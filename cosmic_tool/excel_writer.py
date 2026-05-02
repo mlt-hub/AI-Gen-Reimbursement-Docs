@@ -8,6 +8,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 from .models import CosmicItem
+from .config_utils import load_cfp_formula
 
 logger = logging.getLogger('cosmic_tool.excel_writer')
 
@@ -121,8 +122,9 @@ def write_to_template(
                 12: 'reuse', 13: 'cfp'
             }
             if col_idx == 13:
-                # CFP 列用公式：=IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))
-                cell.value = f'=IF(L{row_num}="新增",1,IF(L{row_num}="复用",1/3,0))'
+                # CFP 列用公式（从配置文件读取）
+                cfp_formula = load_cfp_formula()
+                cell.value = cfp_formula.replace('{row}', str(row_num))
                 cell.number_format = '0.00'
             else:
                 cell.value = row_data.get(key_map[col_idx], '')

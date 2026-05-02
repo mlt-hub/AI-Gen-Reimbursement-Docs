@@ -144,6 +144,9 @@ def main():
 ANTHROPIC_API_KEY=your_api_key_here
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ANTHROPIC_MODEL=deepseek-v4-flash
+
+# CFP 计算公式（{row} 会被替换为实际行号）
+CFP_FORMULA=IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))
 """)
         logger.info(f"配置文件已创建: {env_path}")
         logger.info("请编辑该文件填入你的 API Key")

@@ -22,6 +22,7 @@ class DataMovement:
     move_type: str  # E, X, R, W
     data_group: str
     data_attrs: str  # comma-separated
+    reuse: str = "新增"  # 新增/复用/利旧
 
 
 @dataclass
@@ -56,7 +57,7 @@ class CosmicItem:
                 "move_type": m.move_type,
                 "data_group": m.data_group,
                 "data_attrs": m.data_attrs,
-                "reuse": "新增",
-                "cfp": "1",
+                "reuse": m.reuse,
+                "cfp": "",
             })
         return rows

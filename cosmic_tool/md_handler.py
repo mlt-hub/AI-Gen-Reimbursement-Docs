@@ -20,7 +20,6 @@ HEADER_TEMPLATE = """# COSMIC 功能点拆分表
    - 移动类型：E=Entry, X=eXit, R=Read, W=Write
    - 首步必为 E，末步必为 W 或 X
    - 每个过程至少 2 步
-   - 复用度默认"新增"，CFP 默认 1
 
 """
 
@@ -58,13 +57,13 @@ def export_empty_md(
 
                 for child in l3.children:
                     lines.append(f"### {child}\n")
-                    lines.append("发起者：操作员 | 接收者：地市后台\n")
-                    lines.append("触发事件：用户触发\n")
+                    lines.append("发起者： | 接收者：\n")
+                    lines.append("触发事件：\n")
                     lines.append("\n")
                     lines.append("| 序号 | 子过程描述 | 移动类型 | 数据组 | 数据属性 | 复用度 | CFP |\n")
                     lines.append("|------|-----------|---------|--------|---------|-------|-----|\n")
-                    lines.append("| 1 | | | | | 新增 | 1 |\n")
-                    lines.append("| 2 | | | | | 新增 | 1 |\n")
+                    lines.append("| 1 | | | | | | |\n")
+                    lines.append("| 2 | | | | | | |\n")
                     lines.append("\n")
 
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -125,7 +124,7 @@ def export_filled_md(
                     lines.append("|------|-----------|---------|--------|---------|-------|-----|\n")
                     for m in item.movements:
                         attrs = m.data_attrs or ""
-                        lines.append(f"| {m.order} | {m.sub_process} | {m.move_type} | {m.data_group} | {attrs} | 新增 | 1 |\n")
+                        lines.append(f"| {m.order} | {m.sub_process} | {m.move_type} | {m.data_group} | {attrs} | {m.reuse} | |\n")
                     lines.append("\n")
 
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -208,11 +207,11 @@ def parse_md_to_items(md_path: str) -> list[CosmicItem]:
 
         # Detect trigger event
         if '触发事件' in stripped or '触发' in stripped:
-            m_trig = re.match(r'触发事件[：:]\s*(.+)', stripped)
+            m_trig = re.match(r'触发事件[：:]\s*(.*)', stripped)
             if m_trig:
                 current_trigger = m_trig.group(1).strip()
                 continue
-            m_trig2 = re.match(r'触发[：:]\s*(.+)', stripped)
+            m_trig2 = re.match(r'触发[：:]\s*(.*)', stripped)
             if m_trig2:
                 current_trigger = m_trig2.group(1).strip()
                 continue
@@ -260,6 +259,7 @@ def parse_md_to_items(md_path: str) -> list[CosmicItem]:
                         move_type=move_type,
                         data_group=data_group,
                         data_attrs=data_attrs,
+                        reuse=reuse,
                     ))
 
     # Flush last process
@@ -303,19 +303,19 @@ def fill_md_with_ai(
         base_url=base_url,
     )
 
-    # Merge: existing items take priority, then add AI-generated items
-    existing_map = {}
-    for item in existing_items:
-        key = (item.module_l1, item.module_l2, item.module_l3, item.process)
-        existing_map[key] = item
-
-    merged = list(existing_items)
-    seen_keys = set(existing_map.keys())
+    # Merge: AI items are the base; existing items with real content override
+    item_map = {}
     for item in all_items:
         key = (item.module_l1, item.module_l2, item.module_l3, item.process)
-        if key not in seen_keys:
-            merged.append(item)
-            seen_keys.add(key)
+        item_map[key] = item
+
+    for item in existing_items:
+        key = (item.module_l1, item.module_l2, item.module_l3, item.process)
+        if item.movements:
+            # Existing item has real content — override AI
+            item_map[key] = item
+
+    merged = list(item_map.values())
 
     # Write filled MD
     export_filled_md(modules, merged, project_name, md_path)

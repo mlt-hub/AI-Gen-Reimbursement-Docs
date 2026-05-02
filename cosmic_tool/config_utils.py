@@ -91,7 +91,28 @@ def load_model_name(default: str = "deepseek-v4-flash") -> str:
     return default
 
 
-def _clean_model(name: str) -> str:
+def clean_model_name(name: str) -> str:
     """Remove markdown artifacts from model name, e.g. deepseek-v4-flash[1m]."""
     import re
     return re.sub(r'\[.*?\]', '', name).strip().rstrip()
+
+
+# Backward compatibility alias
+_clean_model = clean_model_name
+
+
+def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))') -> str:
+    """Load CFP_FORMULA from .env file.
+
+    The formula uses {row} as placeholder for the Excel row number.
+    """
+    env_path = Path(__file__).parent / ".env"
+    formula = _read_env_value("CFP_FORMULA", env_path)
+    if formula:
+        return formula
+    # Also check config.json
+    config_path = Path(__file__).parent / "config.json"
+    formula = _read_json_value("cfp_formula", config_path)
+    if formula:
+        return formula
+    return default
