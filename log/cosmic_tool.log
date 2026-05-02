@@ -136,3 +136,26 @@
 下一步:
 2026-05-02 14:17:53 | INFO     | cosmic_tool |   编辑 data\拆分表_已填充.md 人工审核修正
 2026-05-02 14:17:53 | INFO     | cosmic_tool |   然后: python -m cosmic_tool.main --md data\拆分表_已填充.md --template 模板.xlsx --output 结果.xlsx
+2026-05-02 14:27:20 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='data\\拆分表.md', md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 14:27:20 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 14:27:20 | INFO     | cosmic_tool | ============================================================
+2026-05-02 14:27:20 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 14:27:20 | INFO     | cosmic_tool | ============================================================
+2026-05-02 14:27:20 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 14:27:20 | INFO     | cosmic_tool | 源文件: data\拆分表.md
+2026-05-02 14:27:20 | INFO     | cosmic_tool | 副本文件: data\拆分表_已填充.md
+2026-05-02 14:27:20 | DEBUG    | cosmic_tool | 模块数: 13
+2026-05-02 14:27:20 | INFO     | cosmic_tool.md_handler | 从MD解析到 0 个功能过程
+2026-05-02 14:27:20 | INFO     | cosmic_tool.md_handler | 正在AI填充 2 个模块的COSMIC数据...
+2026-05-02 14:27:20 | INFO     | cosmic_tool.cosmic_llm | Generating COSMIC decompositions for 2 modules...
+2026-05-02 14:27:20 | INFO     | cosmic_tool.cosmic_llm |   [1/2] 小福包专区 > 装修管理 > 基础配置...
+2026-05-02 14:27:39 | INFO     | cosmic_tool.cosmic_llm |   [1/2] → 1 processes
+2026-05-02 14:27:39 | INFO     | cosmic_tool.cosmic_llm |   [2/2] 小福包专区 > 装修管理 > 图片轮播组件...
+2026-05-02 14:28:06 | WARNING  | cosmic_tool.cosmic_llm |   [2/2] → ERROR: No text content in response
+2026-05-02 14:28:06 | INFO     | cosmic_tool.cosmic_llm | Total COSMIC items generated: 1
+2026-05-02 14:28:06 | INFO     | cosmic_tool.md_handler | 已填充MD生成: data\拆分表_已填充.md
+2026-05-02 14:28:06 | INFO     | cosmic_tool.md_handler | MD已更新: data\拆分表_已填充.md
+2026-05-02 14:28:06 | INFO     | cosmic_tool | 
+下一步:
+2026-05-02 14:28:06 | INFO     | cosmic_tool |   编辑 data\拆分表_已填充.md 人工审核修正
+2026-05-02 14:28:06 | INFO     | cosmic_tool |   然后: python -m cosmic_tool.main --md data\拆分表_已填充.md --template 模板.xlsx --output 结果.xlsx

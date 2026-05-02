@@ -8,10 +8,19 @@
       "Bash(echo 's = \"\\\\\\\\n\"')",
       "Bash(xxd /tmp/test_actual.txt)",
       "Bash(xxd)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(curl --version)",
+      "Bash(del /f C:\\\\Users\\\\Administrator\\\\Desktop\\\\test_notification.txt)",
+      "Read(//c/Windows/System32/drivers/etc/**)",
+      "Bash(ping 127.0.0.1 -n 1)",
+      "WebFetch(domain:example.com)"
     ],
     "additionalDirectories": [
-      "\\tmp"
+      "\\tmp",
+      "C:\\Users\\Administrator\\.claude",
+      "C:\\Users\\Administrator\\Desktop"
     ]
   }
 }
