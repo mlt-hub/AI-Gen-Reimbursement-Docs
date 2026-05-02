@@ -1150,3 +1150,4 @@
 2026-05-03 00:00:42 | INFO     | cosmic_tool | 
 总计: 96 功能过程, 271 CFP
 2026-05-03 00:00:42 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.xlsx
+2026-05-03 07:37:57 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log='tail')

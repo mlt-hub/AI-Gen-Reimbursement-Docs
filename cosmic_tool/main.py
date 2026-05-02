@@ -17,6 +17,7 @@ import argparse
 import logging
 import os
 import shutil
+from datetime import datetime
 
 from .docx_parser import build_module_tree, print_tree, get_project_name
 from .cosmic_llm import generate_cosmic_items
@@ -35,36 +36,51 @@ if os.path.isdir(_pycache):
     shutil.rmtree(_pycache, ignore_errors=True)
 
 
-def setup_logging(log_file: str = ""):
-    """配置日志：同时输出到控制台和日志文件。"""
-    if not log_file:
-        log_file = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            'log', 'cosmic_tool.log'
-        )
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+def setup_logging():
+    """配置日志：控制台 + 主日志文件 + 本次运行独立日志。"""
+    log_dir = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log'
+    )
+    os.makedirs(log_dir, exist_ok=True)
+
+    # 主日志（持续追加）
+    main_log = os.path.join(log_dir, 'cosmic_tool.log')
+
+    # 本次运行独立日志（带时间戳）
+    run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_log = os.path.join(log_dir, f'run_{run_stamp}.log')
 
     logger = logging.getLogger('cosmic_tool')
     logger.setLevel(logging.DEBUG)
     logger.handlers.clear()
 
-    fh = logging.FileHandler(log_file, encoding='utf-8', mode='a')
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter(
+    fmt = logging.Formatter(
         '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
-    ))
+    )
+
+    # 写入主日志
+    fh = logging.FileHandler(main_log, encoding='utf-8', mode='a')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(fmt)
     logger.addHandler(fh)
 
+    # 写入本次运行日志
+    rh = logging.FileHandler(run_log, encoding='utf-8', mode='w')
+    rh.setLevel(logging.DEBUG)
+    rh.setFormatter(fmt)
+    logger.addHandler(rh)
+
+    # 控制台输出
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
     ch.setFormatter(logging.Formatter('%(message)s'))
     logger.addHandler(ch)
 
-    return logger
+    return logger, run_log
 
 
-logger = setup_logging()
+logger, _run_log_path = setup_logging()
 
 
 def _section(title: str):
@@ -139,8 +155,39 @@ def main():
     parser.add_argument('--init-config', action='store_true',
                         help='初始化 .env 配置文件')
 
+    parser.add_argument('--log', nargs='?', const='tail', default=None,
+                        help='查看日志：--log（末30行），--log full，--log watch，--log open')
+
     args = parser.parse_args()
     logger.debug(f"CLI args: {args}")
+
+    # === Log viewer ===
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'log')
+    if args.log:
+        if args.log == 'open':
+            os.startfile(log_dir)
+            return
+        # Find latest log file
+        log_files = sorted(
+            [f for f in os.listdir(log_dir) if f.endswith('.log')],
+            reverse=True
+        )
+        if not log_files:
+            logger.error("没有找到日志文件")
+            return
+        latest = os.path.join(log_dir, log_files[0])
+        if args.log == 'watch':
+            try:
+                os.system(f'tail -f "{latest}"')
+            except:
+                os.system(f'powershell -command "Get-Content \\"{latest}\\" -Wait"')
+            return
+        with open(latest, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        if args.log == 'tail':
+            lines = lines[-30:]
+        print(''.join(lines))
+        return
 
     # === Init config ===
     if args.init_config:
