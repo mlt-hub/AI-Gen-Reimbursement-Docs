@@ -1,13 +1,15 @@
 """Write COSMIC decompositions to Excel template."""
 
 import copy
-from itertools import groupby
+import logging
 
 import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 from .models import CosmicItem
+
+logger = logging.getLogger('cosmic_tool.excel_writer')
 
 
 # Read a reference cell style from the template to apply to new cells
@@ -95,7 +97,7 @@ def write_to_template(
         all_rows.extend(item.to_rows())
 
     if not all_rows:
-        print("No data rows to write.")
+        logger.warning("No data rows to write.")
         wb.save(output_path)
         return
 
@@ -157,7 +159,7 @@ def write_to_template(
     _add_reuse_validation(ws, start_row, total_rows)
 
     wb.save(output_path)
-    print(f"Written {total_rows} rows to {output_path}")
+    logger.info(f"Written {total_rows} rows to {output_path}")
 
 
 def _merge_column_groups(ws, start_row, total_rows, col, all_rows, key):
@@ -220,7 +222,7 @@ def write_environment_sheet(
                         necessity_cell.value = necessity
 
     wb.save(output_path)
-    print(f"Updated 1、环境图 sheet with project info")
+    logger.info(f"Updated 1、环境图 sheet with project info")
 
 
 def copy_template_sheets(
@@ -231,4 +233,4 @@ def copy_template_sheets(
     """Copy the complete template preserving all sheets."""
     wb = openpyxl.load_workbook(template_path)
     wb.save(output_path)
-    print(f"Template copied to {output_path}")
+    logger.info(f"Template copied to {output_path}")

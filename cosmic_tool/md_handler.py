@@ -1,5 +1,6 @@
 """Markdown handler for COSMIC decomposition — export, fill, and parse."""
 
+import logging
 import re
 import os
 from datetime import date
@@ -7,6 +8,8 @@ from typing import Optional
 
 from .models import CosmicItem, DataMovement
 from .docx_parser import FunctionModule, get_module_by_name
+
+logger = logging.getLogger('cosmic_tool.md_handler')
 
 
 HEADER_TEMPLATE = """# COSMIC 功能点拆分表
@@ -67,7 +70,7 @@ def export_empty_md(
     with open(output_path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
 
-    print(f"空白MD已生成: {output_path}")
+    logger.info(f"空白MD已生成: {output_path}")
 
 
 def export_filled_md(
@@ -128,7 +131,7 @@ def export_filled_md(
     with open(output_path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
 
-    print(f"已填充MD生成: {output_path}")
+    logger.info(f"已填充MD生成: {output_path}")
 
 
 def parse_md_to_items(md_path: str) -> list[CosmicItem]:
@@ -262,7 +265,7 @@ def parse_md_to_items(md_path: str) -> list[CosmicItem]:
     # Flush last process
     flush_process()
 
-    print(f"从MD解析到 {len(items)} 个功能过程")
+    logger.info(f"从MD解析到 {len(items)} 个功能过程")
     return items
 
 
@@ -289,7 +292,7 @@ def fill_md_with_ai(
     l3_modules = [m for m in modules if m.level == 3]
     total = len(l3_modules)
 
-    print(f"\n正在AI填充 {total} 个模块的COSMIC数据...")
+    logger.info(f"正在AI填充 {total} 个模块的COSMIC数据...")
 
     # Generate all items (existing LLM logic, skips nothing — generates fresh)
     all_items = generate_cosmic_items(
@@ -316,4 +319,4 @@ def fill_md_with_ai(
 
     # Write filled MD
     export_filled_md(modules, merged, project_name, md_path)
-    print(f"\nMD已更新: {md_path}")
+    logger.info(f"MD已更新: {md_path}")

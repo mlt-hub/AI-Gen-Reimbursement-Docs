@@ -1,11 +1,14 @@
 """Generate COSMIC decompositions using Claude API."""
 
 import json
+import logging
 import os
 from typing import Optional
 
 from .models import CosmicItem, DataMovement
 from .docx_parser import FunctionModule, get_module_by_name
+
+logger = logging.getLogger('cosmic_tool.cosmic_llm')
 
 SYSTEM_PROMPT = """你是COSMIC功能点拆分专家。你的任务是根据软件功能需求描述，生成标准的COSMIC功能点拆分。
 
@@ -234,16 +237,15 @@ def generate_cosmic_items(
     # Filter L3 modules
     l3_modules = [m for m in modules if m.level == 3]
     if not l3_modules:
-        print("Warning: No L3 modules found in the module tree.")
+        logger.warning("No L3 modules found in the module tree.")
         return []
 
     all_items = []
     total = len(l3_modules)
 
-    print(f"\nGenerating COSMIC decompositions for {total} modules...")
+    logger.info(f"Generating COSMIC decompositions for {total} modules...")
 
     for idx, l3 in enumerate(l3_modules, 1):
-        # Determine module context
         l2_name = l3.parent or ""
         l1_name = ""
         if l2_name:
@@ -256,7 +258,7 @@ def generate_cosmic_items(
 
         prompt = _build_module_prompt(l3, modules)
 
-        print(f"  [{idx}/{total}] {l1_name} > {l2_name} > {l3.name}...", end=" ")
+        logger.info(f"  [{idx}/{total}] {l1_name} > {l2_name} > {l3.name}...")
 
         if interactive:
             input("Press Enter to continue (Ctrl+C to skip)...")
@@ -276,12 +278,12 @@ def generate_cosmic_items(
             items = _parse_llm_response(l3.name, user, trigger, resp_text,
                                         project_name, l1_name, l2_name)
             all_items.extend(items)
-            print(f"→ {len(items)} processes")
+            logger.info(f"  [{idx}/{total}] → {len(items)} processes")
 
         except Exception as e:
-            print(f"→ ERROR: {e}")
+            logger.warning(f"  [{idx}/{total}] → ERROR: {e}")
 
-    print(f"\nTotal COSMIC items generated: {len(all_items)}")
+    logger.info(f"Total COSMIC items generated: {len(all_items)}")
     return all_items
 
 
@@ -367,7 +369,7 @@ def save_to_json(items: list[CosmicItem], output_path: str) -> None:
 
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"Saved {len(data)} items to {output_path}")
+    logger.info(f"Saved {len(data)} items to {output_path}")
 
 
 def load_from_json(input_path: str) -> list[CosmicItem]:
