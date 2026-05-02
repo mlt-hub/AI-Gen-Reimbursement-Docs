@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import sys
 from typing import Optional
 
 from .models import CosmicItem, DataMovement
@@ -391,6 +392,15 @@ def generate_cosmic_items(
         except Exception as e:
             logger.warning(f"  [{idx}/{total}] → ERROR: {e}")
             error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
+            # Prompt user on error (only in interactive terminal)
+            try:
+                if sys.stdin.isatty():
+                    choice = input("  输入 q 结束（其他键继续）: ").strip().lower()
+                    if choice == 'q':
+                        logger.warning(f"用户选择结束，已处理 {idx}/{total} 个模块")
+                        break
+            except (EOFError, KeyboardInterrupt):
+                break
 
     # --- Final summary ---
     total_ok = len(all_items)
