@@ -116,3 +116,75 @@ def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3
     if formula:
         return formula
     return default
+
+
+def load_user_defaults() -> tuple[str, str]:
+    """Load default initiator and receiver from .env.
+
+    Format in .env:
+      USER_INITIATOR_DEFAULT=操作员
+      USER_RECEIVER_DEFAULT=地市后台
+    """
+    env_path = Path(__file__).parent / ".env"
+    default_initiator = "操作员"
+    default_receiver = "地市后台"
+
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("USER_INITIATOR_DEFAULT="):
+                    default_initiator = line.split("=", 1)[1].strip().strip('"').strip("'")
+                elif line.startswith("USER_RECEIVER_DEFAULT="):
+                    default_receiver = line.split("=", 1)[1].strip().strip('"').strip("'")
+    return default_initiator, default_receiver
+
+
+def load_initiator_rules() -> list[tuple[str, str]]:
+    """Load USER_INITIATOR_关键词=值 rules from .env.
+
+    Returns ordered list of (keyword, initiator).
+    """
+    env_path = Path(__file__).parent / ".env"
+    rules: list[tuple[str, str]] = []
+
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("USER_INITIATOR_") and not line.startswith("USER_INITIATOR_DEFAULT="):
+                    rest = line[len("USER_INITIATOR_"):]
+                    key, _, val = rest.partition("=")
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and val:
+                        rules.append((key, val))
+    return rules
+
+
+def load_receiver_rules() -> list[tuple[str, str]]:
+    """Load USER_RECEIVER_关键词=值 rules from .env.
+
+    Returns ordered list of (keyword, receiver).
+    """
+    env_path = Path(__file__).parent / ".env"
+    rules: list[tuple[str, str]] = []
+
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("USER_RECEIVER_") and not line.startswith("USER_RECEIVER_DEFAULT="):
+                    rest = line[len("USER_RECEIVER_"):]
+                    key, _, val = rest.partition("=")
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and val:
+                        rules.append((key, val))
+    return rules
