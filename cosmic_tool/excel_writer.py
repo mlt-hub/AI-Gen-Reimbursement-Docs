@@ -139,10 +139,16 @@ def write_to_template(
         wb.save(output_path)
         return
 
-    # Get reference styles from row 6 of template, per column
-    ref_styles = {}
-    for col_idx in range(1, 14):
-        ref_styles[col_idx] = _get_ref_style(ws, 6, col_idx)
+    # Standard style for data cells
+    _DATA_STYLE = {
+        'font': Font(name='微软雅黑', size=11, color='FF000000'),
+        'fill': PatternFill(fill_type=None),
+        'alignment': _CENTER_ALIGN,
+        'border': _REF_BORDER,
+        'number_format': 'General',
+    }
+    # CFP column green fill (from template)
+    _CFP_FILL = copy.copy(ws.cell(row=6, column=13).fill)
 
     # Column K (数据属性) should be left-aligned
     # Column H (子过程描述) should be left-aligned
@@ -167,10 +173,14 @@ def write_to_template(
             else:
                 cell.value = row_data.get(key_map[col_idx], '')
 
-            # Apply style (per-column from template)
-            _apply_style(cell, ref_styles[col_idx])
+            # Apply standard style
+            _apply_style(cell, _DATA_STYLE)
 
-            # Special alignment for long text columns
+            # CFP 列保留模版绿色底色
+            if col_idx == 13:
+                cell.fill = _CFP_FILL
+
+            # Long text columns: left-align
             if col_idx in (8, 10, 11):
                 cell.alignment = _LEFT_ALIGN
 
@@ -217,6 +227,26 @@ def write_to_template(
             cell.value = val
             _apply_style(cell, style)
         logger.debug(f"Restored footer note at row {note_row}")
+
+    # --- Apply warning indicators (after merges, so they don't get overwritten) ---
+    _WARN_FILL = PatternFill(start_color='FFFFF2CC', end_color='FFFFF2CC', fill_type='solid')
+    for i, row_data in enumerate(all_rows):
+        row_num = start_row + i
+        row_warnings = row_data.get('warnings', [])
+        move_flagged = row_data.get('move_type_flagged', False)
+
+        if row_warnings:
+            # Yellow highlight on the first visible data cell (col 8, sub_process)
+            ws.cell(row=row_num, column=8).fill = _WARN_FILL
+            # Excel comment with warning text
+            from openpyxl.comments import Comment
+            ws.cell(row=row_num, column=8).comment = Comment(
+                "\n".join(f"⚠ {w}" for w in row_warnings), "COSMIC Tool"
+            )
+
+        if move_flagged:
+            # Yellow on fuzzy-matched move_type cell (col 9)
+            ws.cell(row=row_num, column=9).fill = _WARN_FILL
 
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)

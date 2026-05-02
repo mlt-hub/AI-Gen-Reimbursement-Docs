@@ -10,6 +10,31 @@ from .docx_parser import FunctionModule, get_module_by_name
 
 logger = logging.getLogger('cosmic_tool.cosmic_llm')
 
+# Fuzzy matching for common move_type variations
+_MOVE_TYPE_FUZZY = {
+    'entry': 'E', 'enter': 'E', 'input': 'E', 'import': 'E',
+    'e': 'E',
+    'exit': 'X', 'output': 'X', 'export': 'X', 'display': 'X',
+    'x': 'X',
+    'read': 'R', 'query': 'R', 'select': 'R', 'load': 'R', 'retrieve': 'R',
+    'r': 'R',
+    'write': 'W', 'save': 'W', 'insert': 'W', 'update': 'W',
+    'delete': 'W', 'remove': 'W', 'store': 'W', 'create': 'W',
+    'w': 'W',
+}
+
+
+def _resolve_move_type(raw: str) -> tuple[str, bool]:
+    """Resolve move_type with fuzzy matching. Returns (standardized, was_flagged)."""
+    t = raw.strip().upper()
+    if t in ('E', 'X', 'R', 'W'):
+        return t, False
+    t_lower = raw.strip().lower()
+    if t_lower in _MOVE_TYPE_FUZZY:
+        return _MOVE_TYPE_FUZZY[t_lower], True
+    # Completely unknown: default to E and flag
+    return 'E', True
+
 SYSTEM_PROMPT = """你是COSMIC功能点拆分专家。你的任务是根据软件功能需求描述，生成标准的COSMIC功能点拆分。
 
 ## COSMIC规则约束
@@ -200,14 +225,27 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
 
     for proc in data:
         movements = []
-        for i, m in enumerate(proc.get('movements', []), 1):
-            # Validate move_type
-            move_type = m.get('move_type', 'E').upper()
-            if move_type not in ('E', 'X', 'R', 'W'):
-                move_type = 'E'
+        item_warnings: list[str] = []
+        raw_movements = proc.get('movements', [])
 
+        for i, m in enumerate(raw_movements, 1):
+            # Resolve move_type with fuzzy matching
+            raw_type = m.get('move_type', 'E')
+            move_type, flagged = _resolve_move_type(raw_type)
             data_attrs = m.get('data_attrs', '')
             data_group = m.get('data_group', '')
+
+            # Movement-level validations
+            if flagged:
+                item_warnings.append(f"步{i}: 移动类型「{raw_type}」→ {move_type}（模糊匹配）")
+
+            if data_attrs:
+                attr_count = len([a for a in data_attrs.replace('、', ',').split(',') if a.strip()])
+                if attr_count < 3:
+                    item_warnings.append(f"步{i}: 数据属性仅{attr_count}个（建议≥3）")
+
+            if not data_attrs:
+                item_warnings.append(f"步{i}: 数据属性为空")
 
             movements.append(DataMovement(
                 order=i,
@@ -215,8 +253,23 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
                 move_type=move_type,
                 data_group=data_group,
                 data_attrs=data_attrs,
-                reuse=m.get('reuse', '新增')
+                reuse=m.get('reuse', '新增'),
+                move_type_flagged=flagged,
             ))
+
+        # Process-level validations
+        if len(movements) < 2:
+            item_warnings.append(f"数据移动仅{len(movements)}步（建议≥2）")
+
+        if movements and movements[0].move_type != 'E':
+            item_warnings.append(f"首步应为E（当前为{movements[0].move_type}）")
+
+        if movements and movements[-1].move_type not in ('W', 'X'):
+            item_warnings.append(f"末步应为W或X（当前为{movements[-1].move_type}）")
+
+        process_name = proc.get('process', '')
+        if not process_name:
+            item_warnings.append("功能过程名称为空")
 
         items.append(CosmicItem(
             project=project_name,
@@ -225,8 +278,9 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
             module_l3=module_name,
             user=proc.get('user', user),
             trigger=proc.get('trigger', trigger),
-            process=proc.get('process', ''),
-            movements=movements
+            process=process_name,
+            movements=movements,
+            warnings=item_warnings,
         ))
 
     return items
@@ -324,7 +378,14 @@ def generate_cosmic_items(
             items = _parse_llm_response(l3.name, user, trigger, resp_text,
                                         project_name, l1_name, l2_name)
             all_items.extend(items)
-            logger.info(f"  [{idx}/{total}] → {len(items)} processes")
+            # Log warnings summary
+            warn_count = sum(1 for it in items if it.warnings)
+            if warn_count:
+                for it in items:
+                    if it.warnings:
+                        logger.warning(f"  [{idx}/{total}] ⚠ {it.process}: {'; '.join(it.warnings)}")
+            logger.info(f"  [{idx}/{total}] → {len(items)} processes"
+                        + (f" ({warn_count} with warnings)" if warn_count else ""))
 
         except Exception as e:
             logger.warning(f"  [{idx}/{total}] → ERROR: {e}")

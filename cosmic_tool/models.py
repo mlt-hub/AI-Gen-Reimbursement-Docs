@@ -23,6 +23,7 @@ class DataMovement:
     data_group: str
     data_attrs: str  # comma-separated
     reuse: str = "新增"  # 新增/复用/利旧
+    move_type_flagged: bool = False  # True if move_type was fuzzy-matched
 
 
 @dataclass
@@ -36,6 +37,7 @@ class CosmicItem:
     trigger: str    # "用户触发" or "定时触发"
     process: str    # 功能过程名称
     movements: list[DataMovement] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     def total_cfp(self) -> int:
         """Calculate total CFP (each data movement = 1 for '新增')."""
@@ -59,5 +61,7 @@ class CosmicItem:
                 "data_attrs": m.data_attrs,
                 "reuse": m.reuse,
                 "cfp": "",
+                "warnings": self.warnings if i == 0 else [],
+                "move_type_flagged": m.move_type_flagged,
             })
         return rows

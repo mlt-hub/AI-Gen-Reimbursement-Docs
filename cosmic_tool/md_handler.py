@@ -115,6 +115,10 @@ def export_filled_md(
 
                 for item in proc_items:
                     lines.append(f"### {item.process}\n")
+                    # Show warnings below process name
+                    if item.warnings:
+                        for w in item.warnings:
+                            lines.append(f"> ⚠ {w}\n")
                     # item.user format: "发起者：操作员|接收者：地市后台"
                     user_line = item.user.replace("|", " | ")
                     lines.append(f"{user_line}\n")
@@ -124,7 +128,10 @@ def export_filled_md(
                     lines.append("|------|-----------|---------|--------|---------|-------|-----|\n")
                     for m in item.movements:
                         attrs = m.data_attrs or ""
-                        lines.append(f"| {m.order} | {m.sub_process} | {m.move_type} | {m.data_group} | {attrs} | {m.reuse} | |\n")
+                        mt = m.move_type
+                        if m.move_type_flagged:
+                            mt = f"~~{mt}~~"  # strikethrough to indicate fuzzy match
+                        lines.append(f"| {m.order} | {m.sub_process} | {mt} | {m.data_group} | {attrs} | {m.reuse} | |\n")
                     lines.append("\n")
 
     with open(output_path, 'w', encoding='utf-8') as f:
