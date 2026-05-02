@@ -188,7 +188,13 @@ USER_RECEIVER_DEFAULT=地市后台
         _section("阶段1: 解析需求说明书 → 生成空白MD")
         modules = build_module_tree(args.docx)
         project = get_project_name(args.docx)
-        logger.debug(f"识别到 {len(modules)} 个模块")
+        # Statistics
+        l1_count = len([m for m in modules if m.level == 1])
+        l2_count = len([m for m in modules if m.level == 2])
+        l3_count = len([m for m in modules if m.level == 3])
+        proc_count = sum(len(m.children) for m in modules if m.level == 3 and m.children)
+        logger.info(f"模块层级: {l1_count} 个一级 / {l2_count} 个二级 / {l3_count} 个三级")
+        logger.info(f"功能过程: {proc_count} 个")
         export_empty_md(modules, project, args.init_md)
         logger.info(f"\n下一步:")
         logger.info(f"  python -m cosmic_tool.main --fill-md {args.init_md}")
@@ -217,7 +223,10 @@ USER_RECEIVER_DEFAULT=地市后台
 
         modules = build_module_tree(docx_path)
         project = get_project_name(docx_path)
-        logger.debug(f"模块数: {len(modules)}")
+        # 统计实际功能过程数（来自docx，非空白MD）
+        l3_modules = [m for m in modules if m.level == 3]
+        proc_count = sum(len(m.children) for m in l3_modules if m.children)
+        logger.info(f"待AI填充: {len(l3_modules)} 个模块, {proc_count} 个功能过程")
         fill_md_with_ai(output_md, modules, project, api_key, model, base_url)
         logger.info(f"\n下一步:")
         logger.info(f"  编辑 {output_md} 人工审核修正")

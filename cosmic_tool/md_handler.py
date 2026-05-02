@@ -272,7 +272,8 @@ def parse_md_to_items(md_path: str) -> list[CosmicItem]:
     # Flush last process
     flush_process()
 
-    logger.info(f"从MD解析到 {len(items)} 个功能过程")
+    if items:
+        logger.info(f"从MD解析到 {len(items)} 个已有功能过程（将被保留）")
     return items
 
 
