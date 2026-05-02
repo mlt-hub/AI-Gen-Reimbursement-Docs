@@ -6,7 +6,10 @@
      (编辑拆分表.md 人工审核修正)
   3. python -m cosmic_tool.main --md 拆分表.md --template 模板.xlsx --output 结果.xlsx
 
-快捷模式（一键直出）:
+快捷模式（一键全流程）:
+  python -m cosmic_tool.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
+
+一键直出（跳过MD中间文件）:
   python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
 """
 
@@ -88,6 +91,9 @@ def main():
   # (快捷) 一键直出：docx → LLM → Excel
   python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
 
+  # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含中间MD文件）
+  python -m cosmic_tool.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
+
   # 仅查看模块树
   python -m cosmic_tool.main --docx 需求书.docx --show-tree
 
@@ -100,17 +106,17 @@ def main():
     parser.add_argument('--docx', '-d', default='',
                         help='需求说明书 .docx 文件路径')
 
-    parser.add_argument('--init-md', default='',
-                        help='从docx生成空白MD中间文件（不含AI拆分）')
+    parser.add_argument('--init-md', nargs='?', const='', default=None,
+                        help='生成空白MD中间文件；省略路径时从docx自动命名')
 
-    parser.add_argument('--fill-md', default='',
-                        help='AI填充MD中的COSMIC数据（原地更新）')
+    parser.add_argument('--fill-md', nargs='?', const='', default=None,
+                        help='AI填充MD中的COSMIC数据；省略路径时从docx自动命名')
 
-    parser.add_argument('--md', default='',
-                        help='从MD文件生成Excel（MD需已包含COSMIC数据表）')
+    parser.add_argument('--md', nargs='?', const='', default=None,
+                        help='从MD文件生成Excel；省略路径时从docx自动查找')
 
     parser.add_argument('--template', '-t', default='',
-                        help='功能点拆分表 .xlsx 模板文件路径')
+                        help='功能点拆分表 .xlsx 模板文件路径（默认 data/template.xlsx）')
 
     parser.add_argument('--output', '-o', default='',
                         help='输出 .xlsx 文件路径')
@@ -126,6 +132,9 @@ def main():
 
     parser.add_argument('--no-llm', action='store_true',
                         help='跳过AI阶段')
+
+    parser.add_argument('--all', action='store_true',
+                        help='一键全流程: docx → MD → AI填充 → Excel')
 
     parser.add_argument('--init-config', action='store_true',
                         help='初始化 .env 配置文件')
@@ -182,9 +191,11 @@ USER_RECEIVER_DEFAULT=地市后台
         return
 
     # === Mode 1: init-md (docx → empty MD) ===
-    if args.init_md:
+    if args.init_md is not None:  # "" is auto-name, explicit path is used as-is
         if not args.docx:
             parser.error("--init-md 需要 --docx")
+        if not args.init_md:
+            args.init_md = _auto_md_path(args.docx, '_拆分表')
         _section("阶段1: 解析需求说明书 → 生成空白MD")
         modules = build_module_tree(args.docx)
         project = get_project_name(args.docx)
@@ -197,15 +208,28 @@ USER_RECEIVER_DEFAULT=地市后台
         logger.info(f"功能过程: {proc_count} 个")
         export_empty_md(modules, project, args.init_md)
         logger.info(f"\n下一步:")
-        logger.info(f"  python -m cosmic_tool.main --fill-md {args.init_md}")
+        logger.info(f"  python -m cosmic_tool.main --docx \"{args.docx}\" --fill-md    # AI填充")
+        logger.info(f"  python -m cosmic_tool.main --docx \"{args.docx}\" --md         # 生成Excel")
         return
 
     # === Mode 2: fill-md (复制一份MD，AI填充到副本) ===
-    if args.fill_md:
+    if args.fill_md is not None:
         if not api_key:
             logger.warning("⚠ 未设置 API Key。请先运行 --init-config 或设置环境变量")
             return
         _section("阶段2: AI填充COSMIC数据到MD副本")
+        if not args.fill_md:
+            # 自动推导MD路径：从docx找对应MD文件
+            if args.docx:
+                args.fill_md = _auto_md_path(args.docx, '_拆分表')
+            else:
+                # 尝试在当前目录找 _拆分表.md 文件
+                for f in os.listdir('.'):
+                    if f.endswith('_拆分表.md'):
+                        args.fill_md = f
+                        break
+        if not args.fill_md:
+            parser.error("无法自动确定MD文件，请指定 --fill-md <路径> 或提供 --docx")
         docx_path = args.docx or _find_docx_from_md(args.fill_md)
         if not docx_path:
             parser.error("--fill-md 需要 --docx 或将MD放在docx同目录下")
@@ -230,15 +254,30 @@ USER_RECEIVER_DEFAULT=地市后台
         fill_md_with_ai(output_md, modules, project, api_key, model, base_url)
         logger.info(f"\n下一步:")
         logger.info(f"  编辑 {output_md} 人工审核修正")
-        logger.info(f"  然后: python -m cosmic_tool.main --md {output_md} --template 模板.xlsx --output 结果.xlsx")
+        logger.info(f"  然后: python -m cosmic_tool.main --docx \"{docx_path}\" --md")
         return
 
     # === Mode 3: md → Excel ===
-    if args.md:
+    if args.md is not None:
         if not args.template:
-            parser.error("--md 需要 --template")
+            args.template = _default_template_path()
+        # Auto-find MD from docx if not specified
+        if not args.md:
+            if args.docx:
+                # Prefer _已填充.md, fall back to _拆分表.md
+                filled = _auto_md_path(args.docx, '_拆分表_已填充')
+                base = _auto_md_path(args.docx, '_拆分表')
+                args.md = filled if os.path.exists(filled) else base
+            else:
+                # Try to find any _拆分表.md in current dir
+                for f in sorted(os.listdir('.'), reverse=True):
+                    if f.endswith('_拆分表.md'):
+                        args.md = f
+                        break
+        if not args.md:
+            parser.error("无法自动确定MD文件，请指定 --md <路径> 或提供 --docx")
         if not args.output:
-            args.output = "output_COSMIC_拆分表.xlsx"
+            args.output = args.md.replace('.md', '.xlsx')
         _section("阶段3: 从MD生成Excel拆分表")
         items = parse_md_to_items(args.md)
         if not items:
@@ -250,10 +289,60 @@ USER_RECEIVER_DEFAULT=地市后台
         logger.info(f"输出: {os.path.abspath(args.output)}")
         return
 
-    # === Mode 4: Direct docx → LLM → Excel (one shot) ===
-    if args.docx and args.template:
+    # === Mode 4: --all (docx → MD → AI填充 → Excel) ===
+    if args.all:
+        if not args.docx:
+            parser.error("--all 需要 --docx")
+        if not args.template:
+            args.template = _default_template_path()
+        # Auto-generate output and MD paths from docx
         if not args.output:
-            args.output = "output_COSMIC_拆分表.xlsx"
+            args.output = _auto_output_path(args.docx)
+        base_md = args.output.replace('.xlsx', '_拆分表.md')
+        filled_md = base_md.replace('.md', '_已填充.md')
+
+        # Stage 1: docx → blank MD
+        _section("阶段1: 解析需求说明书 → 生成空白MD")
+        modules = build_module_tree(args.docx)
+        project = get_project_name(args.docx)
+        l1_count = len([m for m in modules if m.level == 1])
+        l2_count = len([m for m in modules if m.level == 2])
+        l3_count = len([m for m in modules if m.level == 3])
+        proc_count = sum(len(m.children) for m in modules if m.level == 3 and m.children)
+        logger.info(f"模块层级: {l1_count} 个一级 / {l2_count} 个二级 / {l3_count} 个三级")
+        logger.info(f"功能过程: {proc_count} 个")
+        export_empty_md(modules, project, base_md)
+
+        # Stage 2: AI fill MD
+        if not args.no_llm:
+            if not api_key:
+                logger.warning("⚠ 未设置 API Key。请先运行 --init-config 或设置环境变量")
+                return
+            _section("阶段2: AI填充COSMIC数据到MD副本")
+            shutil.copy2(base_md, filled_md)
+            fill_md_with_ai(filled_md, modules, project, api_key, model, base_url)
+
+        # Stage 3: MD → Excel
+        _section("阶段3: 从MD生成Excel拆分表")
+        md_to_use = filled_md if not args.no_llm else base_md
+        items = parse_md_to_items(md_to_use)
+        if items:
+            write_to_template(args.template, args.output, items)
+            total_cfp = sum(item.total_cfp() for item in items)
+            logger.info(f"\n总计: {len(items)} 功能过程, {total_cfp} CFP")
+        else:
+            logger.warning("⚠ MD中未解析到COSMIC数据，生成空白模板")
+            write_to_template(args.template, args.output, [])
+        logger.info(f"中间文件: {base_md}, {filled_md}")
+        logger.info(f"输出: {os.path.abspath(args.output)}")
+        return
+
+    # === Mode 5: Direct docx → LLM → Excel (one shot) ===
+    if args.docx:
+        if not args.template:
+            args.template = _default_template_path()
+        if not args.output:
+            args.output = _auto_output_path(args.docx)
         _section("阶段1: 解析需求说明书")
         modules = build_module_tree(args.docx)
         project = get_project_name(args.docx)
@@ -288,6 +377,37 @@ USER_RECEIVER_DEFAULT=地市后台
 
     # === No valid mode ===
     parser.print_help()
+
+
+def _default_template_path() -> str:
+    """Return default template path: data/template.xlsx relative to this script."""
+    return os.path.join(os.path.dirname(__file__), '..', 'data', 'template.xlsx')
+
+
+def _auto_md_path(docx_path: str, suffix: str = '') -> str:
+    """Derive MD file path from docx filename.
+
+    suffix: '_拆分表' or '' (auto-chooses based on existing files)
+    """
+    base = os.path.basename(docx_path)
+    name, _ = os.path.splitext(base)
+    return os.path.join(os.path.dirname(docx_path), name + suffix + '.md')
+
+
+def _auto_output_path(docx_path: str) -> str:
+    """Derive Excel output path from docx filename automatically.
+
+    规则:
+      - docx 中的"需求说明书" → "功能点拆分表"
+      - "附件1" → "附件2"
+      - .docx → .xlsx
+    """
+    base = os.path.basename(docx_path)
+    name, _ = os.path.splitext(base)
+    name = name.replace('需求说明书', '功能点拆分表')
+    if name.startswith('附件1'):
+        name = name.replace('附件1', '附件2', 1)
+    return os.path.join(os.path.dirname(docx_path), name + '.xlsx')
 
 
 def _find_docx_from_md(md_path: str) -> str:
