@@ -134,6 +134,9 @@ def write_to_template(
     for item in items:
         all_rows.extend(item.to_rows())
 
+    # Save source data for debugging
+    _save_source_data(all_rows)
+
     if not all_rows:
         logger.warning("No data rows to write.")
         wb.save(output_path)
@@ -287,6 +290,27 @@ def _add_reuse_validation(ws, start_row, total_rows):
         )
         dv.sqref = f"L{start_row}:L{start_row + total_rows - 1}"
         ws.add_data_validation(dv)
+
+
+def _save_source_data(rows: list[dict]) -> None:
+    """Save flattened source data to log/source_data/ for debugging."""
+    import json, os
+    from datetime import datetime
+    log_dir = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log', 'source_data'
+    )
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filepath = os.path.join(log_dir, f'{timestamp}_excel_source.json')
+    # Remove non-serializable keys before saving
+    clean = [{k: v for k, v in row.items() if k in (
+        'project', 'module_l1', 'module_l2', 'module_l3',
+        'user', 'trigger', 'process', 'sub_process',
+        'move_type', 'data_group', 'data_attrs', 'reuse', 'cfp'
+    )} for row in rows]
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(clean, f, ensure_ascii=False, indent=2)
+    logger.info(f"源数据已保存: {filepath}")
 
 
 def _auto_fit(ws, start_row: int, end_row: int) -> None:
