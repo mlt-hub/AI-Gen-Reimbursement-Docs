@@ -12,6 +12,7 @@
 
 import argparse
 import os
+import shutil
 
 from .docx_parser import build_module_tree, print_tree, get_project_name
 from .cosmic_llm import generate_cosmic_items
@@ -23,6 +24,11 @@ from .md_handler import (
     parse_md_to_items,
     fill_md_with_ai,
 )
+
+# 启动时自动清理 cosmic_tool 自身的字节码缓存，避免代码修改后缓存过期问题
+_pycache = os.path.join(os.path.dirname(__file__), '__pycache__')
+if os.path.isdir(_pycache):
+    shutil.rmtree(_pycache, ignore_errors=True)
 
 
 def main():
