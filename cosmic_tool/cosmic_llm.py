@@ -340,6 +340,8 @@ def generate_cosmic_items(
     all_items = []
     error_modules: list[tuple[str, str, str, str]] = []  # (l1, l2, l3, error_msg)
     total = len(l3_modules)
+    total_input_tokens = 0
+    total_output_tokens = 0
 
     logger.info(f"Generating COSMIC decompositions for {total} modules...")
 
@@ -370,6 +372,20 @@ def generate_cosmic_items(
                 system=SYSTEM_PROMPT + "\n\n## 现有参照示例\n" + _get_examples(),
                 messages=[{"role": "user", "content": prompt}]
             )
+
+            # Token usage monitoring
+            usage = getattr(response, 'usage', None)
+            inp_tok = getattr(usage, 'input_tokens', 0) if usage else 0
+            out_tok = getattr(usage, 'output_tokens', 0) if usage else 0
+            total_input_tokens += inp_tok
+            total_output_tokens += out_tok
+            # Per-call usage
+            logger.info(f"  [{idx}/{total}] tokens: ↑{inp_tok} ↓{out_tok}（累积 ↑{total_input_tokens} ↓{total_output_tokens}）")
+
+            # Check for truncation
+            stop_reason = getattr(response, 'stop_reason', None) or ''
+            if stop_reason == 'max_tokens':
+                logger.warning(f"  [{idx}/{total}] ⚠ AI输出被截断（{out_tok}/{max_tokens}），结果可能不完整")
 
             resp_text = _extract_text(response.content)
             if not resp_text:
@@ -407,6 +423,7 @@ def generate_cosmic_items(
     total_ok = len(all_items)
     warn_items = [it for it in all_items if it.warnings]
     logger.info(f"Total COSMIC items generated: {total_ok}")
+    logger.info(f"Token usage: ↑{total_input_tokens} 输入 / ↓{total_output_tokens} 输出（单次上限 {max_tokens}）")
     has_issues = warn_items or error_modules
     if has_issues:
         if warn_items:
