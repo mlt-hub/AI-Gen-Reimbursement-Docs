@@ -179,9 +179,10 @@ def write_to_template(
             # Apply standard style
             _apply_style(cell, _DATA_STYLE)
 
-            # CFP 列保留模版绿色底色
+            # CFP 列：绿色底色 + 分数格式（复用=1/3时显示分数）
             if col_idx == 13:
                 cell.fill = _CFP_FILL
+                cell.number_format = '[=1]0;[=0]0;# ?/?'
 
             # Long text columns: left-align
             if col_idx in (8, 10, 11):

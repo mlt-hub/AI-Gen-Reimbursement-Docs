@@ -229,7 +229,13 @@ USER_RECEIVER_DEFAULT=地市后台
                         args.fill_md = f
                         break
         if not args.fill_md:
-            parser.error("无法自动确定MD文件，请指定 --fill-md <路径> 或提供 --docx")
+            logger.error("MD文件不存在，请先运行阶段1生成空白MD：")
+            logger.info(f"  python -m cosmic_tool.main --docx \"{args.docx}\" --init-md")
+            return
+        if not os.path.exists(args.fill_md):
+            logger.error(f"MD文件不存在: {args.fill_md}")
+            logger.info("请先运行阶段1生成空白MD")
+            return
         docx_path = args.docx or _find_docx_from_md(args.fill_md)
         if not docx_path:
             parser.error("--fill-md 需要 --docx 或将MD放在docx同目录下")
@@ -276,6 +282,12 @@ USER_RECEIVER_DEFAULT=地市后台
                         break
         if not args.md:
             parser.error("无法自动确定MD文件，请指定 --md <路径> 或提供 --docx")
+        if not os.path.exists(args.md):
+            logger.error(f"MD文件不存在: {args.md}")
+            logger.info(f"请先运行阶段1和阶段2生成MD文件：")
+            logger.info(f"  python -m cosmic_tool.main --docx \"{args.docx}\" --init-md")
+            logger.info(f"  python -m cosmic_tool.main --docx \"{args.docx}\" --fill-md")
+            return
         if not args.output:
             args.output = args.md.replace('.md', '.xlsx')
         _section("阶段3: 从MD生成Excel拆分表")

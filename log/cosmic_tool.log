@@ -769,3 +769,384 @@
 总计: 99 功能过程, 289 CFP
 2026-05-02 23:04:54 | INFO     | cosmic_tool | 中间文件: data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表.md, data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md
 2026-05-02 23:04:54 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0.xlsx
+2026-05-02 23:16:23 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='data\\附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx', init_md=None, fill_md=None, md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:16:23 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:16:23 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:16:23 | INFO     | cosmic_tool | 阶段3: 从MD生成Excel拆分表
+2026-05-02 23:16:23 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:16:23 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 23:18:01 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='data\\附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx', init_md=None, fill_md=None, md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:18:01 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:18:01 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:18:01 | INFO     | cosmic_tool | 阶段3: 从MD生成Excel拆分表
+2026-05-02 23:18:01 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:18:01 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 23:19:34 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='data\\附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx', init_md=None, fill_md=None, md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:19:34 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:19:34 | ERROR    | cosmic_tool | MD文件不存在: data\附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0_拆分表.md
+2026-05-02 23:19:34 | INFO     | cosmic_tool | 请先运行阶段1和阶段2生成MD文件：
+2026-05-02 23:19:34 | INFO     | cosmic_tool |   python -m cosmic_tool.main --docx "data\附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx" --init-md
+2026-05-02 23:19:34 | INFO     | cosmic_tool |   python -m cosmic_tool.main --docx "data\附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx" --fill-md
+2026-05-02 23:21:24 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx', init_md=None, fill_md=None, md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:21:24 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:21:24 | ERROR    | cosmic_tool | MD文件不存在: 附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0_拆分表.md
+2026-05-02 23:21:24 | INFO     | cosmic_tool | 请先运行阶段1和阶段2生成MD文件：
+2026-05-02 23:21:24 | INFO     | cosmic_tool |   python -m cosmic_tool.main --docx "附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx" --init-md
+2026-05-02 23:21:24 | INFO     | cosmic_tool |   python -m cosmic_tool.main --docx "附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx" --fill-md
+2026-05-02 23:25:48 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md='附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md', template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:25:48 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:25:48 | ERROR    | cosmic_tool | MD文件不存在: 附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md
+2026-05-02 23:25:48 | INFO     | cosmic_tool | 请先运行阶段1和阶段2生成MD文件：
+2026-05-02 23:25:48 | INFO     | cosmic_tool |   python -m cosmic_tool.main --docx "" --init-md
+2026-05-02 23:25:48 | INFO     | cosmic_tool |   python -m cosmic_tool.main --docx "" --fill-md
+2026-05-02 23:26:04 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md='data\\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md', template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:26:04 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:26:04 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:26:04 | INFO     | cosmic_tool | 阶段3: 从MD生成Excel拆分表
+2026-05-02 23:26:04 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:26:04 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 23:26:04 | INFO     | cosmic_tool.md_handler | 从MD解析到 99 个已有功能过程（将被保留）
+2026-05-02 23:26:04 | INFO     | cosmic_tool.excel_writer | 源数据已保存: D:\mlt\ws_tool\log\source_data\20260502_232604_excel_source.json
+2026-05-02 23:26:05 | DEBUG    | cosmic_tool.excel_writer | Restored footer note at row 295
+2026-05-02 23:26:05 | INFO     | cosmic_tool.excel_writer | Written 289 rows to data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.xlsx
+2026-05-02 23:26:05 | INFO     | cosmic_tool.excel_writer | Restored 1 footer note(s) from template
+2026-05-02 23:26:05 | INFO     | cosmic_tool | 
+总计: 99 功能过程, 289 CFP
+2026-05-02 23:26:05 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.xlsx
+2026-05-02 23:35:40 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='需求书.docx', init_md=None, fill_md='data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表.md', md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:35:40 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:35:40 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:35:40 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 23:35:40 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:35:40 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 23:35:40 | INFO     | cosmic_tool | 源文件: data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表.md
+2026-05-02 23:35:40 | INFO     | cosmic_tool | 副本文件: data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md
+2026-05-02 23:37:00 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='需求书.docx', init_md=None, fill_md='data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表.md', md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:37:00 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:37:00 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:37:00 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 23:37:00 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:37:00 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 23:37:00 | INFO     | cosmic_tool | 源文件: data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表.md
+2026-05-02 23:37:00 | INFO     | cosmic_tool | 副本文件: data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md
+2026-05-02 23:37:05 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md='data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表.md', md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-02 23:37:05 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 23:37:05 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:37:05 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 23:37:05 | INFO     | cosmic_tool | ============================================================
+2026-05-02 23:37:05 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 23:37:05 | INFO     | cosmic_tool | 源文件: data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表.md
+2026-05-02 23:37:05 | INFO     | cosmic_tool | 副本文件: data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md
+2026-05-02 23:37:05 | INFO     | cosmic_tool | 待AI填充: 69 个模块, 94 个功能过程
+2026-05-02 23:37:05 | INFO     | cosmic_tool.md_handler | 正在AI填充 69 个模块的COSMIC数据...
+2026-05-02 23:37:07 | INFO     | cosmic_tool.cosmic_llm | MAX_TOKENS = 16000
+2026-05-02 23:37:07 | INFO     | cosmic_tool.cosmic_llm | Generating COSMIC decompositions for 69 modules...
+2026-05-02 23:37:07 | INFO     | cosmic_tool.cosmic_llm |   [1/69] 抢号管理 > 页面配置 > 基础配置...
+2026-05-02 23:37:30 | INFO     | cosmic_tool.cosmic_llm |   [1/69] tokens: ↑115 ↓1545（累积 ↑115 ↓1545）
+2026-05-02 23:37:30 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233730_抢号管理_页面配置_基础配置.md
+2026-05-02 23:37:30 | INFO     | cosmic_tool.cosmic_llm |   [1/69] → 2 个子过程描述
+2026-05-02 23:37:30 | INFO     | cosmic_tool.cosmic_llm |   [2/69] 抢号管理 > 页面配置 > 广告配置...
+2026-05-02 23:38:02 | INFO     | cosmic_tool.cosmic_llm |   [2/69] tokens: ↑12 ↓2125（累积 ↑127 ↓3670）
+2026-05-02 23:38:02 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233802_抢号管理_页面配置_广告配置.md
+2026-05-02 23:38:02 | INFO     | cosmic_tool.cosmic_llm |   [2/69] → 5 个子过程描述
+2026-05-02 23:38:02 | INFO     | cosmic_tool.cosmic_llm |   [3/69] 抢号管理 > 页面配置 > 分享配置...
+2026-05-02 23:38:15 | INFO     | cosmic_tool.cosmic_llm |   [3/69] tokens: ↑97 ↓893（累积 ↑224 ↓4563）
+2026-05-02 23:38:15 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233815_抢号管理_页面配置_分享配置.md
+2026-05-02 23:38:15 | INFO     | cosmic_tool.cosmic_llm |   [3/69] → 2 个子过程描述
+2026-05-02 23:38:15 | INFO     | cosmic_tool.cosmic_llm |   [4/69] 抢号管理 > 页面配置 > 活动预览...
+2026-05-02 23:38:24 | INFO     | cosmic_tool.cosmic_llm |   [4/69] tokens: ↑78 ↓531（累积 ↑302 ↓5094）
+2026-05-02 23:38:24 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233824_抢号管理_页面配置_活动预览.md
+2026-05-02 23:38:24 | INFO     | cosmic_tool.cosmic_llm |   [4/69] → 3 个子过程描述
+2026-05-02 23:38:24 | INFO     | cosmic_tool.cosmic_llm |   [5/69] 抢号管理 > 活动管理 > 查询秒杀活动...
+2026-05-02 23:38:40 | INFO     | cosmic_tool.cosmic_llm |   [5/69] tokens: ↑123 ↓1073（累积 ↑425 ↓6167）
+2026-05-02 23:38:40 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233840_抢号管理_活动管理_查询秒杀活动.md
+2026-05-02 23:38:40 | INFO     | cosmic_tool.cosmic_llm |   [5/69] → 3 个子过程描述
+2026-05-02 23:38:40 | INFO     | cosmic_tool.cosmic_llm |   [6/69] 抢号管理 > 活动管理 > 秒杀活动列表...
+2026-05-02 23:38:51 | INFO     | cosmic_tool.cosmic_llm |   [6/69] tokens: ↑107 ↓788（累积 ↑532 ↓6955）
+2026-05-02 23:38:51 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233851_抢号管理_活动管理_秒杀活动列表.md
+2026-05-02 23:38:51 | INFO     | cosmic_tool.cosmic_llm |   [6/69] → 3 个子过程描述
+2026-05-02 23:38:51 | INFO     | cosmic_tool.cosmic_llm |   [7/69] 抢号管理 > 活动管理 > 创建秒杀活动...
+2026-05-02 23:39:15 | INFO     | cosmic_tool.cosmic_llm |   [7/69] tokens: ↑117 ↓1618（累积 ↑649 ↓8573）
+2026-05-02 23:39:15 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233915_抢号管理_活动管理_创建秒杀活动.md
+2026-05-02 23:39:15 | INFO     | cosmic_tool.cosmic_llm |   [7/69] → 2 个子过程描述
+2026-05-02 23:39:15 | INFO     | cosmic_tool.cosmic_llm |   [8/69] 抢号管理 > 活动管理 > 编辑秒杀活动...
+2026-05-02 23:39:32 | INFO     | cosmic_tool.cosmic_llm |   [8/69] tokens: ↑115 ↓1108（累积 ↑764 ↓9681）
+2026-05-02 23:39:32 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233932_抢号管理_活动管理_编辑秒杀活动.md
+2026-05-02 23:39:32 | INFO     | cosmic_tool.cosmic_llm |   [8/69] → 3 个子过程描述
+2026-05-02 23:39:32 | INFO     | cosmic_tool.cosmic_llm |   [9/69] 抢号管理 > 活动管理 > 开启/关闭秒杀活动...
+2026-05-02 23:39:39 | INFO     | cosmic_tool.cosmic_llm |   [9/69] tokens: ↑78 ↓471（累积 ↑842 ↓10152）
+2026-05-02 23:39:39 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233939_抢号管理_活动管理_开启_关闭秒杀活动.md
+2026-05-02 23:39:39 | INFO     | cosmic_tool.cosmic_llm |   [9/69] → 2 个子过程描述
+2026-05-02 23:39:39 | INFO     | cosmic_tool.cosmic_llm |   [10/69] 抢号管理 > 活动管理 > 一键复制秒杀活动...
+2026-05-02 23:39:55 | INFO     | cosmic_tool.cosmic_llm |   [10/69] tokens: ↑118 ↓1070（累积 ↑960 ↓11222）
+2026-05-02 23:39:55 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_233955_抢号管理_活动管理_一键复制秒杀活动.md
+2026-05-02 23:39:55 | INFO     | cosmic_tool.cosmic_llm |   [10/69] → 3 个子过程描述
+2026-05-02 23:39:55 | INFO     | cosmic_tool.cosmic_llm |   [11/69] 抢号管理 > 活动管理 > 查看秒杀活动号码...
+2026-05-02 23:40:27 | INFO     | cosmic_tool.cosmic_llm |   [11/69] tokens: ↑126 ↓2130（累积 ↑1086 ↓13352）
+2026-05-02 23:40:27 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234027_抢号管理_活动管理_查看秒杀活动号码.md
+2026-05-02 23:40:27 | INFO     | cosmic_tool.cosmic_llm |   [11/69] → 8 个子过程描述
+2026-05-02 23:40:27 | INFO     | cosmic_tool.cosmic_llm |   [12/69] 抢号管理 > 活动管理 > 删除秒杀活动...
+2026-05-02 23:40:41 | INFO     | cosmic_tool.cosmic_llm |   [12/69] tokens: ↑81 ↓926（累积 ↑1167 ↓14278）
+2026-05-02 23:40:41 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234041_抢号管理_活动管理_删除秒杀活动.md
+2026-05-02 23:40:41 | INFO     | cosmic_tool.cosmic_llm |   [12/69] → 3 个子过程描述
+2026-05-02 23:40:41 | INFO     | cosmic_tool.cosmic_llm |   [13/69] 抢号管理 > 优号号码管理 > 优号号码列表...
+2026-05-02 23:40:50 | INFO     | cosmic_tool.cosmic_llm |   [13/69] tokens: ↑16 ↓611（累积 ↑1183 ↓14889）
+2026-05-02 23:40:50 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234050_抢号管理_优号号码管理_优号号码列表.md
+2026-05-02 23:40:51 | INFO     | cosmic_tool.cosmic_llm |   [13/69] → 3 个子过程描述
+2026-05-02 23:40:51 | INFO     | cosmic_tool.cosmic_llm |   [14/69] 抢号管理 > 优号号码管理 > 查询优号号码...
+2026-05-02 23:40:59 | INFO     | cosmic_tool.cosmic_llm |   [14/69] tokens: ↑22 ↓555（累积 ↑1205 ↓15444）
+2026-05-02 23:40:59 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234059_抢号管理_优号号码管理_查询优号号码.md
+2026-05-02 23:40:59 | INFO     | cosmic_tool.cosmic_llm |   [14/69] → 3 个子过程描述
+2026-05-02 23:40:59 | INFO     | cosmic_tool.cosmic_llm |   [15/69] 抢号管理 > 优号号码管理 > 导出优号号码...
+2026-05-02 23:41:18 | INFO     | cosmic_tool.cosmic_llm |   [15/69] tokens: ↑96 ↓1176（累积 ↑1301 ↓16620）
+2026-05-02 23:41:18 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234118_抢号管理_优号号码管理_导出优号号码.md
+2026-05-02 23:41:18 | INFO     | cosmic_tool.cosmic_llm |   [15/69] → 3 个子过程描述
+2026-05-02 23:41:18 | INFO     | cosmic_tool.cosmic_llm |   [16/69] 抢号管理 > 优号号码管理 > 快捷上下架优号号码...
+2026-05-02 23:41:33 | INFO     | cosmic_tool.cosmic_llm |   [16/69] tokens: ↑3 ↓942（累积 ↑1304 ↓17562）
+2026-05-02 23:41:33 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234133_抢号管理_优号号码管理_快捷上下架优号号码.md
+2026-05-02 23:41:33 | INFO     | cosmic_tool.cosmic_llm |   [16/69] → 3 个子过程描述
+2026-05-02 23:41:33 | INFO     | cosmic_tool.cosmic_llm |   [17/69] 抢号管理 > 优号号码管理 > 快捷上下架优号号码记录...
+2026-05-02 23:41:43 | INFO     | cosmic_tool.cosmic_llm |   [17/69] tokens: ↑6 ↓663（累积 ↑1310 ↓18225）
+2026-05-02 23:41:43 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234143_抢号管理_优号号码管理_快捷上下架优号号码记录.md
+2026-05-02 23:41:43 | INFO     | cosmic_tool.cosmic_llm |   [17/69] → 3 个子过程描述
+2026-05-02 23:41:43 | INFO     | cosmic_tool.cosmic_llm |   [18/69] 抢号管理 > 优号号码管理 > 批量优号号码导入上下架...
+2026-05-02 23:42:01 | INFO     | cosmic_tool.cosmic_llm |   [18/69] tokens: ↑93 ↓1134（累积 ↑1403 ↓19359）
+2026-05-02 23:42:01 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234201_抢号管理_优号号码管理_批量优号号码导入上下架.md
+2026-05-02 23:42:01 | INFO     | cosmic_tool.cosmic_llm |   [18/69] → 2 个子过程描述
+2026-05-02 23:42:01 | INFO     | cosmic_tool.cosmic_llm |   [19/69] 抢号管理 > 优号号码管理 > 批量优号号码修改捆绑套餐...
+2026-05-02 23:42:34 | INFO     | cosmic_tool.cosmic_llm |   [19/69] tokens: ↑124 ↓2120（累积 ↑1527 ↓21479）
+2026-05-02 23:42:34 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234234_抢号管理_优号号码管理_批量优号号码修改捆绑套餐.md
+2026-05-02 23:42:34 | INFO     | cosmic_tool.cosmic_llm |   [19/69] → 4 个子过程描述
+2026-05-02 23:42:34 | INFO     | cosmic_tool.cosmic_llm |   [20/69] 抢号管理 > 优号号码管理 > 批量优号号码修改捆绑店铺标签...
+2026-05-02 23:43:09 | INFO     | cosmic_tool.cosmic_llm |   [20/69] tokens: ↑4 ↓2266（累积 ↑1531 ↓23745）
+2026-05-02 23:43:09 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234309_抢号管理_优号号码管理_批量优号号码修改捆绑店铺标签.md
+2026-05-02 23:43:09 | INFO     | cosmic_tool.cosmic_llm |   [20/69] → 3 个子过程描述
+2026-05-02 23:43:09 | INFO     | cosmic_tool.cosmic_llm |   [21/69] 抢号管理 > 优号号码管理 > 批量修改优号预存和原价...
+2026-05-02 23:43:27 | INFO     | cosmic_tool.cosmic_llm |   [21/69] tokens: ↑108 ↓1154（累积 ↑1639 ↓24899）
+2026-05-02 23:43:28 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234327_抢号管理_优号号码管理_批量修改优号预存和原价.md
+2026-05-02 23:43:28 | INFO     | cosmic_tool.cosmic_llm |   [21/69] → 3 个子过程描述
+2026-05-02 23:43:28 | INFO     | cosmic_tool.cosmic_llm |   [22/69] 抢号管理 > 优号号码管理 > 单个优号号码上下架...
+2026-05-02 23:43:35 | INFO     | cosmic_tool.cosmic_llm |   [22/69] tokens: ↑95 ↓463（累积 ↑1734 ↓25362）
+2026-05-02 23:43:35 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234335_抢号管理_优号号码管理_单个优号号码上下架.md
+2026-05-02 23:43:35 | INFO     | cosmic_tool.cosmic_llm |   [22/69] → 2 个子过程描述
+2026-05-02 23:43:35 | INFO     | cosmic_tool.cosmic_llm |   [23/69] 抢号管理 > 优号号码管理 > 单个优号号码关联套餐...
+2026-05-02 23:44:13 | INFO     | cosmic_tool.cosmic_llm |   [23/69] tokens: ↑13 ↓2566（累积 ↑1747 ↓27928）
+2026-05-02 23:44:13 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234413_抢号管理_优号号码管理_单个优号号码关联套餐.md
+2026-05-02 23:44:13 | WARNING  | cosmic_tool.cosmic_llm |   [23/69] ⚠ 查询单个优号绑定的套餐: 步1: 数据属性仅2个（建议≥3）
+2026-05-02 23:44:13 | INFO     | cosmic_tool.cosmic_llm |   [23/69] → 7 个子过程描述（1个有警告）
+2026-05-02 23:44:13 | INFO     | cosmic_tool.cosmic_llm |   [24/69] 抢号管理 > 优号号码管理 > 单个优号号码关联店铺标签...
+2026-05-02 23:44:41 | INFO     | cosmic_tool.cosmic_llm |   [24/69] tokens: ↑35 ↓1916（累积 ↑1782 ↓29844）
+2026-05-02 23:44:41 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234441_抢号管理_优号号码管理_单个优号号码关联店铺标签.md
+2026-05-02 23:44:41 | INFO     | cosmic_tool.cosmic_llm |   [24/69] → 10 个子过程描述
+2026-05-02 23:44:41 | INFO     | cosmic_tool.cosmic_llm |   [25/69] 抢号管理 > 优号套餐管理 > 优号套餐列表...
+2026-05-02 23:44:52 | INFO     | cosmic_tool.cosmic_llm |   [25/69] tokens: ↑108 ↓710（累积 ↑1890 ↓30554）
+2026-05-02 23:44:52 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234452_抢号管理_优号套餐管理_优号套餐列表.md
+2026-05-02 23:44:52 | INFO     | cosmic_tool.cosmic_llm |   [25/69] → 3 个子过程描述
+2026-05-02 23:44:52 | INFO     | cosmic_tool.cosmic_llm |   [26/69] 抢号管理 > 优号套餐管理 > 查询优号套餐...
+2026-05-02 23:45:00 | INFO     | cosmic_tool.cosmic_llm |   [26/69] tokens: ↑112 ↓535（累积 ↑2002 ↓31089）
+2026-05-02 23:45:00 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234500_抢号管理_优号套餐管理_查询优号套餐.md
+2026-05-02 23:45:00 | INFO     | cosmic_tool.cosmic_llm |   [26/69] → 3 个子过程描述
+2026-05-02 23:45:00 | INFO     | cosmic_tool.cosmic_llm |   [27/69] 抢号管理 > 优号套餐管理 > 添加优号套餐...
+2026-05-02 23:45:09 | INFO     | cosmic_tool.cosmic_llm |   [27/69] tokens: ↑33 ↓547（累积 ↑2035 ↓31636）
+2026-05-02 23:45:09 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234509_抢号管理_优号套餐管理_添加优号套餐.md
+2026-05-02 23:45:09 | INFO     | cosmic_tool.cosmic_llm |   [27/69] → 2 个子过程描述
+2026-05-02 23:45:09 | INFO     | cosmic_tool.cosmic_llm |   [28/69] 抢号管理 > 优号套餐管理 > 编辑优号套餐...
+2026-05-02 23:45:43 | INFO     | cosmic_tool.cosmic_llm |   [28/69] tokens: ↑34 ↓2186（累积 ↑2069 ↓33822）
+2026-05-02 23:45:43 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234543_抢号管理_优号套餐管理_编辑优号套餐.md
+2026-05-02 23:45:43 | INFO     | cosmic_tool.cosmic_llm |   [28/69] → 2 个子过程描述
+2026-05-02 23:45:43 | INFO     | cosmic_tool.cosmic_llm |   [29/69] 抢号管理 > 优号套餐管理 > 优号套餐审核...
+2026-05-02 23:46:05 | INFO     | cosmic_tool.cosmic_llm |   [29/69] tokens: ↑96 ↓1459（累积 ↑2165 ↓35281）
+2026-05-02 23:46:05 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234605_抢号管理_优号套餐管理_优号套餐审核.md
+2026-05-02 23:46:05 | INFO     | cosmic_tool.cosmic_llm |   [29/69] → 3 个子过程描述
+2026-05-02 23:46:05 | INFO     | cosmic_tool.cosmic_llm |   [30/69] 抢号管理 > 优号套餐管理 > 优号套餐审核记录...
+2026-05-02 23:46:24 | INFO     | cosmic_tool.cosmic_llm |   [30/69] tokens: ↑47 ↓1251（累积 ↑2212 ↓36532）
+2026-05-02 23:46:24 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234624_抢号管理_优号套餐管理_优号套餐审核记录.md
+2026-05-02 23:46:24 | WARNING  | cosmic_tool.cosmic_llm |   [30/69] ⚠ 优号套餐审核记录详情: 步1: 数据属性仅2个（建议≥3）; 步3: 数据属性仅2个（建议≥3）
+2026-05-02 23:46:24 | INFO     | cosmic_tool.cosmic_llm |   [30/69] → 9 个子过程描述（1个有警告）
+2026-05-02 23:46:24 | INFO     | cosmic_tool.cosmic_llm |   [31/69] 抢号管理 > 优号套餐管理 > 开启/关闭优号套餐...
+2026-05-02 23:46:32 | INFO     | cosmic_tool.cosmic_llm |   [31/69] tokens: ↑82 ↓445（累积 ↑2294 ↓36977）
+2026-05-02 23:46:32 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234632_抢号管理_优号套餐管理_开启_关闭优号套餐.md
+2026-05-02 23:46:32 | INFO     | cosmic_tool.cosmic_llm |   [31/69] → 2 个子过程描述
+2026-05-02 23:46:32 | INFO     | cosmic_tool.cosmic_llm |   [32/69] 抢号管理 > 优号套餐管理 > 优号套餐快捷绑定号码...
+2026-05-02 23:46:42 | INFO     | cosmic_tool.cosmic_llm |   [32/69] tokens: ↑94 ↓707（累积 ↑2388 ↓37684）
+2026-05-02 23:46:42 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234642_抢号管理_优号套餐管理_优号套餐快捷绑定号码.md
+2026-05-02 23:46:42 | INFO     | cosmic_tool.cosmic_llm |   [32/69] → 2 个子过程描述
+2026-05-02 23:46:42 | INFO     | cosmic_tool.cosmic_llm |   [33/69] 抢号管理 > 优号套餐管理 > 优号套餐快捷移除号码...
+2026-05-02 23:46:56 | INFO     | cosmic_tool.cosmic_llm |   [33/69] tokens: ↑95 ↓877（累积 ↑2483 ↓38561）
+2026-05-02 23:46:56 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234656_抢号管理_优号套餐管理_优号套餐快捷移除号码.md
+2026-05-02 23:46:56 | INFO     | cosmic_tool.cosmic_llm |   [33/69] → 2 个子过程描述
+2026-05-02 23:46:56 | INFO     | cosmic_tool.cosmic_llm |   [34/69] 抢号管理 > 优号套餐管理 > 查看优号套餐关联号码...
+2026-05-02 23:47:23 | INFO     | cosmic_tool.cosmic_llm |   [34/69] tokens: ↑21 ↓1777（累积 ↑2504 ↓40338）
+2026-05-02 23:47:23 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234723_抢号管理_优号套餐管理_查看优号套餐关联号码.md
+2026-05-02 23:47:23 | INFO     | cosmic_tool.cosmic_llm |   [34/69] → 13 个子过程描述
+2026-05-02 23:47:23 | INFO     | cosmic_tool.cosmic_llm |   [35/69] 抢号管理 > 优号套餐管理 > 查看优号套餐关联店铺标签...
+2026-05-02 23:47:50 | INFO     | cosmic_tool.cosmic_llm |   [35/69] tokens: ↑26 ↓1800（累积 ↑2530 ↓42138）
+2026-05-02 23:47:50 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234750_抢号管理_优号套餐管理_查看优号套餐关联店铺标签.md
+2026-05-02 23:47:50 | INFO     | cosmic_tool.cosmic_llm |   [35/69] → 10 个子过程描述
+2026-05-02 23:47:50 | INFO     | cosmic_tool.cosmic_llm |   [36/69] 抢号管理 > 优号套餐管理 > 删除优号套餐...
+2026-05-02 23:48:09 | INFO     | cosmic_tool.cosmic_llm |   [36/69] tokens: ↑87 ↓1227（累积 ↑2617 ↓43365）
+2026-05-02 23:48:09 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234809_抢号管理_优号套餐管理_删除优号套餐.md
+2026-05-02 23:48:09 | INFO     | cosmic_tool.cosmic_llm |   [36/69] → 2 个子过程描述
+2026-05-02 23:48:09 | INFO     | cosmic_tool.cosmic_llm |   [37/69] 抢号管理 > 普号号码管理 > 普号号码列表...
+2026-05-02 23:48:18 | INFO     | cosmic_tool.cosmic_llm |   [37/69] tokens: ↑116 ↓615（累积 ↑2733 ↓43980）
+2026-05-02 23:48:18 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234818_抢号管理_普号号码管理_普号号码列表.md
+2026-05-02 23:48:18 | INFO     | cosmic_tool.cosmic_llm |   [37/69] → 3 个子过程描述
+2026-05-02 23:48:18 | INFO     | cosmic_tool.cosmic_llm |   [38/69] 抢号管理 > 普号号码管理 > 查询普号号码...
+2026-05-02 23:48:27 | INFO     | cosmic_tool.cosmic_llm |   [38/69] tokens: ↑125 ↓622（累积 ↑2858 ↓44602）
+2026-05-02 23:48:27 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234827_抢号管理_普号号码管理_查询普号号码.md
+2026-05-02 23:48:27 | INFO     | cosmic_tool.cosmic_llm |   [38/69] → 3 个子过程描述
+2026-05-02 23:48:27 | INFO     | cosmic_tool.cosmic_llm |   [39/69] 抢号管理 > 普号号码管理 > 导出普号号码...
+2026-05-02 23:48:44 | INFO     | cosmic_tool.cosmic_llm |   [39/69] tokens: ↑123 ↓1094（累积 ↑2981 ↓45696）
+2026-05-02 23:48:44 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234844_抢号管理_普号号码管理_导出普号号码.md
+2026-05-02 23:48:44 | INFO     | cosmic_tool.cosmic_llm |   [39/69] → 3 个子过程描述
+2026-05-02 23:48:44 | INFO     | cosmic_tool.cosmic_llm |   [40/69] 抢号管理 > 普号号码管理 > 普号号码上下架...
+2026-05-02 23:48:58 | INFO     | cosmic_tool.cosmic_llm |   [40/69] tokens: ↑92 ↓977（累积 ↑3073 ↓46673）
+2026-05-02 23:48:58 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234858_抢号管理_普号号码管理_普号号码上下架.md
+2026-05-02 23:48:58 | INFO     | cosmic_tool.cosmic_llm |   [40/69] → 4 个子过程描述
+2026-05-02 23:48:58 | INFO     | cosmic_tool.cosmic_llm |   [41/69] 抢号管理 > 普号号码管理 > 普号号码快捷上下架...
+2026-05-02 23:49:14 | INFO     | cosmic_tool.cosmic_llm |   [41/69] tokens: ↑27 ↓1113（累积 ↑3100 ↓47786）
+2026-05-02 23:49:14 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234914_抢号管理_普号号码管理_普号号码快捷上下架.md
+2026-05-02 23:49:14 | INFO     | cosmic_tool.cosmic_llm |   [41/69] → 7 个子过程描述
+2026-05-02 23:49:14 | INFO     | cosmic_tool.cosmic_llm |   [42/69] 抢号管理 > 普号号码管理 > 普号号码批量操作...
+2026-05-02 23:49:33 | INFO     | cosmic_tool.cosmic_llm |   [42/69] tokens: ↑39 ↓1409（累积 ↑3139 ↓49195）
+2026-05-02 23:49:33 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_234933_抢号管理_普号号码管理_普号号码批量操作.md
+2026-05-02 23:49:33 | INFO     | cosmic_tool.cosmic_llm |   [42/69] → 6 个子过程描述
+2026-05-02 23:49:33 | INFO     | cosmic_tool.cosmic_llm |   [43/69] 抢号管理 > 普号号码管理 > 单个普号号码关联套餐...
+2026-05-02 23:50:03 | INFO     | cosmic_tool.cosmic_llm |   [43/69] tokens: ↑9 ↓2027（累积 ↑3148 ↓51222）
+2026-05-02 23:50:03 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235003_抢号管理_普号号码管理_单个普号号码关联套餐.md
+2026-05-02 23:50:03 | INFO     | cosmic_tool.cosmic_llm |   [43/69] → 7 个子过程描述
+2026-05-02 23:50:03 | INFO     | cosmic_tool.cosmic_llm |   [44/69] 抢号管理 > 普号号码管理 > 单个普号号码关联店铺标签...
+2026-05-02 23:50:26 | INFO     | cosmic_tool.cosmic_llm |   [44/69] tokens: ↑27 ↓1506（累积 ↑3175 ↓52728）
+2026-05-02 23:50:26 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235026_抢号管理_普号号码管理_单个普号号码关联店铺标签.md
+2026-05-02 23:50:26 | INFO     | cosmic_tool.cosmic_llm |   [44/69] → 7 个子过程描述
+2026-05-02 23:50:26 | INFO     | cosmic_tool.cosmic_llm |   [45/69] 抢号管理 > 普号套餐管理 > 普号套餐列表...
+2026-05-02 23:50:44 | INFO     | cosmic_tool.cosmic_llm |   [45/69] tokens: ↑124 ↓1242（累积 ↑3299 ↓53970）
+2026-05-02 23:50:44 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235044_抢号管理_普号套餐管理_普号套餐列表.md
+2026-05-02 23:50:44 | INFO     | cosmic_tool.cosmic_llm |   [45/69] → 3 个子过程描述
+2026-05-02 23:50:44 | INFO     | cosmic_tool.cosmic_llm |   [46/69] 抢号管理 > 普号套餐管理 > 查询普号套餐...
+2026-05-02 23:51:00 | INFO     | cosmic_tool.cosmic_llm |   [46/69] tokens: ↑15 ↓1053（累积 ↑3314 ↓55023）
+2026-05-02 23:51:00 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235100_抢号管理_普号套餐管理_查询普号套餐.md
+2026-05-02 23:51:00 | INFO     | cosmic_tool.cosmic_llm |   [46/69] → 3 个子过程描述
+2026-05-02 23:51:00 | INFO     | cosmic_tool.cosmic_llm |   [47/69] 抢号管理 > 普号套餐管理 > 开启/关闭普号套餐...
+2026-05-02 23:51:08 | INFO     | cosmic_tool.cosmic_llm |   [47/69] tokens: ↑87 ↓516（累积 ↑3401 ↓55539）
+2026-05-02 23:51:08 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235108_抢号管理_普号套餐管理_开启_关闭普号套餐.md
+2026-05-02 23:51:08 | INFO     | cosmic_tool.cosmic_llm |   [47/69] → 2 个子过程描述
+2026-05-02 23:51:08 | INFO     | cosmic_tool.cosmic_llm |   [48/69] 抢号管理 > 普号套餐管理 > 添加普号套餐...
+2026-05-02 23:51:25 | INFO     | cosmic_tool.cosmic_llm |   [48/69] tokens: ↑81 ↓1123（累积 ↑3482 ↓56662）
+2026-05-02 23:51:25 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235125_抢号管理_普号套餐管理_添加普号套餐.md
+2026-05-02 23:51:25 | INFO     | cosmic_tool.cosmic_llm |   [48/69] → 2 个子过程描述
+2026-05-02 23:51:25 | INFO     | cosmic_tool.cosmic_llm |   [49/69] 抢号管理 > 普号套餐管理 > 编辑普号套餐...
+2026-05-02 23:51:55 | INFO     | cosmic_tool.cosmic_llm |   [49/69] tokens: ↑81 ↓1959（累积 ↑3563 ↓58621）
+2026-05-02 23:51:55 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235155_抢号管理_普号套餐管理_编辑普号套餐.md
+2026-05-02 23:51:55 | INFO     | cosmic_tool.cosmic_llm |   [49/69] → 5 个子过程描述
+2026-05-02 23:51:55 | INFO     | cosmic_tool.cosmic_llm |   [50/69] 抢号管理 > 普号套餐管理 > 普号套餐审核...
+2026-05-02 23:52:19 | INFO     | cosmic_tool.cosmic_llm |   [50/69] tokens: ↑96 ↓1542（累积 ↑3659 ↓60163）
+2026-05-02 23:52:19 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235219_抢号管理_普号套餐管理_普号套餐审核.md
+2026-05-02 23:52:19 | INFO     | cosmic_tool.cosmic_llm |   [50/69] → 2 个子过程描述
+2026-05-02 23:52:19 | INFO     | cosmic_tool.cosmic_llm |   [51/69] 抢号管理 > 普号套餐管理 > 普号套餐审核记录...
+2026-05-02 23:52:52 | INFO     | cosmic_tool.cosmic_llm |   [51/69] tokens: ↑29 ↓2245（累积 ↑3688 ↓62408）
+2026-05-02 23:52:52 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235252_抢号管理_普号套餐管理_普号套餐审核记录.md
+2026-05-02 23:52:52 | WARNING  | cosmic_tool.cosmic_llm |   [51/69] ⚠ 普号套餐审核记录详情查看: 步1: 数据属性仅2个（建议≥3）
+2026-05-02 23:52:52 | INFO     | cosmic_tool.cosmic_llm |   [51/69] → 6 个子过程描述（1个有警告）
+2026-05-02 23:52:52 | INFO     | cosmic_tool.cosmic_llm |   [52/69] 抢号管理 > 普号套餐管理 > 复制普号套餐...
+2026-05-02 23:53:02 | INFO     | cosmic_tool.cosmic_llm |   [52/69] tokens: ↑81 ↓645（累积 ↑3769 ↓63053）
+2026-05-02 23:53:02 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235302_抢号管理_普号套餐管理_复制普号套餐.md
+2026-05-02 23:53:02 | INFO     | cosmic_tool.cosmic_llm |   [52/69] → 3 个子过程描述
+2026-05-02 23:53:02 | INFO     | cosmic_tool.cosmic_llm |   [53/69] 抢号管理 > 普号套餐管理 > 普号套餐快捷绑定/移除号码...
+2026-05-02 23:53:13 | INFO     | cosmic_tool.cosmic_llm |   [53/69] tokens: ↑13 ↓713（累积 ↑3782 ↓63766）
+2026-05-02 23:53:13 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235313_抢号管理_普号套餐管理_普号套餐快捷绑定_移除号码.md
+2026-05-02 23:53:13 | INFO     | cosmic_tool.cosmic_llm |   [53/69] → 3 个子过程描述
+2026-05-02 23:53:13 | INFO     | cosmic_tool.cosmic_llm |   [54/69] 抢号管理 > 普号套餐管理 > 普号套餐查看绑定号码...
+2026-05-02 23:53:33 | INFO     | cosmic_tool.cosmic_llm |   [54/69] tokens: ↑118 ↓1374（累积 ↑3900 ↓65140）
+2026-05-02 23:53:33 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235333_抢号管理_普号套餐管理_普号套餐查看绑定号码.md
+2026-05-02 23:53:33 | INFO     | cosmic_tool.cosmic_llm |   [54/69] → 3 个子过程描述
+2026-05-02 23:53:33 | INFO     | cosmic_tool.cosmic_llm |   [55/69] 抢号管理 > 普号套餐管理 > 普号套餐限制店铺标签...
+2026-05-02 23:53:40 | INFO     | cosmic_tool.cosmic_llm |   [55/69] tokens: ↑127 ↓519（累积 ↑4027 ↓65659）
+2026-05-02 23:53:40 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235340_抢号管理_普号套餐管理_普号套餐限制店铺标签.md
+2026-05-02 23:53:40 | INFO     | cosmic_tool.cosmic_llm |   [55/69] → 3 个子过程描述
+2026-05-02 23:53:40 | INFO     | cosmic_tool.cosmic_llm |   [56/69] 抢号管理 > 普号套餐管理 > 删除普号套餐...
+2026-05-02 23:53:50 | INFO     | cosmic_tool.cosmic_llm |   [56/69] tokens: ↑85 ↓624（累积 ↑4112 ↓66283）
+2026-05-02 23:53:50 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235350_抢号管理_普号套餐管理_删除普号套餐.md
+2026-05-02 23:53:50 | INFO     | cosmic_tool.cosmic_llm |   [56/69] → 2 个子过程描述
+2026-05-02 23:53:50 | INFO     | cosmic_tool.cosmic_llm |   [57/69] 抢号管理 > 订单列表 > 订单列表...
+2026-05-02 23:54:01 | INFO     | cosmic_tool.cosmic_llm |   [57/69] tokens: ↑128 ↓737（累积 ↑4240 ↓67020）
+2026-05-02 23:54:01 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235401_抢号管理_订单列表_订单列表.md
+2026-05-02 23:54:01 | INFO     | cosmic_tool.cosmic_llm |   [57/69] → 3 个子过程描述
+2026-05-02 23:54:01 | INFO     | cosmic_tool.cosmic_llm |   [58/69] 抢号管理 > 订单列表 > 查询抢号订单...
+2026-05-02 23:54:13 | INFO     | cosmic_tool.cosmic_llm |   [58/69] tokens: ↑48 ↓827（累积 ↑4288 ↓67847）
+2026-05-02 23:54:13 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235413_抢号管理_订单列表_查询抢号订单.md
+2026-05-02 23:54:13 | INFO     | cosmic_tool.cosmic_llm |   [58/69] → 3 个子过程描述
+2026-05-02 23:54:13 | INFO     | cosmic_tool.cosmic_llm |   [59/69] 抢号管理 > 订单列表 > 查看抢号订单详情...
+2026-05-02 23:54:33 | INFO     | cosmic_tool.cosmic_llm |   [59/69] tokens: ↑65 ↓1412（累积 ↑4353 ↓69259）
+2026-05-02 23:54:33 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235433_抢号管理_订单列表_查看抢号订单详情.md
+2026-05-02 23:54:33 | INFO     | cosmic_tool.cosmic_llm |   [59/69] → 3 个子过程描述
+2026-05-02 23:54:33 | INFO     | cosmic_tool.cosmic_llm |   [60/69] 抢号管理 > 订单列表 > 导出抢号订单...
+2026-05-02 23:54:45 | INFO     | cosmic_tool.cosmic_llm |   [60/69] tokens: ↑70 ↓806（累积 ↑4423 ↓70065）
+2026-05-02 23:54:45 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235445_抢号管理_订单列表_导出抢号订单.md
+2026-05-02 23:54:45 | INFO     | cosmic_tool.cosmic_llm |   [60/69] → 3 个子过程描述
+2026-05-02 23:54:45 | INFO     | cosmic_tool.cosmic_llm |   [61/69] 抢号管理 > 订单列表 > 抢号订单同步统一订单...
+2026-05-02 23:55:02 | INFO     | cosmic_tool.cosmic_llm |   [61/69] tokens: ↑111 ↓1140（累积 ↑4534 ↓71205）
+2026-05-02 23:55:02 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235502_抢号管理_订单列表_抢号订单同步统一订单.md
+2026-05-02 23:55:02 | INFO     | cosmic_tool.cosmic_llm |   [61/69] → 3 个子过程描述
+2026-05-02 23:55:02 | INFO     | cosmic_tool.cosmic_llm |   [62/69] 抢号前台 > 抢号活动首页 > 用户登录活动...
+2026-05-02 23:56:59 | INFO     | cosmic_tool.cosmic_llm |   [62/69] tokens: ↑106 ↓7835（累积 ↑4640 ↓79040）
+2026-05-02 23:56:59 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235659_抢号前台_抢号活动首页_用户登录活动.md
+2026-05-02 23:56:59 | INFO     | cosmic_tool.cosmic_llm |   [62/69] → 10 个子过程描述
+2026-05-02 23:56:59 | INFO     | cosmic_tool.cosmic_llm |   [63/69] 抢号前台 > 抢号活动首页 > 获取活动首页装修...
+2026-05-02 23:57:19 | INFO     | cosmic_tool.cosmic_llm |   [63/69] tokens: ↑2 ↓1392（累积 ↑4642 ↓80432）
+2026-05-02 23:57:19 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235719_抢号前台_抢号活动首页_获取活动首页装修.md
+2026-05-02 23:57:19 | INFO     | cosmic_tool.cosmic_llm |   [63/69] → 6 个子过程描述
+2026-05-02 23:57:19 | INFO     | cosmic_tool.cosmic_llm |   [64/69] 抢号前台 > 抢号活动首页 > 抢号订单通告...
+2026-05-02 23:57:28 | INFO     | cosmic_tool.cosmic_llm |   [64/69] tokens: ↑86 ↓617（累积 ↑4728 ↓81049）
+2026-05-02 23:57:28 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235728_抢号前台_抢号活动首页_抢号订单通告.md
+2026-05-02 23:57:28 | INFO     | cosmic_tool.cosmic_llm |   [64/69] → 3 个子过程描述
+2026-05-02 23:57:28 | INFO     | cosmic_tool.cosmic_llm |   [65/69] 抢号前台 > 抢号活动首页 > 获取抢号活动数据...
+2026-05-02 23:57:38 | INFO     | cosmic_tool.cosmic_llm |   [65/69] tokens: ↑127 ↓699（累积 ↑4855 ↓81748）
+2026-05-02 23:57:38 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235738_抢号前台_抢号活动首页_获取抢号活动数据.md
+2026-05-02 23:57:38 | INFO     | cosmic_tool.cosmic_llm |   [65/69] → 4 个子过程描述
+2026-05-02 23:57:38 | INFO     | cosmic_tool.cosmic_llm |   [66/69] 抢号前台 > 抢号活动首页 > 随机换一批号码...
+2026-05-02 23:57:52 | INFO     | cosmic_tool.cosmic_llm |   [66/69] tokens: ↑110 ↓984（累积 ↑4965 ↓82732）
+2026-05-02 23:57:52 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235752_抢号前台_抢号活动首页_随机换一批号码.md
+2026-05-02 23:57:52 | INFO     | cosmic_tool.cosmic_llm |   [66/69] → 3 个子过程描述
+2026-05-02 23:57:52 | INFO     | cosmic_tool.cosmic_llm |   [67/69] 抢号前台 > 抢号活动首页 > 用户信息及下单校验...
+2026-05-02 23:58:26 | INFO     | cosmic_tool.cosmic_llm |   [67/69] tokens: ↑125 ↓2320（累积 ↑5090 ↓85052）
+2026-05-02 23:58:26 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235826_抢号前台_抢号活动首页_用户信息及下单校验.md
+2026-05-02 23:58:26 | INFO     | cosmic_tool.cosmic_llm |   [67/69] → 8 个子过程描述
+2026-05-02 23:58:26 | INFO     | cosmic_tool.cosmic_llm |   [68/69] 抢号前台 > 抢号活动首页 > 获取广告数据...
+2026-05-02 23:58:33 | INFO     | cosmic_tool.cosmic_llm |   [68/69] tokens: ↑80 ↓498（累积 ↑5170 ↓85550）
+2026-05-02 23:58:33 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235833_抢号前台_抢号活动首页_获取广告数据.md
+2026-05-02 23:58:33 | INFO     | cosmic_tool.cosmic_llm |   [68/69] → 3 个子过程描述
+2026-05-02 23:58:33 | INFO     | cosmic_tool.cosmic_llm |   [69/69] 抢号前台 > 抢号下单页 > 线上下单流程...
+2026-05-02 23:58:54 | INFO     | cosmic_tool.cosmic_llm |   [69/69] tokens: ↑114 ↓1438（累积 ↑5284 ↓86988）
+2026-05-02 23:58:54 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_235854_抢号前台_抢号下单页_线上下单流程.md
+2026-05-02 23:58:54 | INFO     | cosmic_tool.cosmic_llm |   [69/69] → 4 个子过程描述
+2026-05-02 23:58:54 | INFO     | cosmic_tool.cosmic_llm | Total COSMIC items generated: 96
+2026-05-02 23:58:54 | INFO     | cosmic_tool.cosmic_llm | Token usage: ↑5284 输入 / ↓86988 输出（单次上限 16000）
+2026-05-02 23:58:54 | WARNING  | cosmic_tool.cosmic_llm | ⚠ 3 个模块存在数据异常（共3个功能过程）:
+2026-05-02 23:58:54 | WARNING  | cosmic_tool.cosmic_llm |   • 抢号管理>优号号码管理>单个优号号码关联套餐（1个过程）
+2026-05-02 23:58:54 | WARNING  | cosmic_tool.cosmic_llm |     - [查询单个优号绑定的套餐] 步1: 数据属性仅2个（建议≥3）
+2026-05-02 23:58:54 | WARNING  | cosmic_tool.cosmic_llm |   • 抢号管理>优号套餐管理>优号套餐审核记录（1个过程）
+2026-05-02 23:58:54 | WARNING  | cosmic_tool.cosmic_llm |     - [优号套餐审核记录详情] 步1: 数据属性仅2个（建议≥3）
+2026-05-02 23:58:54 | WARNING  | cosmic_tool.cosmic_llm |     - [优号套餐审核记录详情] 步3: 数据属性仅2个（建议≥3）
+2026-05-02 23:58:54 | WARNING  | cosmic_tool.cosmic_llm |   • 抢号管理>普号套餐管理>普号套餐审核记录（1个过程）
+2026-05-02 23:58:54 | WARNING  | cosmic_tool.cosmic_llm |     - [普号套餐审核记录详情查看] 步1: 数据属性仅2个（建议≥3）
+2026-05-02 23:58:54 | INFO     | cosmic_tool.md_handler | 已填充MD生成: data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md
+2026-05-02 23:58:54 | INFO     | cosmic_tool.md_handler | MD已更新: data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md
+2026-05-02 23:58:54 | INFO     | cosmic_tool | 
+下一步:
+2026-05-02 23:58:54 | INFO     | cosmic_tool |   编辑 data/附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md 人工审核修正
+2026-05-02 23:58:54 | INFO     | cosmic_tool |   然后: python -m cosmic_tool.main --docx "D:\mlt\ws_tool\data\附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx" --md
+2026-05-03 00:00:42 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md='data\\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.md', template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False)
+2026-05-03 00:00:42 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-03 00:00:42 | INFO     | cosmic_tool | ============================================================
+2026-05-03 00:00:42 | INFO     | cosmic_tool | 阶段3: 从MD生成Excel拆分表
+2026-05-03 00:00:42 | INFO     | cosmic_tool | ============================================================
+2026-05-03 00:00:42 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 00:00:42 | INFO     | cosmic_tool.md_handler | 从MD解析到 96 个已有功能过程（将被保留）
+2026-05-03 00:00:42 | INFO     | cosmic_tool.excel_writer | 源数据已保存: D:\mlt\ws_tool\log\source_data\20260503_000042_excel_source.json
+2026-05-03 00:00:42 | DEBUG    | cosmic_tool.excel_writer | Restored footer note at row 277
+2026-05-03 00:00:42 | INFO     | cosmic_tool.excel_writer | Written 271 rows to data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.xlsx
+2026-05-03 00:00:42 | INFO     | cosmic_tool.excel_writer | Restored 1 footer note(s) from template
+2026-05-03 00:00:42 | INFO     | cosmic_tool | 
+总计: 96 功能过程, 271 CFP
+2026-05-03 00:00:42 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.xlsx
