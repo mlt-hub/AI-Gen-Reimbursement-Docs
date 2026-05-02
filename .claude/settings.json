@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c 's = \"\\\\\\\\n\"; print\\(repr\\(s\\)\\)')",
+      "Bash(python3 -c 's = \"\\\\\\\\n\"; print\\([hex\\(ord\\(c\\)\\) for c in s]\\)')",
+      "Bash(echo 's = \"\\\\\\\\n\"; print\\([hex\\(ord\\(c\\)\\) for c in s]\\)')",
+      "Bash(python3 /tmp/test_esc.py)",
+      "Bash(echo 's = \"\\\\\\\\n\"')",
+      "Bash(xxd /tmp/test_actual.txt)",
+      "Bash(xxd)",
+      "Bash(python3 -c ' *)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}
