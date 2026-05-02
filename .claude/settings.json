@@ -19,7 +19,8 @@
       "Bash(python -c ' *)",
       "Bash(python -m cosmic_tool.main --docx \"data/闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目需求说明书V1.0.0.docx\" --init-md /tmp/test_step1.md)",
       "Read(//tmp/**)",
-      "Bash(python -m py_compile cosmic_tool/excel_writer.py)"
+      "Bash(python -m py_compile cosmic_tool/excel_writer.py)",
+      "Bash(python -m py_compile cosmic_tool/models.py)"
     ],
     "additionalDirectories": [
       "\\tmp",

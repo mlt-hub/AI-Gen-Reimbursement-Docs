@@ -191,7 +191,9 @@ def write_to_template(
     # Merge L3 module (column D)
     _merge_column_groups(ws, start_row, total_rows, 4, all_rows, 'module_l3')
 
-    # Merge process name (column G)
+    # Merge user (column E), trigger (column F), process name (column G)
+    _merge_column_groups(ws, start_row, total_rows, 5, all_rows, 'process')
+    _merge_column_groups(ws, start_row, total_rows, 6, all_rows, 'process')
     _merge_column_groups(ws, start_row, total_rows, 7, all_rows, 'process')
 
     # Keep the already-set data validations for reuse dropdown
