@@ -260,26 +260,8 @@ def _add_reuse_validation(ws, start_row, total_rows):
 
 
 def _auto_fit(ws, start_row: int, end_row: int) -> None:
-    """Auto-fit column widths and row heights based on content."""
+    """Auto-fit row heights based on content."""
     from openpyxl.utils import get_column_letter
-
-    # Column widths (skip row 5 — long wrapped descriptions)
-    for col_idx in range(1, 14):
-        max_len = 0
-        for r in list(range(1, 5)) + list(range(start_row, end_row + 1)):
-            cell = ws.cell(row=r, column=col_idx)
-            if cell.value:
-                lines = str(cell.value).split('\n')
-                length = max(
-                    sum(2 if ord(c) > 127 else 1 for c in line)
-                    for line in lines
-                )
-                max_len = max(max_len, length)
-        width = min(max_len + 3, 60)
-        if width > 4:
-            ws.column_dimensions[get_column_letter(col_idx)].width = width
-
-    # Row heights (data rows only)
     import math
     for r in range(start_row, end_row + 1):
         max_lines = 1
