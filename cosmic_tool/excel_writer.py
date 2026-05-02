@@ -118,7 +118,12 @@ def write_to_template(
                 9: 'move_type', 10: 'data_group', 11: 'data_attrs',
                 12: 'reuse', 13: 'cfp'
             }
-            cell.value = row_data.get(key_map[col_idx], '')
+            if col_idx == 13:
+                # CFP 列用公式：=IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))
+                cell.value = f'=IF(L{row_num}="新增",1,IF(L{row_num}="复用",1/3,0))'
+                cell.number_format = '0.00'
+            else:
+                cell.value = row_data.get(key_map[col_idx], '')
 
             # Apply style
             _apply_style(cell, ref_style)
