@@ -336,6 +336,7 @@ def generate_cosmic_items(
     max_tokens = load_max_tokens()
 
     all_items = []
+    error_modules: list[tuple[str, str, str, str]] = []  # (l1, l2, l3, error_msg)
     total = len(l3_modules)
 
     logger.info(f"Generating COSMIC decompositions for {total} modules...")
@@ -389,8 +390,32 @@ def generate_cosmic_items(
 
         except Exception as e:
             logger.warning(f"  [{idx}/{total}] → ERROR: {e}")
+            error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
 
-    logger.info(f"Total COSMIC items generated: {len(all_items)}")
+    # --- Final summary ---
+    total_ok = len(all_items)
+    warn_items = [it for it in all_items if it.warnings]
+    logger.info(f"Total COSMIC items generated: {total_ok}")
+    has_issues = warn_items or error_modules
+    if has_issues:
+        if warn_items:
+            module_warns: dict[str, list] = {}
+            for it in warn_items:
+                mod_path = f"{it.module_l1}>{it.module_l2}>{it.module_l3}"
+                module_warns.setdefault(mod_path, []).append(it)
+            logger.warning(f"⚠ {len(module_warns)} 个模块存在数据异常（共{len(warn_items)}个功能过程）:")
+            for mod_path, processes in module_warns.items():
+                logger.warning(f"  • {mod_path}（{len(processes)}个过程）")
+                for it in processes:
+                    for w in it.warnings:
+                        logger.warning(f"    - [{it.process}] {w}")
+        if error_modules:
+            logger.warning(f"❌ {len(error_modules)} 个模块解析失败:")
+            for l1, l2, l3, err in error_modules:
+                mod_path = f"{l1}>{l2}>{l3}" if l1 else l3
+                logger.warning(f"  • {mod_path}: {err}")
+    else:
+        logger.info("所有模块数据正常，无异常")
     return all_items
 
 
