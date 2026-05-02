@@ -55,9 +55,41 @@ def write_to_template(
     """Write COSMIC items to Excel template.
 
     Preserves header rows (1-5) and formatting, fills data starting at row 6.
+    Also preserves any existing footer rows from the template.
     """
     wb = openpyxl.load_workbook(template_path)
     ws = wb['2、功能点拆分表']
+
+    # --- Save existing footer notes (rows below header rows, before clearing) ---
+    # Collect rows from max_row upward that are NOT sample data (footer notes)
+    footer_saved = []  # list of (merge_range_string, {col: (value, style_dict)})
+    seen_merges = list(ws.merged_cells.ranges)
+    for row_num in range(ws.max_row, 5, -1):
+        cell_a = ws.cell(row=row_num, column=1).value
+        if cell_a and isinstance(cell_a, str) and len(cell_a) > 20:
+            # Check if rest of the row is empty (footer note, not data)
+            has_data = any(
+                ws.cell(row=row_num, column=c).value
+                for c in range(5, 14)
+            )
+            if not has_data:
+                # Save merged cells for this row
+                row_merges = []
+                for mr in seen_merges:
+                    if mr.min_row <= row_num <= mr.max_row:
+                        row_merges.append(str(mr))
+                # Save cell values and styles
+                row_vals = {}
+                for col in range(1, 14):
+                    c = ws.cell(row=row_num, column=col)
+                    if c.value is not None or col == 1:
+                        row_vals[col] = (c.value, _get_ref_style(ws, row_num, col))
+                if row_vals:
+                    footer_saved.insert(0, (row_merges, row_vals))
+                continue
+        # Stop at first non-footer row (contiguous from bottom)
+        if footer_saved:
+            break
 
     # --- Clear existing data (rows 6+) ---
     # 1. Remove merged cells in data area
@@ -73,7 +105,12 @@ def write_to_template(
         for cell in row:
             cell.value = None
 
-    # 3. Clear data validations (if any) for data area
+    # 3. Reset CFP column fill to none for non-reference rows (template may have green in unused rows)
+    for row_num in range(7, ws.max_row + 1):
+        cell_m = ws.cell(row=row_num, column=13)
+        cell_m.fill = PatternFill(fill_type=None)
+
+    # 4. Clear data validations (if any) for data area
     if ws.data_validations:
         new_dvs = []
         for dv in ws.data_validations.dataValidation:
@@ -102,8 +139,10 @@ def write_to_template(
         wb.save(output_path)
         return
 
-    # Get reference style from row 6 of template (or use default)
-    ref_style = _get_ref_style(ws, 6, 1)
+    # Get reference styles from row 6 of template, per column
+    ref_styles = {}
+    for col_idx in range(1, 14):
+        ref_styles[col_idx] = _get_ref_style(ws, 6, col_idx)
 
     # Column K (数据属性) should be left-aligned
     # Column H (子过程描述) should be left-aligned
@@ -125,12 +164,11 @@ def write_to_template(
                 # CFP 列用公式（从配置文件读取）
                 cfp_formula = load_cfp_formula()
                 cell.value = cfp_formula.replace('{row}', str(row_num))
-                cell.number_format = '0.00'
             else:
                 cell.value = row_data.get(key_map[col_idx], '')
 
-            # Apply style
-            _apply_style(cell, ref_style)
+            # Apply style (per-column from template)
+            _apply_style(cell, ref_styles[col_idx])
 
             # Special alignment for long text columns
             if col_idx in (8, 10, 11):
@@ -160,8 +198,28 @@ def write_to_template(
     # Add new data validation for L column (复用度) - dropdown
     _add_reuse_validation(ws, start_row, total_rows)
 
+    # --- Restore saved footer notes (from template) below the new data ---
+    for i, (merges, vals) in enumerate(footer_saved):
+        note_row = start_row + total_rows + i
+        for mr_str in merges:
+            # Translate merged cell range to the new row number
+            parts = mr_str.split(':')
+            old_min = int(''.join(c for c in parts[0] if c.isdigit()))
+            old_max = int(''.join(c for c in parts[1] if c.isdigit()))
+            span = old_max - old_min
+            new_min_str = parts[0].rstrip('0123456789') + str(note_row)
+            new_max_str = parts[1].rstrip('0123456789') + str(note_row + span)
+            ws.merge_cells(f'{new_min_str}:{new_max_str}')
+        for col, (val, style) in vals.items():
+            cell = ws.cell(row=note_row, column=col)
+            cell.value = val
+            _apply_style(cell, style)
+        logger.debug(f"Restored footer note at row {note_row}")
+
     wb.save(output_path)
     logger.info(f"Written {total_rows} rows to {output_path}")
+    if footer_saved:
+        logger.info(f"Restored {len(footer_saved)} footer note(s) from template")
 
 
 def _merge_column_groups(ws, start_row, total_rows, col, all_rows, key):
