@@ -218,6 +218,9 @@ def write_to_template(
             _apply_style(cell, style)
         logger.debug(f"Restored footer note at row {note_row}")
 
+    # --- Auto-fit column widths and row heights ---
+    _auto_fit(ws, start_row, start_row + total_rows - 1)
+
     wb.save(output_path)
     logger.info(f"Written {total_rows} rows to {output_path}")
     if footer_saved:
@@ -254,6 +257,42 @@ def _add_reuse_validation(ws, start_row, total_rows):
         )
         dv.sqref = f"L{start_row}:L{start_row + total_rows - 1}"
         ws.add_data_validation(dv)
+
+
+def _auto_fit(ws, start_row: int, end_row: int) -> None:
+    """Auto-fit column widths and row heights based on content."""
+    from openpyxl.utils import get_column_letter
+
+    # Column widths (skip row 5 — long wrapped descriptions)
+    for col_idx in range(1, 14):
+        max_len = 0
+        for r in list(range(1, 5)) + list(range(start_row, end_row + 1)):
+            cell = ws.cell(row=r, column=col_idx)
+            if cell.value:
+                lines = str(cell.value).split('\n')
+                length = max(
+                    sum(2 if ord(c) > 127 else 1 for c in line)
+                    for line in lines
+                )
+                max_len = max(max_len, length)
+        width = min(max_len + 3, 60)
+        if width > 4:
+            ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    # Row heights (data rows only)
+    import math
+    for r in range(start_row, end_row + 1):
+        max_lines = 1
+        for col_idx in range(1, 14):
+            cell = ws.cell(row=r, column=col_idx)
+            if cell.value:
+                text = str(cell.value)
+                for line in text.split('\n'):
+                    visual_len = sum(2 if ord(c) > 127 else 1 for c in line)
+                    col_w = ws.column_dimensions[get_column_letter(col_idx)].width or 10
+                    wraps = math.ceil(visual_len / max(col_w, 1))
+                    max_lines = max(max_lines, wraps)
+        ws.row_dimensions[r].height = max(15, min(max_lines * 18, 200))
 
 
 def write_environment_sheet(
