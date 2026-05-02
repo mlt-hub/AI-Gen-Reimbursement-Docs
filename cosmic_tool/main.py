@@ -140,24 +140,36 @@ ANTHROPIC_MODEL=deepseek-v4-flash
         print(f"  python -m cosmic_tool.main --fill-md {args.init_md}")
         return
 
-    # === Mode 2: fill-md (AI fill MD in-place) ===
+    # === Mode 2: fill-md (复制一份MD，AI填充到副本) ===
     if args.fill_md:
         if not api_key:
             print("⚠ 未设置 API Key。请先运行 --init-config 或设置环境变量")
             return
         print("=" * 60)
-        print("阶段2: AI填充MD中的COSMIC数据")
+        print("阶段2: AI填充COSMIC数据到MD副本")
         print("=" * 60)
-        # Need docx to build module tree context
         docx_path = args.docx or _find_docx_from_md(args.fill_md)
         if not docx_path:
             parser.error("--fill-md 需要 --docx 或将MD放在docx同目录下")
+
+        # 生成输出路径：在原名基础上加 _已填充
+        if args.fill_md.endswith('.md'):
+            output_md = args.fill_md[:-3] + '_已填充.md'
+        else:
+            output_md = args.fill_md + '_已填充.md'
+
+        # 复制原MD → 填充副本
+        import shutil
+        shutil.copy2(args.fill_md, output_md)
+        print(f"源文件: {args.fill_md}")
+        print(f"副本文件: {output_md}")
+
         modules = build_module_tree(docx_path)
         project = get_project_name(docx_path)
-        fill_md_with_ai(args.fill_md, modules, project, api_key, model, base_url)
+        fill_md_with_ai(output_md, modules, project, api_key, model, base_url)
         print(f"\n下一步:")
-        print(f"  编辑 {args.fill_md} 人工审核修正")
-        print(f"  然后: python -m cosmic_tool.main --md {args.fill_md} --template 模板.xlsx --output 结果.xlsx")
+        print(f"  编辑 {output_md} 人工审核修正")
+        print(f"  然后: python -m cosmic_tool.main --md {output_md} --template 模板.xlsx --output 结果.xlsx")
         return
 
     # === Mode 3: md → Excel ===
