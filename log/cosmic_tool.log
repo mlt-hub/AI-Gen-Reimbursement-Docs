@@ -247,3 +247,68 @@
 2026-05-02 20:52:13 | INFO     | cosmic_tool | 
 下一步:
 2026-05-02 20:52:13 | INFO     | cosmic_tool |   python -m cosmic_tool.main --fill-md data\拆分表.md
+2026-05-02 20:52:42 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='data\\拆分表.md', md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 20:52:42 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 20:52:42 | INFO     | cosmic_tool | ============================================================
+2026-05-02 20:52:42 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 20:52:42 | INFO     | cosmic_tool | ============================================================
+2026-05-02 20:52:42 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 20:52:42 | INFO     | cosmic_tool | 源文件: data\拆分表.md
+2026-05-02 20:52:42 | INFO     | cosmic_tool | 副本文件: data\拆分表_已填充.md
+2026-05-02 20:52:43 | INFO     | cosmic_tool | 待AI填充: 37 个模块, 69 个功能过程
+2026-05-02 20:52:43 | INFO     | cosmic_tool.md_handler | 正在AI填充 37 个模块的COSMIC数据...
+2026-05-02 20:52:43 | INFO     | cosmic_tool.cosmic_llm | MAX_TOKENS = 16000
+2026-05-02 20:52:43 | INFO     | cosmic_tool.cosmic_llm | Generating COSMIC decompositions for 37 modules...
+2026-05-02 20:52:43 | INFO     | cosmic_tool.cosmic_llm |   [1/37] 小福包专区 > 装修管理 > 基础配置...
+2026-05-02 20:53:00 | INFO     | cosmic_tool.cosmic_llm |   [1/37] tokens: ↑1513 ↓1361（累积 ↑1513 ↓1361）
+2026-05-02 20:53:00 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205300_小福包专区_装修管理_基础配置.md
+2026-05-02 20:53:00 | INFO     | cosmic_tool.cosmic_llm |   [1/37] → 1 processes
+2026-05-02 20:53:00 | INFO     | cosmic_tool.cosmic_llm |   [2/37] 小福包专区 > 装修管理 > 图片轮播组件...
+2026-05-02 20:53:49 | INFO     | cosmic_tool.cosmic_llm |   [2/37] tokens: ↑260 ↓3923（累积 ↑1773 ↓5284）
+2026-05-02 20:53:49 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205349_小福包专区_装修管理_图片轮播组件.md
+2026-05-02 20:53:49 | INFO     | cosmic_tool.cosmic_llm |   [2/37] → 7 processes
+2026-05-02 20:53:49 | INFO     | cosmic_tool.cosmic_llm |   [3/37] 小福包专区 > 装修管理 > 图片广告组件...
+2026-05-02 20:54:29 | INFO     | cosmic_tool.cosmic_llm |   [3/37] tokens: ↑211 ↓3184（累积 ↑1984 ↓8468）
+2026-05-02 20:54:29 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205429_小福包专区_装修管理_图片广告组件.md
+2026-05-02 20:54:29 | INFO     | cosmic_tool.cosmic_llm |   [3/37] → 4 processes
+2026-05-02 20:54:29 | INFO     | cosmic_tool.cosmic_llm |   [4/37] 小福包专区 > 装修管理 > 小福包组件...
+2026-05-02 20:55:14 | INFO     | cosmic_tool.cosmic_llm |   [4/37] tokens: ↑251 ↓3615（累积 ↑2235 ↓12083）
+2026-05-02 20:55:14 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205514_小福包专区_装修管理_小福包组件.md
+2026-05-02 20:55:14 | INFO     | cosmic_tool.cosmic_llm |   [4/37] → 8 processes
+2026-05-02 20:55:14 | INFO     | cosmic_tool.cosmic_llm |   [5/37] 小福包专区 > 装修管理 > 活动预览...
+2026-05-02 20:55:23 | INFO     | cosmic_tool.cosmic_llm |   [5/37] tokens: ↑80 ↓606（累积 ↑2315 ↓12689）
+2026-05-02 20:55:23 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205523_小福包专区_装修管理_活动预览.md
+2026-05-02 20:55:23 | INFO     | cosmic_tool.cosmic_llm |   [5/37] → 1 processes
+2026-05-02 20:55:23 | INFO     | cosmic_tool.cosmic_llm |   [6/37] 小福包专区 > 装修管理 > 保存活动...
+2026-05-02 20:55:26 | INFO     | cosmic_tool.cosmic_llm |   [6/37] tokens: ↑79 ↓268（累积 ↑2394 ↓12957）
+2026-05-02 20:55:26 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205526_小福包专区_装修管理_保存活动.md
+2026-05-02 20:55:26 | INFO     | cosmic_tool.cosmic_llm |   [6/37] → 1 processes
+2026-05-02 20:55:26 | INFO     | cosmic_tool.cosmic_llm |   [7/37] 小福包专区 > 小福包产品管理 > 小福包产品列表...
+2026-05-02 20:55:39 | INFO     | cosmic_tool.cosmic_llm |   [7/37] tokens: ↑103 ↓971（累积 ↑2497 ↓13928）
+2026-05-02 20:55:39 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205539_小福包专区_小福包产品管理_小福包产品列表.md
+2026-05-02 20:55:39 | INFO     | cosmic_tool.cosmic_llm |   [7/37] → 1 processes
+2026-05-02 20:55:39 | INFO     | cosmic_tool.cosmic_llm |   [8/37] 小福包专区 > 小福包产品管理 > 小福包产品数据同步...
+2026-05-02 20:56:01 | INFO     | cosmic_tool.cosmic_llm |   [8/37] tokens: ↑113 ↓1709（累积 ↑2610 ↓15637）
+2026-05-02 20:56:01 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205601_小福包专区_小福包产品管理_小福包产品数据同步.md
+2026-05-02 20:56:01 | INFO     | cosmic_tool.cosmic_llm |   [8/37] → 1 processes
+2026-05-02 20:56:01 | INFO     | cosmic_tool.cosmic_llm |   [9/37] 小福包专区 > 小福包产品管理 > 小福包产品编辑...
+2026-05-02 20:57:12 | INFO     | cosmic_tool.cosmic_llm |   [9/37] tokens: ↑215 ↓6005（累积 ↑2825 ↓21642）
+2026-05-02 20:57:12 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205712_小福包专区_小福包产品管理_小福包产品编辑.md
+2026-05-02 20:57:12 | INFO     | cosmic_tool.cosmic_llm |   [9/37] → 9 processes
+2026-05-02 20:57:12 | INFO     | cosmic_tool.cosmic_llm |   [10/37] 小福包专区 > 订单管理 > 融合宽带订单列表...
+2026-05-02 20:57:25 | INFO     | cosmic_tool.cosmic_llm |   [10/37] tokens: ↑102 ↓927（累积 ↑2927 ↓22569）
+2026-05-02 20:57:25 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205725_小福包专区_订单管理_融合宽带订单列表.md
+2026-05-02 20:57:25 | INFO     | cosmic_tool.cosmic_llm |   [10/37] → 1 processes
+2026-05-02 20:57:25 | INFO     | cosmic_tool.cosmic_llm |   [11/37] 小福包专区 > 订单管理 > 融合宽带订单导出...
+2026-05-02 20:57:40 | INFO     | cosmic_tool.cosmic_llm |   [11/37] tokens: ↑104 ↓1147（累积 ↑3031 ↓23716）
+2026-05-02 20:57:40 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205740_小福包专区_订单管理_融合宽带订单导出.md
+2026-05-02 20:57:40 | INFO     | cosmic_tool.cosmic_llm |   [11/37] → 1 processes
+2026-05-02 20:57:40 | INFO     | cosmic_tool.cosmic_llm |   [12/37] 小福包专区 > 订单管理 > 融合宽带订单查询...
+2026-05-02 20:57:51 | INFO     | cosmic_tool.cosmic_llm |   [12/37] tokens: ↑107 ↓839（累积 ↑3138 ↓24555）
+2026-05-02 20:57:51 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205751_小福包专区_订单管理_融合宽带订单查询.md
+2026-05-02 20:57:51 | INFO     | cosmic_tool.cosmic_llm |   [12/37] → 1 processes
+2026-05-02 20:57:51 | INFO     | cosmic_tool.cosmic_llm |   [13/37] 小福包专区 > 订单管理 > 融合宽带订单详情查看...
+2026-05-02 20:58:02 | INFO     | cosmic_tool.cosmic_llm |   [13/37] tokens: ↑186 ↓952（累积 ↑3324 ↓25507）
+2026-05-02 20:58:02 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_205802_小福包专区_订单管理_融合宽带订单详情查看.md
+2026-05-02 20:58:02 | INFO     | cosmic_tool.cosmic_llm |   [13/37] → 1 processes
+2026-05-02 20:58:02 | INFO     | cosmic_tool.cosmic_llm |   [14/37] 小福包专区 > 订单管理 > 小福包订单列表...

@@ -403,8 +403,9 @@ def generate_cosmic_items(
                 for it in items:
                     if it.warnings:
                         logger.warning(f"  [{idx}/{total}] ⚠ {it.process}: {'; '.join(it.warnings)}")
-            logger.info(f"  [{idx}/{total}] → {len(items)} processes"
-                        + (f" ({warn_count} with warnings)" if warn_count else ""))
+            sub_count = sum(len(it.movements) for it in items)
+            logger.info(f"  [{idx}/{total}] → {sub_count} 个子过程描述"
+                        + (f"（{warn_count}个有警告）" if warn_count else ""))
 
         except Exception as e:
             logger.warning(f"  [{idx}/{total}] → ERROR: {e}")
