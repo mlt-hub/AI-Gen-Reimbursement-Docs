@@ -23,7 +23,8 @@
       "Bash(python -m py_compile cosmic_tool/models.py)",
       "Bash(python -m py_compile cosmic_tool/config_utils.py)",
       "Bash(python -m py_compile cosmic_tool/cosmic_llm.py)",
-      "Bash(python -m py_compile cosmic_tool/main.py)"
+      "Bash(python -m py_compile cosmic_tool/main.py)",
+      "Bash(python -c \"from cosmic_tool.config_utils import load_max_tokens; print\\('MAX_TOKENS:', load_max_tokens\\(\\)\\)\")"
     ],
     "additionalDirectories": [
       "\\tmp",

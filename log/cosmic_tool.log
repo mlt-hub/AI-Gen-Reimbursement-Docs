@@ -421,3 +421,149 @@
 2026-05-02 17:30:09 | INFO     | cosmic_tool | 
 总计: 1 功能过程, 2 CFP
 2026-05-02 17:30:09 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\最终结果.xlsx
+2026-05-02 18:13:32 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='data\\闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目需求说明书V1.0.0.docx', init_md='data\\拆分表.md', fill_md='', md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 18:13:32 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 18:13:32 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:13:32 | INFO     | cosmic_tool | 阶段1: 解析需求说明书 → 生成空白MD
+2026-05-02 18:13:32 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:13:32 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 18:13:32 | DEBUG    | cosmic_tool | 识别到 13 个模块
+2026-05-02 18:13:32 | INFO     | cosmic_tool.md_handler | 空白MD已生成: data\拆分表.md
+2026-05-02 18:13:32 | INFO     | cosmic_tool | 
+下一步:
+2026-05-02 18:13:32 | INFO     | cosmic_tool |   python -m cosmic_tool.main --fill-md data\拆分表.md
+2026-05-02 18:13:45 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='data\\拆分表.md', md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 18:13:45 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 18:13:45 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:13:45 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 18:13:45 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:13:45 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 18:13:45 | INFO     | cosmic_tool | 源文件: data\拆分表.md
+2026-05-02 18:13:45 | INFO     | cosmic_tool | 副本文件: data\拆分表_已填充.md
+2026-05-02 18:13:45 | DEBUG    | cosmic_tool | 模块数: 13
+2026-05-02 18:13:45 | INFO     | cosmic_tool.md_handler | 从MD解析到 0 个功能过程
+2026-05-02 18:13:45 | INFO     | cosmic_tool.md_handler | 正在AI填充 2 个模块的COSMIC数据...
+2026-05-02 18:13:48 | INFO     | cosmic_tool.cosmic_llm | Generating COSMIC decompositions for 2 modules...
+2026-05-02 18:13:48 | INFO     | cosmic_tool.cosmic_llm |   [1/2] 小福包专区 > 装修管理 > 基础配置...
+2026-05-02 18:14:01 | INFO     | cosmic_tool.cosmic_llm |   [1/2] → 1 processes
+2026-05-02 18:14:01 | INFO     | cosmic_tool.cosmic_llm |   [2/2] 小福包专区 > 装修管理 > 图片轮播组件...
+2026-05-02 18:14:25 | WARNING  | cosmic_tool.cosmic_llm |   [2/2] → ERROR: No text content in response
+2026-05-02 18:14:25 | INFO     | cosmic_tool.cosmic_llm | Total COSMIC items generated: 1
+2026-05-02 18:14:25 | INFO     | cosmic_tool.md_handler | 已填充MD生成: data\拆分表_已填充.md
+2026-05-02 18:14:25 | INFO     | cosmic_tool.md_handler | MD已更新: data\拆分表_已填充.md
+2026-05-02 18:14:25 | INFO     | cosmic_tool | 
+下一步:
+2026-05-02 18:14:25 | INFO     | cosmic_tool |   编辑 data\拆分表_已填充.md 人工审核修正
+2026-05-02 18:14:25 | INFO     | cosmic_tool |   然后: python -m cosmic_tool.main --md data\拆分表_已填充.md --template 模板.xlsx --output 结果.xlsx
+2026-05-02 18:14:55 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='', md='data\\拆分表_已填充.md', template='D:\\mlt\\ws_tool\\data\\template.xlsx', output='data\\最终结果.xlsx', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 18:14:55 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 18:14:55 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:14:55 | INFO     | cosmic_tool | 阶段3: 从MD生成Excel拆分表
+2026-05-02 18:14:55 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:14:55 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 18:14:55 | INFO     | cosmic_tool.md_handler | 从MD解析到 1 个功能过程
+2026-05-02 18:14:55 | DEBUG    | cosmic_tool.excel_writer | Restored footer note at row 8
+2026-05-02 18:14:55 | INFO     | cosmic_tool.excel_writer | Written 2 rows to data\最终结果.xlsx
+2026-05-02 18:14:55 | INFO     | cosmic_tool.excel_writer | Restored 1 footer note(s) from template
+2026-05-02 18:14:55 | INFO     | cosmic_tool | 
+总计: 1 功能过程, 2 CFP
+2026-05-02 18:14:55 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\最终结果.xlsx
+2026-05-02 18:22:15 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='', md='data\\拆分表_已填充.md', template='D:\\mlt\\ws_tool\\data\\template.xlsx', output='data\\最终结果.xlsx', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 18:22:15 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 18:22:15 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:22:15 | INFO     | cosmic_tool | 阶段3: 从MD生成Excel拆分表
+2026-05-02 18:22:15 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:22:15 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 18:22:15 | INFO     | cosmic_tool.md_handler | 从MD解析到 1 个功能过程
+2026-05-02 18:22:16 | DEBUG    | cosmic_tool.excel_writer | Restored footer note at row 8
+2026-05-02 18:22:16 | INFO     | cosmic_tool.excel_writer | Written 2 rows to data\最终结果.xlsx
+2026-05-02 18:22:16 | INFO     | cosmic_tool.excel_writer | Restored 1 footer note(s) from template
+2026-05-02 18:22:16 | INFO     | cosmic_tool | 
+总计: 1 功能过程, 2 CFP
+2026-05-02 18:22:16 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\最终结果.xlsx
+2026-05-02 18:22:24 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='data\\拆分表.md', md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 18:22:24 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 18:22:24 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:22:24 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 18:22:24 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:22:24 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 18:22:24 | INFO     | cosmic_tool | 源文件: data\拆分表.md
+2026-05-02 18:22:24 | INFO     | cosmic_tool | 副本文件: data\拆分表_已填充.md
+2026-05-02 18:22:24 | DEBUG    | cosmic_tool | 模块数: 13
+2026-05-02 18:22:24 | INFO     | cosmic_tool.md_handler | 从MD解析到 0 个功能过程
+2026-05-02 18:22:24 | INFO     | cosmic_tool.md_handler | 正在AI填充 2 个模块的COSMIC数据...
+2026-05-02 18:22:25 | INFO     | cosmic_tool.cosmic_llm | Generating COSMIC decompositions for 2 modules...
+2026-05-02 18:22:25 | INFO     | cosmic_tool.cosmic_llm |   [1/2] 小福包专区 > 装修管理 > 基础配置...
+2026-05-02 18:22:33 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_182233_小福包专区_装修管理_基础配置.md
+2026-05-02 18:22:33 | INFO     | cosmic_tool.cosmic_llm |   [1/2] → 1 processes
+2026-05-02 18:22:33 | INFO     | cosmic_tool.cosmic_llm |   [2/2] 小福包专区 > 装修管理 > 图片轮播组件...
+2026-05-02 18:22:59 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_182259_小福包专区_装修管理_图片轮播组件.md
+2026-05-02 18:22:59 | WARNING  | cosmic_tool.cosmic_llm |   [2/2] → ERROR: Expecting ',' delimiter: line 42 column 6 (char 987)
+2026-05-02 18:22:59 | INFO     | cosmic_tool.cosmic_llm | Total COSMIC items generated: 1
+2026-05-02 18:22:59 | INFO     | cosmic_tool.md_handler | 已填充MD生成: data\拆分表_已填充.md
+2026-05-02 18:22:59 | INFO     | cosmic_tool.md_handler | MD已更新: data\拆分表_已填充.md
+2026-05-02 18:22:59 | INFO     | cosmic_tool | 
+下一步:
+2026-05-02 18:22:59 | INFO     | cosmic_tool |   编辑 data\拆分表_已填充.md 人工审核修正
+2026-05-02 18:22:59 | INFO     | cosmic_tool |   然后: python -m cosmic_tool.main --md data\拆分表_已填充.md --template 模板.xlsx --output 结果.xlsx
+2026-05-02 18:25:58 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='data\\拆分表.md', md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 18:25:58 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 18:25:58 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:25:58 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 18:25:58 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:25:58 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 18:25:58 | INFO     | cosmic_tool | 源文件: data\拆分表.md
+2026-05-02 18:25:58 | INFO     | cosmic_tool | 副本文件: data\拆分表_已填充.md
+2026-05-02 18:25:58 | DEBUG    | cosmic_tool | 模块数: 13
+2026-05-02 18:25:58 | INFO     | cosmic_tool.md_handler | 从MD解析到 0 个功能过程
+2026-05-02 18:25:58 | INFO     | cosmic_tool.md_handler | 正在AI填充 2 个模块的COSMIC数据...
+2026-05-02 18:25:58 | INFO     | cosmic_tool.cosmic_llm | Generating COSMIC decompositions for 2 modules...
+2026-05-02 18:25:58 | INFO     | cosmic_tool.cosmic_llm |   [1/2] 小福包专区 > 装修管理 > 基础配置...
+2026-05-02 18:25:58 | WARNING  | cosmic_tool.cosmic_llm |   [1/2] → ERROR: Streaming is required for operations that may take longer than 10 minutes. See https://github.com/anthropics/anthropic-sdk-python#long-requests for more details
+2026-05-02 18:25:58 | INFO     | cosmic_tool.cosmic_llm |   [2/2] 小福包专区 > 装修管理 > 图片轮播组件...
+2026-05-02 18:25:58 | WARNING  | cosmic_tool.cosmic_llm |   [2/2] → ERROR: Streaming is required for operations that may take longer than 10 minutes. See https://github.com/anthropics/anthropic-sdk-python#long-requests for more details
+2026-05-02 18:25:58 | INFO     | cosmic_tool.cosmic_llm | Total COSMIC items generated: 0
+2026-05-02 18:25:58 | INFO     | cosmic_tool.md_handler | 已填充MD生成: data\拆分表_已填充.md
+2026-05-02 18:25:58 | INFO     | cosmic_tool.md_handler | MD已更新: data\拆分表_已填充.md
+2026-05-02 18:25:58 | INFO     | cosmic_tool | 
+下一步:
+2026-05-02 18:25:58 | INFO     | cosmic_tool |   编辑 data\拆分表_已填充.md 人工审核修正
+2026-05-02 18:25:58 | INFO     | cosmic_tool |   然后: python -m cosmic_tool.main --md data\拆分表_已填充.md --template 模板.xlsx --output 结果.xlsx
+2026-05-02 18:26:43 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='data\\拆分表.md', md='', template='', output='', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 18:26:43 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 18:26:43 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:26:43 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-02 18:26:43 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:26:43 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 18:26:43 | INFO     | cosmic_tool | 源文件: data\拆分表.md
+2026-05-02 18:26:43 | INFO     | cosmic_tool | 副本文件: data\拆分表_已填充.md
+2026-05-02 18:26:43 | DEBUG    | cosmic_tool | 模块数: 13
+2026-05-02 18:26:43 | INFO     | cosmic_tool.md_handler | 从MD解析到 0 个功能过程
+2026-05-02 18:26:43 | INFO     | cosmic_tool.md_handler | 正在AI填充 2 个模块的COSMIC数据...
+2026-05-02 18:26:44 | INFO     | cosmic_tool.cosmic_llm | Generating COSMIC decompositions for 2 modules...
+2026-05-02 18:26:44 | INFO     | cosmic_tool.cosmic_llm |   [1/2] 小福包专区 > 装修管理 > 基础配置...
+2026-05-02 18:26:54 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_182654_小福包专区_装修管理_基础配置.md
+2026-05-02 18:26:54 | INFO     | cosmic_tool.cosmic_llm |   [1/2] → 2 processes
+2026-05-02 18:26:54 | INFO     | cosmic_tool.cosmic_llm |   [2/2] 小福包专区 > 装修管理 > 图片轮播组件...
+2026-05-02 18:27:21 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260502_182721_小福包专区_装修管理_图片轮播组件.md
+2026-05-02 18:27:21 | INFO     | cosmic_tool.cosmic_llm |   [2/2] → 7 processes
+2026-05-02 18:27:21 | INFO     | cosmic_tool.cosmic_llm | Total COSMIC items generated: 9
+2026-05-02 18:27:21 | INFO     | cosmic_tool.md_handler | 已填充MD生成: data\拆分表_已填充.md
+2026-05-02 18:27:21 | INFO     | cosmic_tool.md_handler | MD已更新: data\拆分表_已填充.md
+2026-05-02 18:27:21 | INFO     | cosmic_tool | 
+下一步:
+2026-05-02 18:27:21 | INFO     | cosmic_tool |   编辑 data\拆分表_已填充.md 人工审核修正
+2026-05-02 18:27:21 | INFO     | cosmic_tool |   然后: python -m cosmic_tool.main --md data\拆分表_已填充.md --template 模板.xlsx --output 结果.xlsx
+2026-05-02 18:27:39 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md='', fill_md='', md='data\\拆分表_已填充.md', template='D:\\mlt\\ws_tool\\data\\template.xlsx', output='data\\最终结果.xlsx', api_key='', model='', show_tree=False, no_llm=False, init_config=False)
+2026-05-02 18:27:39 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-02 18:27:39 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:27:39 | INFO     | cosmic_tool | 阶段3: 从MD生成Excel拆分表
+2026-05-02 18:27:39 | INFO     | cosmic_tool | ============================================================
+2026-05-02 18:27:39 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-02 18:27:39 | INFO     | cosmic_tool.md_handler | 从MD解析到 9 个功能过程
+2026-05-02 18:27:40 | DEBUG    | cosmic_tool.excel_writer | Restored footer note at row 25
+2026-05-02 18:27:40 | INFO     | cosmic_tool.excel_writer | Written 19 rows to data\最终结果.xlsx
+2026-05-02 18:27:40 | INFO     | cosmic_tool.excel_writer | Restored 1 footer note(s) from template
+2026-05-02 18:27:40 | INFO     | cosmic_tool | 
+总计: 9 功能过程, 19 CFP
+2026-05-02 18:27:40 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\最终结果.xlsx

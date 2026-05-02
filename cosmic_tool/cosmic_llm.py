@@ -274,11 +274,12 @@ def generate_cosmic_items(
         logger.warning("No L3 modules found in the module tree.")
         return []
 
-    # Load user rules from config (separate initiator and receiver rules)
-    from .config_utils import load_user_defaults, load_initiator_rules, load_receiver_rules
+    # Load config
+    from .config_utils import load_user_defaults, load_initiator_rules, load_receiver_rules, load_max_tokens
     user_default_initiator, user_default_receiver = load_user_defaults()
     user_initiator_rules = load_initiator_rules()
     user_receiver_rules = load_receiver_rules()
+    max_tokens = load_max_tokens()
 
     all_items = []
     total = len(l3_modules)
@@ -307,7 +308,7 @@ def generate_cosmic_items(
         try:
             response = client.messages.create(
                 model=model,
-                max_tokens=2000,
+                max_tokens=max_tokens,
                 temperature=0.1,
                 system=SYSTEM_PROMPT + "\n\n## 现有参照示例\n" + _get_examples(),
                 messages=[{"role": "user", "content": prompt}]
@@ -316,6 +317,10 @@ def generate_cosmic_items(
             resp_text = _extract_text(response.content)
             if not resp_text:
                 raise ValueError("No text content in response")
+
+            # Save raw AI response to log file
+            _save_ai_response(l3.name, l2_name, l1_name, resp_text)
+
             items = _parse_llm_response(l3.name, user, trigger, resp_text,
                                         project_name, l1_name, l2_name)
             all_items.extend(items)
@@ -326,6 +331,33 @@ def generate_cosmic_items(
 
     logger.info(f"Total COSMIC items generated: {len(all_items)}")
     return all_items
+
+
+def _save_ai_response(l3: str, l2: str, l1: str, text: str) -> None:
+    """Save raw AI response text to log/ai_responses/ for review."""
+    import os
+    from datetime import datetime
+
+    log_dir = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log', 'ai_responses'
+    )
+    os.makedirs(log_dir, exist_ok=True)
+
+    # Safe filename from module hierarchy
+    parts = [p for p in [l1, l2, l3] if p]
+    safe_name = '_'.join(parts).replace('/', '_').replace('\\', '_').strip()
+    safe_name = safe_name[:100] if len(safe_name) > 100 else safe_name
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{timestamp}_{safe_name}.md"
+    filepath = os.path.join(log_dir, filename)
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(f"# AI Response: {' > '.join(parts)}\n")
+        f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write(text)
+
+    logger.info(f"AI响应已保存: {filepath}")
 
 
 def _get_examples() -> str:

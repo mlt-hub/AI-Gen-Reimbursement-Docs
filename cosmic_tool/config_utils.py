@@ -188,3 +188,25 @@ def load_receiver_rules() -> list[tuple[str, str]]:
                     if key and val:
                         rules.append((key, val))
     return rules
+
+
+def load_max_tokens(default: int = 2000) -> int:
+    """Load MAX_TOKENS from .env, supporting K/M units.
+
+    Examples: 2000, 384K, 1M
+    """
+    env_path = Path(__file__).parent / ".env"
+    val = _read_env_value("MAX_TOKENS", env_path)
+    if not val:
+        return default
+
+    val = val.strip().upper()
+    try:
+        if val.endswith("M"):
+            return int(float(val[:-1]) * 1_000_000)
+        elif val.endswith("K"):
+            return int(float(val[:-1]) * 1_000)
+        else:
+            return int(val)
+    except (ValueError, OverflowError):
+        return default
