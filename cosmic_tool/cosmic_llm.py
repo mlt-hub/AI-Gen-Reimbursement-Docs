@@ -335,6 +335,7 @@ def generate_cosmic_items(
     user_initiator_rules = load_initiator_rules()
     user_receiver_rules = load_receiver_rules()
     max_tokens = load_max_tokens()
+    logger.info(f"MAX_TOKENS = {max_tokens}")
 
     all_items = []
     error_modules: list[tuple[str, str, str, str]] = []  # (l1, l2, l3, error_msg)

@@ -209,4 +209,6 @@ def load_max_tokens(default: int = 2000) -> int:
         else:
             return int(val)
     except (ValueError, OverflowError):
+        logger = logging.getLogger('cosmic_tool.config_utils')
+        logger.warning(f"MAX_TOKENS 格式无效「{val}」，使用默认值 {default}")
         return default
