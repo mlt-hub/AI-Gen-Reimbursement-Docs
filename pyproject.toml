@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cosmic-tool"
-version = "3.0.0"
+version = "1.0.0"
 description = "COSMIC 功能点拆分工具 — 从需求说明书自动生成功能点拆分表"
 readme = "README.md"
 license = { text = "MIT" }

@@ -5,6 +5,11 @@ import os
 from pathlib import Path
 
 
+def _config_dir() -> Path:
+    """Path to config/ directory (project root /config)."""
+    return Path(__file__).parent.parent / "config"
+
+
 def _read_env_value(key: str, env_path: Path) -> str:
     """Read a specific key from a .env file."""
     if not env_path.exists():
@@ -28,58 +33,70 @@ def _read_json_value(key: str, config_path: Path) -> str:
         return config.get(key, "")
 
 
-def load_api_key() -> str:
-    """Load ANTHROPIC_API_KEY from env, .env file, or config.json."""
-    # 1. Environment variable
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
+def _from_env(key: str, alt_path: Path, default: str = "") -> str:
+    """Read key from env var first, then alt_path. Returns '' if not found."""
+    val = os.environ.get(key, "")
+    if val:
+        return val
+    return _read_env_value(key, alt_path)
+
+
+def _from_env_override(key: str, alt_path: Path, default: str = "") -> str:
+    """Read key from alt_path first (overriding env var), then env var."""
+    val = _read_env_value(key, alt_path)
+    if val:
+        return val
+    return os.environ.get(key, "")
+
+
+def load_api_key(override: bool = True) -> str:
+    """Load ANTHROPIC_API_KEY.
+
+    override=True: config/.env > system env var > config.json
+    override=False: system env var > config/.env > config.json
+    """
+    env_path = _config_dir() / ".env"
+    loader = _from_env_override if override else _from_env
+    key = loader("ANTHROPIC_API_KEY", env_path)
     if key:
         return key
 
-    # 2. .env in cosmic_tool directory
-    env_path = Path(__file__).parent / ".env"
-    key = _read_env_value("ANTHROPIC_API_KEY", env_path)
-    if key:
-        return key
-
-    # 3. config.json
+    # config.json fallback
     config_path = Path(__file__).parent / "config.json"
     key = _read_json_value("anthropic_api_key", config_path)
     if key:
         return key
-
     return ""
 
 
-def load_base_url() -> str:
-    """Load ANTHROPIC_BASE_URL from env, .env file, or config.json."""
-    url = os.environ.get("ANTHROPIC_BASE_URL", "")
+def load_base_url(override: bool = True) -> str:
+    """Load ANTHROPIC_BASE_URL.
+
+    override=True: config/.env > system env var > config.json
+    override=False: system env var > config/.env > config.json
+    """
+    env_path = _config_dir() / ".env"
+    loader = _from_env_override if override else _from_env
+    url = loader("ANTHROPIC_BASE_URL", env_path)
     if url:
         return url
 
-    # .env in cosmic_tool directory
-    env_path = Path(__file__).parent / ".env"
-    url = _read_env_value("ANTHROPIC_BASE_URL", env_path)
-    if url:
-        return url
-
-    # config.json
     config_path = Path(__file__).parent / "config.json"
     url = _read_json_value("anthropic_base_url", config_path)
     if url:
         return url
-
     return ""
 
 
-def load_model_name(default: str = "deepseek-v4-flash") -> str:
-    """Load ANTHROPIC_MODEL from env, .env file, or config.json."""
-    # Priority: .env > env var > config.json > default
-    env_path = Path(__file__).parent / ".env"
-    model = _read_env_value("ANTHROPIC_MODEL", env_path)
-    if model:
-        return _clean_model(model)
+def load_model_name(default: str = "deepseek-v4-flash", override: bool = True) -> str:
+    """Load ANTHROPIC_MODEL.
 
-    model = os.environ.get("ANTHROPIC_MODEL", "")
+    override=True: config/.env > system env var > config.json > default
+    override=False: system env var > config/.env > config.json > default
+    """
+    env_path = _config_dir() / ".env"
+    loader = _from_env_override if override else _from_env
+    model = loader("ANTHROPIC_MODEL", env_path)
     if model:
         return _clean_model(model)
 
@@ -87,7 +104,6 @@ def load_model_name(default: str = "deepseek-v4-flash") -> str:
     model = _read_json_value("anthropic_model", config_path)
     if model:
         return _clean_model(model)
-
     return default
 
 
@@ -101,112 +117,85 @@ def _clean_model(name: str) -> str:
 clean_model_name = _clean_model
 
 
-def _business_env_path() -> Path:
-    """Path to the business config file (同目录下的 business.env)."""
-    return Path(__file__).parent / "business.env"
+def _load_business_rules() -> dict:
+    """Load config/business_rules.yaml and return as dict."""
+    yaml_path = _config_dir() / "business_rules.yaml"
+    if not yaml_path.exists():
+        return {}
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {}
 
 
 def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))') -> str:
-    """Load CFP_FORMULA from business.env."""
-    env_path = _business_env_path()
-    formula = _read_env_value("CFP_FORMULA", env_path)
-    if formula:
-        return formula
-    return default
+    """Load cfp_formula from business_rules.yaml."""
+    cfg = _load_business_rules()
+    formula = cfg.get('cfp_formula', '')
+    return formula if formula else default
 
 
 def load_user_defaults() -> tuple[str, str]:
-    """Load default initiator and receiver from business.env."""
-    env_path = _business_env_path()
-    default_initiator = "操作员"
-    default_receiver = "地市后台"
-
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if line.startswith("USER_INITIATOR_DEFAULT="):
-                    default_initiator = line.split("=", 1)[1].strip().strip('"').strip("'")
-                elif line.startswith("USER_RECEIVER_DEFAULT="):
-                    default_receiver = line.split("=", 1)[1].strip().strip('"').strip("'")
-    return default_initiator, default_receiver
+    """Load user_initiator_default and user_receiver_default from business_rules.yaml."""
+    cfg = _load_business_rules()
+    return (
+        cfg.get('user_initiator_default', '操作员'),
+        cfg.get('user_receiver_default', '地市后台'),
+    )
 
 
 def load_initiator_rules() -> list[tuple[str, str]]:
-    """Load USER_INITIATOR_关键词=值 rules from business.env."""
-    env_path = _business_env_path()
-    rules: list[tuple[str, str]] = []
-
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if line.startswith("USER_INITIATOR_") and not line.startswith("USER_INITIATOR_DEFAULT="):
-                    rest = line[len("USER_INITIATOR_"):]
-                    key, _, val = rest.partition("=")
-                    key = key.strip()
-                    val = val.strip().strip('"').strip("'")
-                    if key and val:
-                        rules.append((key, val))
-    return rules
+    """Load user_initiator_rules from business_rules.yaml."""
+    cfg = _load_business_rules()
+    raw = cfg.get('user_initiator_rules', {})
+    if not isinstance(raw, dict):
+        return []
+    return list(raw.items())
 
 
 def load_receiver_rules() -> list[tuple[str, str]]:
-    """Load USER_RECEIVER_关键词=值 rules from business.env."""
-    env_path = _business_env_path()
-    rules: list[tuple[str, str]] = []
-
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if line.startswith("USER_RECEIVER_") and not line.startswith("USER_RECEIVER_DEFAULT="):
-                    rest = line[len("USER_RECEIVER_"):]
-                    key, _, val = rest.partition("=")
-                    key = key.strip()
-                    val = val.strip().strip('"').strip("'")
-                    if key and val:
-                        rules.append((key, val))
-    return rules
+    """Load user_receiver_rules from business_rules.yaml."""
+    cfg = _load_business_rules()
+    raw = cfg.get('user_receiver_rules', {})
+    if not isinstance(raw, dict):
+        return []
+    return list(raw.items())
 
 
 def load_max_tokens(default: int = 2000) -> int:
-    """Load MAX_TOKENS from .env, supporting K/M units.
+    """Load max_tokens from system_config.yaml, supporting K/M units.
 
     Examples: 2000, 384K, 1M
     """
-    env_path = Path(__file__).parent / ".env"
-    val = _read_env_value("MAX_TOKENS", env_path)
-    if not val:
-        return default
-
-    val = val.strip().upper()
-    try:
-        if val.endswith("M"):
-            return int(float(val[:-1]) * 1_000_000)
-        elif val.endswith("K"):
-            return int(float(val[:-1]) * 1_000)
-        else:
-            return int(val)
-    except (ValueError, OverflowError):
-        logger = logging.getLogger('cosmic_tool.config_utils')
-        logger.warning(f"MAX_TOKENS 格式无效「{val}」，使用默认值 {default}")
-        return default
+    yaml_path = _config_dir() / "system_config.yaml"
+    if yaml_path.exists():
+        try:
+            import yaml
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            val = cfg.get('max_tokens', '')
+            if val:
+                val = str(val).strip().upper()
+                if val.endswith("M"):
+                    return int(float(val[:-1]) * 1_000_000)
+                elif val.endswith("K"):
+                    return int(float(val[:-1]) * 1_000)
+                else:
+                    return int(val)
+        except Exception as e:
+            logger = logging.getLogger('cosmic_tool.config_utils')
+            logger.warning(f"system_config.yaml 读取失败: {e}，使用默认值 {default}")
+    return default
 
 
 def load_business_config() -> dict:
-    """Load business process flags from business.env.
+    """Load business process flags from system_config.yaml.
 
     Returns dict with keys: regenerate_md, regenerate_filled, regenerate_excel,
     regenerate_all, enable_ai.
     """
-    env_path = _business_env_path()
     config = {
         'regenerate_md': False,
         'regenerate_filled': False,
@@ -214,31 +203,22 @@ def load_business_config() -> dict:
         'regenerate_all': False,
         'enable_ai': True,
     }
-    if not env_path.exists():
+    yaml_path = _config_dir() / "system_config.yaml"
+    if not yaml_path.exists():
         return config
 
-    with open(env_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            if '=' not in line:
-                continue
-            key, _, val = line.partition('=')
-            key = key.strip().upper()
-            val = val.strip().lower() in ('true', '1', 'yes')
-            if key == 'REGENERATE_MD':
-                config['regenerate_md'] = val
-            elif key == 'REGENERATE_FILLED':
-                config['regenerate_filled'] = val
-            elif key == 'REGENERATE_EXCEL':
-                config['regenerate_excel'] = val
-            elif key == 'REGENERATE_ALL':
-                config['regenerate_all'] = val
-            elif key == 'ENABLE_AI':
-                config['enable_ai'] = val
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
 
-    # REGENERATE_ALL overrides individual settings
+        for key in ('regenerate_md', 'regenerate_filled', 'regenerate_excel',
+                    'regenerate_all', 'enable_ai'):
+            if key in cfg:
+                config[key] = bool(cfg[key])
+    except Exception:
+        pass
+
     if config['regenerate_all']:
         config['regenerate_md'] = True
         config['regenerate_filled'] = True

@@ -1,0 +1,15 @@
+# COSMIC 功能点拆分工具 — 通用配置
+
+# AI 每次调用的最大输出 token 数（支持 K/M 单位，如 384K）
+max_tokens: 16000
+
+# 是否重新生成各阶段文件（false=有文件则跳过，true=总是重新生成）
+# 单独设置优先级高于全部重新生成
+regenerate_md: false
+regenerate_filled: false
+regenerate_excel: false
+# 以上全部重新生成（覆盖单个设置）
+regenerate_all: false
+
+# 是否使用AI大模型生成COSMIC数据
+enable_ai: true

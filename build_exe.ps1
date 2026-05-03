@@ -45,13 +45,13 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[复制] 附加文件..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path "$root\dist\data" | Out-Null
 Copy-Item "$root\data\template.xlsx" "$root\dist\data\" -Force
-Copy-Item "$root\cosmic_tool\.env.example" "$root\dist\.env.example" -Force
-Copy-Item "$root\cosmic_tool\business.env.example" "$root\dist\business.env.example" -Force
-if (Test-Path "$root\cosmic_tool\.env") {
-    Copy-Item "$root\cosmic_tool\.env" "$root\dist\.env" -Force
-}
-if (Test-Path "$root\cosmic_tool\business.env") {
-    Copy-Item "$root\cosmic_tool\business.env" "$root\dist\business.env" -Force
+Copy-Item "$root\config\.env.example" "$root\dist\.env.example" -Force
+Copy-Item "$root\config\system_config.yaml" "$root\dist\system_config.yaml" -Force
+Copy-Item "$root\config\system_config.yaml.example" "$root\dist\system_config.yaml.example" -Force
+Copy-Item "$root\config\business_rules.yaml" "$root\dist\business_rules.yaml" -Force
+Copy-Item "$root\config\business_rules.yaml.example" "$root\dist\business_rules.yaml.example" -Force
+if (Test-Path "$root\config\.env") {
+    Copy-Item "$root\config\.env" "$root\dist\.env" -Force
 }
 
 # 复制一份并命名为 cosmic.exe（方便无版本号调用）

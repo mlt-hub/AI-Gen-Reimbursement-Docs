@@ -209,10 +209,10 @@ def main():
 
     # === Init config ===
     if args.init_config:
-        pkg_dir = os.path.dirname(__file__)
-        # 检查是否已存在
-        env_path = os.path.join(pkg_dir, '.env')
-        biz_path = os.path.join(pkg_dir, 'business.env')
+        config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+        os.makedirs(config_dir, exist_ok=True)
+        env_path = os.path.join(config_dir, '.env')
+        biz_path = os.path.join(config_dir, 'business.env')
         if os.path.exists(env_path) or os.path.exists(biz_path):
             logger.info("配置文件已存在，跳过创建")
             return

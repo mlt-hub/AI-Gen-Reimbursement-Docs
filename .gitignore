@@ -2,9 +2,6 @@ __pycache__/
 *.pyc
 .env
 business.env
-data/*.docx
-data/*.xlsx
-!data/template.xlsx
 log/
 
 # 构建产物
