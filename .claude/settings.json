@@ -41,7 +41,9 @@
       "Bash(python -m cosmic_tool.main --batch)",
       "Bash(python -m cosmic_tool.main --batch --no-llm)",
       "Bash(cosmic --batch --no-llm)",
-      "Bash(cosmic --no-llm)"
+      "Bash(cosmic --no-llm)",
+      "Bash(cosmic --version)",
+      "Bash(powershell -NoProfile -Command 'Select-String -Path pyproject.toml -Pattern '\\\\''^version = \"\\(.+\\)\"'\\\\'' | ForEach-Object { $_.Matches.Groups[1].Value }')"
     ],
     "additionalDirectories": [
       "\\tmp",

@@ -1234,3 +1234,24 @@
 2026-05-03 08:55:41 | INFO     | cosmic_tool | ============================================================
 2026-05-03 08:55:41 | DEBUG    | cosmic_tool | --- section start ---
 2026-05-03 08:55:41 | INFO     | cosmic_tool | 成功: 4/4，失败: 0/4
+2026-05-03 09:05:24 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log=None)
+2026-05-03 09:05:24 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-03 09:05:24 | INFO     | cosmic_tool | ============================================================
+2026-05-03 09:05:24 | INFO     | cosmic_tool | 批量处理模式
+2026-05-03 09:05:24 | INFO     | cosmic_tool | ============================================================
+2026-05-03 09:05:24 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 09:05:24 | INFO     | cosmic_tool |   [1/4] 01.附件1-闽市移需【202501】17658 号-关于构建垂直行业场景化营销的需求（和乐业）项目需求说明书V1.0.0_simple.docx
+2026-05-03 09:05:24 | INFO     | cosmic_tool |   ----------------------------------------
+2026-05-03 09:09:25 | INFO     | cosmic_tool | ============================================================
+2026-05-03 09:09:25 | INFO     | cosmic_tool | 批量处理完成
+2026-05-03 09:09:25 | INFO     | cosmic_tool | ============================================================
+2026-05-03 09:09:25 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 09:09:25 | INFO     | cosmic_tool | 总数: 4，Excel生成成功: 2，处理未生成Excel: 2，失败: 0
+2026-05-03 09:09:25 | INFO     | cosmic_tool | 成功:
+2026-05-03 09:09:25 | INFO     | cosmic_tool |   ✅ 02.闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目需求说明书V1.0.0_simple.docx
+2026-05-03 09:09:25 | INFO     | cosmic_tool |   ✅ 03.附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0_simple.docx
+2026-05-03 09:09:25 | INFO     | cosmic_tool | 已处理但未生成Excel（如无AI数据、--no-llm等）:
+2026-05-03 09:09:25 | INFO     | cosmic_tool |   ⚠ 01.附件1-闽市移需【202501】17658 号-关于构建垂直行业场景化营销的需求（和乐业）项目需求说明书V1.0.0_simple.docx
+2026-05-03 09:09:25 | INFO     | cosmic_tool |   ⚠ 04.附件1-闽市移需【202506】21252号-关于优化合伙人分销甩单平台C2C模式的需求项目需求说明书_simple.docx
+2026-05-03 09:24:47 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log=None, version=True)
+2026-05-03 09:26:12 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log=None, version=True)

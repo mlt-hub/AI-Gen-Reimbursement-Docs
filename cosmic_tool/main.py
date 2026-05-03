@@ -81,6 +81,18 @@ def setup_logging(log_dir: str = ""):
 logger, _run_log_path = setup_logging()
 
 
+def _get_version() -> str:
+    """Read version from pyproject.toml (single source of truth)."""
+    import tomllib
+    import re
+    try:
+        toml_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'pyproject.toml')
+        with open(toml_path, 'rb') as f:
+            return tomllib.load(f)['project']['version']
+    except Exception:
+        return "unknown"
+
+
 def _section(title: str):
     """Print a section header to both console and log."""
     sep = "=" * 60
@@ -156,6 +168,9 @@ def main():
     parser.add_argument('--log', nargs='?', const='tail', default=None,
                         help='查看日志：--log（末30行），--log full，--log watch，--log open')
 
+    parser.add_argument('--version', '-v', action='store_true',
+                        help='显示版本号')
+
     args = parser.parse_args()
     logger.debug(f"CLI args: {args}")
 
@@ -185,6 +200,11 @@ def main():
         if args.log == 'tail':
             lines = lines[-30:]
         print(''.join(lines))
+        return
+
+    # === Version ===
+    if args.version:
+        print(f"cosmic-tool v{_get_version()}")
         return
 
     # === Init config ===
@@ -260,8 +280,9 @@ USER_RECEIVER_DEFAULT=地市后台
             return
 
         total = len(docx_files)
-        ok_count = 0
-        fail_count = 0
+        excel_ok: list[str] = []       # 成功生成 Excel 的 docx
+        processed_no_excel: list[str] = []  # 处理了但没生成 Excel
+        failed: list[str] = []         # 处理失败的 docx
 
         for idx, docx_path in enumerate(docx_files, 1):
             base_name = os.path.splitext(docx_path)[0]
@@ -274,7 +295,7 @@ USER_RECEIVER_DEFAULT=地市后台
             out_xlsx = os.path.join(out_dir, os.path.basename(xlsx_path))
             if os.path.exists(out_xlsx):
                 logger.info(f"  [{idx}/{total}] {docx_path} → 已处理，跳过")
-                ok_count += 1
+                excel_ok.append(docx_path)
                 continue
 
             os.makedirs(md_dir, exist_ok=True)
@@ -313,18 +334,34 @@ USER_RECEIVER_DEFAULT=地市后台
                 else:
                     logger.warning(f"  MD中无数据，跳过Excel生成")
 
-                ok_count += 1
+
+                if os.path.exists(out_xlsx):
+                    excel_ok.append(docx_path)
+                else:
+                    processed_no_excel.append(docx_path)
                 logger.info("")  # 分隔空行
 
             except Exception as e:
                 logger.error(f"  ❌ 处理失败: {e}")
-                fail_count += 1
+                failed.append(docx_path)
                 logger.info("")  # 分隔空行
 
         # Restore default logging
         setup_logging()
         _section("批量处理完成")
-        logger.info(f"成功: {ok_count}/{total}，失败: {fail_count}/{total}")
+        logger.info(f"总数: {total}，Excel生成成功: {len(excel_ok)}，处理未生成Excel: {len(processed_no_excel)}，失败: {len(failed)}")
+        if excel_ok:
+            logger.info("成功:")
+            for d in excel_ok:
+                logger.info(f"  ✅ {d}")
+        if processed_no_excel:
+            logger.info("已处理但未生成Excel（如无AI数据、--no-llm等）:")
+            for d in processed_no_excel:
+                logger.info(f"  ⚠ {d}")
+        if failed:
+            logger.info("失败:")
+            for d in failed:
+                logger.info(f"  ❌ {d}")
         return
 
     # === Mode 1: init-md (docx → empty MD) ===
