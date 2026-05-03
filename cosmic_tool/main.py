@@ -11,6 +11,9 @@
 
 一键直出（跳过MD中间文件）:
   python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
+
+默认批处理（无参数时自动处理当前目录所有docx）:
+  python -m cosmic_tool.main
 """
 
 import argparse
@@ -36,17 +39,15 @@ if os.path.isdir(_pycache):
     shutil.rmtree(_pycache, ignore_errors=True)
 
 
-def setup_logging():
-    """配置日志：控制台 + 主日志文件 + 本次运行独立日志。"""
-    log_dir = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 'log'
-    )
+def setup_logging(log_dir: str = ""):
+    """配置日志：控制台 + 日志文件（可指定目录）。"""
+    if not log_dir:
+        log_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 'log'
+        )
     os.makedirs(log_dir, exist_ok=True)
 
-    # 主日志（持续追加）
     main_log = os.path.join(log_dir, 'cosmic_tool.log')
-
-    # 本次运行独立日志（带时间戳）
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     run_log = os.path.join(log_dir, f'run_{run_stamp}.log')
 
@@ -59,19 +60,16 @@ def setup_logging():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # 写入主日志
     fh = logging.FileHandler(main_log, encoding='utf-8', mode='a')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(fmt)
     logger.addHandler(fh)
 
-    # 写入本次运行日志
     rh = logging.FileHandler(run_log, encoding='utf-8', mode='w')
     rh.setLevel(logging.DEBUG)
     rh.setFormatter(fmt)
     logger.addHandler(rh)
 
-    # 控制台输出
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
     ch.setFormatter(logging.Formatter('%(message)s'))
@@ -94,7 +92,7 @@ def _section(title: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="COSMIC 功能点拆分工具 - 从需求说明书自动生成功能点拆分表",
+        description="COSMIC 功能点拆分工具 - 从需求说明书自动生成功能点拆分表（无参数时自动批量处理当前目录docx）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 工作流示例:
@@ -248,6 +246,82 @@ USER_RECEIVER_DEFAULT=地市后台
         logger.info(f"模块总数: {len(modules)}")
         print_tree(modules)
         logger.debug("show-tree completed")
+        return
+
+    # === Batch mode: 处理当前目录下所有 docx（默认行为） ===
+    if not any([args.docx, args.init_md is not None, args.fill_md is not None,
+                args.md is not None, args.all, args.show_tree,
+                args.init_config, args.log]):
+        _section("批量处理模式")
+        import glob
+        docx_files = glob.glob("*.docx")
+        if not docx_files:
+            logger.warning("当前目录没有找到 docx 文件")
+            return
+
+        total = len(docx_files)
+        ok_count = 0
+        fail_count = 0
+
+        for idx, docx_path in enumerate(docx_files, 1):
+            base_name = os.path.splitext(docx_path)[0]
+            out_dir = os.path.abspath(base_name)
+            md_dir = os.path.join(out_dir, 'md')
+            log_dir = os.path.join(out_dir, 'log')
+
+            # Check if already processed (output Excel exists)
+            xlsx_path = _auto_output_path(docx_path)
+            out_xlsx = os.path.join(out_dir, os.path.basename(xlsx_path))
+            if os.path.exists(out_xlsx):
+                logger.info(f"  [{idx}/{total}] {docx_path} → 已处理，跳过")
+                ok_count += 1
+                continue
+
+            os.makedirs(md_dir, exist_ok=True)
+            os.makedirs(log_dir, exist_ok=True)
+
+            logger.info(f"  [{'='*20} {idx}/{total} {docx_path} {'='*20}]")
+
+            # Reconfigure logging and AI response paths for this docx
+            setup_logging(log_dir)
+            os.environ['COSMIC_LOG_DIR'] = log_dir
+
+            md_base = os.path.join(md_dir, '拆分表.md')
+            md_filled = os.path.join(md_dir, '拆分表_已填充.md')
+
+            try:
+                # Stage 1
+                modules = build_module_tree(docx_path)
+                project = get_project_name(docx_path)
+                export_empty_md(modules, project, md_base)
+                logger.info(f"  MD已生成: {md_base}")
+
+                # Stage 2
+                if not api_key:
+                    raise ValueError("API Key 未设置")
+                shutil.copy2(md_base, md_filled)
+                fill_md_with_ai(md_filled, modules, project, api_key, model, base_url)
+                logger.info(f"  AI填充完成: {md_filled}")
+
+                # Stage 3
+                items = parse_md_to_items(md_filled)
+                if items:
+                    write_to_template(_default_template_path(), out_xlsx, items)
+                    total_cfp = sum(item.total_cfp() for item in items)
+                    logger.info(f"  Excel已生成: {out_xlsx} ({len(items)} 过程, {total_cfp} CFP)")
+                else:
+                    logger.warning(f"  MD中无数据，跳过Excel生成")
+
+                ok_count += 1
+
+            except Exception as e:
+                logger.error(f"  ❌ 处理失败: {e}")
+                fail_count += 1
+
+        # Restore default logging
+        setup_logging()
+        _section("批量处理完成")
+        logger.info(f"成功: {ok_count}/{total}，失败: {fail_count}/{total}")
         return
 
     # === Mode 1: init-md (docx → empty MD) ===
@@ -448,7 +522,8 @@ USER_RECEIVER_DEFAULT=地市后台
         return
 
     # === No valid mode ===
-    parser.print_help()
+    # Batch mode (above) handles the default case when no args given
+    pass
 
 
 def _default_template_path() -> str:

@@ -297,9 +297,10 @@ def _save_source_data(rows: list[dict]) -> None:
     """Save flattened source data to log/source_data/ for debugging."""
     import json, os
     from datetime import datetime
-    log_dir = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 'log', 'source_data'
+    base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log'
     )
+    log_dir = os.path.join(base_log, 'source_data')
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filepath = os.path.join(log_dir, f'{timestamp}_excel_source.json')

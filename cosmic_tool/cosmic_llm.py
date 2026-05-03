@@ -450,12 +450,12 @@ def generate_cosmic_items(
 
 def _save_ai_response(l3: str, l2: str, l1: str, text: str) -> None:
     """Save raw AI response text to log/ai_responses/ for review."""
-    import os
     from datetime import datetime
 
-    log_dir = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 'log', 'ai_responses'
+    base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log'
     )
+    log_dir = os.path.join(base_log, 'ai_responses')
     os.makedirs(log_dir, exist_ok=True)
 
     # Safe filename from module hierarchy

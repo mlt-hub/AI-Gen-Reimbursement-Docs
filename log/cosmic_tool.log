@@ -1194,3 +1194,38 @@
 总计: 8 功能过程, 18 CFP
 2026-05-03 08:06:28 | INFO     | cosmic_tool | 中间文件: 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple_拆分表.md, 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple_拆分表_已填充.md
 2026-05-03 08:06:28 | INFO     | cosmic_tool | 输出: D:\mlt\test\闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple.xlsx
+2026-05-03 08:29:06 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log=None, batch=True)
+2026-05-03 08:29:06 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-03 08:29:06 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:29:06 | INFO     | cosmic_tool | 批量处理模式
+2026-05-03 08:29:06 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:29:06 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 08:29:06 | WARNING  | cosmic_tool | 当前目录没有找到 docx 文件
+2026-05-03 08:29:16 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=True, all=False, init_config=False, log=None, batch=True)
+2026-05-03 08:29:16 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-03 08:29:16 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:29:16 | INFO     | cosmic_tool | 批量处理模式
+2026-05-03 08:29:16 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:29:16 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 08:29:16 | WARNING  | cosmic_tool | 当前目录没有找到 docx 文件
+2026-05-03 08:29:26 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=True, all=False, init_config=False, log=None, batch=True)
+2026-05-03 08:29:26 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-03 08:29:26 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:29:26 | INFO     | cosmic_tool | 批量处理模式
+2026-05-03 08:29:26 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:29:26 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 08:29:26 | INFO     | cosmic_tool |   [==================== 1/1 附件1-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目需求说明书V1.0.0.docx ====================]
+2026-05-03 08:42:47 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=True, all=False, init_config=False, log=None)
+2026-05-03 08:42:47 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-03 08:42:47 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:42:47 | INFO     | cosmic_tool | 批量处理模式
+2026-05-03 08:42:47 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:42:47 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 08:42:47 | INFO     | cosmic_tool |   [==================== 1/5 office-shark12225396864860073437.tmp.docx ====================]
+2026-05-03 08:43:52 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log=None)
+2026-05-03 08:43:52 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-03 08:43:52 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:43:52 | INFO     | cosmic_tool | 批量处理模式
+2026-05-03 08:43:52 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:43:52 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 08:43:52 | INFO     | cosmic_tool |   [==================== 1/4 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目需求说明书V1.0.0_simple.docx ====================]
