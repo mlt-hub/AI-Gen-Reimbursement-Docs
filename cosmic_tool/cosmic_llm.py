@@ -6,8 +6,8 @@ import os
 import sys
 from typing import Optional
 
-from .models import CosmicItem, DataMovement
-from .docx_parser import FunctionModule, get_module_by_name
+from cosmic_tool.models import CosmicItem, DataMovement
+from cosmic_tool.docx_parser import FunctionModule, get_module_by_name
 
 logger = logging.getLogger('cosmic_tool.cosmic_llm')
 
@@ -330,7 +330,7 @@ def generate_cosmic_items(
         return []
 
     # Load config
-    from .config_utils import load_user_defaults, load_initiator_rules, load_receiver_rules, load_max_tokens
+    from cosmic_tool.config_utils import load_user_defaults, load_initiator_rules, load_receiver_rules, load_max_tokens
     user_default_initiator, user_default_receiver = load_user_defaults()
     user_initiator_rules = load_initiator_rules()
     user_receiver_rules = load_receiver_rules()

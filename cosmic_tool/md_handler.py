@@ -6,8 +6,8 @@ import os
 from datetime import date
 from typing import Optional
 
-from .models import CosmicItem, DataMovement
-from .docx_parser import FunctionModule, get_module_by_name
+from cosmic_tool.models import CosmicItem, DataMovement
+from cosmic_tool.docx_parser import FunctionModule, get_module_by_name
 
 logger = logging.getLogger('cosmic_tool.md_handler')
 
@@ -286,7 +286,7 @@ def fill_md_with_ai(
     base_url: Optional[str] = None,
 ) -> None:
     """Read MD, call AI to fill empty tables, write back."""
-    from .cosmic_llm import generate_cosmic_items
+    from cosmic_tool.cosmic_llm import generate_cosmic_items
 
     # Parse existing items from MD (if any were manually filled)
     existing_items = parse_md_to_items(md_path)

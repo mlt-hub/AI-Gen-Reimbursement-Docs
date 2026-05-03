@@ -7,8 +7,8 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
-from .models import CosmicItem
-from .config_utils import load_cfp_formula
+from cosmic_tool.models import CosmicItem
+from cosmic_tool.config_utils import load_cfp_formula
 
 logger = logging.getLogger('cosmic_tool.excel_writer')
 

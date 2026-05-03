@@ -1151,3 +1151,46 @@
 总计: 96 功能过程, 271 CFP
 2026-05-03 00:00:42 | INFO     | cosmic_tool | 输出: D:\mlt\ws_tool\data\附件2-闽市移需【202501】18579号76-关于和乐业抢号营销功能专区建设的需求（和乐业）项目功能点拆分表V1.0.0_拆分表_已填充.xlsx
 2026-05-03 07:37:57 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log='tail')
+2026-05-03 07:41:50 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log='tail')
+2026-05-03 08:05:09 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目需求说明书V1.0.0_simple.docx', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=True, init_config=False, log=None)
+2026-05-03 08:05:09 | DEBUG    | cosmic_tool | API Key: 已设置, 端点: https://api.deepseek.com/anthropic, 模型: deepseek-v4-flash
+2026-05-03 08:05:09 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:05:09 | INFO     | cosmic_tool | 阶段1: 解析需求说明书 → 生成空白MD
+2026-05-03 08:05:09 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:05:09 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 08:05:09 | INFO     | cosmic_tool | 模块层级: 4 个一级 / 7 个二级 / 2 个三级
+2026-05-03 08:05:09 | INFO     | cosmic_tool | 功能过程: 8 个
+2026-05-03 08:05:09 | INFO     | cosmic_tool.md_handler | 空白MD已生成: 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple_拆分表.md
+2026-05-03 08:05:09 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:05:09 | INFO     | cosmic_tool | 阶段2: AI填充COSMIC数据到MD副本
+2026-05-03 08:05:09 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:05:09 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 08:05:09 | INFO     | cosmic_tool.md_handler | 正在AI填充 2 个模块的COSMIC数据...
+2026-05-03 08:05:10 | INFO     | cosmic_tool.cosmic_llm | MAX_TOKENS = 16000
+2026-05-03 08:05:10 | INFO     | cosmic_tool.cosmic_llm | Generating COSMIC decompositions for 2 modules...
+2026-05-03 08:05:10 | INFO     | cosmic_tool.cosmic_llm |   [1/2] 小福包专区 > 装修管理 > 基础配置...
+2026-05-03 08:05:21 | INFO     | cosmic_tool.cosmic_llm |   [1/2] tokens: ↑105 ↓903（累积 ↑105 ↓903）
+2026-05-03 08:05:21 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260503_080521_小福包专区_装修管理_基础配置.md
+2026-05-03 08:05:21 | INFO     | cosmic_tool.cosmic_llm |   [1/2] → 2 个子过程描述
+2026-05-03 08:05:21 | INFO     | cosmic_tool.cosmic_llm |   [2/2] 小福包专区 > 装修管理 > 图片轮播组件...
+2026-05-03 08:06:27 | INFO     | cosmic_tool.cosmic_llm |   [2/2] tokens: ↑4 ↓5547（累积 ↑109 ↓6450）
+2026-05-03 08:06:27 | INFO     | cosmic_tool.cosmic_llm | AI响应已保存: D:\mlt\ws_tool\log\ai_responses\20260503_080627_小福包专区_装修管理_图片轮播组件.md
+2026-05-03 08:06:27 | INFO     | cosmic_tool.cosmic_llm |   [2/2] → 16 个子过程描述
+2026-05-03 08:06:27 | INFO     | cosmic_tool.cosmic_llm | Total COSMIC items generated: 8
+2026-05-03 08:06:27 | INFO     | cosmic_tool.cosmic_llm | Token usage: ↑109 输入 / ↓6450 输出（单次上限 16000）
+2026-05-03 08:06:27 | INFO     | cosmic_tool.cosmic_llm | 所有模块数据正常，无异常
+2026-05-03 08:06:27 | INFO     | cosmic_tool.md_handler | 已填充MD生成: 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple_拆分表_已填充.md
+2026-05-03 08:06:27 | INFO     | cosmic_tool.md_handler | MD已更新: 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple_拆分表_已填充.md
+2026-05-03 08:06:27 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:06:27 | INFO     | cosmic_tool | 阶段3: 从MD生成Excel拆分表
+2026-05-03 08:06:27 | INFO     | cosmic_tool | ============================================================
+2026-05-03 08:06:27 | DEBUG    | cosmic_tool | --- section start ---
+2026-05-03 08:06:27 | INFO     | cosmic_tool.md_handler | 从MD解析到 8 个已有功能过程（将被保留）
+2026-05-03 08:06:27 | INFO     | cosmic_tool.excel_writer | 源数据已保存: D:\mlt\ws_tool\log\source_data\20260503_080627_excel_source.json
+2026-05-03 08:06:28 | DEBUG    | cosmic_tool.excel_writer | Restored footer note at row 24
+2026-05-03 08:06:28 | INFO     | cosmic_tool.excel_writer | Written 18 rows to 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple.xlsx
+2026-05-03 08:06:28 | INFO     | cosmic_tool.excel_writer | Restored 1 footer note(s) from template
+2026-05-03 08:06:28 | INFO     | cosmic_tool | 
+总计: 8 功能过程, 18 CFP
+2026-05-03 08:06:28 | INFO     | cosmic_tool | 中间文件: 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple_拆分表.md, 闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple_拆分表_已填充.md
+2026-05-03 08:06:28 | INFO     | cosmic_tool | 输出: D:\mlt\test\闽市移需【202502】17639号64-关于和乐业务叠加态业务办理的需求（和乐业）项目功能点拆分表V1.0.0_simple.xlsx

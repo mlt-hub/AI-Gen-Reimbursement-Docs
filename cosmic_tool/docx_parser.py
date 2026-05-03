@@ -5,7 +5,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from typing import Optional
 
-from .models import FunctionModule
+from cosmic_tool.models import FunctionModule
 
 NS = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
 

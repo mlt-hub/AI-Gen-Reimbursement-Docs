@@ -3,3 +3,11 @@ __pycache__/
 .env
 data/
 log/
+
+# 构建产物
+build/
+dist/
+*.spec
+
+# pip install -e . 生成
+*.egg-info/

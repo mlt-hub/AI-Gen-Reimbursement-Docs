@@ -26,7 +26,17 @@
       "Bash(python -m py_compile cosmic_tool/main.py)",
       "Bash(python -c \"from cosmic_tool.config_utils import load_max_tokens; print\\('MAX_TOKENS:', load_max_tokens\\(\\)\\)\")",
       "Bash(python -m py_compile cosmic_tool/md_handler.py)",
-      "Bash(python -m cosmic_tool.main --log)"
+      "Bash(python -m cosmic_tool.main --log)",
+      "Bash(pip install *)",
+      "Bash(cosmic --help)",
+      "Bash(cosmic --log)",
+      "Bash(powershell -NoProfile -Command \"& { . .\\\\build_exe.ps1; Write-Host 'Script syntax OK' }\")",
+      "Bash(powershell -NoProfile -Command \"& { . .\\\\build_exe.ps1; exit 0 }\")",
+      "Bash(./dist/cosmic.exe --help)",
+      "Bash(python -m py_compile cosmic_tool/docx_parser.py)",
+      "Bash(powershell -NoProfile -Command 'Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue; pyinstaller --onefile --name cosmic --add-data \"cosmic_tool;cosmic_tool\" --add-data \"data\\\\template.xlsx;data\" --distpath dist --workpath build --specpath build --console cosmic_tool\\\\main.py')",
+      "Bash(powershell -NoProfile -Command ' *)",
+      "Bash(d:/mlt/ws_tool/dist/cosmic.exe --help)"
     ],
     "additionalDirectories": [
       "\\tmp",

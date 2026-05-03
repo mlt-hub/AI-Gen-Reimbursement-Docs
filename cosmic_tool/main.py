@@ -19,11 +19,11 @@ import os
 import shutil
 from datetime import datetime
 
-from .docx_parser import build_module_tree, print_tree, get_project_name
-from .cosmic_llm import generate_cosmic_items
-from .excel_writer import write_to_template
-from .config_utils import load_api_key, load_base_url, load_model_name
-from .md_handler import (
+from cosmic_tool.docx_parser import build_module_tree, print_tree, get_project_name
+from cosmic_tool.cosmic_llm import generate_cosmic_items
+from cosmic_tool.excel_writer import write_to_template
+from cosmic_tool.config_utils import load_api_key, load_base_url, load_model_name
+from cosmic_tool.md_handler import (
     export_empty_md,
     export_filled_md,
     parse_md_to_items,
