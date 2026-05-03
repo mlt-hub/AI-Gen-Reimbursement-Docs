@@ -14,3 +14,7 @@
 # 功能用户 — 接收者关键词规则（关键字: 接收者值）
 # user_receiver_rules:
 #   用户: 用户前台
+
+# Excel 模板文件路径（相对于项目根目录，或绝对路径）
+# 不设置则默认使用 data/template.xlsx
+# template_path: data/template.xlsx

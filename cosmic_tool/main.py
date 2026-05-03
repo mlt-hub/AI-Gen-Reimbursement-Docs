@@ -581,7 +581,27 @@ USER_RECEIVER_DEFAULT=地市后台
 
 
 def _default_template_path() -> str:
-    """Return default template path: data/template.xlsx relative to this script."""
+    """Return template path from business_rules.yaml, or default data/template.xlsx."""
+    # Check business_rules.yaml first
+    rules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                              'config', 'business_rules.yaml')
+    if os.path.exists(rules_path):
+        try:
+            import yaml
+            with open(rules_path, 'r', encoding='utf-8') as f:
+                rules = yaml.safe_load(f) or {}
+            yaml_path = (rules.get('template_path') or '').strip()
+            if yaml_path:
+                # 如果是相对路径，基于项目根目录
+                if not os.path.isabs(yaml_path):
+                    yaml_path = os.path.join(
+                        os.path.dirname(os.path.dirname(__file__)), yaml_path
+                    )
+                if os.path.exists(yaml_path):
+                    return yaml_path
+        except Exception:
+            pass
+    # Default fallback
     return os.path.join(os.path.dirname(__file__), '..', 'data', 'template.xlsx')
 
 

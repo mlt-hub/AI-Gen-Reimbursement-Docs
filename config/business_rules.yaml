@@ -16,3 +16,7 @@ user_initiator_rules:
 user_receiver_rules:
   用户: 用户前台
   抢号前台: 抢号前台
+
+# Excel 模板文件路径（相对于项目根目录，或绝对路径）
+# 不设置则默认使用 data/template.xlsx
+template_path: data/template.xlsx
