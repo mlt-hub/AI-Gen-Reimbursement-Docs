@@ -1,0 +1,57 @@
+name: 构建发布
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: |
+          pip install pyinstaller
+          pip install -e .
+
+      - name: 读取版本号
+        shell: pwsh
+        run: |
+          $ver = Select-String -Path pyproject.toml -Pattern '^version = "(.+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
+          echo "version=$ver" >> $env:GITHUB_ENV
+
+      - name: 构建 exe
+        shell: pwsh
+        run: |
+          pyinstaller --onefile `
+            --name "cosmic_v$env:version" `
+            --add-data "cosmic_tool;cosmic_tool" `
+            --add-data "data\template.xlsx;data" `
+            --hidden-import "openpyxl.cell._writer" `
+            --distpath dist --workpath build --specpath build --console `
+            cosmic_tool\main.py
+
+      - name: 打包附加文件
+        shell: pwsh
+        run: |
+          $root = Get-Location
+          New-Item -ItemType Directory -Force -Path dist\data | Out-Null
+          Copy-Item data\template.xlsx dist\data\ -Force
+          Copy-Item cosmic_tool\.env.example dist\.env.example -Force
+          Copy-Item cosmic_tool\business.env.example dist\business.env.example -Force
+          Compress-Archive -Path dist\* -DestinationPath "cosmic_v$env:version.zip"
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ env.version }}"
+          body_path: CHANGELOG.md
+          files: |
+            cosmic_v${{ env.version }}.zip

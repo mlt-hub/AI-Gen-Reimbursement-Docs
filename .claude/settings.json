@@ -44,7 +44,19 @@
       "Bash(cosmic --no-llm)",
       "Bash(cosmic --version)",
       "Bash(powershell -NoProfile -Command 'Select-String -Path pyproject.toml -Pattern '\\\\''^version = \"\\(.+\\)\"'\\\\'' | ForEach-Object { $_.Matches.Groups[1].Value }')",
-      "Bash(powershell -NoProfile -Command \"\\(Get-Content cosmic_tool/main.py\\) -replace '\\\\t', '    ' | Set-Content cosmic_tool/main.py\")"
+      "Bash(powershell -NoProfile -Command \"\\(Get-Content cosmic_tool/main.py\\) -replace '\\\\t', '    ' | Set-Content cosmic_tool/main.py\")",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(gh auth *)",
+      "Bash(winget install *)",
+      "Bash(cd /d)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth login --web)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create mlt-hub/cosmic-tool --public --push --source=.)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create mlt-hub/cosmic-tool --public --source=. --push)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth setup-git)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ],
     "additionalDirectories": [
       "\\tmp",
