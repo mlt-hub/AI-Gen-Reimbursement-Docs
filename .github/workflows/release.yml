@@ -44,9 +44,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist\data | Out-Null
           Copy-Item data\template.xlsx dist\data\ -Force
           Copy-Item config\.env.example dist\.env.example -Force
-          Copy-Item config\system_config.yaml dist\system_config.yaml -Force
           Copy-Item config\system_config.yaml.example dist\system_config.yaml.example -Force
-          Copy-Item config\business_rules.yaml dist\business_rules.yaml -Force
           Copy-Item config\business_rules.yaml.example dist\business_rules.yaml.example -Force
           Compress-Archive -Path dist\* -DestinationPath "cosmic_v$env:version.zip"
 

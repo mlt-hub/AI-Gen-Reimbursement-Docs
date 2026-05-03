@@ -100,7 +100,9 @@
     "additionalDirectories": [
       "\\tmp",
       "C:\\Users\\Administrator\\.claude",
-      "C:\\Users\\Administrator\\Desktop"
+      "C:\\Users\\Administrator\\Desktop",
+      "C:\\Users\\Administrator\\.cosmic-tool",
+      "d:\\mlt\\ws_tool\\config"
     ]
   }
 }

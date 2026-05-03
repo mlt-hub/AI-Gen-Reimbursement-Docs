@@ -1,25 +1,14 @@
 """Configuration utilities for loading API keys and settings."""
 
 import json
+import logging
 import os
 from pathlib import Path
 
 
 def _config_dir() -> Path:
-    """Path to config directory.
-
-    优先级: ~/.cosmic-tool/ > 项目目录下的 config/
-    用户主目录配置与软件分离，更新软件不影响配置。
-    如果主目录配置中所有值为占位符（your_），则回退到本地。
-    """
-    home_cfg = Path.home() / ".cosmic-tool"
-    local_cfg = Path(__file__).parent.parent / "config"
-    if home_cfg.exists() and (home_cfg / ".env").exists():
-        # 检查主目录 .env 中的 API Key 是否有效
-        api_key = _read_env_value("ANTHROPIC_API_KEY", home_cfg / ".env")
-        if api_key:
-            return home_cfg
-    return local_cfg
+    """Path to user config directory: ~/.cosmic-tool/."""
+    return Path.home() / ".cosmic-tool"
 
 
 def _read_env_value(key: str, env_path: Path) -> str:
@@ -200,6 +189,90 @@ def load_max_tokens(default: int = 2000) -> int:
             logger = logging.getLogger('cosmic_tool.config_utils')
             logger.warning(f"system_config.yaml 读取失败: {e}，使用默认值 {default}")
     return default
+
+
+def _migrate_config() -> None:
+    """自动迁移配置：将模板中的新键追加到用户配置文件末尾。
+
+    比对 config/*.example 与 ~/.cosmic-tool/*，发现新键时自动追加。
+    """
+    home = Path.home() / ".cosmic-tool"
+    local = Path(__file__).parent.parent / "config"
+    if not home.exists():
+        return
+
+    logger = logging.getLogger('cosmic_tool.config_utils')
+
+    # --- .env 合并 ---
+    env_file = home / ".env"
+    env_example = local / ".env.example"
+    if env_file.exists() and env_example.exists():
+        # 读取用户已有键
+        user_keys = set()
+        with open(env_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if '=' in line and not line.startswith('#'):
+                    key = line.split('=', 1)[0].strip()
+                    user_keys.add(key)
+        # 检查示例中的新键
+        new_lines = []
+        with open(env_example, 'r', encoding='utf-8') as f:
+            for line in f:
+                line_stripped = line.strip()
+                if '=' in line_stripped and not line_stripped.startswith('#'):
+                    key = line_stripped.split('=', 1)[0].strip()
+                    if key not in user_keys:
+                        new_lines.append(f"\n# {key} 已新增至模板，请按需配置")
+                        new_lines.append(line_stripped)
+        if new_lines:
+            with open(env_file, 'a', encoding='utf-8') as f:
+                f.writelines(new_lines)
+            logger.info(f"配置迁移: .env 新增 {len(new_lines)//2} 个配置项")
+
+    # --- YAML 合并（基于文本解析，支持注释中的键） ---
+    yaml_pairs = [
+        (home / "system_config.yaml", local / "system_config.yaml.example", "system_config"),
+        (home / "business_rules.yaml", local / "business_rules.yaml.example", "business_rules"),
+    ]
+    import yaml
+    for yaml_file, example_file, name in yaml_pairs:
+        if not yaml_file.exists() or not example_file.exists():
+            continue
+        try:
+            # 读取用户已有的 YAML 键（含注释中的默认值）
+            with open(yaml_file, 'r', encoding='utf-8') as f:
+                user_content = f.read()
+            user_keys = set()
+            for line in user_content.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('#') and ':' in line:
+                    user_keys.add(line.split(':', 1)[0].strip())
+
+            # 读取示例中的键（包括被注释的，排除描述性文字）
+            import re
+            example_keys = {}
+            with open(example_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    # 只匹配 key: value 或 # key: value 格式（key 为字母下划线组成）
+                    m = re.match(r'^#?\s*([a-zA-Z_]\w*)\s*:\s*(.+)$', line)
+                    if not m:
+                        continue
+                    key = m.group(1)
+                    if key not in user_keys:
+                        example_keys[key] = m.group(2).strip()
+
+            if example_keys:
+                new_lines = []
+                for key, val in example_keys.items():
+                    new_lines.append(f"\n# {key} 已新增至模板，请按需配置\n")
+                    new_lines.append(f"#{key}: {val}\n" if val.startswith('#') else f"{key}: {val}\n")
+                with open(yaml_file, 'a', encoding='utf-8') as f:
+                    f.writelines(new_lines)
+                logger.info(f"配置迁移: {name} 新增 {len(example_keys)} 个配置项")
+        except Exception as e:
+            logger.debug(f"配置迁移跳过 {name}: {e}")
 
 
 def load_business_config() -> dict:

@@ -1,7 +1,5 @@
 __pycache__/
 *.pyc
-.env
-business.env
 log/
 
 # 构建产物

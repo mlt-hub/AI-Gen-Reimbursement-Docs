@@ -179,6 +179,10 @@ def main():
     logger.info(f"COSMIC 工具 v{ver} — 从需求说明书自动生成功能点拆分表")
     logger.debug(f"版本: v{ver}")
 
+    # 配置迁移（新模板键自动追加到用户配置文件）
+    from cosmic_tool.config_utils import _migrate_config
+    _migrate_config()
+
     # === Log viewer ===
     log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'log')
     if args.log:
@@ -591,10 +595,8 @@ template_path: data/template.xlsx
 
 
 def _default_template_path() -> str:
-    """Return template path from business_rules.yaml, or default data/template.xlsx."""
-    # Check business_rules.yaml first
-    rules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                              'config', 'business_rules.yaml')
+    """Return template path from ~/.cosmic-tool/business_rules.yaml or default."""
+    rules_path = os.path.join(os.path.expanduser('~'), '.cosmic-tool', 'business_rules.yaml')
     if os.path.exists(rules_path):
         try:
             import yaml
@@ -602,7 +604,6 @@ def _default_template_path() -> str:
                 rules = yaml.safe_load(f) or {}
             yaml_path = (rules.get('template_path') or '').strip()
             if yaml_path:
-                # 如果是相对路径，基于项目根目录
                 if not os.path.isabs(yaml_path):
                     yaml_path = os.path.join(
                         os.path.dirname(os.path.dirname(__file__)), yaml_path
@@ -611,7 +612,6 @@ def _default_template_path() -> str:
                     return yaml_path
         except Exception:
             pass
-    # Default fallback
     return os.path.join(os.path.dirname(__file__), '..', 'data', 'template.xlsx')
 
 
