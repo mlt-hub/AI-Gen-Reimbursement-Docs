@@ -56,7 +56,10 @@
       "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create mlt-hub/cosmic-tool --public --source=. --push)",
       "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth setup-git)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth refresh --scopes repo,workflow)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth refresh --hostname github.com --scopes repo,workflow)",
+      "Bash(git tag *)"
     ],
     "additionalDirectories": [
       "\\tmp",
