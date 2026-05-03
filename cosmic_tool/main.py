@@ -223,6 +223,10 @@ def main():
     logger.info(f"COSMIC 工具 v{ver} — 从需求说明书自动生成功能点拆分表")
     logger.debug(f"版本: v{ver}")
 
+    # 当前配置目录
+    from cosmic_tool.config_utils import _config_dir
+    logger.info(f"配置文件目录: {_config_dir()}")
+
     # 配置迁移（新模板键自动追加到用户配置文件）
     from cosmic_tool.config_utils import _migrate_config
     _migrate_config()
@@ -291,6 +295,12 @@ def main():
     if base_url:
         os.environ["ANTHROPIC_BASE_URL"] = base_url
     logger.debug(f"API Key: {'已设置' if api_key else '未设置'}, 端点: {base_url or '默认'}, 模型: {model}")
+
+    # 记录实际使用的配置值
+    from cosmic_tool.config_utils import load_max_tokens, load_business_config, load_user_defaults, load_cfp_formula
+    logger.info(f"配置: MAX_TOKENS={load_max_tokens()}, CFP公式={load_cfp_formula()}, 用户默认={load_user_defaults()}")
+    biz_cfg = load_business_config()
+    logger.info(f"配置: REGENERATE_MD={biz_cfg['regenerate_md']}, ENABLE_AI={biz_cfg['enable_ai']}")
 
     # === Show tree ===
     if args.docx and args.show_tree:
