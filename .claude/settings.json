@@ -62,7 +62,9 @@
       "Bash(git tag *)",
       "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run list)",
       "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run list --limit 5)",
-      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run view 25268415202 --log)"
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run view 25268415202 --log)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run list --limit 3)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run view 25268462761 --log)"
     ],
     "additionalDirectories": [
       "\\tmp",
