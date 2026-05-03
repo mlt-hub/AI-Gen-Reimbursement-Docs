@@ -32,16 +32,15 @@ jobs:
         run: |
           pyinstaller --onefile `
             --name "cosmic_v$env:version" `
-            --add-data "cosmic_tool;cosmic_tool" `
-            --add-data "data\template.xlsx;data" `
+            --add-data "$env:GITHUB_WORKSPACE\cosmic_tool;cosmic_tool" `
+            --add-data "$env:GITHUB_WORKSPACE\data\template.xlsx;data" `
             --hidden-import "openpyxl.cell._writer" `
             --distpath dist --workpath build --specpath build --console `
-            cosmic_tool\main.py
+            "$env:GITHUB_WORKSPACE\cosmic_tool\main.py"
 
       - name: 打包附加文件
         shell: pwsh
         run: |
-          $root = Get-Location
           New-Item -ItemType Directory -Force -Path dist\data | Out-Null
           Copy-Item data\template.xlsx dist\data\ -Force
           Copy-Item cosmic_tool\.env.example dist\.env.example -Force
