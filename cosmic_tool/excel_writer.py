@@ -172,7 +172,7 @@ def write_to_template(
             if col_idx == 13:
                 # CFP 列用公式（从配置文件读取）
                 cfp_formula = load_cfp_formula()
-                cell.value = cfp_formula.replace('{row}', str(row_num))
+                cell.value = '=' + cfp_formula.replace('{row}', str(row_num))
             else:
                 cell.value = row_data.get(key_map[col_idx], '')
 
