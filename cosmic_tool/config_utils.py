@@ -6,8 +6,20 @@ from pathlib import Path
 
 
 def _config_dir() -> Path:
-    """Path to config/ directory (project root /config)."""
-    return Path(__file__).parent.parent / "config"
+    """Path to config directory.
+
+    优先级: ~/.cosmic-tool/ > 项目目录下的 config/
+    用户主目录配置与软件分离，更新软件不影响配置。
+    如果主目录配置中所有值为占位符（your_），则回退到本地。
+    """
+    home_cfg = Path.home() / ".cosmic-tool"
+    local_cfg = Path(__file__).parent.parent / "config"
+    if home_cfg.exists() and (home_cfg / ".env").exists():
+        # 检查主目录 .env 中的 API Key 是否有效
+        api_key = _read_env_value("ANTHROPIC_API_KEY", home_cfg / ".env")
+        if api_key:
+            return home_cfg
+    return local_cfg
 
 
 def _read_env_value(key: str, env_path: Path) -> str:

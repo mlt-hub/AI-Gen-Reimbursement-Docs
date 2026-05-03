@@ -93,7 +93,9 @@
       "Bash(powershell -NoProfile -Command \"Compress-Archive -Path dist\\\\* -DestinationPath dist\\\\cosmic_v3.0.0.zip -Force\")",
       "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" release upload v3.0.0 \"dist\\\\cosmic_v3.0.0.zip\")",
       "Bash(python -c \"import yaml; print\\(yaml.__version__\\)\")",
-      "Bash(xargs head *)"
+      "Bash(xargs head *)",
+      "Bash(cosmic --init-config)",
+      "Read(//c/Users/Administrator/.cosmic-tool/**)"
     ],
     "additionalDirectories": [
       "\\tmp",

@@ -214,11 +214,12 @@ def main():
 
     # === Init config ===
     if args.init_config:
-        config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
-        os.makedirs(config_dir, exist_ok=True)
-        env_path = os.path.join(config_dir, '.env')
-        biz_path = os.path.join(config_dir, 'business.env')
-        if os.path.exists(env_path) or os.path.exists(biz_path):
+        home_cfg = os.path.join(os.path.expanduser('~'), '.cosmic-tool')
+        os.makedirs(home_cfg, exist_ok=True)
+        env_path = os.path.join(home_cfg, '.env')
+        sys_path = os.path.join(home_cfg, 'system_config.yaml')
+        biz_path = os.path.join(home_cfg, 'business_rules.yaml')
+        if os.path.exists(env_path):
             logger.info("配置文件已存在，跳过创建")
             return
         # 创建 AI 模型配置
@@ -227,27 +228,31 @@ def main():
 ANTHROPIC_API_KEY=your_api_key_here
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ANTHROPIC_MODEL=deepseek-v4-flash
-
-# AI 每次调用的最大输出 token 数（支持 K/M 单位，如 384K）
-# MAX_TOKENS=2000
+""")
+        # 创建通用配置
+        with open(sys_path, 'w', encoding='utf-8') as f:
+            f.write("""# COSMIC 功能点拆分工具 — 通用配置
+max_tokens: 16000
+regenerate_md: false
+regenerate_filled: false
+regenerate_excel: false
+regenerate_all: false
+enable_ai: true
 """)
         # 创建业务规则配置
         with open(biz_path, 'w', encoding='utf-8') as f:
             f.write("""# COSMIC 功能点拆分工具 — 业务规则配置
-
-# CFP 计算公式（{row} 会被替换为实际行号）
-CFP_FORMULA=IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))
-
-# 功能用户规则：模块名含关键词时匹配，按顺序匹配
-# 发起者规则
-USER_INITIATOR_DEFAULT=操作员
-# USER_INITIATOR_关键词=发起者值
-# 接收者规则
-USER_RECEIVER_用户=用户前台
-USER_RECEIVER_DEFAULT=地市后台
+cfp_formula: "IF(L{row}=\\"新增\\",1,IF(L{row}=\\"复用\\",1/3,0))"
+user_initiator_default: 操作员
+user_receiver_default: 地市后台
+user_initiator_rules: {}
+user_receiver_rules:
+  用户: 用户前台
+template_path: data/template.xlsx
 """)
-        logger.info(f"配置文件已创建:")
+        logger.info(f"配置文件已创建至用户主目录:")
         logger.info(f"  AI 模型: {env_path}")
+        logger.info(f"  通用配置: {sys_path}")
         logger.info(f"  业务规则: {biz_path}")
         logger.info("请编辑 .env 填入你的 API Key 后使用")
         return

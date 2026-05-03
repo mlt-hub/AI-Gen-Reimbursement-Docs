@@ -1261,3 +1261,11 @@
 2026-05-03 21:40:52 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log='tail', version=False)
 2026-05-03 21:40:52 | INFO     | cosmic_tool | COSMIC 工具 v1.0.0 — 从需求说明书自动生成功能点拆分表
 2026-05-03 21:40:52 | DEBUG    | cosmic_tool | 版本: v1.0.0
+2026-05-03 22:02:21 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=True, log=None, version=False)
+2026-05-03 22:02:21 | INFO     | cosmic_tool | COSMIC 工具 v1.0.0 — 从需求说明书自动生成功能点拆分表
+2026-05-03 22:02:21 | DEBUG    | cosmic_tool | 版本: v1.0.0
+2026-05-03 22:02:21 | INFO     | cosmic_tool | 配置文件已创建至用户主目录:
+2026-05-03 22:02:21 | INFO     | cosmic_tool |   AI 模型: C:\Users\Administrator\.cosmic-tool\.env
+2026-05-03 22:02:21 | INFO     | cosmic_tool |   通用配置: C:\Users\Administrator\.cosmic-tool\system_config.yaml
+2026-05-03 22:02:21 | INFO     | cosmic_tool |   业务规则: C:\Users\Administrator\.cosmic-tool\business_rules.yaml
+2026-05-03 22:02:21 | INFO     | cosmic_tool | 请编辑 .env 填入你的 API Key 后使用
