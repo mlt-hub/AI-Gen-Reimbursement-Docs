@@ -174,6 +174,11 @@ def main():
     args = parser.parse_args()
     logger.debug(f"CLI args: {args}")
 
+    # 版本信息
+    ver = _get_version()
+    logger.info(f"COSMIC 工具 v{ver} — 从需求说明书自动生成功能点拆分表")
+    logger.debug(f"版本: v{ver}")
+
     # === Log viewer ===
     log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'log')
     if args.log:

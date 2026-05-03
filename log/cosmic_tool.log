@@ -1255,3 +1255,9 @@
 2026-05-03 09:09:25 | INFO     | cosmic_tool |   ⚠ 04.附件1-闽市移需【202506】21252号-关于优化合伙人分销甩单平台C2C模式的需求项目需求说明书_simple.docx
 2026-05-03 09:24:47 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log=None, version=True)
 2026-05-03 09:26:12 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log=None, version=True)
+2026-05-03 21:40:48 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log=None, version=True)
+2026-05-03 21:40:48 | INFO     | cosmic_tool | COSMIC 工具 v1.0.0 — 从需求说明书自动生成功能点拆分表
+2026-05-03 21:40:48 | DEBUG    | cosmic_tool | 版本: v1.0.0
+2026-05-03 21:40:52 | DEBUG    | cosmic_tool | CLI args: Namespace(docx='', init_md=None, fill_md=None, md=None, template='', output='', api_key='', model='', show_tree=False, no_llm=False, all=False, init_config=False, log='tail', version=False)
+2026-05-03 21:40:52 | INFO     | cosmic_tool | COSMIC 工具 v1.0.0 — 从需求说明书自动生成功能点拆分表
+2026-05-03 21:40:52 | DEBUG    | cosmic_tool | 版本: v1.0.0
