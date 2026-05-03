@@ -280,7 +280,8 @@ USER_RECEIVER_DEFAULT=地市后台
             os.makedirs(md_dir, exist_ok=True)
             os.makedirs(log_dir, exist_ok=True)
 
-            logger.info(f"  [{'='*20} {idx}/{total} {docx_path} {'='*20}]")
+            logger.info(f"  [{idx}/{total}] {docx_path}")
+            logger.info(f"  {'-' * 40}")
 
             # Reconfigure logging and AI response paths for this docx
             setup_logging(log_dir)
@@ -313,10 +314,12 @@ USER_RECEIVER_DEFAULT=地市后台
                     logger.warning(f"  MD中无数据，跳过Excel生成")
 
                 ok_count += 1
+                logger.info("")  # 分隔空行
 
             except Exception as e:
                 logger.error(f"  ❌ 处理失败: {e}")
                 fail_count += 1
+                logger.info("")  # 分隔空行
 
         # Restore default logging
         setup_logging()
