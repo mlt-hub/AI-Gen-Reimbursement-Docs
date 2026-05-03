@@ -198,3 +198,50 @@ def load_max_tokens(default: int = 2000) -> int:
         logger = logging.getLogger('cosmic_tool.config_utils')
         logger.warning(f"MAX_TOKENS 格式无效「{val}」，使用默认值 {default}")
         return default
+
+
+def load_business_config() -> dict:
+    """Load business process flags from business.env.
+
+    Returns dict with keys: regenerate_md, regenerate_filled, regenerate_excel,
+    regenerate_all, enable_ai.
+    """
+    env_path = _business_env_path()
+    config = {
+        'regenerate_md': False,
+        'regenerate_filled': False,
+        'regenerate_excel': False,
+        'regenerate_all': False,
+        'enable_ai': True,
+    }
+    if not env_path.exists():
+        return config
+
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if '=' not in line:
+                continue
+            key, _, val = line.partition('=')
+            key = key.strip().upper()
+            val = val.strip().lower() in ('true', '1', 'yes')
+            if key == 'REGENERATE_MD':
+                config['regenerate_md'] = val
+            elif key == 'REGENERATE_FILLED':
+                config['regenerate_filled'] = val
+            elif key == 'REGENERATE_EXCEL':
+                config['regenerate_excel'] = val
+            elif key == 'REGENERATE_ALL':
+                config['regenerate_all'] = val
+            elif key == 'ENABLE_AI':
+                config['enable_ai'] = val
+
+    # REGENERATE_ALL overrides individual settings
+    if config['regenerate_all']:
+        config['regenerate_md'] = True
+        config['regenerate_filled'] = True
+        config['regenerate_excel'] = True
+
+    return config

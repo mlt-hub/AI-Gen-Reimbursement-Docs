@@ -284,19 +284,22 @@ USER_RECEIVER_DEFAULT=地市后台
         processed_no_excel: list[str] = []  # 处理了但没生成 Excel
         failed: list[str] = []         # 处理失败的 docx
 
+        # 加载业务配置（是否重新生成各阶段文件等）
+        from cosmic_tool.config_utils import load_business_config
+        biz_config = load_business_config()
+        logger.info(f"  配置: ENABLE_AI={biz_config['enable_ai']}, "
+                    f"REGENERATE_ALL={biz_config['regenerate_all']}")
+
         for idx, docx_path in enumerate(docx_files, 1):
             base_name = os.path.splitext(docx_path)[0]
             out_dir = os.path.abspath(base_name)
             md_dir = os.path.join(out_dir, 'md')
             log_dir = os.path.join(out_dir, 'log')
 
-            # Check if already processed (output Excel exists)
             xlsx_path = _auto_output_path(docx_path)
             out_xlsx = os.path.join(out_dir, os.path.basename(xlsx_path))
-            if os.path.exists(out_xlsx):
-                logger.info(f"  [{idx}/{total}] {docx_path} → 已处理，跳过")
-                excel_ok.append(docx_path)
-                continue
+            md_base = os.path.join(md_dir, '拆分表.md')
+            md_filled = os.path.join(md_dir, '拆分表_已填充.md')
 
             os.makedirs(md_dir, exist_ok=True)
             os.makedirs(log_dir, exist_ok=True)
@@ -308,32 +311,43 @@ USER_RECEIVER_DEFAULT=地市后台
             setup_logging(log_dir)
             os.environ['COSMIC_LOG_DIR'] = log_dir
 
-            md_base = os.path.join(md_dir, '拆分表.md')
-            md_filled = os.path.join(md_dir, '拆分表_已填充.md')
-
             try:
-                # Stage 1
-                modules = build_module_tree(docx_path)
-                project = get_project_name(docx_path)
-                export_empty_md(modules, project, md_base)
-                logger.info(f"  MD已生成: {md_base}")
-
-                # Stage 2
-                if not api_key:
-                    raise ValueError("API Key 未设置")
-                shutil.copy2(md_base, md_filled)
-                fill_md_with_ai(md_filled, modules, project, api_key, model, base_url)
-                logger.info(f"  AI填充完成: {md_filled}")
-
-                # Stage 3
-                items = parse_md_to_items(md_filled)
-                if items:
-                    write_to_template(_default_template_path(), out_xlsx, items)
-                    total_cfp = sum(item.total_cfp() for item in items)
-                    logger.info(f"  Excel已生成: {out_xlsx} ({len(items)} 过程, {total_cfp} CFP)")
+                # --- Stage 1: 生成空白 MD ---
+                if os.path.exists(md_base) and not biz_config['regenerate_md']:
+                    logger.info(f"  空白MD已存在，跳过（REGENERATE_MD=false）")
+                    modules = build_module_tree(docx_path)
+                    project = get_project_name(docx_path)
                 else:
-                    logger.warning(f"  MD中无数据，跳过Excel生成")
+                    modules = build_module_tree(docx_path)
+                    project = get_project_name(docx_path)
+                    export_empty_md(modules, project, md_base)
+                    logger.info(f"  空白MD已生成: {md_base}")
 
+                # --- Stage 2: AI 填充 ---
+                if not biz_config['enable_ai']:
+                    logger.info(f"  AI已禁用（ENABLE_AI=false），跳过填充")
+                elif os.path.exists(md_filled) and not biz_config['regenerate_filled']:
+                    logger.info(f"  已填充MD已存在，跳过（REGENERATE_FILLED=false）")
+                else:
+                    if not api_key:
+                        raise ValueError("API Key 未设置")
+                    shutil.copy2(md_base, md_filled)
+                    fill_md_with_ai(md_filled, modules, project, api_key, model, base_url)
+                    logger.info(f"  AI填充完成: {md_filled}")
+
+                # --- Stage 3: 生成 Excel ---
+                if os.path.exists(out_xlsx) and not biz_config['regenerate_excel']:
+                    logger.info(f"  Excel已存在，跳过（REGENERATE_EXCEL=false）")
+                else:
+                    # 优先用已填充的MD，没有则用空白MD
+                    md_to_use = md_filled if os.path.exists(md_filled) else md_base
+                    items = parse_md_to_items(md_to_use)
+                    if items:
+                        write_to_template(_default_template_path(), out_xlsx, items)
+                        total_cfp = sum(item.total_cfp() for item in items)
+                        logger.info(f"  Excel已生成: {out_xlsx} ({len(items)} 过程, {total_cfp} CFP)")
+                    else:
+                        logger.warning(f"  MD中无数据，跳过Excel生成")
 
                 if os.path.exists(out_xlsx):
                     excel_ok.append(docx_path)
