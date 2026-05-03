@@ -39,8 +39,12 @@ Write-Host "[复制] 附加文件..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path "$root\dist\data" | Out-Null
 Copy-Item "$root\data\template.xlsx" "$root\dist\data\" -Force
 Copy-Item "$root\cosmic_tool\.env.example" "$root\dist\.env.example" -Force
+Copy-Item "$root\cosmic_tool\business.env.example" "$root\dist\business.env.example" -Force
 if (Test-Path "$root\cosmic_tool\.env") {
     Copy-Item "$root\cosmic_tool\.env" "$root\dist\.env" -Force
+}
+if (Test-Path "$root\cosmic_tool\business.env") {
+    Copy-Item "$root\cosmic_tool\business.env" "$root\dist\business.env" -Force
 }
 
 Write-Host ""

@@ -91,41 +91,33 @@ def load_model_name(default: str = "deepseek-v4-flash") -> str:
     return default
 
 
-def clean_model_name(name: str) -> str:
+def _clean_model(name: str) -> str:
     """Remove markdown artifacts from model name, e.g. deepseek-v4-flash[1m]."""
     import re
     return re.sub(r'\[.*?\]', '', name).strip().rstrip()
 
 
 # Backward compatibility alias
-_clean_model = clean_model_name
+clean_model_name = _clean_model
+
+
+def _business_env_path() -> Path:
+    """Path to the business config file (同目录下的 business.env)."""
+    return Path(__file__).parent / "business.env"
 
 
 def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))') -> str:
-    """Load CFP_FORMULA from .env file.
-
-    The formula uses {row} as placeholder for the Excel row number.
-    """
-    env_path = Path(__file__).parent / ".env"
+    """Load CFP_FORMULA from business.env."""
+    env_path = _business_env_path()
     formula = _read_env_value("CFP_FORMULA", env_path)
-    if formula:
-        return formula
-    # Also check config.json
-    config_path = Path(__file__).parent / "config.json"
-    formula = _read_json_value("cfp_formula", config_path)
     if formula:
         return formula
     return default
 
 
 def load_user_defaults() -> tuple[str, str]:
-    """Load default initiator and receiver from .env.
-
-    Format in .env:
-      USER_INITIATOR_DEFAULT=操作员
-      USER_RECEIVER_DEFAULT=地市后台
-    """
-    env_path = Path(__file__).parent / ".env"
+    """Load default initiator and receiver from business.env."""
+    env_path = _business_env_path()
     default_initiator = "操作员"
     default_receiver = "地市后台"
 
@@ -143,11 +135,8 @@ def load_user_defaults() -> tuple[str, str]:
 
 
 def load_initiator_rules() -> list[tuple[str, str]]:
-    """Load USER_INITIATOR_关键词=值 rules from .env.
-
-    Returns ordered list of (keyword, initiator).
-    """
-    env_path = Path(__file__).parent / ".env"
+    """Load USER_INITIATOR_关键词=值 rules from business.env."""
+    env_path = _business_env_path()
     rules: list[tuple[str, str]] = []
 
     if env_path.exists():
@@ -167,11 +156,8 @@ def load_initiator_rules() -> list[tuple[str, str]]:
 
 
 def load_receiver_rules() -> list[tuple[str, str]]:
-    """Load USER_RECEIVER_关键词=值 rules from .env.
-
-    Returns ordered list of (keyword, receiver).
-    """
-    env_path = Path(__file__).parent / ".env"
+    """Load USER_RECEIVER_关键词=值 rules from business.env."""
+    env_path = _business_env_path()
     rules: list[tuple[str, str]] = []
 
     if env_path.exists():

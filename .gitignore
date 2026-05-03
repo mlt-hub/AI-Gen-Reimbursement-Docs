@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .env
+business.env
 data/
 log/
 

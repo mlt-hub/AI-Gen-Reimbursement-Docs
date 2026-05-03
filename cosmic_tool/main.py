@@ -191,20 +191,31 @@ def main():
 
     # === Init config ===
     if args.init_config:
-        env_path = os.path.join(os.path.dirname(__file__), '.env')
-        if os.path.exists(env_path):
-            logger.info(f"配置文件已存在: {env_path}")
+        pkg_dir = os.path.dirname(__file__)
+        # 检查是否已存在
+        env_path = os.path.join(pkg_dir, '.env')
+        biz_path = os.path.join(pkg_dir, 'business.env')
+        if os.path.exists(env_path) or os.path.exists(biz_path):
+            logger.info("配置文件已存在，跳过创建")
             return
+        # 创建 AI 模型配置
         with open(env_path, 'w', encoding='utf-8') as f:
-            f.write("""# COSMIC 功能点拆分工具 配置文件
+            f.write("""# COSMIC 功能点拆分工具 — AI 模型配置
 ANTHROPIC_API_KEY=your_api_key_here
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ANTHROPIC_MODEL=deepseek-v4-flash
 
+# AI 每次调用的最大输出 token 数（支持 K/M 单位，如 384K）
+# MAX_TOKENS=2000
+""")
+        # 创建业务规则配置
+        with open(biz_path, 'w', encoding='utf-8') as f:
+            f.write("""# COSMIC 功能点拆分工具 — 业务规则配置
+
 # CFP 计算公式（{row} 会被替换为实际行号）
 CFP_FORMULA=IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))
 
-# 功能用户规则：发起者和接收者独立配置，按顺序匹配
+# 功能用户规则：模块名含关键词时匹配，按顺序匹配
 # 发起者规则
 USER_INITIATOR_DEFAULT=操作员
 # USER_INITIATOR_关键词=发起者值
@@ -212,8 +223,10 @@ USER_INITIATOR_DEFAULT=操作员
 USER_RECEIVER_用户=用户前台
 USER_RECEIVER_DEFAULT=地市后台
 """)
-        logger.info(f"配置文件已创建: {env_path}")
-        logger.info("请编辑该文件填入你的 API Key")
+        logger.info(f"配置文件已创建:")
+        logger.info(f"  AI 模型: {env_path}")
+        logger.info(f"  业务规则: {biz_path}")
+        logger.info("请编辑 .env 填入你的 API Key 后使用")
         return
 
     # === Load config ===
