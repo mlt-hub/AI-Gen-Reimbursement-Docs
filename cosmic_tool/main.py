@@ -39,12 +39,52 @@ if os.path.isdir(_pycache):
     shutil.rmtree(_pycache, ignore_errors=True)
 
 
-def setup_logging(log_dir: str = ""):
-    """配置日志：控制台 + 日志文件（可指定目录）。"""
-    if not log_dir:
-        log_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), 'log'
-        )
+def _init_global_logging():
+    """初始化全局日志：项目根目录 log/（控制台 + 总日志 + 运行日志）"""
+    log_dir = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log'
+    )
+    os.makedirs(log_dir, exist_ok=True)
+
+    main_log = os.path.join(log_dir, 'cosmic_tool.log')
+    run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_log = os.path.join(log_dir, f'global_run_{run_stamp}.log')
+
+    logger = logging.getLogger('cosmic_tool')
+    logger.setLevel(logging.DEBUG)
+
+    fmt = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # 全局总日志（持续追加，永不删除）
+    main_log = os.path.join(log_dir, 'global_cosmic_tool.log')
+    fh = logging.FileHandler(main_log, encoding='utf-8', mode='a')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(fmt)
+    fh._is_global = True
+    logger.addHandler(fh)
+
+    # 本次运行日志
+    rh = logging.FileHandler(run_log, encoding='utf-8', mode='w')
+    rh.setLevel(logging.DEBUG)
+    rh.setFormatter(fmt)
+    rh._is_global = True
+    logger.addHandler(rh)
+
+    # 控制台
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(logging.Formatter('%(message)s'))
+    ch._is_global = True
+    logger.addHandler(ch)
+
+    return logger, run_log
+
+
+def setup_logging(log_dir: str):
+    """添加 per-docx 日志处理器（保留全局日志）。"""
     os.makedirs(log_dir, exist_ok=True)
 
     main_log = os.path.join(log_dir, 'cosmic_tool.log')
@@ -52,14 +92,13 @@ def setup_logging(log_dir: str = ""):
     run_log = os.path.join(log_dir, f'run_{run_stamp}.log')
 
     logger = logging.getLogger('cosmic_tool')
-    logger.setLevel(logging.DEBUG)
-    logger.handlers.clear()
 
     fmt = logging.Formatter(
         '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
+    # 添加 per-docx 日志（不删除全局处理器）
     fh = logging.FileHandler(main_log, encoding='utf-8', mode='a')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(fmt)
@@ -70,15 +109,10 @@ def setup_logging(log_dir: str = ""):
     rh.setFormatter(fmt)
     logger.addHandler(rh)
 
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(ch)
-
     return logger, run_log
 
 
-logger, _run_log_path = setup_logging()
+logger, _run_log_path = _init_global_logging()
 
 
 def _get_version() -> str:
@@ -91,6 +125,16 @@ def _get_version() -> str:
             return tomllib.load(f)['project']['version']
     except Exception:
         return "unknown"
+
+
+def _setup_docx_logging(docx_path: str) -> str:
+    """Set up per-docx log directory: {docx_name}/log/. Returns log_dir."""
+    base_name = os.path.splitext(os.path.basename(docx_path))[0]
+    log_dir = os.path.join(os.path.abspath(base_name), 'log')
+    os.makedirs(log_dir, exist_ok=True)
+    setup_logging(log_dir)
+    os.environ['COSMIC_LOG_DIR'] = log_dir
+    return log_dir
 
 
 def _section(title: str):
@@ -218,49 +262,25 @@ def main():
 
     # === Init config ===
     if args.init_config:
+        config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
         home_cfg = os.path.join(os.path.expanduser('~'), '.cosmic-tool')
         os.makedirs(home_cfg, exist_ok=True)
-        env_path = os.path.join(home_cfg, '.env')
-        sys_path = os.path.join(home_cfg, 'system_config.yaml')
-        biz_path = os.path.join(home_cfg, 'business_rules.yaml')
-        if os.path.exists(env_path):
-            logger.info("配置文件已存在，跳过创建")
-            return
-        # 创建 AI 模型配置
-        with open(env_path, 'w', encoding='utf-8') as f:
-            f.write("""# COSMIC 功能点拆分工具 — AI 模型配置
-ANTHROPIC_API_KEY=your_api_key_here
-ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
-ANTHROPIC_MODEL=deepseek-v4-flash
-""")
-        # 创建通用配置
-        with open(sys_path, 'w', encoding='utf-8') as f:
-            f.write("""# COSMIC 功能点拆分工具 — 通用配置
-max_tokens: 16000
-regenerate_md: false
-regenerate_filled: false
-regenerate_excel: false
-regenerate_all: false
-enable_ai: true
-""")
-        # 创建业务规则配置
-        with open(biz_path, 'w', encoding='utf-8') as f:
-            f.write("""# COSMIC 功能点拆分工具 — 业务规则配置
-cfp_formula: "IF(L{row}=\\"新增\\",1,IF(L{row}=\\"复用\\",1/3,0))"
-user_initiator_default: 操作员
-user_receiver_default: 地市后台
-user_initiator_rules: {}
-user_receiver_rules:
-  用户: 用户前台
-template_path: data/template.xlsx
-""")
-        logger.info(f"配置文件已创建至用户主目录:")
-        logger.info(f"  AI 模型: {env_path}")
-        logger.info(f"  通用配置: {sys_path}")
-        logger.info(f"  业务规则: {biz_path}")
-        logger.info("请编辑 .env 填入你的 API Key 后使用")
-        return
 
+        # 直接从 .example 复制，保留注释
+        pairs = [
+            (os.path.join(config_dir, '.env.example'), os.path.join(home_cfg, '.env')),
+            (os.path.join(config_dir, 'system_config.yaml.example'), os.path.join(home_cfg, 'system_config.yaml')),
+            (os.path.join(config_dir, 'business_rules.yaml.example'), os.path.join(home_cfg, 'business_rules.yaml')),
+        ]
+        for src, dst in pairs:
+            if os.path.exists(dst):
+                logger.info(f"已存在，跳过: {dst}")
+                continue
+            shutil.copy2(src, dst)
+            logger.info(f"已创建: {dst}")
+
+        logger.info("请编辑 ~/.cosmic-tool/.env 填入你的 API Key 后使用")
+        return
     # === Load config ===
     api_key = args.api_key or load_api_key()
     base_url = load_base_url()
@@ -375,7 +395,6 @@ template_path: data/template.xlsx
                 logger.info("")  # 分隔空行
 
         # Restore default logging
-        setup_logging()
         _section("批量处理完成")
         logger.info(f"总数: {total}，Excel生成成功: {len(excel_ok)}，处理未生成Excel: {len(processed_no_excel)}，失败: {len(failed)}")
         if excel_ok:
@@ -398,6 +417,7 @@ template_path: data/template.xlsx
             parser.error("--init-md 需要 --docx")
         if not args.init_md:
             args.init_md = _auto_md_path(args.docx, '_拆分表')
+        _setup_docx_logging(args.docx)
         _section("阶段1: 解析需求说明书 → 生成空白MD")
         modules = build_module_tree(args.docx)
         project = get_project_name(args.docx)
@@ -441,6 +461,9 @@ template_path: data/template.xlsx
         docx_path = args.docx or _find_docx_from_md(args.fill_md)
         if not docx_path:
             parser.error("--fill-md 需要 --docx 或将MD放在docx同目录下")
+
+        # 设置专属日志目录
+        _setup_docx_logging(docx_path)
 
         # 生成输出路径：在原名基础上加 _已填充
         if args.fill_md.endswith('.md'):
@@ -492,6 +515,7 @@ template_path: data/template.xlsx
             return
         if not args.output:
             args.output = args.md.replace('.md', '.xlsx')
+        _setup_docx_logging(args.docx or args.md)
         _section("阶段3: 从MD生成Excel拆分表")
         items = parse_md_to_items(args.md)
         if not items:
@@ -515,6 +539,7 @@ template_path: data/template.xlsx
         base_md = args.output.replace('.xlsx', '_拆分表.md')
         filled_md = base_md.replace('.md', '_已填充.md')
 
+        _setup_docx_logging(args.docx)
         # Stage 1: docx → blank MD
         _section("阶段1: 解析需求说明书 → 生成空白MD")
         modules = build_module_tree(args.docx)
@@ -557,6 +582,7 @@ template_path: data/template.xlsx
             args.template = _default_template_path()
         if not args.output:
             args.output = _auto_output_path(args.docx)
+        _setup_docx_logging(args.docx)
         _section("阶段1: 解析需求说明书")
         modules = build_module_tree(args.docx)
         project = get_project_name(args.docx)
