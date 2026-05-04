@@ -212,11 +212,17 @@ def ai_build_module_tree(
         if not resp_text:
             raise ValueError("AI响应为空")
 
+        # 提取AI推理过程
+        reasoning = _extract_ai_thinking(response.content)
+
         stop_reason = getattr(response, 'stop_reason', None) or ''
         if stop_reason == 'max_tokens':
             logger.warning("AI输出被截断，结果可能不完整")
 
         raw_modules = _parse_ai_heading_response(resp_text)
+
+        # 保存heading解析响应及推理过程
+        _save_heading_response(docx_path, resp_text, reasoning)
 
         modules = []
         for rm in raw_modules:
@@ -259,6 +265,45 @@ def _save_heading_prompt(docx_path: str, prompt: str) -> None:
         f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         f.write(prompt)
     logger.info(f"AI解析提示词已保存: {filepath}")
+
+
+def _extract_ai_thinking(content_blocks: list) -> str:
+    """Extract thinking/reasoning from AI response content blocks."""
+    parts = []
+    for block in content_blocks:
+        block_type = getattr(block, 'type', None) or type(block).__name__
+        if 'thinking' in block_type.lower() or block_type == 'ThinkingBlock':
+            text = getattr(block, 'thinking', None) or getattr(block, 'text', '')
+            if text:
+                parts.append(str(text))
+    return "\n\n".join(parts) if parts else ""
+
+
+def _save_heading_response(docx_path: str, text: str, reasoning: str = "") -> None:
+    """Save AI heading parsing response to log/ai_responses/."""
+    import os
+    from datetime import datetime
+    base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log'
+    )
+    log_dir = os.path.join(base_log, 'ai_responses')
+    os.makedirs(log_dir, exist_ok=True)
+
+    base_name = os.path.splitext(os.path.basename(docx_path))[0]
+    safe_name = base_name.replace('/', '_').replace('\\', '_').strip()[:80]
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filepath = os.path.join(log_dir, f"{timestamp}_{safe_name}_parse_heading_response.md")
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(f"# AI Heading Response: {base_name}\n")
+        f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        if reasoning:
+            f.write("## AI 判断依据\n\n")
+            f.write(reasoning)
+            f.write("\n\n---\n\n")
+        f.write("## 解析结果\n\n")
+        f.write(text)
+    logger.info(f"AI解析响应已保存: {filepath}")
 
 
 def _parse_section_hierarchy(paras: list[dict]) -> dict[str, dict]:

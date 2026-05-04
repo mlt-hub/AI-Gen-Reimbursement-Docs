@@ -164,6 +164,18 @@ def _extract_text(content_blocks: list) -> str:
     return ""
 
 
+def _extract_thinking(content_blocks: list) -> str:
+    """Extract thinking/reasoning content from response blocks."""
+    parts = []
+    for block in content_blocks:
+        block_type = getattr(block, 'type', None) or type(block).__name__
+        if 'thinking' in block_type.lower():
+            parts.append(block.thinking if hasattr(block, 'thinking') else str(block))
+        elif block_type == 'ThinkingBlock':
+            parts.append(block.thinking if hasattr(block, 'thinking') else str(block))
+    return "\n\n".join(parts) if parts else ""
+
+
 def _clean_json(raw: str) -> str:
     """Clean malformed JSON: trailing commas, single quotes, etc."""
     import re
@@ -392,8 +404,11 @@ def generate_cosmic_items(
             if not resp_text:
                 raise ValueError("No text content in response")
 
-            # Save raw AI response to log file
-            _save_ai_response(l3.name, l2_name, l1_name, resp_text)
+            # Extract thinking/reasoning from response content blocks
+            reasoning = _extract_thinking(response.content)
+
+            # Save raw AI response and reasoning to log file
+            _save_ai_response(l3.name, l2_name, l1_name, resp_text, reasoning)
 
             items = _parse_llm_response(l3.name, user, trigger, resp_text,
                                         project_name, l1_name, l2_name)
@@ -473,7 +488,7 @@ def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None
     logger.debug(f"AI提示词已保存: {filepath}")
 
 
-def _save_ai_response(l3: str, l2: str, l1: str, text: str) -> None:
+def _save_ai_response(l3: str, l2: str, l1: str, text: str, reasoning: str = "") -> None:
     """Save raw AI response text to log/ai_responses/ for review."""
     from datetime import datetime
 
@@ -495,6 +510,11 @@ def _save_ai_response(l3: str, l2: str, l1: str, text: str) -> None:
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(f"# AI Response: {' > '.join(parts)}\n")
         f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        if reasoning:
+            f.write("## AI 判断依据\n\n")
+            f.write(reasoning)
+            f.write("\n\n---\n\n")
+        f.write("## 生成结果\n\n")
         f.write(text)
 
     logger.info(f"AI响应已保存: {filepath}")

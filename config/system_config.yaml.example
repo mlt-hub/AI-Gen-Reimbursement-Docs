@@ -1,7 +1,7 @@
 # COSMIC 功能点拆分工具 — 通用配置示例
 
 # AI 每次调用的最大输出 token 数（支持 K/M 单位，如 384K）
-max_tokens: 2000
+max_tokens: 6000
 
 # 是否重新生成各阶段文件（false=有文件则跳过，true=总是重新生成）
 regenerate_md: false
