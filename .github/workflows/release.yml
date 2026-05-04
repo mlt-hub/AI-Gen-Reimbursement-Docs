@@ -53,11 +53,23 @@ jobs:
 
       - name: 创建 Release（本仓）
         uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           name: "v${{ env.version }}"
           body_path: CHANGELOG.md
           files: |
             cosmic_v${{ env.version }}.zip
+
+      - name: 手动触发时创建 Release（用 gh CLI）
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $ver = "${{ env.version }}"
+          $tag = "v$ver"
+          gh release create $tag "cosmic_v$ver.zip" `
+            --title "v$ver" --notes-file CHANGELOG.md `
+            --target "${{ github.sha }}"
+          Write-Host "已创建 Release: https://github.com/mlt-hub/cosmic-tool/releases/tag/$tag"
 
       - name: 推送到发布仓（mlt-hub/cosmic-tool-release）
         shell: pwsh
