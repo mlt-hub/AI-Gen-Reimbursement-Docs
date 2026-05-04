@@ -20,6 +20,7 @@ import argparse
 import logging
 import os
 import shutil
+import sys
 from datetime import datetime
 
 from cosmic_tool.docx_parser import build_module_tree, ai_build_module_tree, print_tree, get_project_name
@@ -725,3 +726,5 @@ def _find_docx_from_md(md_path: str) -> str:
 
 if __name__ == '__main__':
     main()
+    if getattr(sys, 'frozen', False):
+        input("\n按 Enter 键退出...")
