@@ -69,7 +69,7 @@ def export_empty_md(
     with open(output_path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
 
-    logger.info(f"空白MD已生成: {output_path}")
+    logger.info(f"模板MD已生成: {output_path}")
 
 
 def export_filled_md(

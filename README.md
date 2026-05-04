@@ -12,7 +12,7 @@ cosmic
 cosmic --docx "需求书.docx" --all
 
 # 分阶段
-cosmic --docx "需求书.docx" --init-md   # 生成空白 MD
+cosmic --docx "需求书.docx" --init-md   # 生成模板 MD
 cosmic --docx "需求书.docx" --fill-md   # AI 填充
 cosmic --docx "需求书.docx" --md        # 生成 Excel
 ```

@@ -177,10 +177,10 @@ def main():
                         help='需求说明书 .docx 文件路径')
 
     parser.add_argument('--init-md', nargs='?', const='', default=None,
-                        help='生成空白MD中间文件；省略路径时从docx自动命名')
+                        help='生成拆分表模板MD（含模块结构，数据表为空）；省略路径时从docx自动命名')
 
     parser.add_argument('--fill-md', nargs='?', const='', default=None,
-                        help='AI填充MD中的COSMIC数据；省略路径时从docx自动命名')
+                        help='AI填充COSMIC数据到模板MD；省略路径时从docx自动命名')
 
     parser.add_argument('--md', nargs='?', const='', default=None,
                         help='从MD文件生成Excel；省略路径时从docx自动查找')
@@ -356,16 +356,16 @@ def main():
             os.environ['COSMIC_LOG_DIR'] = log_dir
 
             try:
-                # --- Stage 1: 生成空白 MD ---
+                # --- Stage 1: 生成模板 MD ---
                 if os.path.exists(md_base) and not biz_config['regenerate_md']:
-                    logger.info(f"  空白MD已存在，跳过（REGENERATE_MD=false）")
+                    logger.info(f"  模板MD已存在，跳过（REGENERATE_MD=false）")
                     modules = build_module_tree(docx_path)
                     project = get_project_name(docx_path)
                 else:
                     modules = build_module_tree(docx_path)
                     project = get_project_name(docx_path)
                     export_empty_md(modules, project, md_base)
-                    logger.info(f"  空白MD已生成: {md_base}")
+                    logger.info(f"  模板MD已生成: {md_base}")
 
                 # --- Stage 2: AI 填充 ---
                 if not biz_config['enable_ai']:
@@ -383,7 +383,7 @@ def main():
                 if os.path.exists(out_xlsx) and not biz_config['regenerate_excel']:
                     logger.info(f"  Excel已存在，跳过（REGENERATE_EXCEL=false）")
                 else:
-                    # 优先用已填充的MD，没有则用空白MD
+                    # 优先用已填充的MD，没有则用模板MD
                     md_to_use = md_filled if os.path.exists(md_filled) else md_base
                     items = parse_md_to_items(md_to_use)
                     if items:
@@ -428,7 +428,7 @@ def main():
         if not args.init_md:
             args.init_md = _auto_md_path(args.docx, '_拆分表')
         _setup_docx_logging(args.docx)
-        _section("阶段1: 解析需求说明书 → 生成空白MD")
+        _section("阶段1: 解析需求说明书 → 生成模板MD")
         modules = build_module_tree(args.docx)
         project = get_project_name(args.docx)
         # Statistics
@@ -461,12 +461,12 @@ def main():
                         args.fill_md = f
                         break
         if not args.fill_md:
-            logger.error("MD文件不存在，请先运行阶段1生成空白MD：")
+            logger.error("MD文件不存在，请先运行阶段1生成模板MD：")
             logger.info(f"  python -m cosmic_tool.main --docx \"{args.docx}\" --init-md")
             return
         if not os.path.exists(args.fill_md):
             logger.error(f"MD文件不存在: {args.fill_md}")
-            logger.info("请先运行阶段1生成空白MD")
+            logger.info("请先运行阶段1生成模板MD")
             return
         docx_path = args.docx or _find_docx_from_md(args.fill_md)
         if not docx_path:
@@ -488,7 +488,7 @@ def main():
 
         modules = build_module_tree(docx_path)
         project = get_project_name(docx_path)
-        # 统计实际功能过程数（来自docx，非空白MD）
+        # 统计实际功能过程数（来自docx，非模板MD）
         l3_modules = [m for m in modules if m.level == 3]
         proc_count = sum(len(m.children) for m in l3_modules if m.children)
         logger.info(f"待AI填充: {len(l3_modules)} 个模块, {proc_count} 个功能过程")
@@ -551,7 +551,7 @@ def main():
 
         _setup_docx_logging(args.docx)
         # Stage 1: docx → blank MD
-        _section("阶段1: 解析需求说明书 → 生成空白MD")
+        _section("阶段1: 解析需求说明书 → 生成模板MD")
         modules = build_module_tree(args.docx)
         project = get_project_name(args.docx)
         l1_count = len([m for m in modules if m.level == 1])
