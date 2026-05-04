@@ -199,6 +199,7 @@ def ai_build_module_tree(
     logger.info("AI正在分析文档段落结构并推断模块层级...")
 
     try:
+        _save_heading_prompt(docx_path, prompt)
         response = client.messages.create(
             model=model,
             max_tokens=max_tokens,
@@ -236,6 +237,28 @@ def ai_build_module_tree(
         logger.warning(f"AI段落解析失败: {e}")
         logger.warning("正在回退到硬编码解析器...")
         return build_module_tree(docx_path)
+
+
+def _save_heading_prompt(docx_path: str, prompt: str) -> None:
+    """Save AI heading parsing prompt to log/ai_prompts/."""
+    import os
+    from datetime import datetime
+    base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log'
+    )
+    log_dir = os.path.join(base_log, 'ai_prompts')
+    os.makedirs(log_dir, exist_ok=True)
+
+    base_name = os.path.splitext(os.path.basename(docx_path))[0]
+    safe_name = base_name.replace('/', '_').replace('\\', '_').strip()[:80]
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filepath = os.path.join(log_dir, f"{timestamp}_{safe_name}_parse_heading_prompt.txt")
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(f"# AI Heading Prompt: {base_name}\n")
+        f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write(prompt)
+    logger.info(f"AI解析提示词已保存: {filepath}")
 
 
 def _parse_section_hierarchy(paras: list[dict]) -> dict[str, dict]:

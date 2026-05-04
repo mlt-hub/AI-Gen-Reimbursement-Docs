@@ -365,6 +365,7 @@ def generate_cosmic_items(
             input("Press Enter to continue (Ctrl+C to skip)...")
 
         try:
+            _save_ai_prompt(l3.name, l2_name, l1_name, prompt, "generate_cosmic")
             response = client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
@@ -446,6 +447,30 @@ def generate_cosmic_items(
     else:
         logger.info("所有模块数据正常，无异常")
     return all_items
+
+
+def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None:
+    """Save full AI prompt text to log/ai_prompts/ for review."""
+    from datetime import datetime
+    base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'log'
+    )
+    log_dir = os.path.join(base_log, 'ai_prompts')
+    os.makedirs(log_dir, exist_ok=True)
+
+    parts = [p for p in [l1, l2, l3] if p]
+    safe_name = '_'.join(parts).replace('/', '_').replace('\\', '_').strip()
+    safe_name = safe_name[:100] if len(safe_name) > 100 else safe_name
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    tag_str = f'_{tag}' if tag else ''
+    filename = f"{timestamp}_{safe_name}{tag_str}_prompt.txt"
+    filepath = os.path.join(log_dir, filename)
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(f"# AI Prompt: {' > '.join(parts)} ({tag})\n")
+        f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write(text)
+    logger.debug(f"AI提示词已保存: {filepath}")
 
 
 def _save_ai_response(l3: str, l2: str, l1: str, text: str) -> None:
