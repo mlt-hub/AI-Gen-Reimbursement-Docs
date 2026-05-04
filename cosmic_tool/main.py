@@ -43,9 +43,12 @@ if os.path.isdir(_pycache):
 
 def _init_global_logging():
     """初始化全局日志：项目根目录 log/（控制台 + 总日志 + 运行日志）"""
-    log_dir = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 'log'
-    )
+    if getattr(sys, 'frozen', False):
+        log_dir = os.path.join(os.path.expanduser('~'), '.cosmic-tool', 'log')
+    else:
+        log_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 'log'
+        )
     os.makedirs(log_dir, exist_ok=True)
 
     main_log = os.path.join(log_dir, 'cosmic_tool.log')
@@ -266,7 +269,10 @@ def main():
     _migrate_config()
 
     # === Log viewer ===
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'log')
+    if getattr(sys, 'frozen', False):
+        log_dir = os.path.join(os.path.expanduser('~'), '.cosmic-tool', 'log')
+    else:
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'log')
     if args.log:
         if args.log == 'open':
             os.startfile(log_dir)
@@ -664,6 +670,13 @@ def main():
     pass
 
 
+def _project_root() -> str:
+    """Get project root dir (works for both source and PyInstaller exe)."""
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.dirname(__file__))
+
+
 def _default_template_path() -> str:
     """Return template path from ~/.cosmic-tool/business_rules.yaml or default."""
     rules_path = os.path.join(os.path.expanduser('~'), '.cosmic-tool', 'business_rules.yaml')
@@ -675,14 +688,12 @@ def _default_template_path() -> str:
             yaml_path = (rules.get('template_path') or '').strip()
             if yaml_path:
                 if not os.path.isabs(yaml_path):
-                    yaml_path = os.path.join(
-                        os.path.dirname(os.path.dirname(__file__)), yaml_path
-                    )
+                    yaml_path = os.path.join(_project_root(), yaml_path)
                 if os.path.exists(yaml_path):
                     return yaml_path
         except Exception:
             pass
-    return os.path.join(os.path.dirname(__file__), '..', 'data', 'template.xlsx')
+    return os.path.join(_project_root(), 'data', 'template.xlsx')
 
 
 def _auto_md_path(docx_path: str, suffix: str = '') -> str:
