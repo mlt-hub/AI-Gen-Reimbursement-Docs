@@ -88,8 +88,24 @@ jobs:
           # 检查发布仓是否存在
           gh repo view mlt-hub/cosmic-tool-release --json name 2>$null | Out-Null
           if ($LASTEXITCODE -ne 0) {
-            # 创建发布仓
-            gh repo create mlt-hub/cosmic-tool-release --public --description "COSMIC 功能点拆分工具发布包"
+            # 创建发布仓（含 README 避免空仓）
+            gh repo create mlt-hub/cosmic-tool-release --public --description "COSMIC 功能点拆分工具发布包" --add-readme
+          }
+          # 检查是否空仓（无提交的仓库无法创建 release）
+          $empty = gh api "repos/mlt-hub/cosmic-tool-release/contents" 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            # 空仓，初始化一次
+            gh repo clone mlt-hub/cosmic-tool-release temp_repo 2>$null | Out-Null
+            if (Test-Path temp_repo) {
+              cd temp_repo
+              "# COSMIC 功能点拆分工具发布包" | Out-File -Encoding utf8 README.md
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add -A; git commit -m "初始化"
+              git push
+              cd ..
+              Remove-Item -Recurse -Force temp_repo
+            }
           }
           # 创建或更新 Release
           gh release view $tag --repo mlt-hub/cosmic-tool-release 2>$null | Out-Null
