@@ -18,3 +18,61 @@ user_receiver_rules:
 # Excel 模板文件路径（相对于项目根目录，或绝对路径）
 # 不设置则默认使用 data/template.xlsx
 template_path: data/template.xlsx
+
+# ---------- docx 样式→层级映射方案 ----------
+# 按顺序尝试每个方案，第一个通过层级验证的生效。
+# 如果所有方案都无效，使用代码内默认值。
+# 遇到新的 docx 样式时，在此新增方案即可，无需改代码。
+docx_style_schemes:
+
+  # ============================================================
+  # 方案一：标题编号三级（4 / 4.1 / 4.1.1）
+  #         功能过程描述在正文段落中
+  # 标题编号→COSMIC映射：
+  #   4          section      章节标记，用于定位第4章
+  #   4.1         → L1        一级模块（1个点）
+  #   4.1.1       → L2        二级模块（2个点）
+  #   4.1.1.1     → L3        三级模块（3个点）
+  #   功能过程描述在正文段落中，用 process_style 匹配
+  # ============================================================
+  - name: "方案1"
+    toc:
+      section_style: "toc 1"
+      section_number: "4"         # 4          章节标记
+      section_keyword: "功能需求"
+      l1_style: "toc 2"              # 4.1        一级模块 L1
+      l2_style: "toc 3"              # 4.1.1      二级模块 L2
+    detail:
+      start_style: "heading 2"       # 详情区开始
+      end_style: "heading 1"         # 详情区结束
+      end_keyword: "附加值调整因子"
+      l2_style: "heading 3"          # 4.1.1      详情区 L2
+      l3_style: "heading 4"          # 4.1.1.1    三级模块 L3
+      process_style: "正文（缩进）"   # 功能过程正文段落
+
+  # ============================================================
+  # 方案二：标题编号四级/五级（4 / 4.1 / 4.1.1 / 4.1.1.1 / 4.1.1.1.1）
+  #         功能过程在第4级或第5级编号
+  # 标题编号→COSMIC映射：
+  #   4                section      章节标记
+  #   4.1               → L1        一级模块（1个点）
+  #   4.1.1             → L2        二级模块（2个点）
+  #   4.1.1.1           → L3        三级模块（3个点，第4级标题→L3）
+  #   4.1.1.1.1         → 功能过程   第5级标题即为功能过程名称
+  #   第5级标题（功能过程）用 process_style 匹配（如有 toc 5 则填 toc 5）
+  # ============================================================
+  - name: "方案2"
+    toc:
+      section_style: "toc 1"
+      section_number: "4"         # 4               章节标记
+      section_keyword: "功能需求"
+      l1_style: "toc 2"              # 4.1             L1
+      l2_style: "toc 3"              # 4.1.1           L2
+    detail:
+      start_style: "toc 3"           # 4.1.1           L2 同时也进入详情区
+      l2_style: "toc 3"              # 4.1.1           L2
+      l3_style: "toc 4"              # 4.1.1.1         第4级标题→L3
+      process_style: "Body Text Indent"  # 功能过程匹配（优先用样式，其次用 ilvl）
+      process_ilvl: 4               # 也可通过Word列表层级 ilvl=4 匹配功能过程
+      end_style: "toc 1"
+      end_keyword: "附加值调整因子"

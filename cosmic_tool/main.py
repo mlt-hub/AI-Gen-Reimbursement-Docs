@@ -23,7 +23,7 @@ import shutil
 import sys
 from datetime import datetime
 
-from cosmic_tool.docx_parser import build_module_tree, ai_build_module_tree, print_tree, get_project_name
+from cosmic_tool.docx_parser import build_module_tree, build_module_tree_with_schemes, ai_build_module_tree, print_tree, get_project_name
 from cosmic_tool.models import FunctionModule
 from cosmic_tool.cosmic_llm import generate_cosmic_items
 from cosmic_tool.excel_writer import write_to_template
@@ -154,13 +154,20 @@ def _section(title: str):
 def _build_modules(docx_path: str, use_ai: bool,
                    api_key: str = "", model: str = "",
                    base_url: str = "") -> list[FunctionModule]:
-    """Build module tree: hardcoded优先；层级不完整时回退到AI。"""
-    modules = build_module_tree(docx_path)
+    """Build module tree: 多方案逐级尝试；失败时回退到AI。"""
+    from cosmic_tool.config_utils import load_docx_style_schemes
+
+    schemes = load_docx_style_schemes()
+    if schemes:
+        logger.debug(f"加载了 {len(schemes)} 个样式方案")
+        modules = build_module_tree_with_schemes(docx_path, schemes)
+    else:
+        modules = build_module_tree(docx_path)
+
+    # 检查层级是否完整
     l1 = [m for m in modules if m.level == 1]
     l2 = [m for m in modules if m.level == 2]
     l3 = [m for m in modules if m.level == 3]
-
-    # 检查层级是否完整：有L1、有L3，且L3的parent能找到对应模块
     l3_parents_valid = all(
         not m.parent or any(p.name == m.parent for p in l2) or any(gp.name == m.parent for gp in l1)
         for m in l3
@@ -168,7 +175,7 @@ def _build_modules(docx_path: str, use_ai: bool,
     tree_ok = len(l1) > 0 and len(l3) > 0 and l3_parents_valid
 
     if not tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
-        logger.warning(f"硬编码解析层级不完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），尝试AI解析...")
+        logger.warning(f"样式方案解析层级不完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），尝试AI解析...")
         modules = ai_build_module_tree(
             docx_path=docx_path,
             api_key=api_key or None,
@@ -176,7 +183,7 @@ def _build_modules(docx_path: str, use_ai: bool,
             base_url=base_url or None,
         )
     elif tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
-        logger.info(f"硬编码解析层级完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），跳过AI解析")
+        logger.info(f"样式方案解析层级完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），跳过AI解析")
     return modules
 
 

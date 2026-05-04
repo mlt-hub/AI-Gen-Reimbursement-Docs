@@ -165,6 +165,12 @@ def load_receiver_rules() -> list[tuple[str, str]]:
     return list(raw.items())
 
 
+def load_docx_style_schemes() -> list[dict]:
+    """Load docx_style_schemes from business_rules.yaml."""
+    cfg = _load_business_rules()
+    return cfg.get('docx_style_schemes', [])
+
+
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
 

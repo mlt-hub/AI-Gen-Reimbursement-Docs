@@ -21,7 +21,29 @@ def _read_docx_xml(path: str) -> ET.Element:
     return ET.fromstring(xml_content)
 
 
-def _get_paragraphs(root: ET.Element) -> list[dict]:
+def _load_style_names(docx_path: str) -> dict[str, str]:
+    """Load word/styles.xml and map style ID → display name."""
+    try:
+        import zipfile
+        with zipfile.ZipFile(docx_path) as z:
+            if 'word/styles.xml' not in z.namelist():
+                return {}
+            xml_content = z.read('word/styles.xml')
+            styles_root = ET.fromstring(xml_content)
+            style_names = {}
+            for style in styles_root.findall('.//w:style', NS):
+                sid = style.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}styleId', '')
+                name_elem = style.find('w:name', NS)
+                if name_elem is not None:
+                    sname = name_elem.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', '')
+                    if sid and sname:
+                        style_names[sid] = sname
+            return style_names
+    except Exception:
+        return {}
+
+
+def _get_paragraphs(root: ET.Element, style_names: dict | None = None) -> list[dict]:
     """Extract paragraphs with style and text from XML."""
     paragraphs = []
     for p in root.findall('.//w:p', NS):
@@ -41,8 +63,22 @@ def _get_paragraphs(root: ET.Element) -> list[dict]:
                 texts.append(t.text)
         full_text = ''.join(texts).strip()
 
+        ilvl = None
+        if pPr is not None:
+            numPr = pPr.find('w:numPr', NS)
+            if numPr is not None:
+                ilvl_elem = numPr.find('w:ilvl', NS)
+                if ilvl_elem is not None:
+                    ilvl = int(ilvl_elem.get(
+                        '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', 0
+                    ))
+
         if full_text:
-            paragraphs.append({'style': style, 'text': full_text})
+            style_name = (style_names or {}).get(style, '')
+            paragraphs.append({
+                'style': style, 'style_name': style_name,
+                'text': full_text, 'ilvl': ilvl,
+            })
     return paragraphs
 
 
@@ -168,8 +204,9 @@ def ai_build_module_tree(
     import anthropic
 
     root = _read_docx_xml(docx_path)
-    all_paras = _get_paragraphs(root)
-    heading_paras = _filter_heading_paragraphs(all_paras)
+    style_names = _load_style_names(docx_path)
+    paras = _get_paragraphs(root, style_names)
+    heading_paras = _filter_heading_paragraphs(paras)
 
     if not heading_paras:
         logger.warning("未找到标题段落，回退到硬编码解析器")
@@ -177,7 +214,8 @@ def ai_build_module_tree(
 
     prompt_lines = ["以下是需求文档中的段落（样式ID + 文本）：\n"]
     for i, p in enumerate(heading_paras, 1):
-        prompt_lines.append(f"[{i}] [style:{p['style']}] {p['text']}")
+        ilvl_info = f" ilvl:{p['ilvl']}" if p.get('ilvl') is not None else ""
+        prompt_lines.append(f"[{i}] [style:{p['style']}{ilvl_info}] {p['text']}")
     prompt = "\n".join(prompt_lines)
     prompt += "\n\n请根据以上段落，推断功能模块的三级层次结构（L1/L2/L3），每个L3模块的功能过程（children）和功能描述（description）。按指定的JSON格式返回。"
 
@@ -306,148 +344,228 @@ def _save_heading_response(docx_path: str, text: str, reasoning: str = "") -> No
     logger.info(f"AI解析响应已保存: {filepath}")
 
 
-def _parse_section_hierarchy(paras: list[dict]) -> dict[str, dict]:
-    """Parse the TOC-style section headings to build the L1/L2 hierarchy.
 
-    Style mapping: 12=Heading1, 14=Heading2, 9=Heading3
-    Only Section 4 (功能需求) is relevant.
+def _style_matches(p: dict, style_val: str) -> bool:
 
-    Returns dict: {name: {level, parent, children}}
-    """
+    """Check if paragraph matches style, trying both ID and name."""
+
+    return p["style"] == style_val or p.get("style_name", "") == style_val
+
+DEFAULT_TOC_SCHEME = {
+    'section_style': '12', 'section_number': '4',
+    'section_keyword': '功能需求',
+    'l1_style': '14', 'l2_style': '9',
+}
+
+DEFAULT_DETAIL_SCHEME = {
+    'start_style': '5', 'end_style': '4', 'end_keyword': '功附加值调整因子',
+    'l2_style': '7', 'l3_style': '8', 'process_style': '6',
+}
+
+
+def _parse_section_hierarchy(paras: list[dict],
+                              scheme: dict | None = None) -> dict[str, dict]:
+    """Parse the TOC-style section headings to build the L1/L2 hierarchy."""
+    s = scheme or DEFAULT_TOC_SCHEME
     hierarchy = {}
     current_l1 = None
-    in_section_4 = False
+    in_section = False
+    section_style = s.get('section_style', '12')
+    section_number = s.get('section_number', '4')
+    section_keyword = s.get('section_keyword', '功能需求')
+    l1_style = s.get('l1_style', '14')
+    l2_style = s.get('l2_style', '9')
 
     for p in paras:
         text = p['text']
         style = p['style']
+        sname = p.get('style_name', '')
 
-        if style == '12':
-            if text.startswith('4.') and '功能需求' in text:
-                in_section_4 = True
-            elif in_section_4:
-                # Reached section 5 - stop
+        if _style_matches(p, section_style):
+            if text.startswith(f'{section_number}.') and section_keyword in text:
+                in_section = True
+                logger.debug(f"[TOC] section标记: style={style} name={sname} text={text[:40]}")
+            elif in_section:
+                logger.debug(f"[TOC] section结束: style={style} text={text[:40]}")
                 break
             continue
 
-        if not in_section_4:
+        if not in_section:
             continue
 
-        if style == '14':  # L1
+        if _style_matches(p, l1_style):
             name = _clean_name(text)
             current_l1 = name
             hierarchy[name] = {'level': 1, 'parent': None, 'children': []}
+            logger.debug(f"[TOC] L1: style={style} name={sname} → {name}")
 
-        elif style == '9':  # L2
+        elif _style_matches(p, l2_style):
             name = _clean_name(text)
             hierarchy[name] = {'level': 2, 'parent': current_l1, 'children': []}
             if current_l1:
                 hierarchy.setdefault(current_l1, {'level': 1, 'parent': None, 'children': []})
                 hierarchy[current_l1]['children'].append(name)
+            logger.debug(f"[TOC] L2: style={style} name={sname} → {name} parent={current_l1}")
 
     return hierarchy
 
 
-def _parse_detail_section(paras: list[dict]) -> tuple[list[FunctionModule], dict[str, list[str]]]:
-    """Parse the detailed function description section.
-
-    Style mapping: 5=L1, 7=L2, 8=L3(leaf functions), 6=process names or descriptions.
-
-    Returns (l3_modules, processes) where:
-      - l3_modules: list of FunctionModule at level 3
-      - processes: {l3_name: [process_names]}
-    """
+def _parse_detail_section(paras: list[dict],
+                           scheme: dict | None = None) -> tuple[list[FunctionModule], dict[str, list[str]]]:
+    """Parse the detailed function description section."""
+    s = scheme or DEFAULT_DETAIL_SCHEME
     l3_modules = []
     processes = {}
     current_l2 = None
     current_l3 = None
     in_detail = False
 
+    start_styles = (s['start_style'], s['l2_style'], s['l3_style'], s['process_style'])
+    end_style = s.get('end_style', '4')
+    end_keyword = s.get('end_keyword', '功附加值调整因子')
+
     for p in paras:
         text = p['text']
         style = p['style']
+        sname = p.get('style_name', '')
+        ilvl = p.get('ilvl')
 
-        # Detect detail section start
-        if not in_detail and style in ('5', '7', '8', '6'):
-            if style == '5':
+        if not in_detail:
+            if _style_matches(p, s['start_style']):
                 in_detail = True
+                logger.debug(f"[DETAIL] 进入详情: style={style} name={sname} ilvl={ilvl} text={text[:40]}")
             else:
                 continue
         if not in_detail:
             continue
-        if style == '4' and '功附加值调整因子' in text:
-            break
 
-        if style == '5':
-            current_l2 = None
-            current_l3 = None
+        if _style_matches(p, s.get('end_style', '')) and end_keyword in text:
+            logger.debug(f"[DETAIL] 详情结束标记: style={style} name={sname} text={text[:40]}，之后仅匹配ilvl功能过程")
+            # 不再break，继续用ilvl匹配功能过程
 
-        elif style == '7':
-            current_l2 = text
-            current_l3 = None
+        # 详情区内：按样式解析层级
+        if not (_style_matches(p, s.get('end_style', '')) and end_keyword in text):
+            if _style_matches(p, s['start_style']):
+                current_l2 = None
+                current_l3 = None
 
-        elif style == '8':
-            current_l3 = text
-            l3_modules.append(FunctionModule(
-                name=text, level=3, description="", parent=current_l2
-            ))
-            processes.setdefault(text, [])
+            if _style_matches(p, s['l2_style']):
+                current_l2 = _clean_name(text)
+                current_l3 = None
+                logger.debug(f"[DETAIL] L2: style={style} name={sname} → {current_l2}")
 
-        elif style == '6' and current_l3:
-            if text.startswith('功能描述：'):
-                desc = text[5:].strip()
-                for m in reversed(l3_modules):
-                    if m.name == current_l3:
-                        m.description = desc
-                        break
-            else:
-                # Functional process name
-                if text not in processes.get(current_l3, []):
-                    processes.setdefault(current_l3, []).append(text)
+            elif _style_matches(p, s['l3_style']):
+                clean_l3 = _clean_name(text)
+                current_l3 = clean_l3
+                l3_modules.append(FunctionModule(
+                    name=clean_l3, level=3, description="", parent=current_l2
+                ))
+                processes.setdefault(clean_l3, [])
+                logger.debug(f"[DETAIL] L3: style={style} name={sname} → {clean_l3} parent={current_l2}")
+
+        # 用ilvl跟踪当前L3（详情区外也能识别）
+        process_ilvl = s.get('process_ilvl')
+        if process_ilvl is not None and ilvl == process_ilvl - 1:
+            # ilvl比功能过程低一级 → 这是L3标题（即使无样式）
+            current_l3 = text.strip()
+            # 如果这个L3还不在列表中则添加
+            if not any(m.name == current_l3 for m in l3_modules):
+                l3_modules.append(FunctionModule(
+                    name=current_l3, level=3, description="", parent=current_l2
+                ))
+                processes.setdefault(current_l3, [])
+                logger.debug(f"[DETAIL] L3(ilvl): ilvl={ilvl} → {current_l3}")
+
+        # 匹配功能过程（ilvl匹配，不限是否在详情区内）
+        if process_ilvl is not None and ilvl == process_ilvl and current_l3:
+            if text not in processes.get(current_l3, []):
+                processes.setdefault(current_l3, []).append(text)
+                logger.debug(f"[DETAIL] 功能过程(ilvl): {text[:40]} → L3={current_l3}")
 
     return l3_modules, processes
 
 
-def build_module_tree(docx_path: str) -> list[FunctionModule]:
-    """Build a complete module tree from a docx requirements document.
-
-    Returns a flat list of FunctionModules with parent pointers.
-    """
-    root = _read_docx_xml(docx_path)
-    paras = _get_paragraphs(root)
-
-    # Parse hierarchy from section headings
-    hierarchy = _parse_section_hierarchy(paras)
-
-    # Parse detailed function descriptions
-    l3_modules, processes = _parse_detail_section(paras)
-
-    # Build result: L1 + L2 from hierarchy, L3 from detail section
+def _build_result(hierarchy: dict, l3_modules: list, processes: dict) -> list[FunctionModule]:
+    """Combine hierarchy + L3 modules into flat FunctionModule list."""
     result = []
-    l1_names_added = set()
-    l2_names_added = set()
+    l1_added, l2_added = set(), set()
 
-    # Add L1 and L2 modules
     for name, info in hierarchy.items():
-        if info['level'] == 1 and name not in l1_names_added:
+        if info['level'] == 1 and name not in l1_added:
             result.append(FunctionModule(name=name, level=1, parent=None))
-            l1_names_added.add(name)
-        elif info['level'] == 2 and name not in l2_names_added:
+            l1_added.add(name)
+        elif info['level'] == 2 and name not in l2_added:
             result.append(FunctionModule(name=name, level=2, parent=info['parent']))
-            l2_names_added.add(name)
+            l2_added.add(name)
 
-    # Add L3 modules from detail section and attach functional processes
     for m in l3_modules:
         m.children = processes.get(m.name, [])
         result.append(m)
-
     return result
+
+
+def _validate_tree(modules: list[FunctionModule]) -> bool:
+    """Check if module tree has valid L1 and L3 structure."""
+    l1 = [m for m in modules if m.level == 1]
+    l3 = [m for m in modules if m.level == 3]
+    l2 = [m for m in modules if m.level == 2]
+
+    if not l1 or not l3:
+        return False
+
+    # All L3 parents must exist
+    for m in l3:
+        if m.parent and not any(p.name == m.parent for p in l2) and not any(p.name == m.parent for p in l1):
+            return False
+    return True
+
+
+def build_module_tree(docx_path: str, scheme: dict | None = None) -> list[FunctionModule]:
+    """Build module tree using a single style scheme (default scheme if None)."""
+    root = _read_docx_xml(docx_path)
+    style_names = _load_style_names(docx_path)
+    paras = _get_paragraphs(root, style_names)
+
+    toc_scheme = scheme['toc'] if scheme and 'toc' in scheme else DEFAULT_TOC_SCHEME
+    detail_scheme = scheme['detail'] if scheme and 'detail' in scheme else DEFAULT_DETAIL_SCHEME
+
+    hierarchy = _parse_section_hierarchy(paras, toc_scheme)
+    l3_modules, processes = _parse_detail_section(paras, detail_scheme)
+    return _build_result(hierarchy, l3_modules, processes)
+
+
+def build_module_tree_with_schemes(docx_path: str, schemes: list[dict]) -> list[FunctionModule]:
+    """Try each style scheme and return the first valid result."""
+    root = _read_docx_xml(docx_path)
+    style_names = _load_style_names(docx_path)
+    paras = _get_paragraphs(root, style_names)
+
+    for s in schemes:
+        name = s.get('name', 'unnamed')
+        logger.debug(f"尝试样式方案: {name}")
+
+        hierarchy = _parse_section_hierarchy(paras, s.get('toc', {}))
+        l3_modules, processes = _parse_detail_section(paras, s.get('detail', {}))
+        result = _build_result(hierarchy, l3_modules, processes)
+
+        l1c = len([m for m in result if m.level == 1])
+        l2c = len([m for m in result if m.level == 2])
+        l3c = len([m for m in result if m.level == 3])
+        valid = _validate_tree(result)
+        logger.debug(f"  方案「{name}」: L1={l1c} L2={l2c} L3={l3c} 有效={valid}")
+        if valid:
+            logger.info(f"样式方案「{name}」有效 (L1:{l1c} L2:{l2c} L3:{l3c})")
+            return result
+
+    logger.warning("所有样式方案均无效，使用默认方案")
+    return build_module_tree(docx_path)
 
 
 def get_project_name(docx_path: str) -> str:
     """Extract project name from the docx (first heading)."""
     root = _read_docx_xml(docx_path)
-    paras = _get_paragraphs(root)
+    style_names = _load_style_names(docx_path)
+    paras = _get_paragraphs(root, style_names)
     for p in paras:
         if p['text'] and '需' in p['text'] and '求' in p['text']:
             return p['text']
