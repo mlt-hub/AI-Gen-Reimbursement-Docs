@@ -9,5 +9,8 @@ regenerate_filled: false
 regenerate_excel: false
 regenerate_all: false
 
+# 是否使用AI大模型解析docx模块层级（false=使用硬编码解析器）
+parse_docx_by_ai: false
+
 # 是否使用AI大模型生成COSMIC数据
-enable_ai: true
+enable_ai_generate_cosmic: true

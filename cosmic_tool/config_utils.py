@@ -286,7 +286,8 @@ def load_business_config() -> dict:
         'regenerate_filled': False,
         'regenerate_excel': False,
         'regenerate_all': False,
-        'enable_ai': True,
+        'enable_ai_generate_cosmic': True,
+        'parse_docx_by_ai': False,
     }
     yaml_path = _config_dir() / "system_config.yaml"
     if not yaml_path.exists():
@@ -298,7 +299,8 @@ def load_business_config() -> dict:
             cfg = yaml.safe_load(f) or {}
 
         for key in ('regenerate_md', 'regenerate_filled', 'regenerate_excel',
-                    'regenerate_all', 'enable_ai'):
+                    'regenerate_all', 'enable_ai_generate_cosmic',
+                    'parse_docx_by_ai'):
             if key in cfg:
                 config[key] = bool(cfg[key])
     except Exception:

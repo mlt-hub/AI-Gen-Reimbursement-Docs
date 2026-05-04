@@ -22,10 +22,11 @@ import os
 import shutil
 from datetime import datetime
 
-from cosmic_tool.docx_parser import build_module_tree, print_tree, get_project_name
+from cosmic_tool.docx_parser import build_module_tree, ai_build_module_tree, print_tree, get_project_name
+from cosmic_tool.models import FunctionModule
 from cosmic_tool.cosmic_llm import generate_cosmic_items
 from cosmic_tool.excel_writer import write_to_template
-from cosmic_tool.config_utils import load_api_key, load_base_url, load_model_name
+from cosmic_tool.config_utils import load_api_key, load_base_url, load_model_name, load_business_config
 from cosmic_tool.md_handler import (
     export_empty_md,
     export_filled_md,
@@ -146,6 +147,35 @@ def _section(title: str):
     logger.debug("--- section start ---")
 
 
+def _build_modules(docx_path: str, use_ai: bool,
+                   api_key: str = "", model: str = "",
+                   base_url: str = "") -> list[FunctionModule]:
+    """Build module tree: hardcoded优先；层级不完整时回退到AI。"""
+    modules = build_module_tree(docx_path)
+    l1 = [m for m in modules if m.level == 1]
+    l2 = [m for m in modules if m.level == 2]
+    l3 = [m for m in modules if m.level == 3]
+
+    # 检查层级是否完整：有L1、有L3，且L3的parent能找到对应模块
+    l3_parents_valid = all(
+        not m.parent or any(p.name == m.parent for p in l2) or any(gp.name == m.parent for gp in l1)
+        for m in l3
+    )
+    tree_ok = len(l1) > 0 and len(l3) > 0 and l3_parents_valid
+
+    if not tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
+        logger.warning(f"硬编码解析层级不完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），尝试AI解析...")
+        modules = ai_build_module_tree(
+            docx_path=docx_path,
+            api_key=api_key or None,
+            model=model or "deepseek-v4-flash",
+            base_url=base_url or None,
+        )
+    elif tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
+        logger.info(f"硬编码解析层级完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），跳过AI解析")
+    return modules
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="COSMIC 功能点拆分工具 - 从需求说明书自动生成功能点拆分表（无参数时自动批量处理当前目录docx）",
@@ -202,6 +232,9 @@ def main():
 
     parser.add_argument('--no-llm', action='store_true',
                         help='跳过AI阶段')
+
+    parser.add_argument('--parse-by-ai', action='store_true',
+                        help='使用AI解析模块层级（默认用硬编码解析器）')
 
     parser.add_argument('--all', action='store_true',
                         help='一键全流程: docx → MD → AI填充 → Excel')
@@ -300,11 +333,11 @@ def main():
     from cosmic_tool.config_utils import load_max_tokens, load_business_config, load_user_defaults, load_cfp_formula
     logger.info(f"配置: MAX_TOKENS={load_max_tokens()}, CFP公式={load_cfp_formula()}, 用户默认={load_user_defaults()}")
     biz_cfg = load_business_config()
-    logger.info(f"配置: REGENERATE_MD={biz_cfg['regenerate_md']}, ENABLE_AI={biz_cfg['enable_ai']}")
+    logger.info(f"配置: REGENERATE_MD={biz_cfg['regenerate_md']}, ENABLE_AI_GENERATE_COSMIC={biz_cfg['enable_ai_generate_cosmic']}")
 
     # === Show tree ===
     if args.docx and args.show_tree:
-        modules = build_module_tree(args.docx)
+        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url)
         project = get_project_name(args.docx)
         logger.info(f"项目名称: {project}")
         logger.info(f"模块总数: {len(modules)}")
@@ -331,7 +364,7 @@ def main():
         # 加载业务配置（是否重新生成各阶段文件等）
         from cosmic_tool.config_utils import load_business_config
         biz_config = load_business_config()
-        logger.info(f"  配置: ENABLE_AI={biz_config['enable_ai']}, "
+        logger.info(f"  配置: ENABLE_AI_GENERATE_COSMIC={biz_config['enable_ai_generate_cosmic']}, "
                     f"REGENERATE_ALL={biz_config['regenerate_all']}")
 
         for idx, docx_path in enumerate(docx_files, 1):
@@ -359,17 +392,17 @@ def main():
                 # --- Stage 1: 生成模板 MD ---
                 if os.path.exists(md_base) and not biz_config['regenerate_md']:
                     logger.info(f"  模板MD已存在，跳过（REGENERATE_MD=false）")
-                    modules = build_module_tree(docx_path)
+                    modules = _build_modules(docx_path, args.parse_by_ai, api_key, model, base_url)
                     project = get_project_name(docx_path)
                 else:
-                    modules = build_module_tree(docx_path)
+                    modules = _build_modules(docx_path, args.parse_by_ai, api_key, model, base_url)
                     project = get_project_name(docx_path)
                     export_empty_md(modules, project, md_base)
                     logger.info(f"  模板MD已生成: {md_base}")
 
                 # --- Stage 2: AI 填充 ---
-                if not biz_config['enable_ai']:
-                    logger.info(f"  AI已禁用（ENABLE_AI=false），跳过填充")
+                if not biz_config['enable_ai_generate_cosmic']:
+                    logger.info(f"  AI已禁用（ENABLE_AI_GENERATE_COSMIC=false），跳过填充")
                 elif os.path.exists(md_filled) and not biz_config['regenerate_filled']:
                     logger.info(f"  已填充MD已存在，跳过（REGENERATE_FILLED=false）")
                 else:
@@ -429,7 +462,7 @@ def main():
             args.init_md = _auto_md_path(args.docx, '_拆分表')
         _setup_docx_logging(args.docx)
         _section("阶段1: 解析需求说明书 → 生成模板MD")
-        modules = build_module_tree(args.docx)
+        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url)
         project = get_project_name(args.docx)
         # Statistics
         l1_count = len([m for m in modules if m.level == 1])
@@ -486,7 +519,7 @@ def main():
         logger.info(f"源文件: {args.fill_md}")
         logger.info(f"副本文件: {output_md}")
 
-        modules = build_module_tree(docx_path)
+        modules = _build_modules(docx_path, args.parse_by_ai, api_key, model, base_url)
         project = get_project_name(docx_path)
         # 统计实际功能过程数（来自docx，非模板MD）
         l3_modules = [m for m in modules if m.level == 3]
@@ -552,7 +585,7 @@ def main():
         _setup_docx_logging(args.docx)
         # Stage 1: docx → blank MD
         _section("阶段1: 解析需求说明书 → 生成模板MD")
-        modules = build_module_tree(args.docx)
+        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url)
         project = get_project_name(args.docx)
         l1_count = len([m for m in modules if m.level == 1])
         l2_count = len([m for m in modules if m.level == 2])
@@ -594,7 +627,7 @@ def main():
             args.output = _auto_output_path(args.docx)
         _setup_docx_logging(args.docx)
         _section("阶段1: 解析需求说明书")
-        modules = build_module_tree(args.docx)
+        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url)
         project = get_project_name(args.docx)
         logger.info(f"项目: {project}")
         logger.info(f"模块: {len(modules)}")
