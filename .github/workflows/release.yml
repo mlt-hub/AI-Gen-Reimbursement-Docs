@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --onefile `
-            --name "cosmic_v$env:version" `
+            --name cosmic `
             --add-data "$env:GITHUB_WORKSPACE\cosmic_tool;cosmic_tool" `
             --add-data "$env:GITHUB_WORKSPACE\data\template.xlsx;data" `
             --hidden-import "openpyxl.cell._writer" `
@@ -45,10 +45,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist\data | Out-Null
+          New-Item -ItemType Directory -Force -Path dist\config | Out-Null
+          Copy-Item "cosmic_v$env:version" "dist\cosmic_v$env:version" -Force
           Copy-Item data\template.xlsx dist\data\ -Force
-          Copy-Item config\.env.example dist\.env.example -Force
-          Copy-Item config\system_config.yaml.example dist\system_config.yaml.example -Force
-          Copy-Item config\business_rules.yaml.example dist\business_rules.yaml.example -Force
+          Copy-Item config\.env.example dist\config\.env.example -Force
+          Copy-Item config\system_config.yaml.example dist\config\system_config.yaml.example -Force
+          Copy-Item config\business_rules.yaml.example dist\config\business_rules.yaml.example -Force
           Compress-Archive -Path dist\* -DestinationPath "cosmic_v$env:version.zip"
 
       - name: 创建 Release（本仓）

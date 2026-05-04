@@ -10,11 +10,11 @@ if (-not $pyi) {
     pip install pyinstaller
 }
 
-# 从 pyproject.toml 读取版本号
+# 读取版本号（用于 zip 文件名）
 $toml = "$PSScriptRoot\pyproject.toml"
 $ver = (Select-String -Path $toml -Pattern '^version = "(.+)"' | ForEach-Object { $_.Matches.Groups[1].Value })
 if (-not $ver) { $ver = "unknown" }
-$exe_name = "cosmic_v$ver"
+$exe_name = "cosmic"
 Write-Host "[版本] $ver" -ForegroundColor Cyan
 
 # 清理旧构建
@@ -44,19 +44,17 @@ if ($LASTEXITCODE -ne 0) {
 # 复制模板和配置
 Write-Host "[复制] 附加文件..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path "$root\dist\data" | Out-Null
+New-Item -ItemType Directory -Force -Path "$root\dist\config" | Out-Null
+Copy-Item "$root\cosmic_v$ver" "$root\dist\cosmic_v$ver" -Force
 Copy-Item "$root\data\template.xlsx" "$root\dist\data\" -Force
-Copy-Item "$root\config\.env.example" "$root\dist\.env.example" -Force
-Copy-Item "$root\config\system_config.yaml.example" "$root\dist\system_config.yaml.example" -Force
-Copy-Item "$root\config\business_rules.yaml.example" "$root\dist\business_rules.yaml.example" -Force
-
-# 复制一份并命名为 cosmic.exe（方便无版本号调用）
-Copy-Item "$root\dist\$exe_name.exe" "$root\dist\cosmic.exe" -Force
+Copy-Item "$root\config\.env.example" "$root\dist\config\.env.example" -Force
+Copy-Item "$root\config\system_config.yaml.example" "$root\dist\config\system_config.yaml.example" -Force
+Copy-Item "$root\config\business_rules.yaml.example" "$root\dist\config\business_rules.yaml.example" -Force
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  打包完成！" -ForegroundColor Green
 Write-Host "  exe: dist\$exe_name.exe" -ForegroundColor Green
-Write-Host "  别名: dist\cosmic.exe" -ForegroundColor Green
 Write-Host ""
 Write-Host "  使用方法:" -ForegroundColor White
 Write-Host "    dist\$exe_name.exe --docx `"需求书.docx`" --all" -ForegroundColor White
