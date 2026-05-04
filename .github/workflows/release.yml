@@ -68,9 +68,15 @@ jobs:
         run: |
           $ver = "${{ env.version }}"
           $tag = "v$ver"
-          gh release create $tag "cosmic_v$ver.zip" `
-            --title "v$ver" --notes-file CHANGELOG.md `
-            --target "${{ github.sha }}"
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag 已存在，更新资产..."
+            gh release upload $tag "cosmic_v$ver.zip" --clobber
+          } else {
+            gh release create $tag "cosmic_v$ver.zip" `
+              --title "v$ver" --notes-file CHANGELOG.md `
+              --target "${{ github.sha }}"
+          }
           Write-Host "已创建 Release: https://github.com/mlt-hub/cosmic-tool/releases/tag/$tag"
 
       - name: 推送到发布仓（mlt-hub/cosmic-tool-release）
