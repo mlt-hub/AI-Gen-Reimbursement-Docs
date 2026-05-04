@@ -48,6 +48,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist\config | Out-Null
           # 生成版本标记文件
           "cosmic-tool v$env:version" | Out-File -Encoding utf8 "dist\cosmic_v$env:version"
+          Copy-Item README.md dist\README.md -Force
+          Copy-Item CHANGELOG.md dist\CHANGELOG.md -Force
           Copy-Item data\template.xlsx dist\data\ -Force
           Copy-Item config\.env.example dist\config\.env.example -Force
           Copy-Item config\system_config.yaml.example dist\config\system_config.yaml.example -Force

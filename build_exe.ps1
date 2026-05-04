@@ -47,6 +47,8 @@ New-Item -ItemType Directory -Force -Path "$root\dist\data" | Out-Null
 New-Item -ItemType Directory -Force -Path "$root\dist\config" | Out-Null
 # 生成版本标记文件
 "cosmic-tool v$ver" | Out-File -Encoding utf8 "$root\dist\cosmic_v$ver"
+Copy-Item "$root\README.md" "$root\dist\README.md" -Force
+Copy-Item "$root\CHANGELOG.md" "$root\dist\CHANGELOG.md" -Force
 Copy-Item "$root\data\template.xlsx" "$root\dist\data\" -Force
 Copy-Item "$root\config\.env.example" "$root\dist\config\.env.example" -Force
 Copy-Item "$root\config\system_config.yaml.example" "$root\dist\config\system_config.yaml.example" -Force
