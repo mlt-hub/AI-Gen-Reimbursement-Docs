@@ -45,7 +45,8 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[复制] 附加文件..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path "$root\dist\data" | Out-Null
 New-Item -ItemType Directory -Force -Path "$root\dist\config" | Out-Null
-Copy-Item "$root\cosmic_v$ver" "$root\dist\cosmic_v$ver" -Force
+# 生成版本标记文件
+"cosmic-tool v$ver" | Out-File -Encoding utf8 "$root\dist\cosmic_v$ver"
 Copy-Item "$root\data\template.xlsx" "$root\dist\data\" -Force
 Copy-Item "$root\config\.env.example" "$root\dist\config\.env.example" -Force
 Copy-Item "$root\config\system_config.yaml.example" "$root\dist\config\system_config.yaml.example" -Force
