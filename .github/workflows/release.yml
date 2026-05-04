@@ -36,7 +36,7 @@ jobs:
           pyinstaller --onefile `
             --name cosmic `
             --add-data "$env:GITHUB_WORKSPACE\cosmic_tool;cosmic_tool" `
-            --add-data "$env:GITHUB_WORKSPACE\data\template.xlsx;data" `
+            --add-data "$env:GITHUB_WORKSPACE\data\excel_template.xlsx;data" `
             --hidden-import "openpyxl.cell._writer" `
             --distpath dist --workpath build --specpath build --console `
             "$env:GITHUB_WORKSPACE\cosmic_tool\main.py"
@@ -50,7 +50,7 @@ jobs:
           "cosmic-tool v$env:version" | Out-File -Encoding utf8 "dist\cosmic_v$env:version"
           Copy-Item README.md dist\README.md -Force
           Copy-Item CHANGELOG.md dist\CHANGELOG.md -Force
-          Copy-Item data\template.xlsx dist\data\ -Force
+          Copy-Item data\excel_template.xlsx dist\data\ -Force
           Copy-Item config\.env.example dist\config\.env.example -Force
           Copy-Item config\system_config.yaml.example dist\config\system_config.yaml.example -Force
           Copy-Item config\business_rules.yaml.example dist\config\business_rules.yaml.example -Force

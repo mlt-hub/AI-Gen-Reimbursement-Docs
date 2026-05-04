@@ -227,7 +227,7 @@ def main():
                         help='从MD文件生成Excel；省略路径时从docx自动查找')
 
     parser.add_argument('--template', '-t', default='',
-                        help='功能点拆分表 .xlsx 模板文件路径（默认 data/template.xlsx）')
+                        help='功能点拆分表 .xlsx 模板文件路径（默认 data/excel_template.xlsx）')
 
     parser.add_argument('--output', '-o', default='',
                         help='输出 .xlsx 文件路径')
@@ -700,7 +700,7 @@ def _default_template_path() -> str:
                     return yaml_path
         except Exception:
             pass
-    return os.path.join(_project_root(), 'data', 'template.xlsx')
+    return os.path.join(_project_root(), 'data', 'excel_template.xlsx')
 
 
 def _auto_md_path(docx_path: str, suffix: str = '') -> str:

@@ -16,8 +16,8 @@ user_receiver_rules:
   用户: 用户前台
 
 # Excel 模板文件路径（相对于项目根目录，或绝对路径）
-# 不设置则默认使用 data/template.xlsx
-template_path: data/template.xlsx
+# 不设置则默认使用 data/excel_template.xlsx
+template_path: data/excel_template.xlsx
 
 # ---------- docx 样式→层级映射方案 ----------
 # 按顺序尝试每个方案，第一个通过层级验证的生效。
