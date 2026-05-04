@@ -9,3 +9,6 @@ dist/
 
 # pip install -e . 生成
 *.egg-info/
+
+# 版本标记文件（构建产物）
+cosmic_v*

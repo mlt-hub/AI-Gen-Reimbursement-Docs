@@ -19,11 +19,6 @@ cosmic --docx "需求书.docx" --md        # 生成 Excel
 
 ## 发布版（exe）
 
-从 [Releases](https://github.com/mlt-hub/cosmic-tool/releases) 下载 `cosmic_v*.exe`，无需安装 Python。
+从 [发布仓](https://github.com/mlt-hub/cosmic-tool-release/releases) 下载 `cosmic_v*.zip`，解压即可使用，无需安装 Python。
 
-## 开发者
 
-```bash
-pip install -e .
-cosmic --version
-```
