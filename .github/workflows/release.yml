@@ -11,13 +11,11 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: 安装 Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -54,7 +52,7 @@ jobs:
           Compress-Archive -Path dist\* -DestinationPath "cosmic_v$env:version.zip"
 
       - name: 创建 Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: "v${{ env.version }}"
           body_path: CHANGELOG.md
