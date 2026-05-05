@@ -127,8 +127,7 @@ def _find_chapter_boundaries(doc, section_config: dict) -> tuple[int, int]:
     if marker_start >= 0:
         marker_end = len(paragraphs)
         for j in range(marker_start + 1, len(paragraphs)):
-            text = re.sub(r'[\s]', '', paragraphs[j].text.strip()) if paragraphs[j].text else ""
-            if text and (text.startswith(f'{next_number}.') or '附加值' in text):
+            if '###文档结束###' in paragraphs[j].text:
                 marker_end = j
                 break
         logger.info(f"标记检测: chapter=[{marker_start}..{marker_end})")
@@ -230,15 +229,15 @@ def _detect_marker_level(text: str) -> int | None:
     ###三级模块### → 4 (####) → L3
     ###文档开始### → 1 (#) → chapter
     """
-    if '###一级模块###' in text:
+    if '###一级模块###' in text or '###一级模块:' in text:
         return 2
-    if '###二级模块###' in text:
+    if '###二级模块###' in text or '###二级模块:' in text:
         return 3
-    if '###三级模块###' in text:
+    if '###三级模块###' in text or '###三级模块:' in text:
         return 4
     if '###文档开始###' in text:
         return 1
-    if '###功能过程###' in text:
+    if '###功能过程###' in text or '###功能过程:' in text:
         return 5
     return None
 
@@ -263,28 +262,39 @@ def convert_to_md(docx_path: str, output_path: Optional[str] = None) -> str:
 
     md_lines: list[str] = []
     list_buffer: list[str] = []
-    in_process_mode = False  # after ###功能过程###, Normal paragraphs → ##### headings
+    in_process_mode = False
 
     from docx.oxml.ns import qn
     body = doc.element.body
     p_idx = 0
 
+    def _has_num_id(para) -> bool:
+        pPr = para._p.find(qn('w:pPr'))
+        if pPr is None:
+            return False
+        numPr = pPr.find(qn('w:numPr'))
+        if numPr is None:
+            return False
+        el = numPr.find(qn('w:numId'))
+        if el is None:
+            return False
+        return int(el.get(qn('w:val'), 0)) != 0
+
     for child in body:
         if child.tag == qn('w:p') and chapter_start <= p_idx < chapter_end:
             para = doc.paragraphs[p_idx]
             raw = para.text.strip()
-            # Switch to process mode when hitting ###功能过程### marker
-            if '###功能过程###' in raw:
+            if '###功能过程###' in raw or '###功能过程:' in raw:
                 in_process_mode = True
-            # In process mode: Normal(1) paragraphs without markers → #####
-            sname = para.style.name if para.style else ''
-            sid = para.style.style_id if para.style else ''
-            is_normal = (sname == 'Normal' or sid == '1' or sname == '')
             has_marker = any(m in raw for m in ('###文档开始###', '###一级模块###',
                                                   '###二级模块###', '###三级模块###',
                                                   '###功能过程###'))
-            if in_process_mode and is_normal and not has_marker:
-                _process_paragraph(para, md_lines, list_buffer, force_heading=5)
+            if in_process_mode and not has_marker and _has_num_id(para):
+                hl = _heading_level(para)
+                if hl is None:
+                    _process_paragraph(para, md_lines, list_buffer, force_heading=5)
+                else:
+                    _process_paragraph(para, md_lines, list_buffer)
             else:
                 _process_paragraph(para, md_lines, list_buffer)
         p_idx += 1

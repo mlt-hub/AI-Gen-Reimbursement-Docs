@@ -370,7 +370,7 @@ def main():
                 args.init_config, args.log]):
         _section("批量处理模式")
         import glob
-        docx_files = glob.glob("*.docx")
+        docx_files = [f for f in glob.glob("*.docx") if not f.startswith("~$")]
         if not docx_files:
             logger.warning("当前目录没有找到 docx 文件")
             return
@@ -771,11 +771,11 @@ def _find_docx_from_md(md_path: str) -> str:
     """Try to find the corresponding docx for an MD file."""
     md_dir = os.path.dirname(os.path.abspath(md_path))
     for f in os.listdir(md_dir):
-        if f.endswith('.docx'):
+        if f.endswith('.docx') and not f.startswith('~$'):
             return os.path.join(md_dir, f)
     parent = os.path.dirname(md_dir)
     for f in os.listdir(parent):
-        if f.endswith('.docx'):
+        if f.endswith('.docx') and not f.startswith('~$'):
             return os.path.join(parent, f)
     return ""
 

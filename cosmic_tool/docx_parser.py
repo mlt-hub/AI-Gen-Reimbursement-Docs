@@ -405,10 +405,10 @@ def _build_modules_from_marks(paras: list[dict]) -> list[FunctionModule] | None:
         elif strategy == '多级列表格式':
             sig = ('ilvl', p.get('num_id'), p.get('ilvl'))
         elif strategy == '编号格式':
-            sig = ('numbered', p.get('style', ''))
+            sig = ('numbered',)
         else:
             continue
-        if sig is None or sig == ('style', '') or sig == ('ilvl', None, None) or sig == ('numbered', ''):
+        if sig is None or sig == ('style', '') or sig == ('ilvl', None, None):
             continue
         if level not in rules:
             rules[level] = []
@@ -417,13 +417,22 @@ def _build_modules_from_marks(paras: list[dict]) -> list[FunctionModule] | None:
     if not rules:
         return None
 
-    # Log rules
-    rule_desc = []
-    for level_num, rule_list in rules.items():
-        for strategy, sig in rule_list:
-            label = {1: 'L1', 2: 'L2', 3: 'L3', 'process': 'proc'}.get(level_num, level_num)
-            rule_desc.append(f'{label}:{strategy}={sig}')
-    logger.info(f"格式A（标记法）: {'; '.join(rule_desc)}")
+    # Log strategy summary
+    strategies = set(strategy for _, rule_list in rules.items() for strategy, _ in rule_list)
+    if len(strategies) == 1:
+        strat = next(iter(strategies))
+        hint = {'多级列表格式': '全部按 (num_id, ilvl) 匹配',
+                '标题样式': '全部按标题样式匹配',
+                '编号格式': '全部按 numId（忽略样式）匹配'}.get(strat, strat)
+        logger.info(f"格式A（标记法）: {strat}：{hint}")
+    else:
+        parts = []
+        for s in ['标题样式', '多级列表格式', '编号格式']:
+            if s in strategies:
+                hint_s = {'标题样式': '按标题样式', '多级列表格式': '按(num_id,ilvl)',
+                          '编号格式': '按 numId（忽略样式）'}[s]
+                parts.append(f"{s}：{hint_s}")
+        logger.info(f"格式A（标记法）: {'；'.join(parts)}")
 
     # ── Set chapter boundaries ──
     if doc_start < 0:
@@ -469,10 +478,9 @@ def _build_modules_from_marks(paras: list[dict]) -> list[FunctionModule] | None:
                     if (p.get('num_id'), p.get('ilvl')) == (sig[1], sig[2]):
                         matched_level = level
                 elif strategy == '编号格式' and sig[0] == 'numbered':
-                    if p.get('style', '') == sig[1]:
-                        nid = p.get('num_id')
-                        if nid is not None and nid != 0:
-                            matched_level = level
+                    nid = p.get('num_id')
+                    if nid is not None and nid != 0:
+                        matched_level = level
                 if matched_level is not None:
                     break
             if matched_level is not None:
@@ -504,6 +512,26 @@ def _build_modules_from_marks(paras: list[dict]) -> list[FunctionModule] | None:
     for m in modules:
         if m.level == 3:
             m.children = l3_processes.get(m.name, [])
+
+    # Log per-level detail
+    for level_num in (1, 2, 3, 'process'):
+        if level_num not in rules:
+            continue
+        label = {1: 'L1', 2: 'L2', 3: 'L3', 'process': 'proc'}[level_num]
+        for strategy, sig in rules[level_num]:
+            if level_num == 'process':
+                cnt = sum(len(m.children) for m in modules if m.level == 3)
+            else:
+                cnt = len([m for m in modules if m.level == level_num])
+            if strategy == '多级列表格式':
+                desc = f"numId={sig[1]}, ilvl={sig[2]}"
+            elif strategy == '标题样式':
+                desc = f"style={sig[1]}"
+            elif strategy == '编号格式':
+                desc = "有 numId（忽略样式）"
+            else:
+                desc = str(sig)
+            logger.info(f"  {label}:{strategy}={sig} → {desc} → {cnt} 个")
 
     logger.info(
         f"标记策略: "
@@ -656,14 +684,15 @@ def _parse_detail_section(paras: list[dict],
     in_detail = False
 
     start_styles = (s['start_style'], s['l2_style'], s['l3_style'], s['process_style'])
-    end_style = s.get('end_style', '4')
-    end_keyword = s.get('end_keyword', '功附加值调整因子')
 
     for p in paras:
         text = p['text']
         style = p['style']
         sname = p.get('style_name', '')
         ilvl = p.get('ilvl')
+
+        if '###文档结束###' in text:
+            break
 
         if not in_detail:
             if _style_matches(p, s['start_style']):
@@ -674,29 +703,24 @@ def _parse_detail_section(paras: list[dict],
         if not in_detail:
             continue
 
-        if _style_matches(p, s.get('end_style', '')) and end_keyword in text:
-            logger.debug(f"[DETAIL] 详情结束标记: style={style} name={sname} text={text[:40]}，之后仅匹配ilvl功能过程")
-            # 不再break，继续用ilvl匹配功能过程
-
         # 详情区内：按样式解析层级
-        if not (_style_matches(p, s.get('end_style', '')) and end_keyword in text):
-            if _style_matches(p, s['start_style']):
-                current_l2 = None
-                current_l3 = None
+        if _style_matches(p, s['start_style']):
+            current_l2 = None
+            current_l3 = None
 
-            if _style_matches(p, s['l2_style']):
-                current_l2 = _clean_name(text)
-                current_l3 = None
-                logger.debug(f"[DETAIL] L2: style={style} name={sname} → {current_l2}")
+        if _style_matches(p, s['l2_style']):
+            current_l2 = _clean_name(text)
+            current_l3 = None
+            logger.debug(f"[DETAIL] L2: style={style} name={sname} → {current_l2}")
 
-            elif _style_matches(p, s['l3_style']):
-                clean_l3 = _clean_name(text)
-                current_l3 = clean_l3
-                l3_modules.append(FunctionModule(
-                    name=clean_l3, level=3, description="", parent=current_l2
-                ))
-                processes.setdefault(clean_l3, [])
-                logger.debug(f"[DETAIL] L3: style={style} name={sname} → {clean_l3} parent={current_l2}")
+        elif _style_matches(p, s['l3_style']):
+            clean_l3 = _clean_name(text)
+            current_l3 = clean_l3
+            l3_modules.append(FunctionModule(
+                name=clean_l3, level=3, description="", parent=current_l2
+            ))
+            processes.setdefault(clean_l3, [])
+            logger.debug(f"[DETAIL] L3: style={style} name={sname} → {clean_l3} parent={current_l2}")
 
         # 用ilvl跟踪当前L3（详情区外也能识别）
         process_ilvl = s.get('process_ilvl')
