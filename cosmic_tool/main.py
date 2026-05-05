@@ -1,10 +1,10 @@
 """COSMIC 功能点拆分工具 - CLI入口
 
 推荐工作流（MD中间件模式）:
-  1. python -m cosmic_tool.main --docx 需求书.docx --init-md 拆分表.md
-  2. python -m cosmic_tool.main --fill-md 拆分表.md
+  0. python -m cosmic_tool.main --docx 需求书.docx --init-md 需求书_拆分表.md   (含原文转MD)
+  1. python -m cosmic_tool.main --fill-md 需求书_拆分表.md
      (编辑拆分表.md 人工审核修正)
-  3. python -m cosmic_tool.main --md 拆分表.md --template 模板.xlsx --output 结果.xlsx
+  2. python -m cosmic_tool.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
 
 快捷模式（一键全流程）:
   python -m cosmic_tool.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
@@ -23,7 +23,8 @@ import shutil
 import sys
 from datetime import datetime
 
-from cosmic_tool.docx_parser import build_module_tree, build_module_tree_with_schemes, ai_build_module_tree, print_tree, get_project_name
+from cosmic_tool.docx_to_md import convert_to_md, build_modules_from_md, get_project_name_from_md
+from cosmic_tool.docx_parser import build_module_tree, ai_build_module_tree, print_tree, get_project_name
 from cosmic_tool.models import FunctionModule
 from cosmic_tool.cosmic_llm import generate_cosmic_items
 from cosmic_tool.excel_writer import write_to_template
@@ -88,13 +89,14 @@ def _init_global_logging():
     return logger, run_log
 
 
-def setup_logging(log_dir: str):
+def setup_logging(log_dir: str, docx_name: str = ""):
     """添加 per-docx 日志处理器（保留全局日志）。"""
     os.makedirs(log_dir, exist_ok=True)
 
-    main_log = os.path.join(log_dir, 'cosmic_tool.log')
+    prefix = f"{docx_name}_" if docx_name else ""
+    main_log = os.path.join(log_dir, f'{prefix}cosmic_tool.log')
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_log = os.path.join(log_dir, f'run_{run_stamp}.log')
+    run_log = os.path.join(log_dir, f'{prefix}run_{run_stamp}.log')
 
     logger = logging.getLogger('cosmic_tool')
 
@@ -137,7 +139,7 @@ def _setup_docx_logging(docx_path: str) -> str:
     base_name = os.path.splitext(os.path.basename(docx_path))[0]
     log_dir = os.path.join(os.path.abspath(base_name), 'log')
     os.makedirs(log_dir, exist_ok=True)
-    setup_logging(log_dir)
+    setup_logging(log_dir, base_name)
     os.environ['COSMIC_LOG_DIR'] = log_dir
     return log_dir
 
@@ -154,17 +156,9 @@ def _section(title: str):
 def _build_modules(docx_path: str, use_ai: bool,
                    api_key: str = "", model: str = "",
                    base_url: str = "") -> list[FunctionModule]:
-    """Build module tree: 多方案逐级尝试；失败时回退到AI。"""
-    from cosmic_tool.config_utils import load_docx_style_schemes
+    """Build module tree from docx; fall back to AI if configured."""
+    modules = build_module_tree(docx_path)
 
-    schemes = load_docx_style_schemes()
-    if schemes:
-        logger.debug(f"加载了 {len(schemes)} 个样式方案")
-        modules = build_module_tree_with_schemes(docx_path, schemes)
-    else:
-        modules = build_module_tree(docx_path)
-
-    # 检查层级是否完整
     l1 = [m for m in modules if m.level == 1]
     l2 = [m for m in modules if m.level == 2]
     l3 = [m for m in modules if m.level == 3]
@@ -175,7 +169,7 @@ def _build_modules(docx_path: str, use_ai: bool,
     tree_ok = len(l1) > 0 and len(l3) > 0 and l3_parents_valid
 
     if not tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
-        logger.warning(f"样式方案解析层级不完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），尝试AI解析...")
+        logger.warning(f"硬编码解析层级不完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），尝试AI解析...")
         modules = ai_build_module_tree(
             docx_path=docx_path,
             api_key=api_key or None,
@@ -183,7 +177,18 @@ def _build_modules(docx_path: str, use_ai: bool,
             base_url=base_url or None,
         )
     elif tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
-        logger.info(f"样式方案解析层级完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），跳过AI解析")
+        logger.info(f"硬编码解析层级完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），跳过AI解析")
+    return modules
+
+
+def _build_modules_from_md(md_path: str, docx_path: str = "") -> list[FunctionModule]:
+    """Build module tree from docx (B→A priority). Falls back to Markdown if no docx."""
+    if docx_path:
+        from cosmic_tool.docx_parser import build_module_tree
+        return build_module_tree(docx_path)
+    modules = build_modules_from_md(md_path)
+    if not modules:
+        logger.warning("Markdown中未解析到模块层次，结果可能为空")
     return modules
 
 
@@ -195,9 +200,9 @@ def main():
 工作流示例:
 
   # (推荐) MD中间件模式：docx → MD → 编辑MD → Excel
-  python -m cosmic_tool.main --docx 需求书.docx --init-md 拆分表.md
-  python -m cosmic_tool.main --fill-md 拆分表.md
-  python -m cosmic_tool.main --md 拆分表.md --template 模板.xlsx --output 结果.xlsx
+  python -m cosmic_tool.main --docx 需求书.docx --init-md 需求书_拆分表.md
+  python -m cosmic_tool.main --fill-md 需求书_拆分表.md
+  python -m cosmic_tool.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
 
   # (快捷) 一键直出：docx → LLM → Excel
   python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
@@ -389,8 +394,10 @@ def main():
 
             xlsx_path = _auto_output_path(docx_path)
             out_xlsx = os.path.join(out_dir, os.path.basename(xlsx_path))
-            md_base = os.path.join(md_dir, '拆分表.md')
-            md_filled = os.path.join(md_dir, '拆分表_已填充.md')
+            docx_name = os.path.splitext(os.path.basename(docx_path))[0]
+            md_raw = os.path.join(md_dir, f'{docx_name}_原文.md')
+            md_base = os.path.join(md_dir, f'{docx_name}_拆分表.md')
+            md_filled = os.path.join(md_dir, f'{docx_name}_拆分表_已填充.md')
 
             os.makedirs(md_dir, exist_ok=True)
             os.makedirs(log_dir, exist_ok=True)
@@ -399,18 +406,26 @@ def main():
             logger.info(f"  {'-' * 40}")
 
             # Reconfigure logging and AI response paths for this docx
-            setup_logging(log_dir)
+            docx_name = os.path.splitext(os.path.basename(docx_path))[0]
+            setup_logging(log_dir, docx_name)
             os.environ['COSMIC_LOG_DIR'] = log_dir
 
             try:
-                # --- Stage 1: 生成模板 MD ---
+                # --- Stage 0: docx → 原文 Markdown ---
+                if os.path.exists(md_raw) and not biz_config['regenerate_md']:
+                    logger.info(f"  原文MD已存在，跳过（REGENERATE_MD=false）")
+                else:
+                    convert_to_md(docx_path, md_raw)
+                    logger.info(f"  原文MD已生成: {md_raw}")
+
+                # --- Stage 1: 原文 MD → 生成 COSMIC 模板 ---
                 if os.path.exists(md_base) and not biz_config['regenerate_md']:
                     logger.info(f"  模板MD已存在，跳过（REGENERATE_MD=false）")
-                    modules = _build_modules(docx_path, args.parse_by_ai, api_key, model, base_url)
-                    project = get_project_name(docx_path)
+                    modules = _build_modules_from_md(md_raw, docx_path)
+                    project = get_project_name_from_md(md_raw)
                 else:
-                    modules = _build_modules(docx_path, args.parse_by_ai, api_key, model, base_url)
-                    project = get_project_name(docx_path)
+                    modules = _build_modules_from_md(md_raw, docx_path)
+                    project = get_project_name_from_md(md_raw)
                     export_empty_md(modules, project, md_base)
                     logger.info(f"  模板MD已生成: {md_base}")
 
@@ -475,9 +490,17 @@ def main():
         if not args.init_md:
             args.init_md = _auto_md_path(args.docx, '_拆分表')
         _setup_docx_logging(args.docx)
-        _section("阶段1: 解析需求说明书 → 生成模板MD")
-        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url)
-        project = get_project_name(args.docx)
+        # 生成原文MD（与模板MD同目录）
+        docx_name = os.path.splitext(os.path.basename(args.docx))[0]
+        md_dir = os.path.dirname(args.init_md) or '.'
+        raw_md = os.path.join(md_dir, f'{docx_name}_原文.md')
+        _section("阶段0: 需求说明书 → 原文Markdown")
+        convert_to_md(args.docx, raw_md)
+        logger.info(f"  原文MD已生成: {raw_md}")
+
+        _section("阶段1: 原文MD → 生成COSMIC模板")
+        modules = _build_modules_from_md(raw_md, args.docx)
+        project = get_project_name_from_md(raw_md)
         # Statistics
         l1_count = len([m for m in modules if m.level == 1])
         l2_count = len([m for m in modules if m.level == 2])
@@ -593,14 +616,22 @@ def main():
         # Auto-generate output and MD paths from docx
         if not args.output:
             args.output = _auto_output_path(args.docx)
-        base_md = args.output.replace('.xlsx', '_拆分表.md')
-        filled_md = base_md.replace('.md', '_已填充.md')
 
         _setup_docx_logging(args.docx)
-        # Stage 1: docx → blank MD
-        _section("阶段1: 解析需求说明书 → 生成模板MD")
-        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url)
-        project = get_project_name(args.docx)
+        # All md files named after the source docx
+        docx_name = os.path.splitext(os.path.basename(args.docx))[0]
+        out_dir = os.path.dirname(args.output) or '.'
+        md_raw = os.path.join(out_dir, f'{docx_name}_原文.md')
+        base_md = os.path.join(out_dir, f'{docx_name}_拆分表.md')
+        filled_md = os.path.join(out_dir, f'{docx_name}_拆分表_已填充.md')
+        _section("阶段0: 需求说明书 → 原文Markdown")
+        convert_to_md(args.docx, md_raw)
+        logger.info(f"  原文MD已生成: {md_raw}")
+
+        # Stage 1: 原文 MD → 生成 COSMIC 模板
+        _section("阶段1: 原文MD → 生成COSMIC模板")
+        modules = _build_modules_from_md(md_raw, args.docx)
+        project = get_project_name_from_md(md_raw)
         l1_count = len([m for m in modules if m.level == 1])
         l2_count = len([m for m in modules if m.level == 2])
         l3_count = len([m for m in modules if m.level == 3])
@@ -629,7 +660,7 @@ def main():
         else:
             logger.warning("⚠ MD中未解析到COSMIC数据，生成空白模板")
             write_to_template(args.template, args.output, [])
-        logger.info(f"中间文件: {base_md}, {filled_md}")
+        logger.info(f"中间文件: {md_raw}, {base_md}, {filled_md}")
         logger.info(f"输出: {os.path.abspath(args.output)}")
         return
 
@@ -640,9 +671,16 @@ def main():
         if not args.output:
             args.output = _auto_output_path(args.docx)
         _setup_docx_logging(args.docx)
-        _section("阶段1: 解析需求说明书")
-        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url)
-        project = get_project_name(args.docx)
+        docx_name = os.path.splitext(os.path.basename(args.docx))[0]
+        out_dir = os.path.dirname(args.output) or '.'
+        _section("阶段0: 需求说明书 → 原文Markdown")
+        md_raw = os.path.join(out_dir, f'{docx_name}_原文.md')
+        convert_to_md(args.docx, md_raw)
+        logger.info(f"  原文MD已生成: {md_raw}")
+
+        _section("阶段1: 原文MD → 构建模块树")
+        modules = _build_modules_from_md(md_raw, args.docx)
+        project = get_project_name_from_md(md_raw)
         logger.info(f"项目: {project}")
         logger.info(f"模块: {len(modules)}")
         print_tree(modules)
@@ -743,6 +781,14 @@ def _find_docx_from_md(md_path: str) -> str:
 
 
 if __name__ == '__main__':
-    main()
-    if getattr(sys, 'frozen', False):
-        input("\n按 Enter 键退出...")
+    _exit_code = 0
+    try:
+        main()
+    except Exception:
+        _exit_code = 1
+        import traceback
+        traceback.print_exc()
+    finally:
+        if getattr(sys, 'frozen', False):
+            input("\n按 Enter 键退出...")
+        sys.exit(_exit_code)

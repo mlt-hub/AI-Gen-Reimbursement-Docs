@@ -64,6 +64,7 @@ def _get_paragraphs(root: ET.Element, style_names: dict | None = None) -> list[d
         full_text = ''.join(texts).strip()
 
         ilvl = None
+        num_id = None
         if pPr is not None:
             numPr = pPr.find('w:numPr', NS)
             if numPr is not None:
@@ -72,20 +73,27 @@ def _get_paragraphs(root: ET.Element, style_names: dict | None = None) -> list[d
                     ilvl = int(ilvl_elem.get(
                         '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', 0
                     ))
+                num_id_elem = numPr.find('w:numId', NS)
+                if num_id_elem is not None:
+                    num_id = int(num_id_elem.get(
+                        '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', 0
+                    ))
 
         if full_text:
             style_name = (style_names or {}).get(style, '')
             paragraphs.append({
                 'style': style, 'style_name': style_name,
-                'text': full_text, 'ilvl': ilvl,
+                'text': full_text, 'ilvl': ilvl, 'num_id': num_id,
             })
     return paragraphs
 
 
 def _clean_name(raw: str) -> str:
-    """Clean module name: remove leading numbering and trailing page numbers."""
+    """Clean module name: remove leading numbering, trailing page numbers, and ### markers."""
     name = re.sub(r'^[\d.]+\s+', '', raw).strip()
     name = re.sub(r'\d+$', '', name).strip()
+    cleaned = re.sub(r'###.*?###', '', name).strip()
+    return cleaned if cleaned else name
     return name
 
 
@@ -351,22 +359,249 @@ def _style_matches(p: dict, style_val: str) -> bool:
 
     return p["style"] == style_val or p.get("style_name", "") == style_val
 
-DEFAULT_TOC_SCHEME = {
-    'section_style': '12', 'section_number': '4',
-    'section_keyword': '功能需求',
-    'l1_style': '14', 'l2_style': '9',
-}
+def _build_modules_from_marks(paras: list[dict]) -> list[FunctionModule] | None:
+    """Build module tree from ### markers with strategies.
 
-DEFAULT_DETAIL_SCHEME = {
-    'start_style': '5', 'end_style': '4', 'end_keyword': '功附加值调整因子',
-    'l2_style': '7', 'l3_style': '8', 'process_style': '6',
-}
+    Marker format:  ###level:strategy###
+      level: 一级模块 / 二级模块 / 三级模块 / 功能过程
+      strategy: 标题样式 / 多级列表格式 / 编号格式
+
+    Strategy rules:
+      标题样式     → match all paragraphs with the same style_id
+      多级列表格式  → match all paragraphs with the same (num_id, ilvl)
+      编号格式     → match all paragraphs with the same num_id
+
+    ###文档开始### / ###文档结束### → chapter boundaries (no strategy).
+    """
+    import re
+    pattern = re.compile(r'###(.+?):(.+?)###')
+    MARKER_LEVELS = {
+        '一级模块': 1, '二级模块': 2, '三级模块': 3, '功能过程': 'process',
+    }
+
+    # ── Parse markers ──
+    rules = {}  # level -> (strategy, signature)
+    doc_start = -1
+    doc_end = len(paras)
+
+    for i, p in enumerate(paras):
+        text = p.get('text', '')
+        if '###文档开始###' in text and ':' not in text:
+            doc_start = i
+            continue
+        if '###文档结束###' in text and ':' not in text:
+            doc_end = i
+            continue
+        m = pattern.search(text)
+        if not m:
+            continue
+        level_name, strategy = m.group(1), m.group(2)
+        level = MARKER_LEVELS.get(level_name)
+        if level is None:
+            continue
+        # Extract signature from the marker paragraph
+        if strategy == '标题样式':
+            sig = ('style', p.get('style', ''))
+        elif strategy == '多级列表格式':
+            sig = ('ilvl', p.get('num_id'), p.get('ilvl'))
+        elif strategy == '编号格式':
+            sig = ('numbered', p.get('style', ''))
+        else:
+            continue
+        if sig is None or sig == ('style', '') or sig == ('ilvl', None, None) or sig == ('numbered', ''):
+            continue
+        if level not in rules:
+            rules[level] = []
+        rules[level].append((strategy, sig))
+
+    if not rules:
+        return None
+
+    # Log rules
+    rule_desc = []
+    for level_num, rule_list in rules.items():
+        for strategy, sig in rule_list:
+            label = {1: 'L1', 2: 'L2', 3: 'L3', 'process': 'proc'}.get(level_num, level_num)
+            rule_desc.append(f'{label}:{strategy}={sig}')
+    logger.info(f"格式A（标记法）: {'; '.join(rule_desc)}")
+
+    # ── Set chapter boundaries ──
+    if doc_start < 0:
+        for i, p in enumerate(paras):
+            if '功能需求' in p.get('text', ''):
+                doc_start = i
+                break
+    if doc_start < 0:
+        doc_start = 0
+
+    # ── Walk paragraphs in chapter range, matching rules ──
+    modules: list[FunctionModule] = []
+    l1_registry: set[str] = set()
+    l2_registry: set[str] = set()
+    l3_registry: set[str] = set()
+    l3_processes: dict[str, list[str]] = {}
+    current_l1: str | None = None
+    current_l2: str | None = None
+    current_l3: str | None = None
+
+    for pi in range(doc_start, min(doc_end, len(paras))):
+        p = paras[pi]
+        text = p.get('text', '').strip()
+        if not text:
+            continue
+        if '###文档开始###' in text or '###文档结束###' in text:
+            continue
+
+        # Clean marker suffixes
+        clean_text = re.sub(r'###.+?:.+?###', '', text).strip()
+        clean_text = re.sub(r'###[^#]+###', '', clean_text).strip()
+        if not clean_text:
+            continue
+
+        # Rule matching
+        matched_level = None
+        for level, rule_list in rules.items():
+            for strategy, sig in rule_list:
+                if strategy == '标题样式' and sig[0] == 'style':
+                    if p.get('style', '') == sig[1]:
+                        matched_level = level
+                elif strategy == '多级列表格式' and sig[0] == 'ilvl':
+                    if (p.get('num_id'), p.get('ilvl')) == (sig[1], sig[2]):
+                        matched_level = level
+                elif strategy == '编号格式' and sig[0] == 'numbered':
+                    if p.get('style', '') == sig[1]:
+                        nid = p.get('num_id')
+                        if nid is not None and nid != 0:
+                            matched_level = level
+                if matched_level is not None:
+                    break
+            if matched_level is not None:
+                break
+
+        if matched_level is None:
+            continue
+
+        if matched_level == 1:
+            current_l1, current_l2, current_l3 = clean_text, None, None
+            if clean_text not in l1_registry:
+                modules.append(FunctionModule(name=clean_text, level=1))
+                l1_registry.add(clean_text)
+        elif matched_level == 2:
+            current_l2, current_l3 = clean_text, None
+            if clean_text not in l2_registry:
+                modules.append(FunctionModule(name=clean_text, level=2, parent=current_l1))
+                l2_registry.add(clean_text)
+        elif matched_level == 3:
+            current_l3 = clean_text
+            l3_processes[clean_text] = []
+            if clean_text not in l3_registry:
+                modules.append(FunctionModule(name=clean_text, level=3, parent=current_l2))
+                l3_registry.add(clean_text)
+        elif matched_level == 'process' and current_l3:
+            if clean_text not in l3_processes.get(current_l3, []):
+                l3_processes.setdefault(current_l3, []).append(clean_text)
+
+    for m in modules:
+        if m.level == 3:
+            m.children = l3_processes.get(m.name, [])
+
+    logger.info(
+        f"标记策略: "
+        f"{len([m for m in modules if m.level==1])}L1 "
+        f"{len([m for m in modules if m.level==2])}L2 "
+        f"{len([m for m in modules if m.level==3])}L3"
+    )
+    return modules
+
+
+_TEMPLATE_SCHEME_CACHE: dict | None = None
+
+
+def analyze_docx_template(template_path: str) -> dict:
+    """Read word_template.docx, detect Heading 1~4 and 正文（缩进） style IDs."""
+    from docx import Document
+    doc = Document(template_path)
+
+    heading_styles = {}
+    process_style = ''
+
+    for p in doc.paragraphs:
+        sid = p.style.style_id if p.style else ''
+        sname = p.style.name if p.style else ''
+        text = p.text.strip()
+        if not sid or not text:
+            continue
+        if 'heading' in sname.lower():
+            for level in range(1, 5):
+                if sname.lower() == f'heading {level}':
+                    heading_styles[level] = sid
+        if '正文' in sname and '缩进' in sname and not process_style:
+            process_style = sid
+
+    h1 = heading_styles.get(1, '12')
+    h2 = heading_styles.get(2, '5')
+    h3 = heading_styles.get(3, '7')
+    h4 = heading_styles.get(4, '8')
+
+    # End keyword: first Heading 1 after "功能需求"
+    end_keyword = ''
+    found_func = False
+    for p in doc.paragraphs:
+        text = p.text.strip()
+        sid = p.style.style_id if p.style else ''
+        if not found_func:
+            if '功能需求' in text:
+                found_func = True
+            continue
+        if sid == h1 and text:
+            for suffix in ('说明', '介绍', '概述', '：'):
+                if text.endswith(suffix):
+                    text = text[:-len(suffix)]
+                    break
+            end_keyword = text.strip()
+            break
+
+    logger.info(
+        f"模板样式: H1={h1} H2={h2} H3={h3} H4={h4} "
+        f"process={process_style} end_keyword={end_keyword}"
+    )
+
+    return {
+        'toc': {
+            'section_style': h1, 'section_number': '4',
+            'section_keyword': '功能需求',
+            'l1_style': h2, 'l2_style': h3,
+        },
+        'detail': {
+            'start_style': h2,
+            'l2_style': h3, 'l3_style': h4,
+            'process_style': process_style,
+            'end_style': h1, 'end_keyword': end_keyword,
+        },
+    }
+
+
+def _get_template_scheme() -> dict | None:
+    """Cached template analysis result."""
+    global _TEMPLATE_SCHEME_CACHE
+    if _TEMPLATE_SCHEME_CACHE is not None:
+        return _TEMPLATE_SCHEME_CACHE
+    candidates = [
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'word_template.docx'),
+        os.path.join(os.getcwd(), 'data', 'word_template.docx'),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            _TEMPLATE_SCHEME_CACHE = analyze_docx_template(p)
+            return _TEMPLATE_SCHEME_CACHE
+    logger.debug("未找到 word_template.docx，使用硬编码默认方案")
+    return None
 
 
 def _parse_section_hierarchy(paras: list[dict],
                               scheme: dict | None = None) -> dict[str, dict]:
     """Parse the TOC-style section headings to build the L1/L2 hierarchy."""
-    s = scheme or DEFAULT_TOC_SCHEME
+    s = scheme or {}
     hierarchy = {}
     current_l1 = None
     in_section = False
@@ -382,7 +617,7 @@ def _parse_section_hierarchy(paras: list[dict],
         sname = p.get('style_name', '')
 
         if _style_matches(p, section_style):
-            if text.startswith(f'{section_number}.') and section_keyword in text:
+            if section_keyword in text:
                 in_section = True
                 logger.debug(f"[TOC] section标记: style={style} name={sname} text={text[:40]}")
             elif in_section:
@@ -413,7 +648,7 @@ def _parse_section_hierarchy(paras: list[dict],
 def _parse_detail_section(paras: list[dict],
                            scheme: dict | None = None) -> tuple[list[FunctionModule], dict[str, list[str]]]:
     """Parse the detailed function description section."""
-    s = scheme or DEFAULT_DETAIL_SCHEME
+    s = scheme or {}
     l3_modules = []
     processes = {}
     current_l2 = None
@@ -521,44 +756,47 @@ def _validate_tree(modules: list[FunctionModule]) -> bool:
 
 
 def build_module_tree(docx_path: str, scheme: dict | None = None) -> list[FunctionModule]:
-    """Build module tree using a single style scheme (default scheme if None)."""
+    """Build module tree — priority: template-style → markers → hardcoded-defaults."""
     root = _read_docx_xml(docx_path)
     style_names = _load_style_names(docx_path)
     paras = _get_paragraphs(root, style_names)
 
-    toc_scheme = scheme['toc'] if scheme and 'toc' in scheme else DEFAULT_TOC_SCHEME
-    detail_scheme = scheme['detail'] if scheme and 'detail' in scheme else DEFAULT_DETAIL_SCHEME
+    # Load scheme if not provided
+    s = scheme
+    if s is None:
+        s = _get_template_scheme()
 
-    hierarchy = _parse_section_hierarchy(paras, toc_scheme)
-    l3_modules, processes = _parse_detail_section(paras, detail_scheme)
-    return _build_result(hierarchy, l3_modules, processes)
+    from cosmic_tool.config_utils import load_business_config
+    biz_cfg = load_business_config()
+    parse_by_style = biz_cfg.get('docx_parse_by_template_style', True)
+    parse_by_marker = biz_cfg.get('docx_parse_by_marker', True)
 
-
-def build_module_tree_with_schemes(docx_path: str, schemes: list[dict]) -> list[FunctionModule]:
-    """Try each style scheme and return the first valid result."""
-    root = _read_docx_xml(docx_path)
-    style_names = _load_style_names(docx_path)
-    paras = _get_paragraphs(root, style_names)
-
-    for s in schemes:
-        name = s.get('name', 'unnamed')
-        logger.debug(f"尝试样式方案: {name}")
-
-        hierarchy = _parse_section_hierarchy(paras, s.get('toc', {}))
-        l3_modules, processes = _parse_detail_section(paras, s.get('detail', {}))
-        result = _build_result(hierarchy, l3_modules, processes)
-
-        l1c = len([m for m in result if m.level == 1])
-        l2c = len([m for m in result if m.level == 2])
-        l3c = len([m for m in result if m.level == 3])
-        valid = _validate_tree(result)
-        logger.debug(f"  方案「{name}」: L1={l1c} L2={l2c} L3={l3c} 有效={valid}")
-        if valid:
-            logger.info(f"样式方案「{name}」有效 (L1:{l1c} L2:{l2c} L3:{l3c})")
+    # Priority 1: template-style (Format B)
+    if s and parse_by_style:
+        toc = s.get('toc') or {}
+        detail = s.get('detail') or {}
+        logger.info(
+            f"格式B（样式法）: "
+            f"section={toc.get('section_style')} L1={toc.get('l1_style')} L2={toc.get('l2_style')} "
+            f"L3={detail.get('l3_style')} process={detail.get('process_style')}"
+        )
+        hierarchy = _parse_section_hierarchy(paras, toc)
+        l3_mods, procs = _parse_detail_section(paras, detail)
+        result = _build_result(hierarchy, l3_mods, procs)
+        l1s = [m for m in result if m.level == 1]
+        l3s = [m for m in result if m.level == 3]
+        has_marker_names = any('###' in m.name for m in result)
+        if l1s and l3s and not has_marker_names:
             return result
 
-    logger.warning("所有样式方案均无效，使用默认方案")
-    return build_module_tree(docx_path)
+    # Priority 2: marker-based (Format A)
+    if parse_by_marker:
+        marked = _build_modules_from_marks(paras)
+        if marked is not None:
+            return marked
+
+    logger.warning("无法解析模块层级：样式法和标记法均未产生有效结果")
+    return []
 
 
 def get_project_name(docx_path: str) -> str:

@@ -95,7 +95,14 @@
       "Bash(python -c \"import yaml; print\\(yaml.__version__\\)\")",
       "Bash(xargs head *)",
       "Bash(cosmic --init-config)",
-      "Read(//c/Users/Administrator/.cosmic-tool/**)"
+      "Read(//c/Users/Administrator/.cosmic-tool/**)",
+      "Bash(python -c \"import mammoth; print\\('mammoth', mammoth.__version__\\)\")",
+      "Bash(python -c \"import docx; print\\('python-docx', docx.__version__\\)\")",
+      "Bash(python -c \"from cosmic_tool.docx_to_md import convert_to_md; print\\('Import OK'\\)\")",
+      "Bash(ls *.docx)",
+      "Bash(ls -la data/)",
+      "Bash(python -c \"from cosmic_tool.docx_to_md import convert_to_md, build_modules_from_md; print\\('OK'\\)\")",
+      "Bash(python -c \"from cosmic_tool.main import main; import sys; sys.argv=['cosmic','--version']; main\\(\\)\")"
     ],
     "additionalDirectories": [
       "\\tmp",

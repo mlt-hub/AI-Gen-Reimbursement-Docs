@@ -165,12 +165,6 @@ def load_receiver_rules() -> list[tuple[str, str]]:
     return list(raw.items())
 
 
-def load_docx_style_schemes() -> list[dict]:
-    """Load docx_style_schemes from business_rules.yaml."""
-    cfg = _load_business_rules()
-    return cfg.get('docx_style_schemes', [])
-
-
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
 
@@ -294,6 +288,8 @@ def load_business_config() -> dict:
         'regenerate_all': False,
         'enable_ai_generate_cosmic': True,
         'parse_docx_by_ai': False,
+        'docx_parse_by_template_style': True,
+        'docx_parse_by_marker': True,
     }
     yaml_path = _config_dir() / "system_config.yaml"
     if not yaml_path.exists():
@@ -306,7 +302,8 @@ def load_business_config() -> dict:
 
         for key in ('regenerate_md', 'regenerate_filled', 'regenerate_excel',
                     'regenerate_all', 'enable_ai_generate_cosmic',
-                    'parse_docx_by_ai'):
+                    'parse_docx_by_ai', 'docx_parse_by_template_style',
+                    'docx_parse_by_marker'):
             if key in cfg:
                 config[key] = bool(cfg[key])
     except Exception:
