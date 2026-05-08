@@ -3,7 +3,13 @@
     "allow": [
       "Bash(mkdir -p d:/mlt/ws_tool/help)",
       "Bash(mv d:/mlt/ws_tool/config/docx_style_reference.docx d:/mlt/ws_tool/help/)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(rm -f ~/.cosmic-tool/docx_parse_mapping_rules.yaml ~/.cosmic-tool/mapping_*)",
+      "Bash(ls ~/.cosmic-tool/mapping_*word_template*)",
+      "Bash(rm -f /c/Users/Administrator/.cosmic-tool/mapping_1_word_template.docx)",
+      "Bash(timeout 10 python -c ' *)",
+      "Bash(grep -v '^$')"
     ]
-  }
+  },
+  "_comment": "本地私有配置，包含命令权限白名单，不提交到 git"
 }

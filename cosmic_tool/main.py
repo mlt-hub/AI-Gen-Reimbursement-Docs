@@ -12,8 +12,8 @@
 一键直出（跳过MD中间文件）:
   python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
 
-默认批处理（无参数时自动处理当前目录所有docx）:
-  python -m cosmic_tool.main
+批量处理Word文件:
+  python -m cosmic_tool.main --docx-all
 """
 
 import argparse
@@ -155,9 +155,13 @@ def _section(title: str):
 
 def _build_modules(docx_path: str, use_ai: bool,
                    api_key: str = "", model: str = "",
-                   base_url: str = "") -> list[FunctionModule]:
+                   base_url: str = "",
+                   mapping_name: str = "",
+                   chapter_detection: str = "") -> list[FunctionModule]:
     """Build module tree from docx; fall back to AI if configured."""
-    modules = build_module_tree(docx_path)
+    modules = build_module_tree(docx_path, mapping_name=mapping_name,
+                                 chapter_detection=chapter_detection)
+    _verify_against_json(modules, docx_path)
 
     l1 = [m for m in modules if m.level == 1]
     l2 = [m for m in modules if m.level == 2]
@@ -181,20 +185,57 @@ def _build_modules(docx_path: str, use_ai: bool,
     return modules
 
 
-def _build_modules_from_md(md_path: str, docx_path: str = "") -> list[FunctionModule]:
-    """Build module tree from docx (B→A priority). Falls back to Markdown if no docx."""
+def _build_modules_from_md(md_path: str, docx_path: str = "",
+                            mapping_name: str = "",
+                            chapter_detection: str = "") -> list[FunctionModule]:
+    """Build module tree from docx. Falls back to Markdown if no docx."""
     if docx_path:
         from cosmic_tool.docx_parser import build_module_tree
-        return build_module_tree(docx_path)
+        modules = build_module_tree(docx_path, mapping_name=mapping_name,
+                                    chapter_detection=chapter_detection)
+        _verify_against_json(modules, docx_path)
+        return modules
     modules = build_modules_from_md(md_path)
     if not modules:
         logger.warning("Markdown中未解析到模块层次，结果可能为空")
     return modules
 
 
+def _verify_against_json(modules: list, docx_path: str) -> None:
+    """Compare parsing result with expected counts from a JSON file."""
+    json_path = os.path.splitext(docx_path)[0] + '.json'
+    if not os.path.exists(json_path):
+        logger.info(f"未找到预期结果文件: [{os.path.basename(json_path)}]，跳过比较")
+        return
+    try:
+        import json
+        with open(json_path, 'r', encoding='utf-8') as f:
+            expected = json.load(f)
+        actual = {
+            'L1': len([m for m in modules if m.level == 1]),
+            'L2': len([m for m in modules if m.level == 2]),
+            'L3': len([m for m in modules if m.level == 3]),
+            'proc': sum(len(m.children) for m in modules if m.level == 3),
+        }
+        diffs = []
+        for key in ('L1', 'L2', 'L3', 'proc'):
+            exp = expected.get(key)
+            if exp is None:
+                continue
+            act = actual[key]
+            if act != exp:
+                diffs.append(f"{key}: 预期={exp} 实际={act}")
+        if diffs:
+            logger.warning(f"解析结果与JSON不一致: {'; '.join(diffs)}")
+        else:
+            logger.info(f"解析结果同JSON文件一致")
+    except Exception as e:
+        logger.warning(f"读取JSON比较文件失败: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="COSMIC 功能点拆分工具 - 从需求说明书自动生成功能点拆分表（无参数时自动批量处理当前目录docx）",
+        description="COSMIC 功能点拆分工具 - 从需求说明书自动生成功能点拆分表（需指定参数，--docx-all可批量处理Word）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 工作流示例:
@@ -215,6 +256,9 @@ def main():
 
   # 初始化API Key配置
   python -m cosmic_tool.main --init-config
+
+  # 批量处理当前目录下所有Word文件
+  python -m cosmic_tool.main --docx-all
         """
     )
 
@@ -252,8 +296,17 @@ def main():
     parser.add_argument('--parse-by-ai', action='store_true',
                         help='使用AI解析模块层级（默认用硬编码解析器）')
 
+    parser.add_argument('--mapping', default='',
+                        help='指定层级映射名（来自 ~/.cosmic-tool/docx_parse_mapping_rules.yaml 中的 mapping 名称）')
+
+    parser.add_argument('--chapter-detection', default='',
+                        help='指定章节检测配置名（来自 ~/.cosmic-tool/docx_parse_mapping_rules.yaml 中的 章节检测 分组）')
+
     parser.add_argument('--all', action='store_true',
                         help='一键全流程: docx → MD → AI填充 → Excel')
+
+    parser.add_argument('--docx-all', action='store_true',
+                        help='批量处理当前目录下所有Word文件')
 
     parser.add_argument('--init-config', action='store_true',
                         help='初始化 .env 配置文件')
@@ -356,7 +409,8 @@ def main():
 
     # === Show tree ===
     if args.docx and args.show_tree:
-        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url)
+        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url,
+                                  mapping_name=args.mapping, chapter_detection=args.chapter_detection)
         project = get_project_name(args.docx)
         logger.info(f"项目名称: {project}")
         logger.info(f"模块总数: {len(modules)}")
@@ -364,13 +418,12 @@ def main():
         logger.debug("show-tree completed")
         return
 
-    # === Batch mode: 处理当前目录下所有 docx（默认行为） ===
-    if not any([args.docx, args.init_md is not None, args.fill_md is not None,
-                args.md is not None, args.all, args.show_tree,
-                args.init_config, args.log]):
-        _section("批量处理模式")
+    # === 批量处理模式: 处理当前目录下所有 Word 文件 ===
+    if args.docx_all:
+        _section("批量处理模式（Word → AI → Excel）")
         import glob
-        docx_files = [f for f in glob.glob("*.docx") if not f.startswith("~$")]
+        docx_files = [f for f in glob.glob("*.docx") + glob.glob("*.docm")
+                      if not f.startswith("~$")]
         if not docx_files:
             logger.warning("当前目录没有找到 docx 文件")
             return
@@ -415,16 +468,16 @@ def main():
                 if os.path.exists(md_raw) and not biz_config['regenerate_md']:
                     logger.info(f"  原文MD已存在，跳过（REGENERATE_MD=false）")
                 else:
-                    convert_to_md(docx_path, md_raw)
+                    convert_to_md(docx_path, md_raw, args.chapter_detection)
                     logger.info(f"  原文MD已生成: {md_raw}")
 
                 # --- Stage 1: 原文 MD → 生成 COSMIC 模板 ---
                 if os.path.exists(md_base) and not biz_config['regenerate_md']:
                     logger.info(f"  模板MD已存在，跳过（REGENERATE_MD=false）")
-                    modules = _build_modules_from_md(md_raw, docx_path)
+                    modules = _build_modules_from_md(md_raw, docx_path, args.mapping, args.chapter_detection)
                     project = get_project_name_from_md(md_raw)
                 else:
-                    modules = _build_modules_from_md(md_raw, docx_path)
+                    modules = _build_modules_from_md(md_raw, docx_path, args.mapping, args.chapter_detection)
                     project = get_project_name_from_md(md_raw)
                     export_empty_md(modules, project, md_base)
                     logger.info(f"  模板MD已生成: {md_base}")
@@ -466,7 +519,6 @@ def main():
                 failed.append(docx_path)
                 logger.info("")  # 分隔空行
 
-        # Restore default logging
         _section("批量处理完成")
         logger.info(f"总数: {total}，Excel生成成功: {len(excel_ok)}，处理未生成Excel: {len(processed_no_excel)}，失败: {len(failed)}")
         if excel_ok:
@@ -495,11 +547,11 @@ def main():
         md_dir = os.path.dirname(args.init_md) or '.'
         raw_md = os.path.join(md_dir, f'{docx_name}_原文.md')
         _section("阶段0: 需求说明书 → 原文Markdown")
-        convert_to_md(args.docx, raw_md)
+        convert_to_md(args.docx, raw_md, args.chapter_detection)
         logger.info(f"  原文MD已生成: {raw_md}")
 
         _section("阶段1: 原文MD → 生成COSMIC模板")
-        modules = _build_modules_from_md(raw_md, args.docx)
+        modules = _build_modules_from_md(raw_md, args.docx, args.mapping, args.chapter_detection)
         project = get_project_name_from_md(raw_md)
         # Statistics
         l1_count = len([m for m in modules if m.level == 1])
@@ -556,7 +608,8 @@ def main():
         logger.info(f"源文件: {args.fill_md}")
         logger.info(f"副本文件: {output_md}")
 
-        modules = _build_modules(docx_path, args.parse_by_ai, api_key, model, base_url)
+        modules = _build_modules(docx_path, args.parse_by_ai, api_key, model, base_url,
+                                  mapping_name=args.mapping, chapter_detection=args.chapter_detection)
         project = get_project_name(docx_path)
         # 统计实际功能过程数（来自docx，非模板MD）
         l3_modules = [m for m in modules if m.level == 3]
@@ -625,7 +678,7 @@ def main():
         base_md = os.path.join(out_dir, f'{docx_name}_拆分表.md')
         filled_md = os.path.join(out_dir, f'{docx_name}_拆分表_已填充.md')
         _section("阶段0: 需求说明书 → 原文Markdown")
-        convert_to_md(args.docx, md_raw)
+        convert_to_md(args.docx, md_raw, args.chapter_detection)
         logger.info(f"  原文MD已生成: {md_raw}")
 
         # Stage 1: 原文 MD → 生成 COSMIC 模板
@@ -675,7 +728,7 @@ def main():
         out_dir = os.path.dirname(args.output) or '.'
         _section("阶段0: 需求说明书 → 原文Markdown")
         md_raw = os.path.join(out_dir, f'{docx_name}_原文.md')
-        convert_to_md(args.docx, md_raw)
+        convert_to_md(args.docx, md_raw, args.chapter_detection)
         logger.info(f"  原文MD已生成: {md_raw}")
 
         _section("阶段1: 原文MD → 构建模块树")

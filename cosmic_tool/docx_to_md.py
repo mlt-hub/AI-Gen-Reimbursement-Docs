@@ -77,9 +77,43 @@ def _is_list_item(paragraph) -> Optional[str]:
     return None
 
 
-def _section_config() -> dict:
-    """Return hardcoded chapter detection config."""
-    return {'section_number': '4', 'section_keyword': '功能需求'}
+def _section_config(chapter_detection: str = "") -> dict:
+    """Load chapter detection config from docx_parse_mapping_rules.yaml."""
+    try:
+        import yaml, os
+        path = os.path.join(os.path.expanduser('~'), '.cosmic-tool',
+                            'docx_parse_mapping_rules.yaml')
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f) or {}
+            groups = cfg.get('章节检测', {})
+            if not isinstance(groups, dict):
+                groups = {}
+            if 'section_begin_number' in groups:
+                groups = {'default': groups}
+            name = chapter_detection if chapter_detection in groups else 'default'
+            cc = groups.get(name, {})
+            if not isinstance(cc, dict):
+                cc = {}
+            for old_k, new_k in [('section_number', 'section_begin_number'),
+                                  ('section_keyword', 'section_begin_keyword')]:
+                if old_k in cc and new_k not in cc:
+                    cc[new_k] = cc[old_k]
+            if cc.get('section_begin_number') and cc.get('section_begin_keyword'):
+                r = {'section_begin_number': str(cc['section_begin_number']),
+                     'section_begin_keyword': str(cc['section_begin_keyword'])}
+                if cc.get('section_end_number') or cc.get('section_end_keyword'):
+                    if cc.get('section_end_number'):
+                        r['section_end_number'] = str(cc['section_end_number'])
+                    if cc.get('section_end_keyword'):
+                        r['section_end_keyword'] = str(cc['section_end_keyword'])
+                logger.info(f"章节检测: 组名={name} 开始=「{r['section_begin_number']}.{r['section_begin_keyword']}」"
+                           f" 结束=「{r.get('section_end_number', '?')}.{r.get('section_end_keyword', '')}」")
+                return r
+    except Exception:
+        pass
+    return {'section_begin_number': '4', 'section_begin_keyword': '功能需求',
+            'section_end_number': '5', 'section_end_keyword': ''}
 
 
 def _find_chapter_boundaries(doc, section_config: dict) -> tuple[int, int]:
@@ -92,33 +126,15 @@ def _find_chapter_boundaries(doc, section_config: dict) -> tuple[int, int]:
 
     Returns (start_idx, end_idx) — start is inclusive, end is exclusive.
     """
-    section_number = str(section_config.get('section_number', '4'))
-    section_keyword = section_config.get('section_keyword', '功能需求')
+    section_number = str(section_config.get('section_begin_number', '4'))
+    section_keyword = section_config.get('section_begin_keyword', '功能需求')
     next_number = str(int(section_number) + 1)
+    end_number = str(section_config.get('section_end_number', str(next_number)))
+    end_keyword = section_config.get('section_end_keyword', '')
 
     paragraphs = doc.paragraphs
 
-    # ── 1. Style-based (Format B): template section_style + "功能需求" ──
-    try:
-        from cosmic_tool.docx_parser import _get_template_scheme
-        ts = _get_template_scheme()
-        if ts:
-            section_style = ts.get('toc', {}).get('section_style', '')
-            if section_style:
-                for i, p in enumerate(paragraphs):
-                    sid = p.style.style_id if p.style else ''
-                    if sid == section_style and section_keyword in p.text:
-                        for j in range(i + 1, len(paragraphs)):
-                            p2 = paragraphs[j]
-                            s2 = p2.style.style_id if p2.style else ''
-                            if s2 == section_style and p2.text.strip():
-                                logger.info(f"样式检测: chapter=[{i}..{j})")
-                                return i, j
-                        return i, len(paragraphs)
-    except Exception:
-        pass
-
-    # ── 2. Marker-based detection (Format A: ###文档开始###) ──
+    # ── Marker-based detection (Format A: ###文档开始###) ──
     marker_start = -1
     for i, p in enumerate(paragraphs):
         if '###文档开始###' in p.text:
@@ -145,7 +161,7 @@ def _find_chapter_boundaries(doc, section_config: dict) -> tuple[int, int]:
             if text.startswith(f'{section_number}.') and section_keyword in text:
                 start = i
         else:
-            if text.startswith(f'{next_number}.'):
+            if text.startswith(f'{end_number}.') and (not end_keyword or end_keyword in text):
                 end = i
                 break
 
@@ -166,7 +182,8 @@ def _find_chapter_boundaries(doc, section_config: dict) -> tuple[int, int]:
             logger.warning(f"  附近匹配段落: {candidates[:8]}")
         return 0, len(paragraphs)
 
-    logger.info(f"定位到「第{section_number}章 {section_keyword}」: 段落[{start}..{end})")
+    logger.info(f"定位章节: 开始=[{start}]「{paragraphs[start].text.strip()[:40]}」"
+                f" 结束=[{end}]「{paragraphs[end].text.strip()[:40] if end < len(paragraphs) else '文档结尾'}」")
     return start, end
 
 
@@ -235,14 +252,13 @@ def _detect_marker_level(text: str) -> int | None:
         return 3
     if '###三级模块###' in text or '###三级模块:' in text:
         return 4
-    if '###文档开始###' in text:
-        return 1
     if '###功能过程###' in text or '###功能过程:' in text:
         return 5
     return None
 
 
-def convert_to_md(docx_path: str, output_path: Optional[str] = None) -> str:
+def convert_to_md(docx_path: str, output_path: Optional[str] = None,
+                   chapter_detection: str = "") -> str:
     """Convert a .docx file to Markdown text.
 
     仅提取「第4章 功能需求」章节段落，不解析全文。
@@ -257,8 +273,15 @@ def convert_to_md(docx_path: str, output_path: Optional[str] = None) -> str:
     """
     logger.info(f"正在转换Word文档为Markdown（仅第4章 功能需求）: {docx_path}")
 
-    doc = Document(docx_path)
-    chapter_start, chapter_end = _find_chapter_boundaries(doc, _section_config())
+    try:
+        doc = Document(docx_path)
+    except Exception as e:
+        if 'macroEnabled' in str(e) or 'content type' in str(e).lower():
+            logger.error(f"不支持宏启用文档（.docm），请另存为 .docx 格式: {e}")
+        else:
+            logger.error(f"打开文档失败: {e}")
+        raise
+    chapter_start, chapter_end = _find_chapter_boundaries(doc, _section_config(chapter_detection))
 
     md_lines: list[str] = []
     list_buffer: list[str] = []
@@ -267,8 +290,21 @@ def convert_to_md(docx_path: str, output_path: Optional[str] = None) -> str:
     from docx.oxml.ns import qn
     body = doc.element.body
     p_idx = 0
+    process_ilvl = None
 
-    def _has_num_id(para) -> bool:
+    def _get_ilvl(para):
+        pPr = para._p.find(qn('w:pPr'))
+        if pPr is None:
+            return None
+        numPr = pPr.find(qn('w:numPr'))
+        if numPr is None:
+            return None
+        el = numPr.find(qn('w:ilvl'))
+        if el is None:
+            return None
+        return int(el.get(qn('w:val'), 0))
+
+    def _has_num_id(para):
         pPr = para._p.find(qn('w:pPr'))
         if pPr is None:
             return False
@@ -281,25 +317,34 @@ def convert_to_md(docx_path: str, output_path: Optional[str] = None) -> str:
         return int(el.get(qn('w:val'), 0)) != 0
 
     for child in body:
-        if child.tag == qn('w:p') and chapter_start <= p_idx < chapter_end:
-            para = doc.paragraphs[p_idx]
-            raw = para.text.strip()
-            if '###功能过程###' in raw or '###功能过程:' in raw:
-                in_process_mode = True
-            has_marker = any(m in raw for m in ('###文档开始###', '###一级模块###',
-                                                  '###二级模块###', '###三级模块###',
-                                                  '###功能过程###'))
-            if in_process_mode and not has_marker and _has_num_id(para):
-                hl = _heading_level(para)
-                if hl is None:
-                    _process_paragraph(para, md_lines, list_buffer, force_heading=5)
+        if child.tag == qn('w:p'):
+            if chapter_start <= p_idx < chapter_end:
+                para = doc.paragraphs[p_idx]
+                if p_idx == chapter_start:
+                    p_idx += 1
+                    continue
+                raw = para.text.strip()
+                if '###功能过程###' in raw or '###功能过程:' in raw:
+                    in_process_mode = True
+                    process_ilvl = _get_ilvl(para)
+                has_marker = any(m in raw for m in ('###文档开始###', '###一级模块###',
+                                                      '###二级模块###', '###三级模块###',
+                                                      '###功能过程###'))
+                if in_process_mode and not has_marker and _get_ilvl(para) == process_ilvl:
+                    # Skip if no numbering (功能描述 lines have ilvl but no numId)
+                    if not _has_num_id(para):
+                        _process_paragraph(para, md_lines, list_buffer)
+                    else:
+                        hl = _heading_level(para)
+                        if hl is None:
+                            _process_paragraph(para, md_lines, list_buffer, force_heading=5)
+                        else:
+                            _process_paragraph(para, md_lines, list_buffer)
                 else:
                     _process_paragraph(para, md_lines, list_buffer)
-            else:
-                _process_paragraph(para, md_lines, list_buffer)
-        p_idx += 1
-        if p_idx >= chapter_end:
-            break
+            p_idx += 1
+            if p_idx >= chapter_end:
+                break
 
     # Flush remaining list buffer
     _flush_list_buffer(list_buffer, md_lines)

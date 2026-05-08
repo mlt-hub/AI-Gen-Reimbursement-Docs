@@ -102,7 +102,11 @@
       "Bash(ls *.docx)",
       "Bash(ls -la data/)",
       "Bash(python -c \"from cosmic_tool.docx_to_md import convert_to_md, build_modules_from_md; print\\('OK'\\)\")",
-      "Bash(python -c \"from cosmic_tool.main import main; import sys; sys.argv=['cosmic','--version']; main\\(\\)\")"
+      "Bash(python -c \"from cosmic_tool.main import main; import sys; sys.argv=['cosmic','--version']; main\\(\\)\")",
+      "Bash(python)",
+      "Bash(rm -f ~/.cosmic-tool/docx_parse_hierarchical_structure_mapping_rules.yaml)",
+      "Bash(ls ~/.cosmic-tool/docx_parse_mapping_rules.yaml)",
+      "Bash(python -m cosmic_tool.main --docx \"D:\\\\mlt\\\\test\\\\1ma2m\\\\2m.docx\" --show-tree)"
     ],
     "additionalDirectories": [
       "\\tmp",
