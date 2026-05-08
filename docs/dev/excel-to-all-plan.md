@@ -4,20 +4,20 @@
 
 ```bash
 # 必要参数：指定源文件
-python -m cosmic_tool.main --from-excel "0.功能清单.xlsx"
+python -m cosmic_tool.main --from-excel "功能清单.xlsx"
 
 # 步骤参数（四选一，或 --gen-all 全流程）：
---gen-fpa        第1步：生成 4.FPA工作量评估.xlsx
---gen-cosmic     第2步：生成 2.项目功能点拆分表.xlsx（需第1步完成）
---gen-require    第3步：生成 3.项目需求清单.xlsx（需第2步完成）
---gen-docx       可选：生成 1.项目需求说明书.docx（无依赖，可随时执行）
+--gen-fpa        第1步：生成 FPA工作量评估.xlsx
+--gen-cosmic     第2步：生成 项目功能点拆分表.xlsx（需第1步完成）
+--gen-require    第3步：生成 项目需求清单.xlsx（需第2步完成）
+--gen-docx       可选：生成 项目需求说明书.docx（无依赖，可随时执行）
 --gen-all        全流程：按依赖顺序自动执行
 
 # 示例
-python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-fpa
-python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-cosmic
-python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-require
-python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
+python -m cosmic_tool.main --from-excel "功能清单.xlsx" --gen-fpa
+python -m cosmic_tool.main --from-excel "功能清单.xlsx" --gen-cosmic
+python -m cosmic_tool.main --from-excel "功能清单.xlsx" --gen-require
+python -m cosmic_tool.main --from-excel "功能清单.xlsx" --gen-all
 ```
 
 可选 `--output-dir` 指定输出目录，默认输入文件所在目录。
@@ -27,15 +27,15 @@ python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
 `--gen-all` 全自动执行时，核减后工作量无法自动求和（需用户逐行填写），因此采用以下策略：
 
 ```
-① 生成 4.FPA工作量评估.xlsx（核减后工作量默认 = FPA工作量）
+① 生成 FPA工作量评估.xlsx（核减后工作量默认 = FPA工作量）
    → 系统读取 FPA.xlsx，对核减后工作量列求和
-   → 回填到 0.功能清单.xlsx → sheet 5.FPA核减后的工作量
+   → 回填到 功能清单.xlsx → sheet 5.FPA核减后的工作量
     ↓
-② 生成 2.项目功能点拆分表.xlsx
+② 生成 项目功能点拆分表.xlsx
    CFP 上限 = FPA核减后的工作量 × CFP数量限制倍数
    → 系统读取 CFP 总和
     ↓
-③ 生成 3.项目需求清单.xlsx
+③ 生成 项目需求清单.xlsx
    送审功能点 = CFP 总和
 ```
 
@@ -44,7 +44,7 @@ python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
 
 ## 源文件
 
-`0.功能清单.xlsx` 含8个 sheet：
+`功能清单.xlsx` 含8个 sheet：
 
 | Sheet | 内容 | 用途 |
 |-------|------|------|
@@ -60,7 +60,7 @@ python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
 
 ## 中间文件
 
-解析 `0.功能清单.xlsx` 后生成两个 Markdown 中间文件：
+解析 `功能清单.xlsx` 后生成两个 Markdown 中间文件：
 
 | 中间文件 | 包含数据 | 数据来源 |
 |---------|---------|---------|
@@ -116,7 +116,7 @@ python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
 | 方式 | 说明 |
 |------|------|
 | 手动输入 | 用户直接在单元格中输入数值 |
-| 系统自动求和 | 系统运行时，对 `4.FPA工作量评估.xlsx` 中核减后工作量列自动求和，回填到此单元格 |
+| 系统自动求和 | 系统运行时，对 `FPA工作量评估.xlsx` 中核减后工作量列自动求和，回填到此单元格 |
 | 界面手动输入 | 用户在系统运行时的界面中手动输入 |
 
 优先级：自动求和 > 界面手动输入 > 单元格原值。
@@ -126,20 +126,20 @@ python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
 三个 Excel 输出有严格的依赖关系，必须按序生成：
 
 ```
-第一步：4.FPA工作量评估.xlsx
+第一步：FPA工作量评估.xlsx
         生成后确定 FPA核减后的工作量 的值（手动/自动求和/界面输入）
              ↓
-第二步：2.项目功能点拆分表.xlsx
+第二步：项目功能点拆分表.xlsx
         CFP 总和不得超过 FPA核减后的工作量 × CFP数量限制倍数
              ↓
-第三步：3.项目需求清单.xlsx
+第三步：项目需求清单.xlsx
         送审功能点 = CFP 总和（来自第二步）
 ```
 
 ### 完整流水线
 
 ```
-0.功能清单.xlsx
+功能清单.xlsx
   │
   ├→ excel_source.py 解析
   │     ① 2、功能清单内容录入 → 功能清单模块树.md
@@ -148,14 +148,14 @@ python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
   ├→ gen_docx.py                            （可与第1步并行）
   │     输入: 功能清单模块树.md + 文档元数据.md
   │     处理: 替换占位符 → 对 #AI生成# 标记调 AI → 替换 docx 模板段落
-  │     模板: 1.项目需求说明书.docx
-  │     → 输出 1.项目需求说明书.docx
+  │     模板: 项目需求说明书.docx
+  │     → 输出 项目需求说明书.docx
   │
   ├→ [第1步] gen_xlsx.py — FPA
   │     输入: 功能清单模块树.md + 文档元数据.md
   │     处理: init_fpa_template_md → ai_fill_fpa_data_md → write_to_template
-  │     模板: 4.FPA工作量评估.xlsx
-  │     → 输出 4.FPA工作量评估.xlsx
+  │     模板: FPA工作量评估.xlsx
+  │     → 输出 FPA工作量评估.xlsx
   │     → 确定 FPA核减后的工作量 的值（自动求和/用户输入/单元格值）
   │
   ├→ [第2步] 功能清单模块树.md → 复用现有 COSMIC 链路
@@ -164,18 +164,18 @@ python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
   │           约束: CFP 总和 ≤ FPA核减后的工作量 × CFP数量限制倍数
   │           → parse_md_to_items → write_to_template
   │     模板: data/excel_template.xlsx
-  │     → 输出 2.项目功能点拆分表.xlsx
+  │     → 输出 项目功能点拆分表.xlsx
   │     → 确定 CFP 总和
   │
   └→ [第3步] gen_xlsx.py — 需求清单
        输入: 功能清单模块树.md + 文档元数据.md + CFP 总和
-       模板: 3.项目需求清单.xlsx
-       → 输出 3.项目需求清单.xlsx
+       模板: 项目需求清单.xlsx
+       → 输出 项目需求清单.xlsx
 ```
 
 ## 输出1：需求说明书.docx — 模板替换
 
-以现有 `1.项目需求说明书.docx` 为模板。不设占位符，直接通过段落文本匹配定位。
+以现有 `项目需求说明书.docx` 为模板。不设占位符，直接通过段落文本匹配定位。
 
 ### 三类处理方式
 
@@ -221,7 +221,7 @@ python -m cosmic_tool.main --from-excel "0.功能清单.xlsx" --gen-all
       AI 填充完成后，对 CFP 列求和，将 CFP 总量写回 MD 文件元数据区
   → parse_md_to_items() → write_to_template()
       模板: data/excel_template.xlsx
-      → 输出 2.项目功能点拆分表.xlsx
+      → 输出 项目功能点拆分表.xlsx
 ```
 
 ### 配置来源
@@ -258,7 +258,7 @@ CFP 总和不得超过 `FPA核减后的工作量 × CFP数量限制倍数`：
 
 ## 输出3：需求清单.xlsx — 第3步生成
 
-以现有 `3.项目需求清单.xlsx` 为模板，保留2个 sheet，替换数据行。
+以现有 `项目需求清单.xlsx` 为模板，保留2个 sheet，替换数据行。
 
 需要等待第2步完成后拿到 CFP 总和。
 
@@ -305,8 +305,8 @@ CFP 总和不得超过 `FPA核减后的工作量 × CFP数量限制倍数`：
        ↓
       AI 完成后对各列求和，写回 MD 文件元数据区
   → parse_fpa_to_items() → write_to_template()
-      模板: 4.FPA工作量评估.xlsx
-      → 输出 4.FPA工作量评估.xlsx
+      模板: FPA工作量评估.xlsx
+      → 输出 FPA工作量评估.xlsx
   → 确定 FPA核减后的工作量（核减后工作量列求和 / 用户输入）
 ```
 
@@ -357,10 +357,10 @@ Word 的目录（TOC）是一个字段代码，内容变更后需要 Word 重新
 
 | 模板 | 用途 |
 |------|------|
-| `1.项目需求说明书.docx` | docx 模板（封面样式、Section 5 表格、文档格式体系） |
+| `项目需求说明书.docx` | docx 模板（封面样式、Section 5 表格、文档格式体系） |
 | `data/excel_template.xlsx` | COSMIC 拆分表模板（复用现有） |
-| `3.项目需求清单.xlsx` | 需求清单模板 |
-| `4.FPA工作量评估.xlsx` | FPA 工作量评估模板 |
+| `项目需求清单.xlsx` | 需求清单模板 |
+| `FPA工作量评估.xlsx` | FPA 工作量评估模板 |
 
 ## 依赖
 
