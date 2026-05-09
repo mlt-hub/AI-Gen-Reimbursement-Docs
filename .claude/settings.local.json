@@ -8,7 +8,22 @@
       "Bash(ls ~/.cosmic-tool/mapping_*word_template*)",
       "Bash(rm -f /c/Users/Administrator/.cosmic-tool/mapping_1_word_template.docx)",
       "Bash(timeout 10 python -c ' *)",
-      "Bash(grep -v '^$')"
+      "Bash(grep -v '^$')",
+      "Bash(python -c \"from cosmic_tool.gen_spec import generate_spec, export_spec_template_md, fill_spec_md; print\\('OK'\\)\")",
+      "Bash(rm -f data/products/md/spec*.md data/products/项目需求说明书.docx)",
+      "Bash(cosmic --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-spec)",
+      "Bash(cosmic --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-spec --api-key \"\")",
+      "Bash(rm -f data/products/md/FPA核减后工作量.md)",
+      "Bash(cosmic --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-fpa --api-key \"\")",
+      "Bash(rm -f data/products/md/文档元数据.md data/products/md/功能清单模块树.md)",
+      "Bash(rm -f data/products/md/*.md)",
+      "Bash(cosmic --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-basedata)",
+      "Bash(cosmic --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-basedata --api-key \"\")",
+      "Bash(python -m cosmic_tool.main --from-excel \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/products\")",
+      "Bash(python -m cosmic_tool.main --from-excel \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/products/test_out\")",
+      "Bash(python -m cosmic_tool.main --from-excel \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/out_test\")",
+      "Bash(python -m cosmic_tool.main --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/tmp/out_test\")",
+      "Bash(python -m cosmic_tool.main --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/tmp/out2\")"
     ]
   },
   "_comment": "本地私有配置，包含命令权限白名单，不提交到 git"

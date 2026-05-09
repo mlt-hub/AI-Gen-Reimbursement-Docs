@@ -109,9 +109,8 @@ def load_model_name(default: str = "deepseek-v4-flash", override: bool = True) -
 
 
 def _clean_model(name: str) -> str:
-    """Remove markdown artifacts from model name, e.g. deepseek-v4-flash[1m]."""
-    import re
-    return re.sub(r'\[.*?\]', '', name).strip().rstrip()
+    """Return model name as-is (保留原始值，不过滤)。"""
+    return name.strip()
 
 
 # Backward compatibility alias
@@ -235,7 +234,11 @@ def _migrate_config() -> None:
         (home / "system_config.yaml", local / "system_config.yaml.example", "system_config"),
         (home / "business_rules.yaml", local / "business_rules.yaml.example", "business_rules"),
     ]
-    import yaml
+    try:
+        import yaml
+    except ImportError:
+        logger.warning("yaml 模块未安装，跳过配置迁移")
+        return
     for yaml_file, example_file, name in yaml_pairs:
         if not yaml_file.exists() or not example_file.exists():
             continue
