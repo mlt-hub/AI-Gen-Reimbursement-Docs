@@ -19,15 +19,6 @@ logger = logging.getLogger('cosmic_tool.gen_spec')
 
 
 
-def _resolve_meta_value(meta: dict, key_spec) -> str:
-    """从文档元数据字典中取值。key_spec 可以是字符串key, 或 (key, sheet_name) 元组。"""
-    if isinstance(key_spec, tuple):
-        sheet, key = key_spec
-        # 文档元数据.md 的 key 格式是 "sheet名称.项目key"
-        full_key = f"{sheet}.{key}"
-        return meta.get(full_key, meta.get(key, ""))
-    return meta.get(key_spec, "")
-
 
 def _parse_meta_md(meta_md_path: str) -> dict:
     """解析文档元数据.md 为扁平字典。支持跨多行的表格值。"""
@@ -365,15 +356,6 @@ def _replace_paragraph_text(doc: Document, text_fragment: str, new_text: str):
 
 
 
-def _replace_table_cell(doc: Document, table_idx: int, row_idx: int, col_idx: int, new_text: str):
-    """替换指定表格单元格的内容。"""
-    if table_idx < len(doc.tables):
-        t = doc.tables[table_idx]
-        if row_idx < len(t.rows) and col_idx < len(t.rows[row_idx].cells):
-            t.rows[row_idx].cells[col_idx].text = new_text
-            return True
-    return False
-
 
 
 def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
@@ -443,7 +425,7 @@ def _read_raw_sheet1(excel_path: str) -> dict:
     """直接从 Excel 读取 sheet 1 原始值（含 ${} 占位符）。"""
     import openpyxl
     wb = openpyxl.load_workbook(excel_path, data_only=False)
-    ws = wb['1、工单需求内容录入']
+    ws = wb['1、工单需求-内容录入']
     data = {}
     for row in ws.iter_rows(min_row=2, values_only=True):
         k = str(row[0]).strip() if row[0] else ""
@@ -462,7 +444,7 @@ def export_spec_template_md(excel_path: str, tree_md_path: str,
     # 读取 sheet 4 的原始值（功能需求-三级模块的描述 等）
     import openpyxl
     wb = openpyxl.load_workbook(excel_path, data_only=False)
-    ws4 = wb['4、项目需求说明书元数据录入']
+    ws4 = wb['4、项目需求说明书-元数据录入']
     raw_sheet4 = {}
     for row in ws4.iter_rows(min_row=2, values_only=True):
         k = str(row[0]).strip() if row[0] else ""
@@ -517,8 +499,8 @@ def fill_spec_md(md_path: str, meta_md_path: str,
                  api_key: str, model: str, base_url: str) -> str:
     """AI填充 spec MD 中的 #AI生成# 标记。"""
     meta = _parse_meta_md(meta_md_path)
-    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求内容录入.")}
-    fpa_meta = {k: v for k, v in meta.items() if k.startswith("3、FPA工作量评估元数据录入.")}
+    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求-内容录入.")}
+    fpa_meta = {k: v for k, v in meta.items() if k.startswith("3、FPA工作量评估-元数据录入.")}
 
     with open(md_path, 'r', encoding='utf-8') as f:
         content = f.read()
@@ -602,8 +584,8 @@ def generate_spec(
     groups = _group_by_entry_and_l1(module_tree)
 
     # 获取项目信息用于替换占位符
-    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求内容录入.")}
-    fpa_meta = {k: v for k, v in meta.items() if k.startswith("3、FPA工作量评估元数据录入.")}
+    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求-内容录入.")}
+    fpa_meta = {k: v for k, v in meta.items() if k.startswith("3、FPA工作量评估-元数据录入.")}
 
     # 从模块树收集实际内容，用于替换 【三级模块】、【三级模块整体功能描述】、【功能过程描述】 占位符
     all_l3_names: list[str] = []
@@ -629,21 +611,6 @@ def generate_spec(
     # 打开模板
     doc = Document(template_path)
 
-    # 占位符 → meta key 映射
-    PLACEHOLDER_MAP = {
-        "文档标题": "文档标题",
-        "文档类别": "文档类别",
-        "公司名": "公司",
-        "文档日期": "日期",
-        "总体描述": "总体描述",
-        "建设目标": "建设目标",
-        "建设必要性": "建设必要性",
-        "系统概况": "系统概况",
-        "调整因子中的功能概述": "附加值调整因子说明-应用类型-功能概述",
-        "调整因子中的可靠性描述": "附加值调整因子说明-质量及特性-可靠性描述",
-        "调整因子中的子系统名称": "附加值调整因子说明-应用类型-子系统名称",
-    }
-
     # 加载模板
     doc = Document(template_path)
 
@@ -661,26 +628,14 @@ def generate_spec(
         # {{功能需求详情}} — 在此位置生成 Section 4 内容
         if placeholder == "功能需求详情":
             insert_elem = para._element
-            # 用下一个兄弟元素作插入锚点（先获取再删除）
             next_elem = insert_elem.getnext()
             insert_elem.getparent().remove(insert_elem)
             anchor = next_elem if next_elem is not None else insert_elem.getparent()
             _generate_section4_content(doc, groups, rows, anchor, meta)
             continue
 
-        meta_key = PLACEHOLDER_MAP.get(placeholder)
-        if not meta_key:
-            continue
-
-        # 优先取 filled_sections
-        filled_val = filled_sections.get(placeholder, "")
-        if filled_val:
-            _replace_paragraph_text(doc, text, filled_val)
-            logger.info(f"占位符 [{{{{{placeholder}}}}}] → {len(filled_val)} 字（来自AI填充MD）")
-            continue
-
-        # 从 meta 解析（含 #AI生成# 处理）
-        raw_val = _resolve_meta_value(meta, meta_key)
+        # 优先取 AI填充MD，否则从 meta 取值（{{}} 名称与 Excel 项目名一致）
+        raw_val = filled_sections.get(placeholder, "") or meta.get(placeholder, "")
         if not raw_val:
             continue
         raw_val = replace_placeholders(raw_val, project_info, fpa_meta)
@@ -711,10 +666,7 @@ def generate_spec(
                 if not m:
                     continue
                 p = m.group(1)
-                mk = PLACEHOLDER_MAP.get(p)
-                if not mk:
-                    continue
-                rv = _resolve_meta_value(meta, mk)
+                rv = meta.get(p, "")
                 if rv:
                     rv = replace_placeholders(rv, project_info, fpa_meta)
                     cv, na = strip_ai_marker(rv)

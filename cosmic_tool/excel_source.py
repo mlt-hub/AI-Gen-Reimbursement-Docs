@@ -42,7 +42,7 @@ def _key_value_sheet(ws):
 
 def _calc_cfp_limit(wb) -> float:
     """从 sheet 5 读取 CFP 限制值（如果含公式则计算）。"""
-    ws = wb['5、预估工作量和FPA核减后的工作量元数据录入']
+    ws = wb['5、预估工作量-元数据录入']
     b1 = _cell_val(ws.cell(2, 2).value)  # 预估工作量
     b2 = _cell_val(ws.cell(3, 2).value)  # FPA核减后的工作量
     b3 = _cell_val(ws.cell(4, 2).value)  # CFP数量限制倍数
@@ -72,46 +72,46 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict:
 
     # ========== 解析各个 sheet ==========
 
-    # 1、工单需求内容录入
-    ws1 = wb['1、工单需求内容录入']
+    # 1、工单需求-内容录入
+    ws1 = wb['1、工单需求-内容录入']
     project_info = _key_value_sheet(ws1)
 
-    # 2、功能清单内容录入 — 模块树 + 功能过程
-    ws2 = wb['2、功能清单内容录入']
+    # 2、功能清单-内容录入 — 模块树 + 功能过程
+    ws2 = wb['2、功能清单-内容录入']
     func_rows = _resolve_inherited_rows(ws2)
 
-    # 3、FPA工作量评估元数据录入
-    ws3 = wb['3、FPA工作量评估元数据录入']
+    # 3、FPA工作量评估-元数据录入
+    ws3 = wb['3、FPA工作量评估-元数据录入']
     fpa_meta = _key_value_sheet(ws3)
 
-    # 4、项目需求说明书元数据录入
-    ws4 = wb['4、项目需求说明书元数据录入']
+    # 4、项目需求说明书-元数据录入
+    ws4 = wb['4、项目需求说明书-元数据录入']
     docx_meta = _key_value_sheet(ws4)
 
-    # 5、预估工作量和FPA核减后的工作量元数据录入
-    ws5 = wb['5、预估工作量和FPA核减后的工作量元数据录入']
+    # 5、预估工作量-元数据录入
+    ws5 = wb['5、预估工作量-元数据录入']
     workload_meta = _key_value_sheet(ws5)
 
-    # 6、项目功能点拆分表元数据录入
-    ws6 = wb['6、项目功能点拆分表元数据录入']
+    # 6、项目功能点拆分表-元数据录入
+    ws6 = wb['6、项目功能点拆分表-元数据录入']
     cosmic_meta = _key_value_sheet(ws6)
 
-    # 7、项目需求清单元数据录入
-    ws7 = wb['7、项目需求清单元数据录入']
+    # 7、项目需求清单-元数据录入
+    ws7 = wb['7、项目需求清单-元数据录入']
     require_meta = _key_value_sheet(ws7)
 
     wb.close()
 
     # data_only=True 还原公式单元格的计算值
     wb_val = openpyxl.load_workbook(excel_path, data_only=True)
-    for row in wb_val['5、预估工作量和FPA核减后的工作量元数据录入'].iter_rows(min_row=2, values_only=True):
+    for row in wb_val['5、预估工作量-元数据录入'].iter_rows(min_row=2, values_only=True):
         k, v = row[0], row[1]
         if k and str(v).strip():
             wk = str(k).strip()
             wv = str(v).strip()
             if wk in workload_meta and workload_meta[wk].startswith('='):
                 workload_meta[wk] = wv
-    for row in wb_val['7、项目需求清单元数据录入'].iter_rows(min_row=2, values_only=True):
+    for row in wb_val['7、项目需求清单-元数据录入'].iter_rows(min_row=2, values_only=True):
         k, v = row[0], row[1]
         if k and str(v).strip():
             wk = str(k).strip()
@@ -156,12 +156,12 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict:
 
         # 按 sheet 分组写入
         sections = [
-            ("1、工单需求内容录入", project_info),
-            ("3、FPA工作量评估元数据录入", fpa_meta),
-            ("4、项目需求说明书元数据录入", docx_meta),
-            ("5、预估工作量和FPA核减后的工作量元数据录入", workload_meta),
-            ("6、项目功能点拆分表元数据录入", cosmic_meta),
-            ("7、项目需求清单元数据录入", require_meta),
+            ("1、工单需求-内容录入", project_info),
+            ("3、FPA工作量评估-元数据录入", fpa_meta),
+            ("4、项目需求说明书-元数据录入", docx_meta),
+            ("5、预估工作量-元数据录入", workload_meta),
+            ("6、项目功能点拆分表-元数据录入", cosmic_meta),
+            ("7、项目需求清单-元数据录入", require_meta),
             ("9、测试元数据自动统计", stats_meta),
         ]
 
@@ -208,8 +208,8 @@ def read_template_config(excel_path: str) -> dict[str, str]:
     result: dict[str, str] = {}
     try:
         wb = openpyxl.load_workbook(excel_path, data_only=True)
-        if '8、待生成文档的模板路径录入' in wb.sheetnames:
-            ws = wb['8、待生成文档的模板路径录入']
+        if '8、各文档-模板路径录入' in wb.sheetnames:
+            ws = wb['8、各文档-模板路径录入']
             for row in ws.iter_rows(min_row=2, max_row=ws.max_row,
                                     min_col=1, max_col=2, values_only=True):
                 name, path = row

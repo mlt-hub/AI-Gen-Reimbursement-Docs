@@ -374,13 +374,13 @@ def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_ur
 
     project_info = {}
     for k, v in meta_data.items():
-        key = k.replace("1、工单需求内容录入.", "")
+        key = k.replace("1、工单需求-内容录入.", "")
         if key in ("工单编号", "工单标题", "工单内容", "总体描述",
                     "建设目标", "建设必要性", "系统概况"):
             project_info[key] = v
     fpa_meta = {}
     for k, v in meta_data.items():
-        key = k.replace("3、FPA工作量评估元数据录入.", "")
+        key = k.replace("3、FPA工作量评估-元数据录入.", "")
         if key in ("子系统（模块）",):
             fpa_meta[key] = v
 
