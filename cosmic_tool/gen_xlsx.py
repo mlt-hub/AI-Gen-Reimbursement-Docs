@@ -565,17 +565,17 @@ def generate_require_xlsx(
     subsystem = meta.get("功能清单-子系统", "")
     sw_formula2 = meta.get("功能清单-送审工作量", "")
 
-    # 按三级模块去重写入
+    # 按三级模块去重写入（先存为列表，之后合并单元格）
+    data_rows_data = []
     seen_modules = set()
     seq = 0
-    row_idx = 2
 
     for r in rows:
         key = (r["一级模块"], r["二级模块"], r["三级模块"])
         if key not in seen_modules:
             seen_modules.add(key)
             seq += 1
-            row_idx += 1
+            row_idx = seq + 2
             ws2.cell(row_idx, 1, seq)
             ws2.cell(row_idx, 2, project_name)
             ws2.cell(row_idx, 3, subsystem)
@@ -587,6 +587,53 @@ def generate_require_xlsx(
                 ws2.cell(row_idx, 8).value = sw_formula2 if sw_formula2.startswith('=') else float(sw_formula2)
             if cfp_total > 0:
                 ws2.cell(row_idx, 9, cfp_total)
+            data_rows_data.append({
+                "row": row_idx,
+                "project_name": project_name,
+                "subsystem": subsystem,
+                "module_l1": r["一级模块"],
+                "module_l2": r["二级模块"],
+            })
+
+    # 合并行1标题居中（A~I列）
+    if seq > 0:
+        from openpyxl.styles import Alignment
+        ws2.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
+        ws2.cell(1, 1).alignment = Alignment(horizontal='center', vertical='center')
+
+    # 合并相同值的列：B(项目名称), C(子系统), D(一级模块)
+    for col_idx in [2, 3, 4]:
+        i = 0
+        while i < len(data_rows_data):
+            val_key = ["project_name", "subsystem", "module_l1"][col_idx - 2]
+            curr_val = data_rows_data[i][val_key]
+            j = i
+            while j < len(data_rows_data) and data_rows_data[j][val_key] == curr_val:
+                j += 1
+            count = j - i
+            if count > 1:
+                ws2.merge_cells(
+                    start_row=data_rows_data[i]["row"],
+                    start_column=col_idx,
+                    end_row=data_rows_data[j - 1]["row"],
+                    end_column=col_idx
+                )
+            i = j
+
+    # 合并送审工作量(H/8列)和送审功能点(I/9列) — 所有行相同值
+    if len(data_rows_data) > 1:
+        ws2.merge_cells(
+            start_row=data_rows_data[0]["row"],
+            start_column=8,
+            end_row=data_rows_data[-1]["row"],
+            end_column=8
+        )
+        ws2.merge_cells(
+            start_row=data_rows_data[0]["row"],
+            start_column=9,
+            end_row=data_rows_data[-1]["row"],
+            end_column=9
+        )
 
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     wb.save(output_path)

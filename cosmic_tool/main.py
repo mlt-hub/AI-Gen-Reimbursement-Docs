@@ -1122,25 +1122,43 @@ def main():
             logger.error(f"文件不存在: {excel_path}")
             return
 
-        out_dir = args.output_dir or os.path.join(os.path.dirname(os.path.abspath(excel_path)), 'products')
-        os.makedirs(out_dir, exist_ok=True)
+        # 读取工单标题用于创建输出目录
+        import re as _re_title
+        import openpyxl as _opxl
+        try:
+            _wb_t = _opxl.load_workbook(excel_path, data_only=True)
+            _ws_t = _wb_t['1、工单需求-元数据录入']
+            _p_title = ''
+            for _r in _ws_t.iter_rows(min_row=2, values_only=True):
+                if str(_r[0]).strip() == '工单标题':
+                    _p_title = str(_r[1]).strip() if _r[1] else ''
+                    break
+            _wb_t.close()
+        except Exception:
+            _p_title = ''
+        _safe_t = _re_title.sub(r'[\/:*?"<>|]', '_', _p_title) if _p_title else 'products'
+        _excel_dir = os.path.dirname(os.path.abspath(excel_path))
 
-        # 设置 per-output 日志目录
-        log_dir = os.path.join(out_dir, 'log')
+        out_dir = args.output_dir or os.path.join(_excel_dir, _safe_t)
+        doc_dir = os.path.join(out_dir, 'cosmic文档')
+        os.makedirs(doc_dir, exist_ok=True)
+
+        log_dir = os.path.join(out_dir, '日志')
         os.makedirs(log_dir, exist_ok=True)
         setup_logging(log_dir, '功能清单')
         os.environ['COSMIC_LOG_DIR'] = log_dir
         logger.info(f"日志目录: {log_dir}")
 
-        # 模板文件路径（默认与输出同目录）
+        # FPA 在根目录，其余在 cosmic文档 下
         fpa_template = os.path.join(out_dir, 'FPA工作量评估.xlsx')
-        cosmic_template = os.path.join(out_dir, '项目功能点拆分表.xlsx')
-        require_template = os.path.join(out_dir, '项目需求清单.xlsx')
-        doc_template = os.path.join(out_dir, '项目需求说明书.docx')
+        cosmic_template = os.path.join(doc_dir, '项目功能点拆分表.xlsx')
+        require_template = os.path.join(doc_dir, '项目需求清单.xlsx')
+        doc_template = os.path.join(doc_dir, '项目需求说明书.docx')
 
         # 从元数据解析输出文件名（各 sheet 中的 文件名 字段）
         import re as _re
-        def _resolve_output_filename(sheet_name: str, default: str) -> str:
+        def _resolve_output_filename(sheet_name: str, default: str,
+                                       target_dir: str | None = None) -> str:
             if not os.path.exists(meta_md):
                 return default
             with open(meta_md, encoding='utf-8') as f:
@@ -1159,7 +1177,8 @@ def main():
                 pm = _re.search(rf'{key}\s*\|\s*(.+?)(?:\s*\||$)', c)
                 if pm:
                     name = name.replace(ph, pm.group(1).strip())
-            return os.path.join(out_dir, name)
+            _d = target_dir or doc_dir
+            return os.path.join(_d, name)
         # 从元数据解析各输出文件名（覆盖默认值）
 
 
@@ -1229,7 +1248,7 @@ def main():
 
             # Step 0: 生成数据源中间文件
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
-            fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template)
+            fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
 
             # Step 1: FPA（MD → 模板MD → AI填充FPA.md → Excel）
             fpa_md = os.path.join(md_dir, 'FPA模板.md')
@@ -1344,7 +1363,7 @@ def main():
         # --gen-fpa: MD → FPA模板MD → AI填充FPA.md → Excel
         if args.gen_fpa:
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
-            fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template)
+            fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
             fpa_md = os.path.join(md_dir, 'FPA模板.md')
             fpa_filled_md = os.path.join(md_dir, 'AI填充FPA.md')
             logger.info("第1步: 生成 FPA 模板 MD...")
