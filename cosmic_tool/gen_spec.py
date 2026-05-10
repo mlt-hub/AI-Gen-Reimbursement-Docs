@@ -166,14 +166,36 @@ def _generate_section4_content(doc: Document, tree: list[dict], rows: list[dict]
 
 
 def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
-    """插入模块清单表，合并相同内容的单元格。"""
+    """插入模块清单表，合并相同内容的单元格。表头加粗，所有单元格居中。"""
     from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    def _set_cell_style(cell):
+        """设置单元格：水平居中 + 垂直居中。"""
+        for p in cell.paragraphs:
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        tc = cell._tc
+        tcPr = tc.find(qn('w:tcPr'))
+        if tcPr is None:
+            tcPr = OxmlElement('w:tcPr')
+            tc.insert(0, tcPr)
+        valign = tcPr.find(qn('w:vAlign'))
+        if valign is None:
+            valign = OxmlElement('w:vAlign')
+            tcPr.append(valign)
+        valign.set(qn('w:val'), 'center')
 
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
     hdr = table.rows[0].cells
     for i, t in enumerate(["入口", "一级功能模块名称", "二级功能模块名称", "三级功能模块名称"]):
         hdr[i].text = t
+        for p in hdr[i].paragraphs:
+            for run in p.runs:
+                run.bold = True
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _set_cell_style(hdr[i])
 
     seen = set()
     for m in tree:
@@ -185,6 +207,10 @@ def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
             row[1].text = m["一级模块"]
             row[2].text = m["二级模块"]
             row[3].text = m["三级模块"]
+            for c in row:
+                for p in c.paragraphs:
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                _set_cell_style(c)
 
     # 合并单元格：对 入口(0)、一级(1)、二级(2) 列中连续相同值的行进行合并
     if len(table.rows) <= 2:
@@ -214,8 +240,6 @@ def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
 
     insert_before_elem.addprevious(table._tbl)
 
-    # 将表格移到指定位置前
-    insert_before_elem.addprevious(table._tbl)
 
 
 def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
@@ -367,7 +391,7 @@ def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
 
     from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt
     max_tokens = load_max_tokens()
-    system_prompt = load_ai_system_prompt("docx_section")
+    system_prompt = load_ai_system_prompt("metadata_gen")
 
     logger.info(f"AI 生成请求 [{tag}] 模型: {model}")
 
@@ -429,7 +453,7 @@ def _read_raw_sheet1(excel_path: str) -> dict:
     """直接从 Excel 读取 sheet 1 原始值（含 ${} 占位符）。"""
     import openpyxl
     wb = openpyxl.load_workbook(excel_path, data_only=False)
-    ws = wb['1、工单需求-内容录入']
+    ws = wb['1、工单需求-元数据录入']
     data = {}
     for row in ws.iter_rows(min_row=2, values_only=True):
         k = str(row[0]).strip() if row[0] else ""
@@ -478,21 +502,19 @@ def export_spec_template_md(excel_path: str, tree_md_path: str,
                 l3_path = f"{entry} > {l1_name} > {m['二级模块']} > {m['三级模块']}"
                 f.write(f"### {l3_path}\n\n")
                 if m.get("三级模块整体功能描述"):
-                    raw = (raw_sheet4.get("功能需求-三级模块的描述", "")
-                           or "#AI生成#基于${三级模块整体功能描述}")
-                    # 将占位符替换为模块的实际描述内容，确保 AI 基于真实数据生成
-                    raw_desc = m["三级模块整体功能描述"]
-                    raw = raw.replace("${三级模块整体功能描述}", raw_desc)
-                    raw = raw.replace("【三级模块整体功能描述】", raw_desc)
-                    f.write(f"{raw}\n\n")
+                    raw = raw_sheet4.get("功能需求-三级模块的描述", "")
+                    if raw:
+                        raw_desc = m["三级模块整体功能描述"]
+                        raw = raw.replace("${三级模块整体功能描述}", raw_desc)
+                        raw = raw.replace("【三级模块整体功能描述】", raw_desc)
+                        f.write(f"{raw}\n\n")
                 for r in rows:
                     if (r["入口"] == entry and r["一级模块"] == l1_name
                             and r["二级模块"] == m["二级模块"] and r["三级模块"] == m["三级模块"]):
-                        raw = (raw_sheet4.get("功能需求-功能过程的描述", "")
-                               or "#AI生成#基于${功能过程描述}")
-                        # 将占位符替换为功能过程的实际描述内容
-                        raw = raw.replace("${功能过程描述}", r["功能过程描述"])
-                        raw = raw.replace("【功能过程描述】", r["功能过程描述"])
+                        raw = raw_sheet4.get("功能需求-功能过程的描述", "")
+                        if raw:
+                            raw = raw.replace("${功能过程描述}", r["功能过程描述"])
+                            raw = raw.replace("【功能过程描述】", r["功能过程描述"])
                         f.write(f"#### {r['功能过程']}\n\n{raw}\n\n")
 
     logger.info(f"spec 模板 MD 已生成: {output_path}")
@@ -503,16 +525,25 @@ def fill_spec_md(md_path: str, meta_md_path: str,
                  api_key: str, model: str, base_url: str) -> str:
     """AI填充 spec MD 中的 #AI生成# 标记。"""
     meta = _parse_meta_md(meta_md_path)
-    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求-内容录入.")}
+    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求-元数据录入.")}
     fpa_meta = {k: v for k, v in meta.items() if k.startswith("3、FPA工作量评估-元数据录入.")}
 
     with open(md_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
+    from cosmic_tool.config_utils import load_flow_max_ai
+    _max_ai_spec = load_flow_max_ai("gen_spec")
+    _ai_count = 0
     lines = content.split('\n')
     new_lines = []
     for line in lines:
         if '#AI生成#' in line or '#AI生成-' in line:
+            _ai_count += 1
+            if _max_ai_spec > 0 and _ai_count > _max_ai_spec:
+                cleaned, _ = strip_ai_marker(line)
+                new_lines.append(cleaned or '')
+                logger.info(f"  AI填充跳过（超过限制 {_max_ai_spec}）")
+                continue
             cleaned, _ = strip_ai_marker(line)
             if cleaned:
                 final = replace_placeholders(cleaned, project_info, fpa_meta)
@@ -588,7 +619,7 @@ def generate_spec(
     groups = _group_by_entry_and_l1(module_tree)
 
     # 获取项目信息用于替换占位符
-    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求-内容录入.")}
+    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求-元数据录入.")}
     fpa_meta = {k: v for k, v in meta.items() if k.startswith("3、FPA工作量评估-元数据录入.")}
 
     # 从模块树收集实际内容，用于替换 【三级模块】、【三级模块整体功能描述】、【功能过程描述】 占位符
@@ -686,7 +717,14 @@ def generate_spec(
                     else:
                         fv = cv
                     if fv:
-                        cell.text = fv
+                        # 替换单元格内第一个 run 的文本，保留模板字体样式
+                        fp = cell.paragraphs[0]
+                        for run in fp.runs:
+                            run.text = ""
+                        if fp.runs:
+                            fp.runs[0].text = fv
+                        else:
+                            fp.add_run(fv)
                         logger.info(f"表格占位符 [{{{{{p}}}}}] → {len(fv)} 字")
 
     # ====== 保存 ======

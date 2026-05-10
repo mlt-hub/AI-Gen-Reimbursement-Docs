@@ -284,6 +284,10 @@ def fill_md_with_ai(
     api_key: str,
     model: str = "deepseek-v4-flash",
     base_url: Optional[str] = None,
+    user_default_initiator: str = "操作员",
+    user_default_receiver: str = "地市后台",
+    user_initiator_rules: list[tuple[str, str]] | None = None,
+    user_receiver_rules: list[tuple[str, str]] | None = None,
 ) -> None:
     """Read MD, call AI to fill empty tables, write back."""
     from cosmic_tool.cosmic_llm import generate_cosmic_items
@@ -309,6 +313,10 @@ def fill_md_with_ai(
         api_key=api_key,
         model=model,
         base_url=base_url,
+        user_default_initiator=user_default_initiator,
+        user_default_receiver=user_default_receiver,
+        user_initiator_rules=user_initiator_rules,
+        user_receiver_rules=user_receiver_rules,
     )
 
     # Merge: AI items are the base; existing items with real content override

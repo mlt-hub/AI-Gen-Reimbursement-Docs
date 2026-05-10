@@ -4,6 +4,12 @@
 max_tokens: 6000
 
 # 是否重新生成各阶段文件（false=有文件则跳过，true=总是重新生成）
+# 只对前 N 个 L3 模块调用 AI，超过的不走 AI（0=不限制）
+# 限制 AI 批处理数量，超过的不走 AI（0=不限制，对各流程各自生效）
+# 只对前 N 个 L3 模块调用 AI（保留兼容，优先使用 max_ai_items）
+max_ai_l3_modules: 0
+
+# 是否重新生成各阶段文件
 regenerate_md: false
 regenerate_filled: false
 regenerate_excel: false

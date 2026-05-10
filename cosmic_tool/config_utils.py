@@ -137,32 +137,6 @@ def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3
     return formula if formula else default
 
 
-def load_user_defaults() -> tuple[str, str]:
-    """Load user_initiator_default and user_receiver_default from business_rules.yaml."""
-    cfg = _load_business_rules()
-    return (
-        cfg.get('user_initiator_default', '操作员'),
-        cfg.get('user_receiver_default', '地市后台'),
-    )
-
-
-def load_initiator_rules() -> list[tuple[str, str]]:
-    """Load user_initiator_rules from business_rules.yaml."""
-    cfg = _load_business_rules()
-    raw = cfg.get('user_initiator_rules', {})
-    if not isinstance(raw, dict):
-        return []
-    return list(raw.items())
-
-
-def load_receiver_rules() -> list[tuple[str, str]]:
-    """Load user_receiver_rules from business_rules.yaml."""
-    cfg = _load_business_rules()
-    raw = cfg.get('user_receiver_rules', {})
-    if not isinstance(raw, dict):
-        return []
-    return list(raw.items())
-
 
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
@@ -187,6 +161,47 @@ def load_max_tokens(default: int = 2000) -> int:
         except Exception as e:
             logger = logging.getLogger('cosmic_tool.config_utils')
             logger.warning(f"system_config.yaml 读取失败: {e}，使用默认值 {default}")
+    return default
+
+
+
+def load_flow_max_ai(flow_name: str) -> int:
+    """读取流程对应的 AI 限制数。优先走专有参数，fallback 到 max_ai_l3_modules。
+    
+    Args:
+        flow_name: 'gen_fpa', 'gen_spec', 'gen_cosmic'
+    """
+    key = f"{flow_name}_max_ai_l3_modules"
+    yaml_path = _config_dir() / "system_config.yaml"
+    if yaml_path.exists():
+        try:
+            import yaml
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            # 专有参数 > 通用参数 > 0
+            val = cfg.get(key, 0)
+            if val and int(val) > 0:
+                return int(val)
+            common = cfg.get('max_ai_l3_modules', 0)
+            if common and int(common) > 0:
+                return int(common)
+        except Exception:
+            pass
+    return 0
+
+
+def load_max_ai_l3_modules(default: int = 0) -> int:
+    """读取 max_ai_l3_modules，0=不限制。"""
+    yaml_path = _config_dir() / "system_config.yaml"
+    if yaml_path.exists():
+        try:
+            import yaml
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            val = cfg.get('max_ai_l3_modules', default)
+            return int(val)
+        except Exception:
+            pass
     return default
 
 

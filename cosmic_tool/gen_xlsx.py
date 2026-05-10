@@ -240,7 +240,12 @@ def _ai_fill_fpa(
     )
 
     total = len(fpa_rows)
+    from cosmic_tool.config_utils import load_flow_max_ai
+    _max_ai = load_flow_max_ai("gen_fpa")
     for idx, row in enumerate(fpa_rows, 1):
+        if _max_ai > 0 and idx > _max_ai:
+            logger.info(f"  [{idx}/{total}] 跳过（超过 AI 限制 {_max_ai}）")
+            continue
         if not row["计算依据说明"]:
             continue
 
@@ -416,14 +421,26 @@ def generate_fpa_xlsx_from_md(
     wb = openpyxl.load_workbook(template_path)
     ws = wb['FPA功能点估算']
 
-    # 清除旧数据（从第3行开始）
+        # 保存模板第3行的格式作为参照
+    tmpl_format = {}
+    for col_idx in range(1, 15):
+        c = ws.cell(3, col_idx)
+        tmpl_format[col_idx] = {
+            'font': c.font.copy() if c.font else None,
+            'fill': c.fill.copy() if c.fill else None,
+            'border': c.border.copy() if c.border else None,
+            'number_format': c.number_format,
+            'alignment': c.alignment.copy() if c.alignment else None,
+        }
+
+    # 清除旧数据（从第3行开始，保留格式）
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
         for cell in row:
             cell.value = None
 
     # 写入数据
     for i, fpa_row in enumerate(fpa_rows):
-        excel_row = i + 3  # 从第3行开始
+        excel_row = i + 3
         ws.cell(excel_row, 1, fpa_row["序号"])
         ws.cell(excel_row, 2, fpa_row["子系统(模块)"])
         ws.cell(excel_row, 3, fpa_row["资产标识"])
@@ -432,35 +449,55 @@ def generate_fpa_xlsx_from_md(
         ws.cell(excel_row, 6, fpa_row["计算依据归类"])
         ws.cell(excel_row, 7, fpa_row["计算依据说明"])
         ws.cell(excel_row, 8, fpa_row["变更状态"])
-        # I 列基准值公式（写入 Excel 须加 = 前缀）
         if base_formula:
-            formula = base_formula.replace("E3", f"E{excel_row}") \
-                .replace("H3", f"H{excel_row}").replace("I3", f"I{excel_row}") \
-                .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
+            formula = base_formula.replace("E3", f"E{excel_row}")                 .replace("H3", f"H{excel_row}").replace("I3", f"I{excel_row}")                 .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
             ws.cell(excel_row, 9).value = f"={formula}" if not formula.startswith('=') else formula
-        ws.cell(excel_row, 10, fpa_row["调整值"])
-        ws.cell(excel_row, 11, fpa_row["要素数量"])
-        # L 列 FPA工作量公式
+        try:
+            ws.cell(excel_row, 10, int(fpa_row["调整值"]))
+        except (ValueError, TypeError):
+            ws.cell(excel_row, 10, fpa_row["调整值"])
+        try:
+            ws.cell(excel_row, 11, int(fpa_row["要素数量"]))
+        except (ValueError, TypeError):
+            ws.cell(excel_row, 11, fpa_row["要素数量"])
         if workload_formula:
-            formula = workload_formula.replace("J{row}", f"J{excel_row}") \
-                .replace("K{row}", f"K{excel_row}") \
-                .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
+            formula = workload_formula.replace("J{row}", f"J{excel_row}")                 .replace("K{row}", f"K{excel_row}")                 .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
             ws.cell(excel_row, 12).value = f"={formula}" if not formula.startswith('=') else formula
-        ws.cell(excel_row, 13, "")  # 核减后工作量留空
-        ws.cell(excel_row, 14, "")  # 备注留空
+        ws.cell(excel_row, 13, "")
+        ws.cell(excel_row, 14, "")
 
-        # 设置文本自动换行
-        for col in [4, 7]:
-            ws.cell(excel_row, col).alignment = Alignment(wrap_text=True)
+        # 从模板第3行复制格式
+        for col_idx in range(1, 15):
+            c = ws.cell(excel_row, col_idx)
+            fmt = tmpl_format.get(col_idx, {})
+            if fmt.get('font'):
+                c.font = fmt['font']
+            if fmt.get('fill'):
+                c.fill = fmt['fill']
+            if fmt.get('border'):
+                c.border = fmt['border']
+            if fmt.get('number_format'):
+                c.number_format = fmt['number_format']
+            if col_idx in (4, 7):
+                orig_align = fmt.get('alignment')
+                if orig_align:
+                    c.alignment = Alignment(
+                        wrap_text=True,
+                        vertical='center',
+                        horizontal=orig_align.horizontal or 'center',
+                    )
+                else:
+                    c.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
+            else:
+                if fmt.get('alignment'):
+                    c.alignment = fmt['alignment']
 
-    # 更新合计行公式
+    # 更新第1行合计公式
     last_data_row = len(fpa_rows) + 2
-    sum_row = 2  # 第2行是合计行
-    for col_idx in [9, 10, 11, 12, 13]:  # I/M 列
-        cell = ws.cell(sum_row, col_idx)
+    for col_idx in [9, 10, 11, 12, 13]:
+        cell = ws.cell(1, col_idx)
         col_letter = openpyxl.utils.get_column_letter(col_idx)
         cell.value = f"=SUM({col_letter}3:{col_letter}{last_data_row})"
-
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     wb.save(output_path)
     logger.info(f"FPA工作量评估已生成: {output_path} ({len(fpa_rows)} 行)")
@@ -494,28 +531,24 @@ def generate_require_xlsx(
     title = meta.get("项目信息概览-标题", "")
     ws1.cell(1, 1, title)
 
-    # 替换数据行（第2行）
-    ws1.cell(2, 2, meta.get("项目信息概览-项目名称", ""))
-    ws1.cell(2, 3, meta.get("项目信息概览-子系统名称", ""))
-    ws1.cell(2, 4, meta.get("项目信息概览-项目类型", ""))
-    ws1.cell(2, 5, meta.get("项目信息概览-所属域", ""))
-    ws1.cell(2, 6, meta.get("项目信息概览-所属系统", ""))
-    ws1.cell(2, 7, meta.get("项目信息概览-需求部门", ""))
-    ws1.cell(2, 8, meta.get("项目信息概览-需求负责人", ""))
-    ws1.cell(2, 9, meta.get("项目信息概览-需求负责人联系方式", ""))
+    # 替换数据行（第3行，第2行为表头）
+    ws1.cell(3, 2, meta.get("项目信息概览-项目名称", ""))
+    ws1.cell(3, 3, meta.get("项目信息概览-子系统名称", ""))
+    ws1.cell(3, 4, meta.get("项目信息概览-项目类型", ""))
+    ws1.cell(3, 5, meta.get("项目信息概览-所属域", ""))
+    ws1.cell(3, 6, meta.get("项目信息概览-所属系统", ""))
+    ws1.cell(3, 7, meta.get("项目信息概览-需求部门", ""))
+    ws1.cell(3, 8, meta.get("项目信息概览-需求负责人", ""))
+    ws1.cell(3, 9, meta.get("项目信息概览-需求负责人联系方式", ""))
 
     # 送审工作量（保留公式）
     sw_formula = meta.get("项目信息概览-送审工作量", "")
     if sw_formula:
-        ws1.cell(2, 10).value = sw_formula if sw_formula.startswith('=') else float(sw_formula)
+        ws1.cell(3, 10).value = sw_formula if sw_formula.startswith('=') else float(sw_formula)
 
     # 送审功能点 = CFP 总量
     if cfp_total > 0:
-        ws1.cell(2, 11, cfp_total)
-
-    # 合计行公式
-    ws1.cell(3, 10).value = f"=SUM(J2:J2)"
-    ws1.cell(3, 11).value = f"=SUM(K2:K2)"
+        ws1.cell(3, 11, cfp_total)
 
     # ====== Sheet 2: 功能清单 ======
     ws2 = wb['功能清单']

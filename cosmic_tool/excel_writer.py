@@ -60,7 +60,13 @@ def write_to_template(
     wb = openpyxl.load_workbook(template_path)
     ws = wb['2、功能点拆分表']
 
-    # --- Save existing footer notes (rows below header rows, before clearing) ---
+    # --- Save template row 6 format as reference ---
+    tmpl_format_row6 = {}
+    for col_idx in range(1, 14):
+        tmpl_format_row6[col_idx] = _get_ref_style(ws, 6, col_idx)
+    _CFP_FILL_TMPL = copy.copy(ws.cell(row=6, column=13).fill)
+
+# --- Save existing footer notes (rows below header rows, before clearing) ---
     # Collect rows from max_row upward that are NOT sample data (footer notes)
     footer_saved = []  # list of (merge_range_string, {col: (value, style_dict)})
     seen_merges = list(ws.merged_cells.ranges)
@@ -142,16 +148,9 @@ def write_to_template(
         wb.save(output_path)
         return
 
-    # Standard style for data cells
-    _DATA_STYLE = {
-        'font': Font(name='微软雅黑', size=11, color='FF000000'),
-        'fill': PatternFill(fill_type=None),
-        'alignment': _CENTER_ALIGN,
-        'border': _REF_BORDER,
-        'number_format': 'General',
-    }
-    # CFP column green fill (from template)
-    _CFP_FILL = copy.copy(ws.cell(row=6, column=13).fill)
+    # Use template row 6 format for data cells
+    _DATA_STYLE = None
+    _CFP_FILL = _CFP_FILL_TMPL
 
     # Column K (数据属性) should be left-aligned
     # Column H (子过程描述) should be left-aligned
@@ -176,8 +175,8 @@ def write_to_template(
             else:
                 cell.value = row_data.get(key_map[col_idx], '')
 
-            # Apply standard style
-            _apply_style(cell, _DATA_STYLE)
+            # Apply template row 6 format
+            _apply_style(cell, tmpl_format_row6[col_idx])
 
             # CFP 列：绿色底色 + 分数格式（复用=1/3时显示分数）
             if col_idx == 13:

@@ -36,6 +36,53 @@ def _resolve_move_type(raw: str) -> tuple[str, bool]:
     # Completely unknown: default to E and flag
     return 'E', True
 
+def parse_user_rules(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """解析"默认：操作员\\n分销：分销员" → ("操作员", [("分销","分销员")])"""
+    default = ""
+    rules: list[tuple[str, str]] = []
+    for line in text.split('\n'):
+        line = line.strip().rstrip('|').strip()
+        if not line:
+            continue
+        if '：' not in line:
+            continue
+        key, val = line.split('：', 1)
+        key = key.strip()
+        val = val.strip()
+        if key == '默认':
+            default = val
+        else:
+            rules.append((key, val))
+    return default, rules
+
+
+def load_user_config_from_meta(meta_md_path: str) -> dict:
+    """从文档元数据读取功能用户-发起者/接收者判定，返回配置字典。"""
+    from cosmic_tool.gen_spec import _parse_meta_md
+    meta = _parse_meta_md(meta_md_path)
+    result = {
+        "user_default_initiator": "操作员",
+        "user_default_receiver": "地市后台",
+        "user_initiator_rules": None,
+        "user_receiver_rules": None,
+    }
+    initiator_text = meta.get("功能用户-发起者判定", "")
+    if initiator_text:
+        default, rules = parse_user_rules(initiator_text)
+        if default:
+            result["user_default_initiator"] = default
+        if rules:
+            result["user_initiator_rules"] = rules
+    receiver_text = meta.get("功能用户-接收者判定", "")
+    if receiver_text:
+        default, rules = parse_user_rules(receiver_text)
+        if default:
+            result["user_default_receiver"] = default
+        if rules:
+            result["user_receiver_rules"] = rules
+    return result
+
+
 def _build_user(module: FunctionModule, modules: list[FunctionModule],
                 initiator_rules: list[tuple[str, str]] | None = None,
                 receiver_rules: list[tuple[str, str]] | None = None,
@@ -266,7 +313,11 @@ def generate_cosmic_items(
     api_key: Optional[str] = None,
     model: str = "deepseek-v4-flash",
     base_url: Optional[str] = None,
-    interactive: bool = False
+    interactive: bool = False,
+    user_default_initiator: str = "操作员",
+    user_default_receiver: str = "地市后台",
+    user_initiator_rules: list[tuple[str, str]] | None = None,
+    user_receiver_rules: list[tuple[str, str]] | None = None,
 ) -> list[CosmicItem]:
     """Generate COSMIC decompositions for all L3 modules using Claude API.
 
@@ -303,12 +354,13 @@ def generate_cosmic_items(
         return []
 
     # Load config
-    from cosmic_tool.config_utils import load_user_defaults, load_initiator_rules, load_receiver_rules, load_max_tokens, load_ai_system_prompt
-    user_default_initiator, user_default_receiver = load_user_defaults()
-    user_initiator_rules = load_initiator_rules()
-    user_receiver_rules = load_receiver_rules()
+    from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt, load_flow_max_ai
     max_tokens = load_max_tokens()
     logger.info(f"MAX_TOKENS = {max_tokens}")
+
+    max_ai_l3 = load_flow_max_ai("gen_cosmic")
+    if max_ai_l3 > 0:
+        logger.info(f"仅对前 {max_ai_l3} 个 L3 模块调用 AI，超过的跳过")
 
     all_items = []
     error_modules: list[tuple[str, str, str, str]] = []  # (l1, l2, l3, error_msg)
@@ -325,6 +377,18 @@ def generate_cosmic_items(
             l2 = get_module_by_name(modules, l2_name)
             if l2 and l2.parent:
                 l1_name = l2.parent
+
+        # 超过限制的模块跳过 AI
+        if max_ai_l3 > 0 and idx > max_ai_l3:
+            logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过 AI 限制 {max_ai_l3}）")
+            # 仍然添加到 all_items，但使用空数据
+            from cosmic_tool.models import CosmicItem
+            all_items.append(CosmicItem(
+                project=project_name,
+                module_l1=l1_name, module_l2=l2_name, module_l3=l3.name,
+                process="", user="", trigger="", movements=[]
+            ))
+            continue
 
         user = _build_user(l3, modules, user_initiator_rules, user_receiver_rules,
                            user_default_initiator, user_default_receiver)

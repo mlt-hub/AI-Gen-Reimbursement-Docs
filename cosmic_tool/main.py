@@ -318,37 +318,44 @@ def _ensure_basedata(excel_path: str, md_dir: str, meta_md: str, tree_md: str,
     verify_module_tree_stats(tree_md, tpl)
 
 
-def _write_fpa_reduced_summary(fpa_xlsx_path: str, output_md_path: str) -> None:
+def _write_fpa_summary(fpa_xlsx_path: str, output_md_path: str) -> None:
     """读取 FPA Excel 核减后工作量列的求和，写入 MD 文件。"""
     total = read_fpa_xlsx_sum(fpa_xlsx_path)
     os.makedirs(os.path.dirname(output_md_path), exist_ok=True)
     with open(output_md_path, 'w', encoding='utf-8') as f:
         f.write("# FPA 核减后工作量\n\n")
-        f.write(f"FPA核减后的工作量（人/天）: {total}\n")
+        f.write(f"FPA工作量（人/天）: {total}\n")
 
 
-def _resolve_fpa_reduced(fpa_reduced_md_path: str) -> float:
-    """提示用户输入核减后工作量，空值时从 FPA核减后工作量.md 读取。"""
-    print("\n请确认 FPA 核减后的工作量（人/天）: ", end="")
+def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
+    """从 FPA工作量.md 读取值作为默认，提示用户输入FPA核减后工作量。"""
+    import re
+    md_val = 0.0
+    if os.path.exists(fpa_sum_md_path):
+        with open(fpa_sum_md_path, encoding='utf-8') as f:
+            for line in f:
+                m = re.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', line)
+                if m:
+                    md_val = float(m.group(1))
+                    break
+
+    if md_val > 0:
+        print(f"\nFPA工作量: {md_val}。请输入 FPA 核减后的工作量（直接回车使用FPA工作量）: ", end="")
+    else:
+        print("\n请输入 FPA 核减后的工作量（人/天）: ", end="")
+
     try:
         inp = input().strip()
         if inp:
             val = float(inp)
-            logger.info(f"FPA核减后的工作量: {val}（用户输入）")
+            logger.info(f"FPA核减后工作量: {val}（用户输入）")
             return val
     except (EOFError, OSError, ValueError):
         pass
 
-    # 空输入/非数字 → 从 FPA核减后工作量.md 读取
-    if os.path.exists(fpa_reduced_md_path):
-        import re
-        with open(fpa_reduced_md_path, encoding='utf-8') as f:
-            for line in f:
-                m = re.search(r'FPA核减后的工作量（人/天）[：:]\s*([\d.]+)', line)
-                if m:
-                    val = float(m.group(1))
-                    logger.info(f"FPA核减后的工作量: {val}（来自 FPA核减后工作量.md）")
-                    return val
+    if md_val > 0:
+        logger.info(f"FPA核减后工作量: {md_val}（来自 FPA工作量.md）")
+        return md_val
 
     msg = "未输入 FPA 核减后的工作量，CFP 数量将不受限制"
     logger.warning(msg)
@@ -374,7 +381,7 @@ def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_ur
 
     project_info = {}
     for k, v in meta_data.items():
-        key = k.replace("1、工单需求-内容录入.", "")
+        key = k.replace("1、工单需求-元数据录入.", "")
         if key in ("工单编号", "工单标题", "工单内容", "总体描述",
                     "建设目标", "建设必要性", "系统概况"):
             project_info[key] = v
@@ -440,7 +447,7 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
 
     from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt
     max_tokens = load_max_tokens()
-    system_prompt = load_ai_system_prompt("meta_fill")
+    system_prompt = load_ai_system_prompt("metadata_gen")
 
     try:
         import anthropic
@@ -718,8 +725,8 @@ def main():
     logger.debug(f"API Key: {'已设置' if api_key else '未设置'}, 端点: {base_url or '默认'}, 模型: {model}")
 
     # 记录实际使用的配置值
-    from cosmic_tool.config_utils import load_max_tokens, load_business_config, load_user_defaults, load_cfp_formula
-    logger.info(f"配置: MAX_TOKENS={load_max_tokens()}, CFP公式={load_cfp_formula()}, 用户默认={load_user_defaults()}")
+    from cosmic_tool.config_utils import load_max_tokens, load_business_config, load_cfp_formula
+    logger.info(f"配置: MAX_TOKENS={load_max_tokens()}, CFP公式={load_cfp_formula()}")
     biz_cfg = load_business_config()
     logger.info(f"配置: REGENERATE_MD={biz_cfg['regenerate_md']}, ENABLE_AI_GENERATE_COSMIC={biz_cfg['enable_ai_generate_cosmic']}")
 
@@ -1131,23 +1138,31 @@ def main():
         require_template = os.path.join(out_dir, '项目需求清单.xlsx')
         doc_template = os.path.join(out_dir, '项目需求说明书.docx')
 
-        # 从元数据解析 FPA 输出文件名
-        def _resolve_fpa_filename():
+        # 从元数据解析输出文件名（各 sheet 中的 文件名 字段）
+        import re as _re
+        def _resolve_output_filename(sheet_name: str, default: str) -> str:
             if not os.path.exists(meta_md):
-                return fpa_template
-            import re
+                return default
             with open(meta_md, encoding='utf-8') as f:
                 c = f.read()
-            m = re.search(r'文件名\s*\|\s*(.+?)(?:\s*\||$)', c)
+            sec = _re.search(
+                rf'##\s*{_re.escape(sheet_name)}.*?(?=##|\Z)', c, _re.DOTALL
+            )
+            if not sec:
+                return default
+            m = _re.search(r'\|\s*文件名\s*\|\s*(.+?)\s*(?:\||$)', sec.group())
             if not m:
-                return fpa_template
+                return default
             name = m.group(1).strip()
             for ph, key in [('${工单编号}', '工单编号'), ('${工单名称}', '工单标题'),
                             ('${工单标题}', '工单标题'), ('${子系统（模块）}', '子系统（模块）')]:
-                pm = re.search(rf'{key}\s*\|\s*(.+?)(?:\s*\||$)', c)
+                pm = _re.search(rf'{key}\s*\|\s*(.+?)(?:\s*\||$)', c)
                 if pm:
                     name = name.replace(ph, pm.group(1).strip())
             return os.path.join(out_dir, name)
+        # 从元数据解析各输出文件名（覆盖默认值）
+
+
         # 数据源中间文件路径
         md_dir = os.path.join(out_dir, 'md')
         os.makedirs(md_dir, exist_ok=True)
@@ -1155,8 +1170,11 @@ def main():
         meta_md = os.path.join(md_dir, 'AI填充文档元数据.md')
         if not os.path.exists(meta_md) and os.path.exists(meta_md_tpl):
             meta_md = meta_md_tpl  # 无 AI填充版本时回退模板
+        cosmic_template = _resolve_output_filename("6、项目功能点拆分表-元数据录入", cosmic_template)
+        require_template = _resolve_output_filename("7、项目需求清单-元数据录入", require_template)
+        doc_template = _resolve_output_filename("4、项目需求说明书-元数据录入", doc_template)
         tree_md = os.path.join(md_dir, '功能清单模块树.md')
-        fpa_reduced_md = os.path.join(md_dir, 'FPA核减后工作量.md')
+        fpa_sum_md = os.path.join(md_dir, 'FPA工作量.md')
         meta_filled_md = os.path.join(md_dir, 'AI填充文档元数据.md')
 
         # AI 配置
@@ -1211,7 +1229,7 @@ def main():
 
             # Step 0: 生成数据源中间文件
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
-            fpa_template = _resolve_fpa_filename()
+            fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template)
 
             # Step 1: FPA（MD → 模板MD → AI填充FPA.md → Excel）
             fpa_md = os.path.join(md_dir, 'FPA模板.md')
@@ -1228,10 +1246,10 @@ def main():
                 fpa_src = fpa_filled_md if api_key else fpa_md
             fpa_template_file = fpa_src_template
             generate_fpa_xlsx_from_md(fpa_src, meta_md, fpa_template_file, fpa_template)
-            _write_fpa_reduced_summary(fpa_template, fpa_reduced_md)
+            _write_fpa_summary(fpa_template, fpa_sum_md)
 
             # 读取核减后工作量（从 FPA Excel > 元数据 > 用户输入 > 默认值）
-            fpa_reduced = _resolve_fpa_reduced(fpa_reduced_md)
+            fpa_reduced = _resolve_fpa_sum(fpa_sum_md)
 
             # Step 2: COSMIC
             if not os.path.exists(cosmic_template):
@@ -1250,7 +1268,10 @@ def main():
                     logger.info("  步骤2b: AI 填充 COSMIC 数据...")
                     import shutil
                     shutil.copy2(init_md_path, filled_md_path)
-                    fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url)
+                    from cosmic_tool.cosmic_llm import load_user_config_from_meta
+                    _user_cfg = load_user_config_from_meta(meta_md)
+                    fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url,
+                                    **_user_cfg)
                 else:
                     logger.warning("  跳过 AI 填充（未设置 API Key）")
                     filled_md_path = init_md_path
@@ -1323,7 +1344,7 @@ def main():
         # --gen-fpa: MD → FPA模板MD → AI填充FPA.md → Excel
         if args.gen_fpa:
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
-            fpa_template = _resolve_fpa_filename()
+            fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template)
             fpa_md = os.path.join(md_dir, 'FPA模板.md')
             fpa_filled_md = os.path.join(md_dir, 'AI填充FPA.md')
             logger.info("第1步: 生成 FPA 模板 MD...")
@@ -1340,7 +1361,7 @@ def main():
 
             logger.info("第3步: 生成 FPA 工作量评估 Excel...")
             generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src_template, fpa_template)
-            _write_fpa_reduced_summary(fpa_template, fpa_reduced_md)
+            _write_fpa_summary(fpa_template, fpa_sum_md)
             _write_combined_ai_log()
             logger.info(f"FPA工作量评估已生成: {fpa_template}")
             return
@@ -1354,7 +1375,7 @@ def main():
 
             # 确保数据源存在，提示输入核减后工作量
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
-            _resolve_fpa_reduced(fpa_reduced_md)
+            _resolve_fpa_sum(fpa_sum_md)
 
             init_md_path = os.path.join(md_dir, 'cosmic模板.md')
             filled_md_path = os.path.join(md_dir, 'AI填充cosmic.md')
@@ -1363,7 +1384,10 @@ def main():
             if api_key:
                 import shutil
                 shutil.copy2(init_md_path, filled_md_path)
-                fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url)
+                from cosmic_tool.cosmic_llm import load_user_config_from_meta
+                _user_cfg = load_user_config_from_meta(meta_md)
+                fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url,
+                                **_user_cfg)
 
                 items = parse_md_to_items(filled_md_path)
                 if items:

@@ -72,8 +72,8 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict:
 
     # ========== 解析各个 sheet ==========
 
-    # 1、工单需求-内容录入
-    ws1 = wb['1、工单需求-内容录入']
+    # 1、工单需求-元数据录入
+    ws1 = wb['1、工单需求-元数据录入']
     project_info = _key_value_sheet(ws1)
 
     # 2、功能清单-内容录入 — 模块树 + 功能过程
@@ -156,7 +156,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict:
 
         # 按 sheet 分组写入
         sections = [
-            ("1、工单需求-内容录入", project_info),
+            ("1、工单需求-元数据录入", project_info),
             ("3、FPA工作量评估-元数据录入", fpa_meta),
             ("4、项目需求说明书-元数据录入", docx_meta),
             ("5、预估工作量-元数据录入", workload_meta),
@@ -224,23 +224,23 @@ def read_template_config(excel_path: str) -> dict[str, str]:
 
 
 def read_fpa_xlsx_sum(fpa_xlsx_path: str) -> float:
-    """读取 FPA工作量评估.xlsx 中核减后工作量列的求和。"""
+    """读取 FPA工作量评估.xlsx 中 FPA工作量列（L列）的求和。"""
     try:
         wb = openpyxl.load_workbook(fpa_xlsx_path, data_only=True)
         ws = wb['FPA功能点估算']
         total = 0.0
         for row in ws.iter_rows(min_row=3, values_only=True):
-            val = row[12]  # M列（核减后工作量），0-based index
+            val = row[11]  # L列（FPA工作量），0-based index
             if val is not None:
                 try:
                     total += float(val)
                 except (ValueError, TypeError):
                     pass
         wb.close()
-        logger.info(f"FPA核减后工作量求和: {total}")
+        logger.info(f"FPA工作量求和: {total}")
         return total
     except Exception as e:
-        logger.warning(f"读取FPA求和失败: {e}")
+        logger.warning(f"读取FPA工作量求和失败: {e}")
         return 0.0
 
 
