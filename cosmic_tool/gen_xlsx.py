@@ -161,7 +161,6 @@ def _build_fpa_rule_rows(rows: list[dict], meta: dict) -> list[dict]:
     seq = 0
 
     for r in rows:
-        seq += 1
         client_type = r["客户端类型"]
         l1 = r["一级模块"]
         l2 = r["二级模块"]
@@ -173,15 +172,16 @@ def _build_fpa_rule_rows(rows: list[dict], meta: dict) -> list[dict]:
         # 接收者
         receiver = _receiver_from_client_type(client_type, receiver_rules)
 
-        # 功能点前缀
+        # 功能点前缀（保留 【】 括号）
         fp_prefix = prefix_rule \
-            .replace("【客户端类型】", client_type) \
+            .replace("【客户端类型】", f"【{client_type}】") \
             .replace("一级模块", l1) \
             .replace("二级模块", l2) \
             .replace("三级模块", l3) \
             .replace("功能过程", proc)
 
         # 界面行
+        seq += 1
         fpa_rows.append({
             "序号": seq,
             "子系统(模块)": subsystem,
@@ -200,6 +200,7 @@ def _build_fpa_rule_rows(rows: list[dict], meta: dict) -> list[dict]:
         })
 
         # 接口行
+        seq += 1
         fpa_rows.append({
             "序号": seq,
             "子系统(模块)": subsystem,
@@ -251,19 +252,37 @@ def _ai_fill_fpa(
 
         row_tag = f"fpa_{row['类型']}_{row['新增/修改功能点'][:30]}"
         prompt = (
-            f"功能过程描述：{row['计算依据说明']}\n"
-            f"类型：{row['类型']}\n\n"
+            f"功能过程描述：{row['计算依据说明']}\n\n"
             f"判定原则列表：\n{judgement_rules}\n\n"
             f"请按以下格式输出（直接输出，不要解释）：\n"
+            f"类型：EI/EO/EQ/ILF/EIF\n"
             f"计算依据归类：<选中的判定原则>\n"
-            f"计算依据说明：<展开的详细说明>"
+            f"计算依据说明：<展开的详细说明，记录事件流、业务规则、业务数据、非功能性规约、表、服务、接口等关键信息>\n"
+            f"\n"
+            f"参考示例（计算依据说明的格式）：\n"
+            f"示例1：【地市后台】垂直行业管理-垂直行业列表界面新增，具体如下：\n"
+            f"1、新增垂直行业列表界面，包含搜索（垂直行业名称、查询按钮、重置按钮）、添加垂直行业按钮\n"
+            f"2、列表（序号、垂直行业名称、添加时间、状态、操作）\n"
+            f"3、列表翻页功能\n"
+            f"4、调用垂直行业列表数据展示接口\n"
+            f"示例2：【地市后台】垂直行业管理-垂直行业列表界面数据展示接口开发，具体如下：\n"
+            f"1、垂直行业列表界面数据展示接口开发\n"
+            f"2、将数据返回至前端进行展示\n"
+            f"示例3：【地市后台】垂直行业管理-垂直行业列表新增界面开发，具体如下：\n"
+            f"1、点击添加垂直行业按钮跳转至添加界面，要素包含垂直行业名称、确认按钮、返回按钮\n"
+            f"2、提交时校验页面必填项\n"
+            f"3、点击返回按钮关闭弹窗\n"
+            f"4、调用垂直行业列表数据新增接口"
         )
 
         logger.info(f"  FPA AI 填充 [{idx}/{total}] {row['新增/修改功能点'][:40]}...")
         resp = _call_llm(prompt, system_prompt, api_key, model, base_url, tag=row_tag)
         if resp:
+            m_type = re.search(r'类型[：:]\s*(EI|EO|EQ|ILF|EIF)', resp)
             m_cat = re.search(r'计算依据归类[：:]\s*(.+?)(?:\n|$)', resp)
             m_desc = re.search(r'计算依据说明[：:]\s*(.+)', resp, re.DOTALL)
+            if m_type:
+                row["类型"] = m_type.group(1).strip()
             if m_cat:
                 row["计算依据归类"] = m_cat.group(1).strip()
             if m_desc:
