@@ -449,37 +449,11 @@ def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
         return prompt
 
 
-def _read_raw_sheet1(excel_path: str) -> dict:
-    """直接从 Excel 读取 sheet 1 原始值（含 ${} 占位符）。"""
-    import openpyxl
-    wb = openpyxl.load_workbook(excel_path, data_only=False)
-    ws = wb['1、工单需求-元数据录入']
-    data = {}
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        k = str(row[0]).strip() if row[0] else ""
-        v = str(row[1]).strip() if len(row) > 1 and row[1] else ""
-        if k:
-            data[k] = v
-    wb.close()
-    return data
 
-
-def export_spec_template_md(excel_path: str, tree_md_path: str,
+def export_spec_template_md(meta_md_path: str, tree_md_path: str,
                             output_path: str) -> str:
-    """生成 spec模板.md：从 Excel 读取原始值（含 ${} 占位符）。"""
-    raw_sheet1 = _read_raw_sheet1(excel_path)
-
-    # 读取 sheet 4 的原始值（功能需求-三级模块的描述 等）
-    import openpyxl
-    wb = openpyxl.load_workbook(excel_path, data_only=False)
-    ws4 = wb['4、项目需求说明书-元数据录入']
-    raw_sheet4 = {}
-    for row in ws4.iter_rows(min_row=2, values_only=True):
-        k = str(row[0]).strip() if row[0] else ""
-        v = str(row[1]).strip() if len(row) > 1 and row[1] else ""
-        if k:
-            raw_sheet4[k] = v
-    wb.close()
+    """生成 spec模板.md：从元数据 md 读取原始值（含 ${} 和 #AI生成#）。"""
+    meta = _parse_meta_md(meta_md_path)
 
     rows = _parse_module_tree_md(tree_md_path)
     tree = _build_module_tree(rows)
@@ -488,10 +462,10 @@ def export_spec_template_md(excel_path: str, tree_md_path: str,
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write("# 项目需求说明书\n\n")
 
-        # 文档概述部分（从 Excel sheet 1 读取原始值，含 ${} 和 #AI生成#）
+        # 文档概述部分（从元数据读取 #AI生成# 标记）
         for key, label in [("总体描述", "总体描述"), ("建设目标", "建设目标"),
                            ("建设必要性", "建设必要性"), ("系统概况", "系统概况")]:
-            val = raw_sheet1.get(key, "")
+            val = meta.get(key, "")
             if val:
                 f.write(f"## {label}\n\n{val}\n\n")
 
@@ -502,7 +476,7 @@ def export_spec_template_md(excel_path: str, tree_md_path: str,
                 l3_path = f"{entry} > {l1_name} > {m['二级模块']} > {m['三级模块']}"
                 f.write(f"### {l3_path}\n\n")
                 if m.get("三级模块整体功能描述"):
-                    raw = raw_sheet4.get("功能需求-三级模块的描述", "")
+                    raw = meta.get("功能需求-三级模块的描述", "")
                     if raw:
                         raw_desc = m["三级模块整体功能描述"]
                         raw = raw.replace("${三级模块整体功能描述}", raw_desc)
@@ -511,15 +485,17 @@ def export_spec_template_md(excel_path: str, tree_md_path: str,
                 for r in rows:
                     if (r["入口"] == entry and r["一级模块"] == l1_name
                             and r["二级模块"] == m["二级模块"] and r["三级模块"] == m["三级模块"]):
-                        raw = raw_sheet4.get("功能需求-功能过程的描述", "")
+                        raw = meta.get("功能需求-功能过程的描述", "")
                         if raw:
                             raw = raw.replace("${功能过程描述}", r["功能过程描述"])
                             raw = raw.replace("【功能过程描述】", r["功能过程描述"])
-                        f.write(f"#### {r['功能过程']}\n\n{raw}\n\n")
+                            f.write(f"#### {r['功能过程']}\n\n{raw}\n\n")
 
     logger.info(f"spec 模板 MD 已生成: {output_path}")
     return output_path
 
+    logger.info(f"spec 模板 MD 已生成: {output_path}")
+    return output_path
 
 def fill_spec_md(md_path: str, meta_md_path: str,
                  api_key: str, model: str, base_url: str) -> str:

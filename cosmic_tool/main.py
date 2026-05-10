@@ -1122,20 +1122,32 @@ def main():
             logger.error(f"文件不存在: {excel_path}")
             return
 
-        # 读取工单标题用于创建输出目录
+        # 读取工单标题用于创建输出目录（优先从 md，无 md 则从 Excel）
+        _p_title = ''
+        _tmp_md_dir = os.path.join(os.path.dirname(os.path.abspath(excel_path)) if not args.output_dir else args.output_dir, 'md')
+        _tmp_md_path = os.path.join(_tmp_md_dir, '文档元数据模板.md')
+        if os.path.exists(_tmp_md_path):
+            import re as _re_t
+            with open(_tmp_md_path, encoding='utf-8') as _f_t:
+                for _l_t in _f_t:
+                    _m_t = _re_t.search(r'工单标题\s*\|\s*(.+?)(?:\s*\||$)', _l_t)
+                    if _m_t:
+                        _p_title = _m_t.group(1).strip()
+                        break
+        if not _p_title:
+            import re as _re_title
+            import openpyxl as _opxl
+            try:
+                _wb_t = _opxl.load_workbook(excel_path, data_only=True)
+                _ws_t = _wb_t['1、工单需求-元数据录入']
+                for _r_t in _ws_t.iter_rows(min_row=2, values_only=True):
+                    if str(_r_t[0]).strip() == '工单标题':
+                        _p_title = str(_r_t[1]).strip() if _r_t[1] else ''
+                        break
+                _wb_t.close()
+            except Exception:
+                _p_title = ''
         import re as _re_title
-        import openpyxl as _opxl
-        try:
-            _wb_t = _opxl.load_workbook(excel_path, data_only=True)
-            _ws_t = _wb_t['1、工单需求-元数据录入']
-            _p_title = ''
-            for _r in _ws_t.iter_rows(min_row=2, values_only=True):
-                if str(_r[0]).strip() == '工单标题':
-                    _p_title = str(_r[1]).strip() if _r[1] else ''
-                    break
-            _wb_t.close()
-        except Exception:
-            _p_title = ''
         _safe_t = _re_title.sub(r'[\/:*?"<>|]', '_', _p_title) if _p_title else 'products'
         _excel_dir = os.path.dirname(os.path.abspath(excel_path))
 
@@ -1328,7 +1340,7 @@ def main():
             # Step 可选: docx
             if not os.path.exists(doc_template):
                 logger.info("可选：生成 项目需求说明书.docx...")
-                generate_spec(doc_template, doc_template, meta_md, tree_md,
+                generate_spec(doc_src_template, doc_template, meta_md, tree_md,
                               api_key=api_key, model=model, base_url=base_url)
             else:
                 logger.info("项目需求说明书.docx 已存在，跳过")
@@ -1463,7 +1475,7 @@ def main():
             spec_filled = os.path.join(md_dir, 'AI填充spec.md')
 
             logger.info("第1步: 生成 spec 模板 MD...")
-            export_spec_template_md(excel_path, tree_md, spec_md)
+            export_spec_template_md(meta_md_tpl, tree_md, spec_md)
 
             if api_key and os.path.exists(spec_filled):
                 logger.info("第2步: AI填充spec.md 已存在，跳过 AI 生成")
