@@ -23,7 +23,8 @@ import shutil
 import sys
 from datetime import datetime
 
-from cosmic_tool.docx_to_md import convert_to_md, build_modules_from_md, get_project_name_from_md
+from cosmic_tool.docx_to_md import convert_to_md
+from cosmic_tool.md_handler import build_modules_from_md, get_project_name_from_md
 from cosmic_tool.docx_parser import build_module_tree, ai_build_module_tree, print_tree, get_project_name
 from cosmic_tool.models import FunctionModule
 from cosmic_tool.cosmic_llm import generate_cosmic_items
@@ -35,7 +36,7 @@ from cosmic_tool.md_handler import (
     parse_md_to_items,
     fill_md_with_ai,
 )
-from cosmic_tool.excel_source import generate_md_files, read_fpa_xlsx_sum, read_template_config, verify_module_tree_stats
+from cosmic_tool.excel_source import generate_md_files, read_template_config, verify_module_tree_stats
 from cosmic_tool.gen_spec import generate_spec, export_spec_template_md, fill_spec_md
 from cosmic_tool.gen_xlsx import generate_fpa_xlsx_from_md, generate_require_xlsx
 from cosmic_tool.gen_xlsx import init_fpa_template_md, ai_fill_fpa_md
@@ -316,15 +317,6 @@ def _ensure_basedata(excel_path: str, md_dir: str, meta_md: str, tree_md: str,
         logger.info("第1步: 生成功能清单模块树.md 和 文档元数据模板.md...")
         generate_md_files(excel_path, md_dir)
     verify_module_tree_stats(tree_md, tpl)
-
-
-def _write_fpa_summary(fpa_xlsx_path: str, output_md_path: str) -> None:
-    """读取 FPA Excel 核减后工作量列的求和，写入 MD 文件。"""
-    total = read_fpa_xlsx_sum(fpa_xlsx_path)
-    os.makedirs(os.path.dirname(output_md_path), exist_ok=True)
-    with open(output_md_path, 'w', encoding='utf-8') as f:
-        f.write("# FPA 核减后工作量\n\n")
-        f.write(f"FPA工作量（人/天）: {total}\n")
 
 
 def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
@@ -1197,29 +1189,33 @@ def main():
         # 数据源中间文件路径
         md_dir = os.path.join(out_dir, 'md')
         os.makedirs(md_dir, exist_ok=True)
+        tree_md = os.path.join(md_dir, '功能清单模块树.md')
         meta_md_tpl = os.path.join(md_dir, '文档元数据模板.md')
+
+        # 是否需要先生成数据源中间文件
+        needs_md = not (os.path.exists(meta_md_tpl) and os.path.exists(tree_md))
+        if needs_md:
+            logger.info("第1步: 生成功能清单模块树.md 和 文档元数据模板.md...")
+            generate_md_files(excel_path, md_dir)
+        else:
+            logger.info("数据源中间文件已存在，跳过生成")
+
+        # 设置 meta_md（优先 AI填充版，无则回退模板）
         meta_md = os.path.join(md_dir, 'AI填充文档元数据.md')
         if not os.path.exists(meta_md) and os.path.exists(meta_md_tpl):
-            meta_md = meta_md_tpl  # 无 AI填充版本时回退模板
+            meta_md = meta_md_tpl
+
+        # 从元数据解析输出文件名（此时 md 文件已存在）
         cosmic_template = _resolve_output_filename("6、项目功能点拆分表-元数据录入", cosmic_template)
         require_template = _resolve_output_filename("7、项目需求清单-元数据录入", require_template)
         doc_template = _resolve_output_filename("4、项目需求说明书-元数据录入", doc_template)
-        tree_md = os.path.join(md_dir, '功能清单模块树.md')
-        fpa_sum_md = os.path.join(md_dir, 'FPA工作量.md')
+        fpa_sum_md = os.path.join(md_dir, 'FPA工作量-计算结果.md')
         meta_filled_md = os.path.join(md_dir, 'AI填充文档元数据.md')
 
         # AI 配置
         api_key = args.api_key or load_api_key()
         model = args.model or load_model_name("deepseek-v4-flash")
         base_url = load_base_url()
-
-        # 是否需要先生成数据源中间文件
-        needs_md = not (os.path.exists(meta_md) and os.path.exists(tree_md))
-        if needs_md:
-            logger.info("第1步: 生成功能清单模块树.md 和 文档元数据模板.md...")
-            generate_md_files(excel_path, md_dir)
-        else:
-            logger.info("数据源中间文件已存在，跳过生成")
 
         # MD 生成后再检查一次（首次运行模板刚生成，AI填充版还未创建）
         if not os.path.exists(meta_md) and os.path.exists(meta_md_tpl):
@@ -1267,7 +1263,7 @@ def main():
             fpa_filled_md = os.path.join(md_dir, 'AI填充FPA.md')
             if not os.path.exists(fpa_template):
                 logger.info("第1步：FPA → 模板 MD...")
-                init_fpa_template_md(tree_md, meta_md, fpa_md)
+                init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
                 if api_key:
                     import shutil
                     shutil.copy2(fpa_md, fpa_filled_md)
@@ -1277,8 +1273,6 @@ def main():
                 fpa_src = fpa_filled_md if api_key else fpa_md
             fpa_template_file = fpa_src_template
             generate_fpa_xlsx_from_md(fpa_src, meta_md, fpa_template_file, fpa_template)
-            _write_fpa_summary(fpa_template, fpa_sum_md)
-
             # 读取核减后工作量（从 FPA Excel > 元数据 > 用户输入 > 默认值）
             fpa_reduced = _resolve_fpa_sum(fpa_sum_md)
 
@@ -1347,6 +1341,21 @@ def main():
 
             _write_combined_ai_log()
             _section("全流程完成")
+            # 输出汇总
+            _summary_files = [
+                ("FPA 工作量评估", fpa_template),
+                ("项目功能点拆分表", cosmic_template),
+                ("项目需求清单", require_template),
+                ("项目需求说明书", doc_template),
+            ]
+            print()
+            for _label, _path in _summary_files:
+                if os.path.exists(_path):
+                    _size = os.path.getsize(_path)
+                    print(f"  ✅ {_label}: {_path} ({_size/1024:.0f} KB)")
+                else:
+                    print(f"  ⏭️  {_label}: 跳过（已存在或未生成）")
+            print()
             return
 
         # --gen-basedata
@@ -1379,7 +1388,7 @@ def main():
             fpa_md = os.path.join(md_dir, 'FPA模板.md')
             fpa_filled_md = os.path.join(md_dir, 'AI填充FPA.md')
             logger.info("第1步: 生成 FPA 模板 MD...")
-            init_fpa_template_md(tree_md, meta_md, fpa_md)
+            init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
 
             if api_key:
                 logger.info("第2步: AI 填充 FPA 数据...")
@@ -1392,7 +1401,6 @@ def main():
 
             logger.info("第3步: 生成 FPA 工作量评估 Excel...")
             generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src_template, fpa_template)
-            _write_fpa_summary(fpa_template, fpa_sum_md)
             _write_combined_ai_log()
             logger.info(f"FPA工作量评估已生成: {fpa_template}")
             return

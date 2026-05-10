@@ -1,6 +1,11 @@
 {
   "permissions": {
+    "additionalDirectories": [
+      "F:\\mlt\\mlt-tests\\AI-Cosmic",
+      "F:\\mlt\\mlt-projects\\ai_cosmic"
+    ],
     "allow": [
+	      "Bash(python *)",
       "Bash(mkdir -p d:/mlt/ws_tool/help)",
       "Bash(mv d:/mlt/ws_tool/config/docx_style_reference.docx d:/mlt/ws_tool/help/)",
       "Bash(python -c ' *)",

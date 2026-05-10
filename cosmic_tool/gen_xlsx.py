@@ -276,13 +276,19 @@ def init_fpa_template_md(
     tree_md_path: str,
     meta_md_path: str,
     output_md_path: str,
+    summary_md_path: str = "",
 ) -> str:
-    """生成 FPA 模板 MD（规则骨架，F/G 列留空待 AI 填充）。"""
+    """生成 FPA 模板 MD（规则骨架，F/G 列留空待 AI 填充）。
+
+    Args:
+        summary_md_path: 非空时同步写入 FPA工作量-计算结果.md（调整值×要素数量 的求和）
+    """
     logger.info("生成 FPA 模板 MD...")
     meta = _load_meta_md(meta_md_path)
     rows = _load_module_rows(tree_md_path)
     fpa_rows = _build_fpa_rule_rows(rows, meta)
 
+    total = 0.0
     with open(output_md_path, 'w', encoding='utf-8') as f:
         f.write("# FPA 工作量评估\n\n")
         f.write(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
@@ -302,8 +308,20 @@ def init_fpa_template_md(
                 str(row["要素数量"]),
             ]
             f.write("| " + " | ".join(vals) + " |\n")
+            try:
+                total += float(row["调整值"]) * float(row["要素数量"])
+            except (ValueError, TypeError):
+                pass
 
     logger.info(f"FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
+
+    if summary_md_path:
+        os.makedirs(os.path.dirname(summary_md_path) or '.', exist_ok=True)
+        with open(summary_md_path, 'w', encoding='utf-8') as f:
+            f.write("# FPA 工作量\n\n")
+            f.write(f"FPA工作量（人/天）: {total}\n")
+        logger.info(f"FPA 工作量已写入: {summary_md_path} ({total})")
+
     return output_md_path
 
 
@@ -570,12 +588,17 @@ def generate_require_xlsx(
     seen_modules = set()
     seq = 0
 
+    from openpyxl.styles import Alignment
+    _center = Alignment(horizontal='center', vertical='center')
+
     for r in rows:
         key = (r["一级模块"], r["二级模块"], r["三级模块"])
         if key not in seen_modules:
             seen_modules.add(key)
             seq += 1
             row_idx = seq + 2
+            for col_idx in range(1, 10):
+                ws2.cell(row_idx, col_idx).alignment = _center
             ws2.cell(row_idx, 1, seq)
             ws2.cell(row_idx, 2, project_name)
             ws2.cell(row_idx, 3, subsystem)

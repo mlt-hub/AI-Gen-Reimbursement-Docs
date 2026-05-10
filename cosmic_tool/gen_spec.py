@@ -236,6 +236,8 @@ def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
                 start_cell = table.rows[start_row].cells[col_idx]
                 end_cell = table.rows[end_row].cells[col_idx]
                 start_cell.merge(end_cell)
+                # 合并后重新设置垂直居中（merge 会重置样式）
+                _set_cell_style(start_cell)
             start_row = end_row + 1
 
     insert_before_elem.addprevious(table._tbl)

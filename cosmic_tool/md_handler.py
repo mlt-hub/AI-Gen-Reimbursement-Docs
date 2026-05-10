@@ -336,3 +336,116 @@ def fill_md_with_ai(
     # Write filled MD
     export_filled_md(modules, merged, project_name, md_path)
     logger.info(f"MD已更新: {md_path}")
+
+
+def get_project_name_from_md(md_path: str) -> str:
+    """从 Markdown 中提取项目名称（首个含'需求'的标题）。"""
+    try:
+        with open(md_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception:
+        return ""
+
+    for m in re.finditer(r'^#{1,6}\s+(.+)$', content, re.MULTILINE):
+        text = m.group(1).strip()
+        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+        if '需' in text and '求' in text:
+            return text
+    for m in re.finditer(r'^#{1,2}\s+(.+)$', content, re.MULTILINE):
+        text = m.group(1).strip()
+        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+        if text:
+            return text
+    return ""
+
+
+def build_modules_from_md(md_path: str) -> list[FunctionModule]:
+    """从 Markdown 标题层级解析功能模块树（L1/L2/L3/功能过程）。"""
+    with open(md_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    headings: list[tuple[int, str, int]] = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        m = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+        if m:
+            level = len(m.group(1))
+            text = re.sub(r'\*\*(.+?)\*\*', r'\1', m.group(2)).strip()
+            headings.append((level, text, i))
+
+    if not headings:
+        logger.warning(f"Markdown文件中未找到标题: {md_path}")
+        return []
+
+    level_counts: dict[int, int] = {}
+    for h_level, _, _ in headings:
+        level_counts[h_level] = level_counts.get(h_level, 0) + 1
+
+    sorted_levels = sorted(level_counts.keys())
+    if len(sorted_levels) < 3:
+        logger.warning(f"Markdown中标题层级不足（{len(sorted_levels)}级），结果可能不完整")
+
+    lvl_map: dict[int, int] = {}
+    for i, lvl in enumerate(sorted_levels[:3], 1):
+        lvl_map[lvl] = i
+
+    modules: list[FunctionModule] = []
+    current_l1: str | None = None
+    current_l2: str | None = None
+    l3_processes: dict[str, list[str]] = {}
+    l3_descriptions: dict[str, list[str]] = {}
+    seen_names: dict[int, set[str]] = {1: set(), 2: set(), 3: set()}
+
+    for h_level, text, line_idx in headings:
+        mapped = lvl_map.get(h_level)
+        if mapped is None:
+            # 超过3级的作为功能过程
+            if current_l3:
+                l3_processes.setdefault(current_l3, []).append(text)
+            continue
+
+        if mapped == 1:
+            current_l1 = text
+            current_l2 = None
+            current_l3 = None
+            if text not in seen_names[1]:
+                seen_names[1].add(text)
+                modules.append(FunctionModule(name=text, level=1))
+        elif mapped == 2:
+            current_l2 = text
+            current_l3 = None
+            if text not in seen_names[2]:
+                seen_names[2].add(text)
+                modules.append(FunctionModule(name=text, level=2, parent=current_l1))
+        elif mapped == 3:
+            current_l3 = text
+            if text not in seen_names[3]:
+                seen_names[3].add(text)
+                modules.append(FunctionModule(name=text, level=3, parent=current_l2))
+            l3_processes.setdefault(current_l3, [])
+
+        # 收集 L3 描述（标题与下一个标题之间的文本）
+        if current_l3:
+            desc_parts: list[str] = []
+            for j in range(line_idx + 1, len(lines)):
+                nxt = lines[j].strip()
+                if nxt.startswith('#'):
+                    break
+                if nxt and not nxt.startswith('>') and not nxt.startswith('|'):
+                    desc_parts.append(nxt)
+            desc = ' '.join(desc_parts)[:500]
+            l3_descriptions.setdefault(current_l3, [])
+            l3_descriptions[current_l3].append(desc)
+
+    for m in modules:
+        if m.level == 3:
+            desc_list = l3_descriptions.get(m.name, [])
+            if desc_list:
+                m.description = '\n'.join(filter(None, desc_list))
+            m.children = l3_processes.get(m.name, [])
+
+    logger.info(f"从Markdown解析到模块层级: "
+                f"{len([m for m in modules if m.level==1])}个L1, "
+                f"{len([m for m in modules if m.level==2])}个L2, "
+                f"{len([m for m in modules if m.level==3])}个L3")
+    return modules
