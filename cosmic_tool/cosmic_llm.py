@@ -36,45 +36,6 @@ def _resolve_move_type(raw: str) -> tuple[str, bool]:
     # Completely unknown: default to E and flag
     return 'E', True
 
-SYSTEM_PROMPT = """你是COSMIC功能点拆分专家。你的任务是根据软件功能需求描述，生成标准的COSMIC功能点拆分。
-
-## COSMIC规则约束
-1. **每个功能过程由一系列数据移动组成**，每种数据移动记1CFP
-2. **数据移动类型**：
-   - E (Entry): 用户/系统输入数据，触发功能过程
-   - X (eXit): 系统输出数据给用户/系统
-   - R (Read): 系统从持久存储读取数据
-   - W (Write): 系统将数据写入持久存储
-3. **首步必为E**（Entry），末步必为W或X
-4. **每个功能过程的子过程 ≥ 2个**
-5. **每个数据组 ≥ 3个数据属性**（属性之间用顿号或逗号分隔）
-6. **功能用户格式**: "发起者：xxx|接收者：xxx"
-7. **触发事件**: 一般为"用户触发"；定时任务用"定时触发"
-8. **复用度**: 每个数据移动需标注复用度——"新增"（新开发的功能）、"复用"（已有功能复用了）、"利旧"（沿用旧系统功能不动）
-
-## 常见模式
-- **表单展示**：E(请求表单) → X(返回表单页面)
-- **查询列表**：E(提交查询条件) → R(读取数据) → X(返回列表)
-- **新增数据**：E(提交新增数据) → W(存储数据到数据库)
-- **删除数据**：E(提交删除指令) → W(从数据库删除)
-- **编辑数据**：E(进入编辑页面) → X(展示编辑表单)
-- **执行编辑保存**：E(提交修改数据) → W(更新数据库)
-- **导出数据**：E(提交导出请求) → R(读取数据) → X(生成导出文件)
-
-## 输出格式
-返回JSON数组，每项格式：
-{
-  "user": "发起者：操作员|接收者：地市后台",
-  "trigger": "用户触发",
-  "process": "功能过程名称",
-  "movements": [
-    {"sub_process": "子过程描述", "move_type": "E", "data_group": "数据组名", "data_attrs": "属性1、属性2、属性3", "reuse": "新增"},
-    ...
-  ]
-}
-"""
-
-
 def _build_user(module: FunctionModule, modules: list[FunctionModule],
                 initiator_rules: list[tuple[str, str]] | None = None,
                 receiver_rules: list[tuple[str, str]] | None = None,
@@ -342,7 +303,7 @@ def generate_cosmic_items(
         return []
 
     # Load config
-    from cosmic_tool.config_utils import load_user_defaults, load_initiator_rules, load_receiver_rules, load_max_tokens
+    from cosmic_tool.config_utils import load_user_defaults, load_initiator_rules, load_receiver_rules, load_max_tokens, load_ai_system_prompt
     user_default_initiator, user_default_receiver = load_user_defaults()
     user_initiator_rules = load_initiator_rules()
     user_receiver_rules = load_receiver_rules()
@@ -382,7 +343,7 @@ def generate_cosmic_items(
                 model=model,
                 max_tokens=max_tokens,
                 temperature=0.1,
-                system=SYSTEM_PROMPT + "\n\n## 现有参照示例\n" + _get_examples(),
+                system=load_ai_system_prompt("cosmic_split") + "\n\n## 现有参照示例\n" + _get_examples(),
                 messages=[{"role": "user", "content": prompt}]
             )
 

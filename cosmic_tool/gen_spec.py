@@ -365,6 +365,10 @@ def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
         logger.warning("AI生成需要 API Key，使用提示词原文")
         return prompt
 
+    from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt
+    max_tokens = load_max_tokens()
+    system_prompt = load_ai_system_prompt("docx_section")
+
     logger.info(f"AI 生成请求 [{tag}] 模型: {model}")
 
     # 保存提示词
@@ -391,8 +395,8 @@ def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
         client = anthropic.Anthropic(**client_kwargs)
         msg = client.messages.create(
             model=model or "deepseek-v4-flash",
-            max_tokens=1024,
-            system="你是一个项目需求文档编写助手。根据提示词生成一段通顺的中文描述，直接输出结果，不要输出其他内容。",
+            max_tokens=max_tokens,
+            system=system_prompt,
             messages=[{"role": "user", "content": prompt}],
         )
         # 取最后一个 TextBlock（跳过 ThinkingBlock）
@@ -638,6 +642,13 @@ def generate_spec(
         raw_val = filled_sections.get(placeholder, "") or meta.get(placeholder, "")
         if not raw_val:
             continue
+
+        # 文档日期：Excel 序列号 → yyyy年MM月
+        if placeholder == "文档日期" and raw_val.isdigit():
+            from datetime import datetime, timedelta
+            dt = datetime(1899, 12, 30) + timedelta(days=int(raw_val))
+            raw_val = dt.strftime("%Y年%m月")
+
         raw_val = replace_placeholders(raw_val, project_info, fpa_meta)
         raw_val = raw_val.replace("【三级模块整体功能描述】", "；".join(all_module_descs))
         raw_val = raw_val.replace("${三级模块整体功能描述}", "；".join(all_module_descs))

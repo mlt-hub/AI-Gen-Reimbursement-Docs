@@ -333,7 +333,17 @@ def _load_mapping_rules(mapping_name: str) -> dict | None:
         return None
 
 
-_AI_HEADING_SYSTEM_PROMPT = """你是软件需求文档结构分析专家。你需要从需求文档的段落中推断出功能模块的三级层次结构。
+def _load_heading_system_prompt() -> str:
+    """加载标题解析的 system prompt（优先从配置读取）。"""
+    try:
+        from cosmic_tool.config_utils import load_ai_system_prompt
+        prompt = load_ai_system_prompt("heading_parse")
+        if prompt:
+            return prompt
+    except Exception:
+        pass
+    # 内嵌默认值（配置不存在时的保底）
+    return """你是软件需求文档结构分析专家。你需要从需求文档的段落中推断出功能模块的三级层次结构。
 
 ## 任务
 给定一份软件需求说明书（.docx）中的所有段落（包含Word样式ID和文本内容），你需要推断出功能模块的三级层次：
@@ -486,7 +496,7 @@ def ai_build_module_tree(
             model=model,
             max_tokens=max_tokens,
             temperature=0.1,
-            system=_AI_HEADING_SYSTEM_PROMPT,
+            system=_load_heading_system_prompt(),
             messages=[{"role": "user", "content": prompt}]
         )
 

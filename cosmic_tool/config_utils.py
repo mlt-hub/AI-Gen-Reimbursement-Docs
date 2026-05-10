@@ -190,6 +190,21 @@ def load_max_tokens(default: int = 2000) -> int:
     return default
 
 
+def load_ai_system_prompt(name: str) -> str:
+    """从 ai_system_prompts_config.yaml 读取指定场景的 system prompt。"""
+    yaml_path = _config_dir() / "ai_system_prompts_config.yaml"
+    if not yaml_path.exists():
+        return ""
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f)
+        prompts = cfg.get("ai_prompts", {})
+        return prompts.get(name, {}).get("system", "")
+    except Exception:
+        return ""
+
+
 def _migrate_config() -> None:
     """自动迁移配置：将模板中的新键追加到用户配置文件末尾。
 

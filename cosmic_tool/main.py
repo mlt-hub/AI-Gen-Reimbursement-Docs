@@ -438,6 +438,10 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
     except Exception as e:
         logger.debug(f"保存提示词失败: {e}")
 
+    from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt
+    max_tokens = load_max_tokens()
+    system_prompt = load_ai_system_prompt("meta_fill")
+
     try:
         import anthropic
         client_kwargs = {"api_key": api_key}
@@ -446,8 +450,8 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
         client = anthropic.Anthropic(**client_kwargs)
         msg = client.messages.create(
             model=model or "deepseek-v4-flash",
-            max_tokens=1024,
-            system="你是一个项目需求文档编写助手。根据提示词生成一段通顺的中文描述，直接输出结果。",
+            max_tokens=max_tokens,
+            system=system_prompt,
             messages=[{"role": "user", "content": prompt}],
         )
         resp = ""

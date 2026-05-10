@@ -127,9 +127,10 @@ def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
         if base_url:
             client_kwargs["base_url"] = base_url
         client = anthropic.Anthropic(**client_kwargs)
+        from cosmic_tool.config_utils import load_max_tokens
         msg = client.messages.create(
             model=model or "deepseek-v4-flash",
-            max_tokens=2048,
+            max_tokens=load_max_tokens(),
             system=system_prompt,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -231,7 +232,8 @@ def _ai_fill_fpa(
         logger.warning("未设置 API Key，跳过 AI 填充 FPA")
         return fpa_rows
 
-    system_prompt = (
+    from cosmic_tool.config_utils import load_ai_system_prompt
+    system_prompt = load_ai_system_prompt("fpa_eval") or (
         "你是一个 FPA 功能点评估助手。根据功能过程描述和类型，"
         "从判定原则中选择最匹配的一项，并展开计算依据说明。"
         "直接输出结果，不要输出其他内容。"
