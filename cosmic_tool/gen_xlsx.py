@@ -20,23 +20,9 @@ logger = logging.getLogger('cosmic_tool.gen_xlsx')
 # ============================================================
 
 def _load_meta_md(meta_md_path: str) -> dict:
-    """解析文档元数据.md 为扁平字典。"""
-    meta = {}
-    current_sheet = ""
-    with open(meta_md_path, encoding='utf-8') as f:
-        for line in f:
-            line = line.rstrip()
-            m = re.match(r'^##\s+(.+)$', line)
-            if m:
-                current_sheet = m.group(1).strip()
-                continue
-            if '|' in line and line.startswith('|'):
-                cells = parse_md_table_row(line, min_cols=2)
-                if cells is not None and cells[0] and cells[1]:
-                    meta[cells[0]] = cells[1]
-                    if current_sheet:
-                        meta[f"{current_sheet}.{cells[0]}"] = cells[1]
-    return meta
+    """解析文档元数据.md 为扁平字典。支持跨多行的表格值。"""
+    from cosmic_tool.gen_spec import _parse_meta_md
+    return _parse_meta_md(meta_md_path)
 
 
 def _load_module_rows(tree_md_path: str) -> list[dict]:
@@ -254,39 +240,30 @@ def _ai_fill_fpa(
         prompt = (
             f"功能过程描述：{row['计算依据说明']}\n\n"
             f"判定原则列表：\n{judgement_rules}\n\n"
-            f"请按以下格式输出（直接输出，不要解释）：\n"
-            f"类型：EI/EO/EQ/ILF/EIF\n"
-            f"计算依据归类：<选中的判定原则>\n"
-            f"计算依据说明：<展开的详细说明，记录事件流、业务规则、业务数据、非功能性规约、表、服务、接口等关键信息>\n"
-            f"\n"
-            f"参考示例（计算依据说明的格式）：\n"
-            f"示例1：【地市后台】垂直行业管理-垂直行业列表界面新增，具体如下：\n"
-            f"1、新增垂直行业列表界面，包含搜索（垂直行业名称、查询按钮、重置按钮）、添加垂直行业按钮\n"
-            f"2、列表（序号、垂直行业名称、添加时间、状态、操作）\n"
-            f"3、列表翻页功能\n"
-            f"4、调用垂直行业列表数据展示接口\n"
-            f"示例2：【地市后台】垂直行业管理-垂直行业列表界面数据展示接口开发，具体如下：\n"
-            f"1、垂直行业列表界面数据展示接口开发\n"
-            f"2、将数据返回至前端进行展示\n"
-            f"示例3：【地市后台】垂直行业管理-垂直行业列表新增界面开发，具体如下：\n"
-            f"1、点击添加垂直行业按钮跳转至添加界面，要素包含垂直行业名称、确认按钮、返回按钮\n"
-            f"2、提交时校验页面必填项\n"
-            f"3、点击返回按钮关闭弹窗\n"
-            f"4、调用垂直行业列表数据新增接口"
+            f"请直接输出JSON，不要输出其他内容：\n"
+            f'{{"type":"EI/EO/EQ/ILF/EIF","classification_basis":"<从判定原则列表中逐字选中一条>","explanation":"<展开的说明，包含触发事件、事件流、业务规则、业务数据、涉及表/文件/接口>"}}'
         )
 
         logger.info(f"  FPA AI 填充 [{idx}/{total}] {row['新增/修改功能点'][:40]}...")
         resp = _call_llm(prompt, system_prompt, api_key, model, base_url, tag=row_tag)
+        import json as _json
         if resp:
-            m_type = re.search(r'类型[：:]\s*(EI|EO|EQ|ILF|EIF)', resp)
-            m_cat = re.search(r'计算依据归类[：:]\s*(.+?)(?:\n|$)', resp)
-            m_desc = re.search(r'计算依据说明[：:]\s*(.+)', resp, re.DOTALL)
-            if m_type:
-                row["类型"] = m_type.group(1).strip()
-            if m_cat:
-                row["计算依据归类"] = m_cat.group(1).strip()
-            if m_desc:
-                row["计算依据说明"] = m_desc.group(1).strip()
+            try:
+                _data = _json.loads(resp)
+                if isinstance(_data, list):
+                    _data = _data[0]
+                if _data.get("type"):
+                    row["类型"] = _data["type"].strip()
+                if _data.get("classification_basis"):
+                    row["计算依据归类"] = _data["classification_basis"].strip()
+                if _data.get("explanation"):
+                    exp = _data["explanation"].strip()
+                    exp = exp.replace("具体如下", "具体如下" + chr(10))
+                    exp = exp.replace("；", "；" + chr(10))
+                    exp = exp.replace("事件流：", "事件流：" + chr(10))
+                    row["计算依据说明"] = exp
+            except Exception:
+                pass
 
     return fpa_rows
 
@@ -321,7 +298,7 @@ def init_fpa_template_md(
                 row["新增/修改功能点"].replace('|', '\\|'),
                 row["类型"],
                 row["计算依据归类"],
-                row["计算依据说明"].replace('|', '\\|').replace('\n', ' '),
+                row["计算依据说明"].replace("|", chr(92) + "|").replace(chr(10), " "),
                 row["变更状态"],
                 str(row["调整值"]),
                 str(row["要素数量"]),
@@ -403,7 +380,7 @@ def ai_fill_fpa_md(
                 row["新增/修改功能点"].replace('|', '\\|'),
                 row["类型"],
                 row["计算依据归类"],
-                row["计算依据说明"].replace('|', '\\|').replace('\n', ' '),
+                row["计算依据说明"].replace('|', '\\|').replace(chr(10), ' '),
                 row["变更状态"],
                 str(row["调整值"]),
                 str(row["要素数量"]),
@@ -484,7 +461,11 @@ def generate_fpa_xlsx_from_md(
         ws.cell(excel_row, 4, fpa_row["新增/修改功能点"])
         ws.cell(excel_row, 5, fpa_row["类型"])
         ws.cell(excel_row, 6, fpa_row["计算依据归类"])
-        ws.cell(excel_row, 7, fpa_row["计算依据说明"])
+        exp_val = fpa_row["计算依据说明"]
+        exp_val = exp_val.replace("具体如下", "具体如下" + chr(10))
+        exp_val = exp_val.replace("；", "；" + chr(10))
+        exp_val = exp_val.replace("事件流：", "事件流：" + chr(10))
+        ws.cell(excel_row, 7, exp_val)
         ws.cell(excel_row, 8, fpa_row["变更状态"])
         if base_formula:
             formula = base_formula.replace("E3", f"E{excel_row}")                 .replace("H3", f"H{excel_row}").replace("I3", f"I{excel_row}")                 .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
@@ -517,14 +498,15 @@ def generate_fpa_xlsx_from_md(
                 c.number_format = fmt['number_format']
             if col_idx in (4, 7):
                 orig_align = fmt.get('alignment')
+                h = 'left' if col_idx == 7 else (orig_align.horizontal or 'center')
                 if orig_align:
                     c.alignment = Alignment(
                         wrap_text=True,
                         vertical='center',
-                        horizontal=orig_align.horizontal or 'center',
+                        horizontal=h,
                     )
                 else:
-                    c.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
+                    c.alignment = Alignment(wrap_text=True, vertical='center', horizontal=h)
             else:
                 if fmt.get('alignment'):
                     c.alignment = fmt['alignment']
