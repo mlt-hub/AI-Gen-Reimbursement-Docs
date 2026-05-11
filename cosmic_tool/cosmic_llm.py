@@ -231,8 +231,10 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
         if '```' in text:
             text = text.split('```')[0]
 
-    # Find JSON array in text
-    start = text.find('[')
+    # Find JSON array in text（找 [ 后紧跟 { 的位置，避免在思考文本中匹配到 [）
+    start = text.find('[{')
+    if start == -1:
+        start = text.find('[')
     end = text.rfind(']')
     if start == -1 or end == -1:
         raise ValueError(f"No JSON array found in response for module: {module_name}")
@@ -354,7 +356,7 @@ def generate_cosmic_items(
         return []
 
     # Load config
-    from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt, load_flow_max_ai
+    from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt, load_ai_examples, load_flow_max_ai
     max_tokens = load_max_tokens()
     logger.info(f"MAX_TOKENS = {max_tokens}")
 
@@ -407,7 +409,7 @@ def generate_cosmic_items(
                 model=model,
                 max_tokens=max_tokens,
                 temperature=0.1,
-                system=load_ai_system_prompt("cosmic_split") + "\n\n## 现有参照示例\n" + _get_examples(),
+                system=load_ai_system_prompt("cosmic_split") + "\n\n" + load_ai_examples("cosmic_split"),
                 messages=[{"role": "user", "content": prompt}]
             )
 
@@ -543,63 +545,6 @@ def _save_ai_response(l3: str, l2: str, l1: str, text: str, reasoning: str = "")
         f.write(text)
 
     logger.info(f"AI响应已保存: {filepath}")
-
-
-def _get_examples() -> str:
-    """Return few-shot examples from the existing spreadsheet."""
-    return """参考以下COSMIC拆分示例的格式：
-
-示例1：列表查询（3步：E→R→X）
-- 功能过程：融合宽带订单列表
-- 用户：发起者：操作员|接收者：地市后台
-- 触发事件：用户触发
-- 数据移动：
-  [E] 点击进入页面获取列表 → 数据组：订单列表请求 → 数据属性：用户标识、分页参数
-  [R] 读取融合宽带订单列表数据 → 数据组：融合宽带订单列表 → 数据属性：订单编号、客户号码、业务名称、业务编码、分销信息、订单状态、下单时间
-  [X] 融合宽带订单列表展示 → 数据组：列表反映 → 数据属性：产品数据、字段排序、列表组合
-
-示例2：保存数据（2步：E→W）
-- 功能过程：保存活动
-- 用户：发起者：操作员|接收者：地市后台
-- 触发事件：用户触发
-- 数据移动：
-  [E] 点击提交完整页面配置数据 → 数据组：页面配置数据 → 数据属性：页面ID、组件列表、配置参数
-  [W] 存储页面配置 → 数据组：页面配置表 → 数据属性：更新所有组件及配置
-
-示例3：带读取的编辑（3步：E→R→X）
-- 功能过程：小福包产品编辑页面
-- 用户：发起者：操作员|接收者：地市后台
-- 触发事件：用户触发
-- 数据移动：
-  [E] 点击小福包产品编辑标签进入编辑页面 → 数据组：编辑页面获取指令 → 数据属性：小福包产品ID、用户ID
-  [R] 读取小福包产品数据 → 数据组：小福包产品表 → 数据属性：小福包名称、编码、业务描述、子商品信息
-  [X] 渲染展示小福包编辑页面 → 数据组：小福包产品编辑表 → 数据属性：小福包名称、编码、业务描述、子商品信息
-
-示例4：删除（2步：E→W）
-- 功能过程：删除图片轮播组件
-- 用户：发起者：操作员|接收者：地市后台
-- 触发事件：用户触发
-- 数据移动：
-  [E] 点击删除轮播组件 → 数据组：删除指令 → 数据属性：组件ID、组件数据、用户ID
-  [W] 删除轮播图组件数据 → 数据组：轮播组件列表 → 数据属性：组件ID、选择海报、自动轮播、轮播圆点、图片高度
-
-示例5：定时同步（3步：E→R→W）
-- 功能过程：小福包产品数据同步
-- 用户：发起者：操作员|接收者：地市后台
-- 触发事件：定时触发
-- 数据移动：
-  [E] 定时凌晨2点更新小福包产品列表数据 → 数据组：列表更新指令 → 数据属性：小福包名称、编码
-  [R] 调用小福包产品列表查询接口获取产品列表数据 → 数据组：小福包产品表格 → 数据属性：ID、小福包标识、类型、名称、费用
-  [W] 解析并对本地表执行新增/更新/删除 → 数据组：列表响应 → 数据属性：产品信息、字段排序、列表组合
-
-示例6：简单表单（2步：E→X）
-- 功能过程：获取装修管理基础配置页面
-- 用户：发起者：操作员|接收者：地市后台
-- 触发事件：用户触发
-- 数据移动：
-  [E] 点击获取基础配置页面数据 → 数据组：基础配置表单请求 → 数据属性：页面名称、背景颜色、分享设置
-  [X] 返回展示基础配置页面 → 数据组：基础配置表单响应 → 数据属性：页面ID、页面名称、背景颜色、分享设置、主标题、副标题、缩略图
-"""
 
 
 def save_to_json(items: list[CosmicItem], output_path: str) -> None:

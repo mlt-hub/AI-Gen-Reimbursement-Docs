@@ -321,6 +321,19 @@ def _ensure_basedata(excel_path: str, md_dir: str, meta_md: str, tree_md: str,
 
 def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
     """从 FPA工作量.md 读取值作为默认，提示用户输入FPA核减后工作量。"""
+    from cosmic_tool.config_utils import load_fpa_reduced_use_workload
+    if load_fpa_reduced_use_workload():
+        import re
+        if os.path.exists(fpa_sum_md_path):
+            with open(fpa_sum_md_path, encoding='utf-8') as f:
+                for line in f:
+                    m = re.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', line)
+                    if m:
+                        val = float(m.group(1))
+                        logger.info(f"FPA核减后工作量: {val}（直接用 FPA 工作量）")
+                        return val
+        return 0
+
     import re
     md_val = 0.0
     if os.path.exists(fpa_sum_md_path):
@@ -351,7 +364,7 @@ def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
 
     msg = "未输入 FPA 核减后的工作量，CFP 数量将不受限制"
     logger.warning(msg)
-    print(f"\n⚠ {msg}")
+    print(f"\n{msg}")
     return 0
 
 
@@ -1341,6 +1354,12 @@ def main():
 
             _write_combined_ai_log()
             _section("全流程完成")
+            # 提示音
+            try:
+                import winsound
+                winsound.MessageBeep()
+            except Exception:
+                print('', end='', flush=True)
             # 输出汇总
             _summary_files = [
                 ("FPA 工作量评估", fpa_template),

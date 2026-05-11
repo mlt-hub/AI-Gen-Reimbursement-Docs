@@ -24,3 +24,6 @@ enable_ai_generate_cosmic: true
 # docx 解析方式（两都启用时优先用样式法）
 docx_parse_by_template_style: true      # 模板样式法：按 word_template.docx 的样式匹配层级
 docx_parse_by_marker: true     # 标记法：按 ###level:strategy### 标记解析层级
+
+# FPA 核减后的工作量是否直接用 FPA 工作量的值（false=由用户输入确认）
+fpa_reduced_use_workload: false

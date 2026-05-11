@@ -190,6 +190,21 @@ def load_flow_max_ai(flow_name: str) -> int:
     return 0
 
 
+
+def load_fpa_reduced_use_workload() -> bool:
+    """读取 fpa_reduced_use_workload，true 时直接用 FPA 工作量值。"""
+    yaml_path = _config_dir() / "system_config.yaml"
+    if yaml_path.exists():
+        try:
+            import yaml
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            return bool(cfg.get('fpa_reduced_use_workload', False))
+        except Exception:
+            pass
+    return False
+
+
 def load_max_ai_l3_modules(default: int = 0) -> int:
     """读取 max_ai_l3_modules，0=不限制。"""
     yaml_path = _config_dir() / "system_config.yaml"
@@ -218,6 +233,25 @@ def load_ai_system_prompt(name: str) -> str:
         return prompts.get(name, {}).get("system", "")
     except Exception:
         return ""
+
+
+def load_ai_examples(name: str) -> str:
+    """从 ai_system_prompts_config.yaml 读取指定场景的示例。"""
+    yaml_path = _config_dir() / "ai_system_prompts_config.yaml"
+    if not yaml_path.exists():
+        return ""
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f)
+        val = cfg.get("ai_prompts", {}).get(name, {}).get("examples", "")
+        if isinstance(val, str):
+            return val
+        return ""
+    except Exception:
+        return ""
+
+
 
 
 def _migrate_config() -> None:
@@ -306,6 +340,7 @@ def _migrate_config() -> None:
                 logger.info(f"配置迁移: {name} 新增 {len(example_keys)} 个配置项")
         except Exception as e:
             logger.debug(f"配置迁移跳过 {name}: {e}")
+
 
 
 def load_business_config() -> dict:

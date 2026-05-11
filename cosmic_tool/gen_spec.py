@@ -189,7 +189,7 @@ def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
     hdr = table.rows[0].cells
-    for i, t in enumerate(["入口", "一级功能模块名称", "二级功能模块名称", "三级功能模块名称"]):
+    for i, t in enumerate(["入口", "一级功能模块", "二级功能模块", "三级功能模块"]):
         hdr[i].text = t
         for p in hdr[i].paragraphs:
             for run in p.runs:
@@ -236,7 +236,11 @@ def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
                 start_cell = table.rows[start_row].cells[col_idx]
                 end_cell = table.rows[end_row].cells[col_idx]
                 start_cell.merge(end_cell)
-                # 合并后重新设置垂直居中（merge 会重置样式）
+                # 合并后删除多余空段落，保留第一个
+                while len(start_cell.paragraphs) > 1:
+                    p = start_cell.paragraphs[-1]._element
+                    p.getparent().remove(p)
+                # 合并后重新设置居中（merge 会重置样式）
                 _set_cell_style(start_cell)
             start_row = end_row + 1
 
@@ -385,7 +389,8 @@ def _replace_paragraph_text(doc: Document, text_fragment: str, new_text: str):
 
 
 def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
-                      base_url: str = "", tag: str = "") -> str:
+                      base_url: str = "", tag: str = "",
+                      prompt_key: str = "metadata_gen") -> str:
     """调用 AI 生成文本。"""
     if not api_key:
         logger.warning("AI生成需要 API Key，使用提示词原文")
@@ -393,7 +398,7 @@ def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
 
     from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt
     max_tokens = load_max_tokens()
-    system_prompt = load_ai_system_prompt("metadata_gen")
+    system_prompt = load_ai_system_prompt(prompt_key)
 
     logger.info(f"AI 生成请求 [{tag}] 模型: {model}")
 
@@ -667,7 +672,8 @@ def generate_spec(
         raw_val = raw_val.replace("${功能过程描述}", "；".join(all_proc_descs))
         clean_val, needs_ai = strip_ai_marker(raw_val)
         if needs_ai and api_key:
-            final_val = _call_ai_for_text(clean_val, api_key, model, base_url, tag=f"docx_{placeholder}")
+            prompt_key = "reliability_desc" if placeholder == "调整因子中的可靠性描述" else "metadata_gen"
+            final_val = _call_ai_for_text(clean_val, api_key, model, base_url, tag=f"docx_{placeholder}", prompt_key=prompt_key)
         else:
             final_val = clean_val
         if not final_val:

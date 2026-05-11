@@ -178,7 +178,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict:
                                  ("${工单内容}", project_info.get("工单内容", "")),
                                  ("${子系统（模块）}", fpa_meta.get("子系统（模块）", ""))]:
                     v = v.replace(ph, src)
-                val_escaped = v.replace('|', '\\|')
+                val_escaped = v.replace('|', '\\|').replace('\n', ' ').replace('\r', ' ')
                 f.write(f"| {key} | {val_escaped} |\n")
             f.write("\n")
 

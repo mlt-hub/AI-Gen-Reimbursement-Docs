@@ -255,7 +255,8 @@ def _ai_fill_fpa(
                 if _data.get("type"):
                     row["类型"] = _data["type"].strip()
                 if _data.get("classification_basis"):
-                    row["计算依据归类"] = _data["classification_basis"].strip()
+                    import re as _cr
+                    row["计算依据归类"] = _cr.sub(r'\)\s+', ')', _data["classification_basis"].strip())
                 if _data.get("explanation"):
                     exp = _data["explanation"].strip()
                     exp = exp.replace("具体如下", "具体如下" + chr(10))
@@ -462,9 +463,20 @@ def generate_fpa_xlsx_from_md(
         ws.cell(excel_row, 5, fpa_row["类型"])
         ws.cell(excel_row, 6, fpa_row["计算依据归类"])
         exp_val = fpa_row["计算依据说明"]
-        exp_val = exp_val.replace("具体如下", "具体如下" + chr(10))
-        exp_val = exp_val.replace("；", "；" + chr(10))
+        # 换行格式化（空一行）
+        import re as _nl
+        exp_val = exp_val.replace("具体如下", "具体如下" + chr(10) + chr(10))
+        exp_val = exp_val.replace("；", "；" + chr(10) + chr(10))
         exp_val = exp_val.replace("事件流：", "事件流：" + chr(10))
+        exp_val = exp_val.replace("业务规则", chr(10) + "业务规则")
+        exp_val = exp_val.replace("业务数据", chr(10) + "业务数据")
+        exp_val = exp_val.replace("涉及表", chr(10) + "涉及表")
+        exp_val = exp_val.replace("涉及服务", chr(10) + "涉及服务")
+        exp_val = exp_val.replace("涉及接口", chr(10) + "涉及接口")
+        # 数字编号换行：1. xxx → 换行 + 1. xxx
+        exp_val = _nl.sub(r'(?<=\S)\s+(?=\d+\.)', chr(10), exp_val)
+        # 去除每行开头的多余空格
+        exp_val = _nl.sub(r'^[	 ]+', '', exp_val, flags=_nl.MULTILINE)
         ws.cell(excel_row, 7, exp_val)
         ws.cell(excel_row, 8, fpa_row["变更状态"])
         if base_formula:
@@ -592,6 +604,10 @@ def generate_require_xlsx(
     from openpyxl.styles import Alignment
     _center = Alignment(horizontal='center', vertical='center')
 
+    # 保存模板第2行（表头）的边框样式
+    import copy as _cpy
+    _tmpl_border = _cpy.copy(ws2.cell(2, 1).border)
+
     for r in rows:
         key = (r["一级模块"], r["二级模块"], r["三级模块"])
         if key not in seen_modules:
@@ -599,7 +615,9 @@ def generate_require_xlsx(
             seq += 1
             row_idx = seq + 2
             for col_idx in range(1, 10):
-                ws2.cell(row_idx, col_idx).alignment = _center
+                c = ws2.cell(row_idx, col_idx)
+                c.alignment = _center
+                c.border = _tmpl_border
             ws2.cell(row_idx, 1, seq)
             ws2.cell(row_idx, 2, project_name)
             ws2.cell(row_idx, 3, subsystem)
@@ -623,13 +641,13 @@ def generate_require_xlsx(
     if seq > 0:
         from openpyxl.styles import Alignment
         ws2.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
-        ws2.cell(1, 1).alignment = Alignment(horizontal='center', vertical='center')
+        ws2.cell(1, 1).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    # 合并相同值的列：B(项目名称), C(子系统), D(一级模块)
-    for col_idx in [2, 3, 4]:
+    # 合并相同值的列：B(项目名称), C(子系统), D(一级模块), E(二级模块)
+    for col_idx in [2, 3, 4, 5]:
         i = 0
         while i < len(data_rows_data):
-            val_key = ["project_name", "subsystem", "module_l1"][col_idx - 2]
+            val_key = ["project_name", "subsystem", "module_l1", "module_l2"][col_idx - 2]
             curr_val = data_rows_data[i][val_key]
             j = i
             while j < len(data_rows_data) and data_rows_data[j][val_key] == curr_val:
@@ -642,6 +660,7 @@ def generate_require_xlsx(
                     end_row=data_rows_data[j - 1]["row"],
                     end_column=col_idx
                 )
+                ws2.cell(data_rows_data[i]["row"], col_idx).border = _tmpl_border
             i = j
 
     # 合并送审工作量(H/8列)和送审功能点(I/9列) — 所有行相同值
@@ -652,12 +671,14 @@ def generate_require_xlsx(
             end_row=data_rows_data[-1]["row"],
             end_column=8
         )
+        ws2.cell(data_rows_data[0]["row"], 8).border = _tmpl_border
         ws2.merge_cells(
             start_row=data_rows_data[0]["row"],
             start_column=9,
             end_row=data_rows_data[-1]["row"],
             end_column=9
         )
+        ws2.cell(data_rows_data[0]["row"], 9).border = _tmpl_border
 
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     wb.save(output_path)
