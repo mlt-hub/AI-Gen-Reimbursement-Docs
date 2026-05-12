@@ -449,6 +449,9 @@ def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
         except Exception as e:
             logger.debug(f"保存响应失败: {e}")
 
+        # 归一化连续空行：3+换行 → 2换行
+        import re as _rn
+        resp_text = _rn.sub(r'\n{3,}', '\n\n', resp_text)
         logger.info(f"AI 生成完成 [{tag}] 长度: {len(resp_text)} 字")
         return resp_text
     except Exception as e:

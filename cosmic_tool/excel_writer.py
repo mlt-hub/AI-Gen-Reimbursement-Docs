@@ -106,10 +106,16 @@ def write_to_template(
     for mr_str in merged_to_remove:
         ws.unmerge_cells(mr_str)
 
-    # 2. Clear cell values
+    # 2. Clear cell values and styles
+    from openpyxl.styles import Font, PatternFill, Border, Alignment
     for row in ws.iter_rows(min_row=6, max_row=ws.max_row, min_col=1, max_col=13):
         for cell in row:
             cell.value = None
+            cell.font = Font()
+            cell.fill = PatternFill(fill_type=None)
+            cell.border = Border()
+            cell.alignment = Alignment()
+            cell.number_format = 'General'
 
     # 3. Reset CFP column fill to none for non-reference rows (template may have green in unused rows)
     for row_num in range(7, ws.max_row + 1):
@@ -231,11 +237,25 @@ def write_to_template(
             _apply_style(cell, style)
         logger.debug(f"Restored footer note at row {note_row}")
 
+    # 合并后补回边框
+    for row_num in range(start_row, start_row + total_rows):
+        for col_idx in range(1, 14):
+            ws.cell(row=row_num, column=col_idx).border = tmpl_format_row6[col_idx]['border']
+
     # --- Apply warning indicators (after merges, so they don't get overwritten) ---
+    from cosmic_tool.config_utils import load_cosmic_warn_marker
+    _warn_enabled = load_cosmic_warn_marker()
+    if not _warn_enabled:
+        _warn_marker_disabled_skip = True
+    else:
+        _warn_marker_disabled_skip = False
+
     _WARN_FILL = PatternFill(start_color='FFFFF2CC', end_color='FFFFF2CC', fill_type='solid')
     for i, row_data in enumerate(all_rows):
         row_num = start_row + i
         row_warnings = row_data.get('warnings', [])
+        if _warn_marker_disabled_skip:
+            row_warnings = []
         move_flagged = row_data.get('move_type_flagged', False)
 
         if row_warnings:

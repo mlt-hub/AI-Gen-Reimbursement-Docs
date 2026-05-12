@@ -239,9 +239,9 @@ def _ai_fill_fpa(
         row_tag = f"fpa_{row['类型']}_{row['新增/修改功能点'][:30]}"
         prompt = (
             f"功能过程描述：{row['计算依据说明']}\n\n"
-            f"判定原则列表：\n{judgement_rules}\n\n"
+            f"判定原则列表（必须从以下列表中逐字复制一条，不得修改任何字符）：\n{judgement_rules}\n\n"
             f"请直接输出JSON，不要输出其他内容：\n"
-            f'{{"type":"EI/EO/EQ/ILF/EIF","classification_basis":"<从判定原则列表中逐字选中一条>","explanation":"<展开的说明，包含触发事件、事件流、业务规则、业务数据、涉及表/文件/接口>"}}'
+            f'{{"type":"EI/EO/EQ/ILF/EIF","classification_basis":"<从上述列表中逐字复制一条>","explanation":"<展开的说明，包含触发事件、事件流、业务规则、业务数据、涉及表/文件/接口>"}}'
         )
 
         logger.info(f"  FPA AI 填充 [{idx}/{total}] {row['新增/修改功能点'][:40]}...")
@@ -256,7 +256,14 @@ def _ai_fill_fpa(
                     row["类型"] = _data["type"].strip()
                 if _data.get("classification_basis"):
                     import re as _cr
-                    row["计算依据归类"] = _cr.sub(r'\)\s+', ')', _data["classification_basis"].strip())
+                    _val = _data["classification_basis"].strip()
+                    # 尝试从判定原则列表中逐字匹配
+                    for _rule in judgement_rules.split('\n'):
+                        _rule = _rule.strip()
+                        if _rule and _val in _rule or _rule in _val:
+                            _val = _rule
+                            break
+                    row["计算依据归类"] = _val
                 if _data.get("explanation"):
                     exp = _data["explanation"].strip()
                     exp = exp.replace("具体如下", "具体如下" + chr(10))
@@ -392,6 +399,23 @@ def ai_fill_fpa_md(
     return fpa_md_path
 
 
+
+def _format_fpa_explanation(text: str) -> str:
+    """格式化 FPA 计算依据说明：加换行排版，不改变原文内容。"""
+    import re as _re
+    text = text.replace("具体如下", "具体如下" + chr(10))
+    text = text.replace("；", "；" + chr(10))
+    text = text.replace("事件流：", "事件流：" + chr(10))
+    text = text.replace("业务规则", chr(10) + "业务规则")
+    text = text.replace("业务数据", chr(10) + "业务数据")
+    text = text.replace("涉及表", chr(10) + "涉及表")
+    text = text.replace("涉及服务", chr(10) + "涉及服务")
+    text = text.replace("；涉及接口", "；" + chr(10) + "涉及接口")
+    text = _re.sub(_re.compile(r"(?<=\S)\s+(?=\d+\.)"), chr(10), text)
+    text = _re.sub(_re.compile(r"^[	 ]+", _re.MULTILINE), "", text)
+    text = _re.sub(_re.compile(chr(10) + "{3,}"), chr(10) + chr(10), text)
+    return text
+
 def generate_fpa_xlsx_from_md(
     fpa_md_path: str,
     meta_md_path: str,
@@ -456,28 +480,16 @@ def generate_fpa_xlsx_from_md(
     # 写入数据
     for i, fpa_row in enumerate(fpa_rows):
         excel_row = i + 3
-        ws.cell(excel_row, 1, fpa_row["序号"])
+        try:
+            ws.cell(excel_row, 1, int(fpa_row["序号"]))
+        except (ValueError, TypeError):
+            ws.cell(excel_row, 1, fpa_row["序号"])
         ws.cell(excel_row, 2, fpa_row["子系统(模块)"])
         ws.cell(excel_row, 3, fpa_row["资产标识"])
         ws.cell(excel_row, 4, fpa_row["新增/修改功能点"])
         ws.cell(excel_row, 5, fpa_row["类型"])
         ws.cell(excel_row, 6, fpa_row["计算依据归类"])
-        exp_val = fpa_row["计算依据说明"]
-        # 换行格式化（空一行）
-        import re as _nl
-        exp_val = exp_val.replace("具体如下", "具体如下" + chr(10) + chr(10))
-        exp_val = exp_val.replace("；", "；" + chr(10) + chr(10))
-        exp_val = exp_val.replace("事件流：", "事件流：" + chr(10))
-        exp_val = exp_val.replace("业务规则", chr(10) + "业务规则")
-        exp_val = exp_val.replace("业务数据", chr(10) + "业务数据")
-        exp_val = exp_val.replace("涉及表", chr(10) + "涉及表")
-        exp_val = exp_val.replace("涉及服务", chr(10) + "涉及服务")
-        exp_val = exp_val.replace("涉及接口", chr(10) + "涉及接口")
-        # 数字编号换行：1. xxx → 换行 + 1. xxx
-        exp_val = _nl.sub(r'(?<=\S)\s+(?=\d+\.)', chr(10), exp_val)
-        # 去除每行开头的多余空格
-        exp_val = _nl.sub(r'^[	 ]+', '', exp_val, flags=_nl.MULTILINE)
-        ws.cell(excel_row, 7, exp_val)
+        ws.cell(excel_row, 7, _format_fpa_explanation(fpa_row["计算依据说明"]))
         ws.cell(excel_row, 8, fpa_row["变更状态"])
         if base_formula:
             formula = base_formula.replace("E3", f"E{excel_row}")                 .replace("H3", f"H{excel_row}").replace("I3", f"I{excel_row}")                 .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")

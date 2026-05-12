@@ -636,6 +636,8 @@ def main():
     parser.add_argument('--spec-template', default='',
                         help='项目需求说明书(Specification) 模板路径')
 
+    parser.add_argument('--clean', action='store_true',
+                        help='--from-excel 时，删除 Excel 同级目录下以工单标题命名的输出文件夹（如有），再重新生成')
     parser.add_argument('--init-config', action='store_true',
                         help='初始化 .env 配置文件')
 
@@ -1155,6 +1157,12 @@ def main():
         import re as _re_title
         _safe_t = _re_title.sub(r'[\/:*?"<>|]', '_', _p_title) if _p_title else 'products'
         _excel_dir = os.path.dirname(os.path.abspath(excel_path))
+        if args.clean and _p_title:
+            import shutil as _su
+            _target_dir = os.path.join(_excel_dir, _safe_t)
+            if os.path.exists(_target_dir):
+                _su.rmtree(_target_dir)
+                logger.info(f"已删除输出目录: {_target_dir}")
 
         out_dir = args.output_dir or os.path.join(_excel_dir, _safe_t)
         doc_dir = os.path.join(out_dir, 'cosmic文档')
@@ -1284,8 +1292,14 @@ def main():
                     ai_fill_fpa_md(fpa_filled_md, meta_md, api_key=api_key, model=model, base_url=base_url)
                 logger.info("第1步：生成 FPA Excel...")
                 fpa_src = fpa_filled_md if api_key else fpa_md
-            fpa_template_file = fpa_src_template
-            generate_fpa_xlsx_from_md(fpa_src, meta_md, fpa_template_file, fpa_template)
+                fpa_template_file = fpa_src_template
+                generate_fpa_xlsx_from_md(fpa_src, meta_md, fpa_template_file, fpa_template)
+            elif os.path.exists(fpa_filled_md):
+                logger.info("FPA Excel 已存在，重新生成（使用 AI 填充数据）...")
+                fpa_template_file = fpa_src_template
+                generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_template_file, fpa_template)
+            else:
+                logger.info("FPA Excel 已存在，跳过")
             # 读取核减后工作量（从 FPA Excel > 元数据 > 用户输入 > 默认值）
             fpa_reduced = _resolve_fpa_sum(fpa_sum_md)
 
@@ -1354,12 +1368,14 @@ def main():
 
             _write_combined_ai_log()
             _section("全流程完成")
-            # 提示音
+            # 提示音（按配置）
             try:
-                import winsound
-                winsound.MessageBeep()
+                from cosmic_tool.config_utils import _load_business_rules
+                if _load_business_rules().get('notify_sound', False):
+                    import winsound
+                    winsound.MessageBeep()
             except Exception:
-                print('', end='', flush=True)
+                pass
             # 输出汇总
             _summary_files = [
                 ("FPA 工作量评估", fpa_template),

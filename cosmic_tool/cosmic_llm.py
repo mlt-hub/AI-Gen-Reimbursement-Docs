@@ -463,6 +463,19 @@ def generate_cosmic_items(
             except (EOFError, KeyboardInterrupt):
                 break
 
+    # --- 数据组名去重（从功能过程中提取动词作后缀） ---
+    _seen_groups: dict[str, str] = {}
+    for _item in all_items:
+        _verb = _item.process[:2] if len(_item.process) >= 2 else _item.process
+        for _m in _item.movements:
+            _orig = _m.data_group
+            if _orig in _seen_groups:
+                _first_verb = _seen_groups[_orig]
+                if _first_verb != _verb:
+                    _m.data_group = f"{_orig}{_verb}"
+            else:
+                _seen_groups[_orig] = _verb
+
     # --- Final summary ---
     total_ok = len(all_items)
     warn_items = [it for it in all_items if it.warnings]

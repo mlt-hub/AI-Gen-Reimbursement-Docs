@@ -191,6 +191,21 @@ def load_flow_max_ai(flow_name: str) -> int:
 
 
 
+
+def load_cosmic_warn_marker() -> bool:
+    """读取 cosmic_warn_marker，true 时在拆分表中标记数据异常警告。"""
+    yaml_path = _config_dir() / "system_config.yaml"
+    if yaml_path.exists():
+        try:
+            import yaml
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            return bool(cfg.get('cosmic_warn_marker', True))
+        except Exception:
+            pass
+    return True
+
+
 def load_fpa_reduced_use_workload() -> bool:
     """读取 fpa_reduced_use_workload，true 时直接用 FPA 工作量值。"""
     yaml_path = _config_dir() / "system_config.yaml"
