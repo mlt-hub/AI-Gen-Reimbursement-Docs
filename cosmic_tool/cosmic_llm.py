@@ -343,6 +343,9 @@ def generate_cosmic_items(
     _cosmic_proc_count = 0
     if _cosmic_proc_limit > 0:
         logger.info(f"仅对前 {_cosmic_proc_limit} 个功能过程调用 AI，超过的跳过")
+    _skip_ai_limit = 0
+    _skip_proc_limit = 0
+    _ai_called = 0
 
     for idx, l3 in enumerate(l3_modules, 1):
         l2_name = l3.parent or ""
@@ -362,6 +365,7 @@ def generate_cosmic_items(
                     process="", user="", trigger="", movements=[]
                 ))
                 logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过功能过程限制 {_cosmic_proc_limit}）")
+                _skip_proc_limit += 1
                 continue
             _cosmic_proc_count += _module_procs
 
@@ -370,6 +374,7 @@ def generate_cosmic_items(
         # 超过限制的模块跳过 AI
         if max_ai_l3 > 0 and idx > max_ai_l3:
             logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过 AI 限制 {max_ai_l3}）")
+            _skip_ai_limit += 1
             # 仍然添加到 all_items，但使用空数据
             from cosmic_tool.models import CosmicItem
             all_items.append(CosmicItem(
@@ -394,6 +399,7 @@ def generate_cosmic_items(
         _abort_module = False
         while True:
             try:
+                _ai_called += 1
                 _save_ai_prompt(l3.name, l2_name, l1_name, prompt, "generate_cosmic")
 
                 from cosmic_tool.llm_client import call_llm
@@ -469,6 +475,20 @@ def generate_cosmic_items(
             if _key != _orig:
                 _m.data_attrs = _key
             _seen_attrs.add(_key)
+
+    # 汇总：全部跳过时提示配置限制
+    if _ai_called == 0 and total > 0:
+        _reasons = []
+        if max_ai_l3 > 0 and _skip_ai_limit > 0:
+            _reasons.append(f"max_ai_l3_modules={max_ai_l3}（跳过 {_skip_ai_limit} 个模块）")
+        if _cosmic_proc_limit > 0 and _skip_proc_limit > 0:
+            _reasons.append(f"gen_cosmic_ai_limit={_cosmic_proc_limit}（跳过 {_skip_proc_limit} 个模块）")
+        if _reasons:
+            logger.warning(
+                "⚠ COSMIC AI 全部跳过（共 %d 个模块），请检查配置限制：%s。"
+                "如需 AI 填充，请在 ~/.cosmic-tool/system_config.yaml 中将对应值设为 0",
+                total, "、".join(_reasons),
+            )
 
     # --- Final summary ---
     total_ok = len(all_items)

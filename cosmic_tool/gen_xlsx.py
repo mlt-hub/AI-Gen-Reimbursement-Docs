@@ -220,13 +220,18 @@ def _ai_fill_fpa(
                 _seen_fpa_procs.append(_base)
         _allowed_fpa_procs = set(_seen_fpa_procs[:_proc_limit])
         _seen_fpa_procs.clear()
+    _skip_ai_limit = 0
+    _skip_proc_limit = 0
+    _filled_count = 0
     for idx, row in enumerate(fpa_rows, 1):
         _base_name = row["新增/修改功能点"].rsplit('-', 1)[0]
         if _max_ai > 0 and idx > _max_ai:
             logger.info(f"  [{idx}/{total}] 跳过（超过 AI 限制 {_max_ai}）")
+            _skip_ai_limit += 1
             continue
         if _allowed_fpa_procs is not None and _base_name not in _allowed_fpa_procs:
             logger.info(f"  [{idx}/{total}] 跳过（超过功能过程限制 {_proc_limit}）")
+            _skip_proc_limit += 1
             continue
         if not row["计算依据说明"]:
             continue
@@ -243,6 +248,7 @@ def _ai_fill_fpa(
             f'{{"type":"EI/EO/EQ/ILF/EIF","classification_basis_index":1,"explanation":"<展开的说明，包含触发事件、事件流、业务规则、业务数据、涉及表/文件/接口>"}}'
         )
 
+        _filled_count += 1
         logger.info(f"  FPA AI 填充 [{idx}/{total}] {row['新增/修改功能点'][:40]}...")
         resp = _call_llm(prompt, system_prompt, api_key, model, base_url, tag=row_tag)
         import json as _json
@@ -293,6 +299,20 @@ def _ai_fill_fpa(
                     row["计算依据说明"] = exp
             except Exception:
                 pass
+
+    # 汇总：全部跳过时提示配置限制
+    if _filled_count == 0 and total > 0:
+        _reasons = []
+        if _max_ai > 0 and _skip_ai_limit > 0:
+            _reasons.append(f"max_ai_l3_modules={_max_ai}（跳过 {_skip_ai_limit} 行）")
+        if _proc_limit > 0 and _skip_proc_limit > 0:
+            _reasons.append(f"gen_fpa_ai_limit={_proc_limit}（跳过 {_skip_proc_limit} 行）")
+        if _reasons:
+            logger.warning(
+                "⚠ FPA AI 填充全部跳过（共 %d 行），请检查配置限制：%s。"
+                "如需 AI 填充，请在 ~/.cosmic-tool/system_config.yaml 中将对应值设为 0",
+                total, "、".join(_reasons),
+            )
 
     return fpa_rows
 
