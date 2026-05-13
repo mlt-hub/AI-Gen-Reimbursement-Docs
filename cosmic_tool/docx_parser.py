@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from typing import Optional
 
 from cosmic_tool.constants import DEFAULT_MODEL
+from cosmic_tool.exceptions import ParseError, AIError
 from cosmic_tool.models import FunctionModule
 
 NS = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
@@ -419,18 +420,18 @@ def _parse_ai_heading_response(response_text: str) -> list[dict]:
     start = text.find('{')
     end = text.rfind('}')
     if start == -1 or end == -1:
-        raise ValueError("No JSON object found in AI response")
+        raise ParseError("AI 响应中未找到 JSON 对象", details="heading_parse")
 
     json_str = _clean_json_from_heading(text[start:end+1])
     data = json.loads(json_str)
     raw_modules = data.get('modules', [])
 
     if not raw_modules:
-        raise ValueError("No modules found in AI response")
+        raise ParseError("AI 响应中未找到模块数据", details="heading_parse")
 
     for i, m in enumerate(raw_modules):
         if 'name' not in m or 'level' not in m:
-            raise ValueError(f"Module at index {i} missing required fields (name, level)")
+            raise ParseError(f"模块 {i} 缺少必填字段 (name, level)", details="heading_parse")
 
     return raw_modules
 
@@ -482,7 +483,7 @@ def ai_build_module_tree(
         )
 
         if not resp_text:
-            raise ValueError("AI响应为空")
+            raise AIError("AI 段落解析返回空响应", model=model)
 
         raw_modules = _parse_ai_heading_response(resp_text)
 
@@ -512,7 +513,6 @@ def ai_build_module_tree(
 
 def _save_heading_prompt(docx_path: str, prompt: str) -> None:
     """Save AI heading parsing prompt to log/ai_prompts/."""
-    import os
     from datetime import datetime
     base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
@@ -535,7 +535,6 @@ def _save_heading_prompt(docx_path: str, prompt: str) -> None:
 
 def _save_heading_response(docx_path: str, text: str, reasoning: str = "") -> None:
     """Save AI heading parsing response to log/ai_responses/."""
-    import os
     from datetime import datetime
     base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'

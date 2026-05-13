@@ -5,6 +5,7 @@ import os
 import re
 from copy import deepcopy
 from datetime import datetime
+from functools import lru_cache
 
 import openpyxl
 from docx import Document
@@ -20,8 +21,9 @@ logger = logging.getLogger('cosmic_tool.gen_spec')
 
 
 
-def _parse_meta_md(meta_md_path: str) -> dict:
-    """解析文档元数据.md 为扁平字典。支持跨多行的表格值。"""
+@lru_cache(maxsize=4)
+def _parse_meta_md(meta_md_path: str) -> dict[str, str]:
+    """解析文档元数据.md 为扁平字典。支持跨多行的表格值（带缓存）。"""
     meta = {}
     pending_key = None
     pending_val = ""
@@ -70,7 +72,7 @@ def _parse_meta_md(meta_md_path: str) -> dict:
     return meta
 
 
-def _parse_module_tree_md(tree_md_path: str) -> list[dict]:
+def _parse_module_tree_md(tree_md_path: str) -> list[dict[str, str]]:
     """解析功能清单模块树.md 为行字典列表。"""
     rows = []
     with open(tree_md_path, encoding='utf-8') as f:
@@ -101,7 +103,7 @@ def _parse_module_tree_md(tree_md_path: str) -> list[dict]:
     return rows
 
 
-def _build_module_tree(rows: list[dict]) -> list[dict]:
+def _build_module_tree(rows: list[dict[str, str]]) -> list[dict[str, object]]:
     """从行数据构建去重的模块树（入口→一级→二级→三级+客户端类型+描述）。"""
     seen = set()
     tree = []
@@ -120,7 +122,7 @@ def _build_module_tree(rows: list[dict]) -> list[dict]:
     return tree
 
 
-def _group_by_entry_and_l1(tree: list[dict]) -> list[dict]:
+def _group_by_entry_and_l1(tree: list[dict[str, object]]) -> list[dict[str, object]]:
     """按入口+一级模块 分组。"""
     groups = {}
     for m in tree:

@@ -10,12 +10,12 @@ import openpyxl
 logger = logging.getLogger('cosmic_tool.excel_source')
 
 
-def _cell_val(cell) -> str:
+def _cell_val(cell: object) -> str:
     """读取单元格值，None 转空字符串。"""
     return str(cell).strip() if cell is not None else ""
 
 
-def _resolve_inherited_rows(ws):
+def _resolve_inherited_rows(ws: "openpyxl.worksheet.worksheet.Worksheet") -> list[list[str]]:
     """将合并单元格/空单元格的值继承上一行同列的值。返回二维列表。"""
     rows = []
     prev_vals = [""] * ws.max_column
@@ -29,7 +29,7 @@ def _resolve_inherited_rows(ws):
     return rows
 
 
-def _key_value_sheet(ws):
+def _key_value_sheet(ws: "openpyxl.worksheet.worksheet.Worksheet") -> dict[str, str]:
     """读取 key-value 格式 sheet（2列：项目 | 内容），返回 dict。"""
     data = {}
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -40,7 +40,7 @@ def _key_value_sheet(ws):
     return data
 
 
-def _calc_cfp_limit(wb) -> float:
+def _calc_cfp_limit(wb: "openpyxl.Workbook") -> float:
     """从 sheet 5 读取 CFP 限制值（如果含公式则计算）。"""
     ws = wb['5、预估工作量-元数据录入']
     b1 = _cell_val(ws.cell(2, 2).value)  # 预估工作量
@@ -54,7 +54,7 @@ def _calc_cfp_limit(wb) -> float:
     return limit
 
 
-def generate_md_files(excel_path: str, output_dir: str = "") -> dict:
+def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
     """读取功能清单.xlsx，生成功能清单模块树.md 和 文档元数据模板.md。
 
     Args:
@@ -334,7 +334,7 @@ def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
     return all_ok
 
 
-def replace_placeholders(text: str, project_info: dict, fpa_meta: dict) -> str:
+def replace_placeholders(text: str, project_info: dict[str, str], fpa_meta: dict[str, str]) -> str:
     """替换 【占位符】 为实际值。"""
     placeholders = {
         "${工单编号}": project_info.get("工单编号", ""),

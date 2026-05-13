@@ -19,13 +19,13 @@ logger = logging.getLogger('cosmic_tool.gen_xlsx')
 #  公用
 # ============================================================
 
-def _load_meta_md(meta_md_path: str) -> dict:
+def _load_meta_md(meta_md_path: str) -> dict[str, str]:
     """解析文档元数据.md 为扁平字典。支持跨多行的表格值。"""
     from cosmic_tool.gen_spec import _parse_meta_md
     return _parse_meta_md(meta_md_path)
 
 
-def _load_module_rows(tree_md_path: str) -> list[dict]:
+def _load_module_rows(tree_md_path: str) -> list[dict[str, str]]:
     """解析功能清单模块树.md 为行字典列表。"""
     rows = []
     with open(tree_md_path, encoding='utf-8') as f:
@@ -81,26 +81,6 @@ def _receiver_from_client_type(client_type: str, rules_text: str) -> str:
 #  FPA工作量评估.xlsx
 # ============================================================
 
-def _save_ai_log(tag: str, model: str, prompt: str, response: str, log_type: str = "prompt"):
-    """保存 AI 请求或响应到日志目录。"""
-    try:
-        base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), 'log'
-        )
-        sub_dir = 'ai_prompts' if log_type == 'prompt' else 'ai_responses'
-        log_dir = os.path.join(base_log, sub_dir)
-        os.makedirs(log_dir, exist_ok=True)
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        fname = f'{ts}_{tag}_{log_type}.txt'
-        with open(os.path.join(log_dir, fname), 'w', encoding='utf-8') as f:
-            f.write(f"# {log_type}: {tag}\n")
-            f.write(f"# Model: {model}\n")
-            f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            f.write(prompt if log_type == 'prompt' else response)
-    except Exception:
-        pass
-
-
 def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
               base_url: str, tag: str = "") -> str:
     """调用 LLM（委托至 llm_client 公共模块）。"""
@@ -116,7 +96,7 @@ def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
         return ""
 
 
-def _build_fpa_rule_rows(rows: list[dict], meta: dict) -> list[dict]:
+def _build_fpa_rule_rows(rows: list[dict[str, str]], meta: dict[str, str]) -> list[dict[str, object]]:
     """从功能清单行构建 FPA 模板行（规则骨架）。"""
     prefix_rule = meta.get("新增/修改功能点前缀生成规则",
                            "【客户端类型】一级模块-二级模块-三级模块-功能过程")
@@ -189,12 +169,12 @@ def _build_fpa_rule_rows(rows: list[dict], meta: dict) -> list[dict]:
 
 
 def _ai_fill_fpa(
-    fpa_rows: list[dict],
+    fpa_rows: list[dict[str, object]],
     judgement_rules: list[str],
     api_key: str,
     model: str,
     base_url: str,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """AI 填充 FPA 行的 F/G 列。"""
     if not api_key:
         logger.warning("未设置 API Key，跳过 AI 填充 FPA")
@@ -254,16 +234,8 @@ def _ai_fill_fpa(
         import json as _json
         if resp:
             try:
-                # 清洗 JSON：去除可能的 markdown 代码块
-                _clean = resp.strip()
-                if '```json' in _clean:
-                    _clean = _clean.split('```json')[1]
-                    if '```' in _clean:
-                        _clean = _clean.split('```')[0]
-                elif '```' in _clean:
-                    _clean = _clean.split('```')[1]
-                    if '```' in _clean:
-                        _clean = _clean.split('```')[0]
+                from cosmic_tool.llm_client import strip_markdown_code_block
+                _clean = strip_markdown_code_block(resp)
                 _data = _json.loads(_clean)
                 if isinstance(_data, list):
                     _data = _data[0]
@@ -610,7 +582,13 @@ def generate_fpa_xlsx_from_md(
         col_letter = openpyxl.utils.get_column_letter(col_idx)
         cell.value = f"=SUM({col_letter}3:{col_letter}{last_data_row})"
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
-    wb.save(output_path)
+    try:
+        wb.save(output_path)
+    except PermissionError:
+        logger.error(
+            "无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path
+        )
+        raise
     logger.info(f"FPA工作量评估已生成: {output_path} ({len(fpa_rows)} 行)")
 
     return output_path
@@ -766,7 +744,13 @@ def generate_require_xlsx(
         ws2.cell(data_rows_data[0]["row"], 9).border = _tmpl_border
 
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
-    wb.save(output_path)
+    try:
+        wb.save(output_path)
+    except PermissionError:
+        logger.error(
+            "无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path
+        )
+        raise
     logger.info(f"项目需求清单已生成: {output_path} ({len(seen_modules)} 模块)")
 
     return output_path

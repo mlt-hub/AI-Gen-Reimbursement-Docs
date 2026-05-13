@@ -1,6 +1,13 @@
 __pycache__/
 *.pyc
+
+# 运行时日志和生成产物
 log/
+AI-Outputs/
+products/
+data/outputs/
+data/products/
+1m/
 
 # 构建产物
 build/

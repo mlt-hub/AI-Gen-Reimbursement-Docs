@@ -132,7 +132,11 @@ def write_to_template(
 
     if not all_rows:
         logger.warning("No data rows to write.")
-        wb.save(output_path)
+        try:
+            wb.save(output_path)
+        except PermissionError:
+            logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
+            raise
         return
 
     # Use template row 6 format for data cells
@@ -315,7 +319,11 @@ def write_to_template(
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)
 
-    wb.save(output_path)
+    try:
+        wb.save(output_path)
+    except PermissionError:
+        logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
+        raise
     logger.info(f"Written {total_rows} rows to {output_path}")
     if footer_saved:
         logger.info(f"Restored {len(footer_saved)} footer note(s) from template")
@@ -420,7 +428,11 @@ def write_environment_sheet(
                     if necessity:
                         necessity_cell.value = necessity
 
-    wb.save(output_path)
+    try:
+        wb.save(output_path)
+    except PermissionError:
+        logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
+        raise
     logger.info(f"Updated 1、环境图 sheet with project info")
 
 
@@ -431,5 +443,9 @@ def copy_template_sheets(
 ) -> None:
     """Copy the complete template preserving all sheets."""
     wb = openpyxl.load_workbook(template_path)
-    wb.save(output_path)
+    try:
+        wb.save(output_path)
+    except PermissionError:
+        logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
+        raise
     logger.info(f"Template copied to {output_path}")

@@ -141,51 +141,57 @@ def export_filled_md(
     logger.info(f"已填充MD生成: {output_path}")
 
 
+def _extract_project_name_from_md_lines(text: str, lines: list[str]) -> str:
+    """从 Markdown 文本中提取项目名称。"""
+    for line in lines:
+        m = re.match(r'\*\*项目名称\*\*\s*[：:]\s*(.+)', line)
+        if m:
+            return m.group(1).strip()
+    m2 = re.match(r'项目名称[：:]\s*(.+)', text)
+    if m2:
+        return m2.group(1).strip()
+    return ""
+
+
+class _ParseState:
+    """parse_md_to_items 的解析上下文 —— 封装可变状态和 flush 逻辑。"""
+    def __init__(self, project_name: str):
+        self.project_name = project_name
+        self.items: list[CosmicItem] = []
+        self.l1 = self.l2 = self.l3 = ""
+        self.process = ""
+        self.user = ""
+        self.trigger = ""
+        self.movements: list[DataMovement] = []
+        self.in_table = False
+
+    def flush(self):
+        if self.process and self.movements:
+            self.items.append(CosmicItem(
+                project=self.project_name,
+                module_l1=self.l1,
+                module_l2=self.l2,
+                module_l3=self.l3,
+                user=self.user,
+                trigger=self.trigger,
+                process=self.process,
+                movements=list(self.movements),
+            ))
+        self.process = ""
+        self.user = ""
+        self.trigger = ""
+        self.movements = []
+        self.in_table = False
+
+
 def parse_md_to_items(md_path: str) -> list[CosmicItem]:
     """Parse a (possibly edited) MD file back to CosmicItem list."""
     with open(md_path, 'r', encoding='utf-8') as f:
         text = f.read()
 
     lines = text.split('\n')
-
-    # Extract project name
-    project_name = ""
-    for line in lines:
-        m = re.match(r'\*\*项目名称\*\*\s*[：:]\s*(.+)', line)
-        if m:
-            project_name = m.group(1).strip()
-            break
-    if not project_name:
-        m2 = re.match(r'项目名称[：:]\s*(.+)', text)
-        if m2:
-            project_name = m2.group(1).strip()
-
-    items: list[CosmicItem] = []
-    current_l1 = current_l2 = current_l3 = ""
-    current_process = ""
-    current_user = ""
-    current_trigger = ""
-    current_movements: list[DataMovement] = []
-    in_table = False
-
-    def flush_process():
-        nonlocal current_process, current_user, current_trigger, current_movements, in_table
-        if current_process and current_movements:
-            items.append(CosmicItem(
-                project=project_name,
-                module_l1=current_l1,
-                module_l2=current_l2,
-                module_l3=current_l3,
-                user=current_user,
-                trigger=current_trigger,
-                process=current_process,
-                movements=list(current_movements),
-            ))
-        current_process = ""
-        current_user = ""
-        current_trigger = ""
-        current_movements = []
-        in_table = False
+    project_name = _extract_project_name_from_md_lines(text, lines)
+    ctx = _ParseState(project_name)
 
     for line in lines:
         stripped = line.strip()
@@ -193,63 +199,56 @@ def parse_md_to_items(md_path: str) -> list[CosmicItem]:
         # Detect L3 module section: ## L1 > L2 > L3
         m_l3 = re.match(r'^##\s+(.+?)\s*>\s*(.+?)\s*>\s*(.+?)\s*$', stripped)
         if m_l3:
-            flush_process()
-            current_l1 = m_l3.group(1).strip()
-            current_l2 = m_l3.group(2).strip()
-            current_l3 = m_l3.group(3).strip()
+            ctx.flush()
+            ctx.l1 = m_l3.group(1).strip()
+            ctx.l2 = m_l3.group(2).strip()
+            ctx.l3 = m_l3.group(3).strip()
             continue
 
         # Detect functional process: ### name
         m_proc = re.match(r'^###\s+(.+)$', stripped)
         if m_proc:
-            flush_process()
-            current_process = m_proc.group(1).strip()
+            ctx.flush()
+            ctx.process = m_proc.group(1).strip()
             continue
 
         # Detect user line
         if '发起者' in stripped and '|' in stripped:
             m_user = re.match(r'发起者[：:]\s*(.*?)\s*[|]\s*接收者[：:]\s*(.*)', stripped)
             if m_user:
-                current_user = f"发起者：{m_user.group(1).strip()}|接收者：{m_user.group(2).strip()}"
+                ctx.user = f"发起者：{m_user.group(1).strip()}|接收者：{m_user.group(2).strip()}"
             continue
 
         # Detect trigger event
         if '触发事件' in stripped or '触发' in stripped:
             m_trig = re.match(r'触发事件[：:]\s*(.*)', stripped)
             if m_trig:
-                current_trigger = m_trig.group(1).strip()
+                ctx.trigger = m_trig.group(1).strip()
                 continue
             m_trig2 = re.match(r'触发[：:]\s*(.*)', stripped)
             if m_trig2:
-                current_trigger = m_trig2.group(1).strip()
+                ctx.trigger = m_trig2.group(1).strip()
                 continue
 
         # Detect table row
         if stripped.startswith('|') and stripped.endswith('|'):
             cells = [c.strip() for c in stripped.split('|')]
-            # Remove empty first/last from split
             cells = [c for c in cells if c != '']
-            # Skip header/separator rows
             if len(cells) >= 5:
-                # Check if it's a separator row (|---|)
                 if all(c.replace('-', '').strip() == '' for c in cells[1:4]):
                     continue
-                # Check if it's the header row
                 if cells[0].strip() == '序号' or cells[0].strip() == '序号' in cells[0]:
-                    in_table = True
+                    ctx.in_table = True
                     continue
 
-                # It's a data row
-                if in_table and current_process:
+                if ctx.in_table and ctx.process:
                     order_str = cells[0].strip() if len(cells) > 0 else ""
                     sub_process = cells[1].strip() if len(cells) > 1 else ""
                     move_type = cells[2].strip().upper() if len(cells) > 2 else "E"
                     data_group = cells[3].strip() if len(cells) > 3 else ""
                     data_attrs = cells[4].strip() if len(cells) > 4 else ""
                     reuse = cells[5].strip() if len(cells) > 5 else "新增"
-                    cfp_str = cells[6].strip() if len(cells) > 6 else "1"
 
-                    # Skip completely empty rows
                     if not sub_process and not move_type:
                         continue
 
@@ -257,25 +256,20 @@ def parse_md_to_items(md_path: str) -> list[CosmicItem]:
                         move_type = 'E'
 
                     try:
-                        order = int(order_str) if order_str else len(current_movements) + 1
+                        order = int(order_str) if order_str else len(ctx.movements) + 1
                     except ValueError:
-                        order = len(current_movements) + 1
+                        order = len(ctx.movements) + 1
 
-                    current_movements.append(DataMovement(
-                        order=order,
-                        sub_process=sub_process,
-                        move_type=move_type,
-                        data_group=data_group,
-                        data_attrs=data_attrs,
-                        reuse=reuse,
+                    ctx.movements.append(DataMovement(
+                        order=order, sub_process=sub_process, move_type=move_type,
+                        data_group=data_group, data_attrs=data_attrs, reuse=reuse,
                     ))
 
-    # Flush last process
-    flush_process()
+    ctx.flush()
 
-    if items:
-        logger.info(f"从MD解析到 {len(items)} 个已有功能过程（将被保留）")
-    return items
+    if ctx.items:
+        logger.info(f"从MD解析到 {len(ctx.items)} 个已有功能过程（将被保留）")
+    return ctx.items
 
 
 def fill_md_with_ai(

@@ -24,6 +24,7 @@ import sys
 from datetime import datetime
 
 from cosmic_tool.constants import DEFAULT_MODEL
+from cosmic_tool.exceptions import ConfigError
 from cosmic_tool.docx_to_md import convert_to_md
 from cosmic_tool.md_handler import build_modules_from_md, get_project_name_from_md
 from cosmic_tool.docx_parser import build_module_tree, ai_build_module_tree, print_tree, get_project_name
@@ -800,7 +801,7 @@ def main():
                     logger.info(f"  已填充MD已存在，跳过（REGENERATE_FILLED=false）")
                 else:
                     if not api_key:
-                        raise ValueError("API Key 未设置")
+                        raise ConfigError("API Key 未设置")
                     shutil.copy2(md_base, md_filled)
                     fill_md_with_ai(md_filled, modules, project, api_key, model, base_url)
 

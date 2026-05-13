@@ -107,6 +107,20 @@ def call_llm(
     )
 
 
+def strip_markdown_code_block(text: str) -> str:
+    """去除 AI 响应中的 markdown 代码块标记（```json ... ```）。"""
+    text = text.strip()
+    if "```json" in text:
+        text = text.split("```json")[1]
+        if "```" in text:
+            text = text.split("```")[0]
+    elif "```" in text:
+        text = text.split("```")[1]
+        if "```" in text:
+            text = text.split("```")[0]
+    return text.strip()
+
+
 def _extract_text(content_blocks: list) -> str:
     """从 Anthropic 响应中提取文本（跳过 ThinkingBlock）。"""
     for block in content_blocks:

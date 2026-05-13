@@ -4,9 +4,11 @@ import json
 import logging
 import os
 import sys
+from datetime import datetime
 from typing import Optional
 
 from cosmic_tool.constants import DEFAULT_MODEL, DEFAULT_INITIATOR, DEFAULT_RECEIVER
+from cosmic_tool.exceptions import ConfigError, ParseError
 from cosmic_tool.models import CosmicItem, DataMovement
 from cosmic_tool.docx_parser import FunctionModule, get_module_by_name
 
@@ -197,16 +199,8 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
     """Parse LLM JSON response into CosmicItem objects."""
     items = []
 
-    # Extract JSON from response (handle markdown code blocks)
-    text = response_text.strip()
-    if '```json' in text:
-        text = text.split('```json')[1]
-        if '```' in text:
-            text = text.split('```')[0]
-    elif '```' in text:
-        text = text.split('```')[1]
-        if '```' in text:
-            text = text.split('```')[0]
+    from cosmic_tool.llm_client import strip_markdown_code_block
+    text = strip_markdown_code_block(response_text)
 
     # Find JSON array in text（找 [ 后紧跟 { 的位置，避免在思考文本中匹配到 [）
     start = text.find('[{')
@@ -214,7 +208,7 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
         start = text.find('[')
     end = text.rfind(']')
     if start == -1 or end == -1:
-        raise ValueError(f"No JSON array found in response for module: {module_name}")
+        raise ParseError(f"No JSON array found in response for module: {module_name}")
 
     json_str = text[start:end+1]
 
@@ -313,8 +307,8 @@ def generate_cosmic_items(
     """
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        raise ValueError(
-            "ANTHROPIC_API_KEY is not set. Please set it or pass --api-key."
+        raise ConfigError(
+            "未配置 API Key，请在 ~/.cosmic-tool/.env 中设置 ANTHROPIC_API_KEY 或传入 --api-key"
         )
 
     base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
@@ -520,7 +514,6 @@ def generate_cosmic_items(
 
 def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None:
     """Save full AI prompt text to log/ai_prompts/ for review."""
-    from datetime import datetime
     base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
     )
@@ -544,8 +537,6 @@ def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None
 
 def _save_ai_response(l3: str, l2: str, l1: str, text: str, reasoning: str = "") -> None:
     """Save raw AI response text to log/ai_responses/ for review."""
-    from datetime import datetime
-
     base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
     )
