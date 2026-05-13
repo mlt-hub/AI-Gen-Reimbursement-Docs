@@ -49,6 +49,48 @@ def _apply_style(cell, style: dict, skip_fill: bool = False) -> None:
     cell.number_format = style['number_format']
 
 
+def _save_footer_notes(ws) -> list:
+    """保存模板中第6行之后的脚注行（合并单元格、值、样式、行高）。
+    
+    从底部向上扫描，检测 A 列文本长度 > 20 且其余列为空的行作为脚注。
+    """
+    footer_saved = []
+    seen_merges = list(ws.merged_cells.ranges)
+    for row_num in range(ws.max_row, 5, -1):
+        cell_a = ws.cell(row=row_num, column=1).value
+        if cell_a and isinstance(cell_a, str) and len(cell_a) > 20:
+            has_data = any(
+                ws.cell(row=row_num, column=c).value
+                for c in range(5, 14)
+            )
+            if not has_data:
+                row_merges = []
+                for mr in seen_merges:
+                    if mr.min_row <= row_num <= mr.max_row:
+                        row_merges.append(str(mr))
+                row_vals = {}
+                for col in range(1, 14):
+                    c = ws.cell(row=row_num, column=col)
+                    if c.value is not None or col == 1:
+                        row_vals[col] = (c.value, _get_ref_style(ws, row_num, col))
+                saved_heights: dict[int, float] = {}
+                for mr_str in row_merges:
+                    parts = mr_str.split(':')
+                    r1 = int(''.join(c for c in parts[0] if c.isdigit()))
+                    r2 = int(''.join(c for c in parts[1] if c.isdigit()))
+                    for r in range(r1, r2 + 1):
+                        h = ws.row_dimensions[r].height
+                        if h is not None:
+                            saved_heights[r] = h
+                if row_vals:
+                    footer_saved.insert(0, (row_merges, row_vals, saved_heights))
+                continue
+        if footer_saved:
+            break
+    return footer_saved
+
+
+
 def write_to_template(
     template_path: str,
     output_path: str,
