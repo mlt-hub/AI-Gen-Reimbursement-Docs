@@ -10,7 +10,8 @@ from typing import Optional
 from cosmic_tool.constants import DEFAULT_MODEL, DEFAULT_INITIATOR, DEFAULT_RECEIVER
 from cosmic_tool.exceptions import ConfigError, ParseError
 from cosmic_tool.models import CosmicItem, DataMovement
-from cosmic_tool.docx_parser import FunctionModule, get_module_by_name
+from cosmic_tool.models import FunctionModule
+from cosmic_tool.docx_parser import get_module_by_name
 
 logger = logging.getLogger('cosmic_tool.cosmic_llm')
 
@@ -99,13 +100,20 @@ def _build_user(module: FunctionModule, modules: list[FunctionModule],
     """
     # Collect ancestor names to check
     names_to_check = [module.name]
-    parent = get_module_by_name(modules, module.parent) if module.parent else None
-    if parent:
-        names_to_check.append(parent.name)
-        if parent.parent:
-            grandparent = get_module_by_name(modules, parent.parent)
-            if grandparent:
-                names_to_check.append(grandparent.name)
+    # L3.parent 可能是 "L1/L2" 复合格式
+    _raw_parent = module.parent or ""
+    if "/" in _raw_parent:
+        _l1_name, _l2_name = _raw_parent.split("/", 1)
+        names_to_check.append(_l2_name)
+        names_to_check.append(_l1_name)
+    else:
+        parent = get_module_by_name(modules, module.parent) if module.parent else None
+        if parent:
+            names_to_check.append(parent.name)
+            if parent.parent:
+                grandparent = get_module_by_name(modules, parent.parent)
+                if grandparent:
+                    names_to_check.append(grandparent.name)
 
     # Match initiator
     initiator = default_initiator
@@ -142,7 +150,12 @@ def _build_trigger(module: FunctionModule) -> str:
 def _build_module_prompt(l3_module: FunctionModule, modules: list[FunctionModule]) -> str:
     """Build the prompt for a single L3 module."""
     parent = ""
-    if l3_module.parent:
+    _raw_parent = l3_module.parent or ""
+    if "/" in _raw_parent:
+        # 复合格式 "L1/L2" → 直接拼接
+        _l1, _l2 = _raw_parent.split("/", 1)
+        parent = f"{_l1} > {_l2} > "
+    elif _raw_parent:
         p = get_module_by_name(modules, l3_module.parent)
         if p:
             pp = ""
@@ -343,22 +356,31 @@ def generate_cosmic_items(
     _ai_called = 0
 
     for idx, l3 in enumerate(l3_modules, 1):
-        l2_name = l3.parent or ""
-        l1_name = ""
-        if l2_name:
-            l2 = get_module_by_name(modules, l2_name)
-            if l2 and l2.parent:
-                l1_name = l2.parent
+        # L3.parent 可能是 "L1/L2" 复合格式，需拆分
+        _parent_raw = l3.parent or ""
+        if "/" in _parent_raw:
+            _parts = _parent_raw.split("/", 1)
+            l1_name = _parts[0]
+            l2_name = _parts[1]
+        else:
+            l2_name = _parent_raw
+            l1_name = ""
+            if l2_name:
+                l2 = get_module_by_name(modules, l2_name)
+                if l2 and l2.parent:
+                    l1_name = l2.parent
         # 按功能过程累计数跳过
         if _cosmic_proc_limit > 0:
             _module_procs = len(l3.children) if l3.children else 1
             if _cosmic_proc_count >= _cosmic_proc_limit:
                 from cosmic_tool.models import CosmicItem
-                all_items.append(CosmicItem(
-                    project=project_name,
-                    module_l1=l1_name, module_l2=l2_name, module_l3=l3.name,
-                    process="", user="", trigger="", movements=[]
-                ))
+                # 每个功能过程生成一行（保留 L1/L2/L3 信息，movements 为空）
+                for _child in (l3.children or [l3.name]):
+                    all_items.append(CosmicItem(
+                        project=project_name,
+                        module_l1=l1_name, module_l2=l2_name, module_l3=l3.name,
+                        process=_child, user="", trigger="", movements=[]
+                    ))
                 logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过功能过程限制 {_cosmic_proc_limit}）")
                 _skip_proc_limit += 1
                 continue
@@ -370,13 +392,13 @@ def generate_cosmic_items(
         if max_ai_l3 > 0 and idx > max_ai_l3:
             logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过 AI 限制 {max_ai_l3}）")
             _skip_ai_limit += 1
-            # 仍然添加到 all_items，但使用空数据
             from cosmic_tool.models import CosmicItem
-            all_items.append(CosmicItem(
-                project=project_name,
-                module_l1=l1_name, module_l2=l2_name, module_l3=l3.name,
-                process="", user="", trigger="", movements=[]
-            ))
+            for _child in (l3.children or [l3.name]):
+                all_items.append(CosmicItem(
+                    project=project_name,
+                    module_l1=l1_name, module_l2=l2_name, module_l3=l3.name,
+                    process=_child, user="", trigger="", movements=[]
+                ))
             continue
 
         user = _build_user(l3, modules, user_initiator_rules, user_receiver_rules,

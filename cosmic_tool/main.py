@@ -25,11 +25,7 @@ from datetime import datetime
 
 from cosmic_tool.constants import DEFAULT_MODEL
 from cosmic_tool.exceptions import ConfigError
-from cosmic_tool.docx_to_md import convert_to_md
-from cosmic_tool.md_handler import build_modules_from_md, get_project_name_from_md
-from cosmic_tool.docx_parser import build_module_tree, ai_build_module_tree, print_tree, get_project_name
 from cosmic_tool.models import FunctionModule
-from cosmic_tool.cosmic_llm import generate_cosmic_items
 from cosmic_tool.excel_writer import write_to_template
 from cosmic_tool.config_utils import load_api_key, load_base_url, load_model_name, load_business_config
 from cosmic_tool.md_handler import (
@@ -380,6 +376,131 @@ def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
     return 0
 
 
+
+
+
+def _write_combined_ai_log():
+    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
+    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
+    if not log_dir:
+        return
+    prompt_dir = os.path.join(log_dir, 'ai_prompts')
+    resp_dir = os.path.join(log_dir, 'ai_responses')
+    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
+        return
+    all_files = {}
+    for d in [prompt_dir, resp_dir]:
+        if os.path.isdir(d):
+            for fname in os.listdir(d):
+                if fname.endswith('.txt'):
+                    all_files[fname] = os.path.join(d, fname)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
+    NL = chr(10)
+    with open(out_path, 'w', encoding='utf-8') as out:
+        out.write(f'# AI 对话日志{NL}')
+        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
+        for fname in sorted(all_files.keys()):
+            with open(all_files[fname], 'r', encoding='utf-8') as f:
+                fc = f.read()
+            ftype = '提示词' if 'prompt' in fname else '响应'
+            out.write(f'## {ftype}: {fname}{NL}{NL}')
+            out.write(fc)
+            out.write(f'{NL}{NL}---{NL}{NL}')
+
+
+def _write_combined_ai_log():
+    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
+    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
+    if not log_dir:
+        return
+    prompt_dir = os.path.join(log_dir, 'ai_prompts')
+    resp_dir = os.path.join(log_dir, 'ai_responses')
+    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
+        return
+    all_files = {}
+    for d in [prompt_dir, resp_dir]:
+        if os.path.isdir(d):
+            for fname in os.listdir(d):
+                if fname.endswith('.txt'):
+                    all_files[fname] = os.path.join(d, fname)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
+    NL = chr(10)
+    with open(out_path, 'w', encoding='utf-8') as out:
+        out.write(f'# AI 对话日志{NL}')
+        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
+        for fname in sorted(all_files.keys()):
+            with open(all_files[fname], 'r', encoding='utf-8') as f:
+                fc = f.read()
+            ftype = '提示词' if 'prompt' in fname else '响应'
+            out.write(f'## {ftype}: {fname}{NL}{NL}')
+            out.write(fc)
+            out.write(f'{NL}{NL}---{NL}{NL}')
+
+
+def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
+                   tag: str = "") -> str:
+    """单次 LLM 调用（委托至 llm_client 公共模块）。"""
+    from cosmic_tool.config_utils import load_ai_system_prompt
+    system_prompt = load_ai_system_prompt("metadata_gen")
+    from cosmic_tool.llm_client import call_llm
+    try:
+        return call_llm(
+            prompt=prompt, system=system_prompt,
+            api_key=api_key, model=model, base_url=base_url, tag=tag,
+        )
+    except Exception as e:
+        logger.warning("AI 调用失败 [%s]: %s", tag, e)
+        return ""
+
+
+def _write_combined_ai_log():
+    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
+    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
+    if not log_dir:
+        return
+    prompt_dir = os.path.join(log_dir, 'ai_prompts')
+    resp_dir = os.path.join(log_dir, 'ai_responses')
+    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
+        return
+    all_files = {}
+    for d in [prompt_dir, resp_dir]:
+        if os.path.isdir(d):
+            for fname in os.listdir(d):
+                if fname.endswith('.txt'):
+                    all_files[fname] = os.path.join(d, fname)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
+    NL = chr(10)
+    with open(out_path, 'w', encoding='utf-8') as out:
+        out.write(f'# AI 对话日志{NL}')
+        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
+        for fname in sorted(all_files.keys()):
+            with open(all_files[fname], 'r', encoding='utf-8') as f:
+                fc = f.read()
+            ftype = '提示词' if 'prompt' in fname else '响应'
+            out.write(f'## {ftype}: {fname}{NL}{NL}')
+            out.write(fc)
+            out.write(f'{NL}{NL}---{NL}{NL}')
+
+
+def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
+                   tag: str = "") -> str:
+    """单次 LLM 调用（委托至 llm_client 公共模块）。"""
+    from cosmic_tool.config_utils import load_ai_system_prompt
+    system_prompt = load_ai_system_prompt("metadata_gen")
+    from cosmic_tool.llm_client import call_llm
+    try:
+        return call_llm(
+            prompt=prompt, system=system_prompt,
+            api_key=api_key, model=model, base_url=base_url, tag=tag,
+        )
+    except Exception as e:
+        logger.warning("AI 调用失败 [%s]: %s", tag, e)
+        return ""
+
+
 def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url: str) -> str:
     """读取文档元数据模板.md，AI 填充 #AI生成# 标记，写入 AI填充文档元数据.md。
 
@@ -435,6 +556,68 @@ def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_ur
     with open(dst_md, 'w', encoding='utf-8') as f:
         f.writelines(new_lines)
     return dst_md
+
+
+
+
+def _write_combined_ai_log():
+    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
+    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
+    if not log_dir:
+        return
+    prompt_dir = os.path.join(log_dir, 'ai_prompts')
+    resp_dir = os.path.join(log_dir, 'ai_responses')
+    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
+        return
+    all_files = {}
+    for d in [prompt_dir, resp_dir]:
+        if os.path.isdir(d):
+            for fname in os.listdir(d):
+                if fname.endswith('.txt'):
+                    all_files[fname] = os.path.join(d, fname)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
+    NL = chr(10)
+    with open(out_path, 'w', encoding='utf-8') as out:
+        out.write(f'# AI 对话日志{NL}')
+        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
+        for fname in sorted(all_files.keys()):
+            with open(all_files[fname], 'r', encoding='utf-8') as f:
+                fc = f.read()
+            ftype = '提示词' if 'prompt' in fname else '响应'
+            out.write(f'## {ftype}: {fname}{NL}{NL}')
+            out.write(fc)
+            out.write(f'{NL}{NL}---{NL}{NL}')
+
+
+def _write_combined_ai_log():
+    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
+    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
+    if not log_dir:
+        return
+    prompt_dir = os.path.join(log_dir, 'ai_prompts')
+    resp_dir = os.path.join(log_dir, 'ai_responses')
+    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
+        return
+    all_files = {}
+    for d in [prompt_dir, resp_dir]:
+        if os.path.isdir(d):
+            for fname in os.listdir(d):
+                if fname.endswith('.txt'):
+                    all_files[fname] = os.path.join(d, fname)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
+    NL = chr(10)
+    with open(out_path, 'w', encoding='utf-8') as out:
+        out.write(f'# AI 对话日志{NL}')
+        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
+        for fname in sorted(all_files.keys()):
+            with open(all_files[fname], 'r', encoding='utf-8') as f:
+                fc = f.read()
+            ftype = '提示词' if 'prompt' in fname else '响应'
+            out.write(f'## {ftype}: {fname}{NL}{NL}')
+            out.write(fc)
+            out.write(f'{NL}{NL}---{NL}{NL}')
 
 
 def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
@@ -609,6 +792,8 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='--from-excel 时，删除 Excel 同级目录下以工单标题命名的输出文件夹（如有），再重新生成')
     parser.add_argument('--init-config', action='store_true',
                         help='初始化 .env 配置文件')
+
+
 
     parser.add_argument('--log', nargs='?', const='tail', default=None,
                         help='查看日志：--log（末30行），--log full，--log watch，--log open')
@@ -1278,10 +1463,16 @@ def main():
 
             # Step 0: 生成数据源中间文件
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
-            # AI 填充元数据中的 #AI生成# 标记
+            # AI 填充元数据中的 #AI生成# 标记（由 enable_ai_fill_meta 控制）
+            from cosmic_tool.config_utils import load_enable_ai_fill_meta
             if api_key and (not os.path.exists(meta_filled_md)):
-                logger.info("第0步: AI 填充文档元数据...")
-                _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                if load_enable_ai_fill_meta():
+                    logger.info("第0步: AI 填充文档元数据...")
+                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                else:
+                    logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
+                    import shutil
+                    shutil.copy2(meta_md_tpl, meta_filled_md)
             # 切换到 AI 填充后的版本
             if os.path.exists(meta_filled_md):
                 meta_md = meta_filled_md
@@ -1325,7 +1516,7 @@ def main():
                 # 使用现有链路：init_base_data_md + ai_fill_cosmic_data_md + write_to_template
                 logger.info("  步骤3a: 从模块树生成拆分表 MD...")
                 from cosmic_tool.docx_parser import FunctionModule
-                modules = _build_modules_from_md(tree_md)
+                modules = _build_modules_from_tree_md(tree_md)
                 project = modules[0].name if modules else "项目"
 
                 init_md_path = os.path.join(md_dir, 'cosmic模板.md')
@@ -1348,11 +1539,11 @@ def main():
                 items = parse_md_to_items(filled_md_path)
                 if items:
                     from cosmic_tool.excel_writer import write_to_template, write_environment_sheet
-                    write_to_template(cosmic_src_template, cosmic_template, items)
-                    total_cfp = sum(item.total_cfp() for item in items)
-                    logger.info(f"  CFP 总和: {total_cfp}")
                     from cosmic_tool.gen_spec import _parse_meta_md
                     _meta = _parse_meta_md(meta_md)
+                    write_to_template(cosmic_src_template, cosmic_template, items, meta=_meta)
+                    total_cfp = sum(item.total_cfp() for item in items)
+                    logger.info(f"  CFP 总和: {total_cfp}")
                     _target = _meta.get("建设目标", "")
                     _necessity = _meta.get("建设必要性", "")
                     if _target or _necessity:
@@ -1435,8 +1626,14 @@ def main():
             verify_module_tree_stats(tree_md, meta_md_tpl)
 
             if api_key and (not os.path.exists(meta_filled_md)):
-                logger.info("第2步: AI 填充文档元数据...")
-                _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                from cosmic_tool.config_utils import load_enable_ai_fill_meta
+                if load_enable_ai_fill_meta():
+                    logger.info("第2步: AI 填充文档元数据...")
+                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                else:
+                    logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
+                    import shutil
+                    shutil.copy2(meta_md_tpl, meta_filled_md)
             elif os.path.exists(meta_filled_md):
                 logger.info("AI填充文档元数据.md 已存在，跳过")
             else:
@@ -1455,8 +1652,14 @@ def main():
         if args.gen_fpa:
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
             if api_key and (not os.path.exists(meta_filled_md)):
-                logger.info("AI 填充文档元数据...")
-                _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                from cosmic_tool.config_utils import load_enable_ai_fill_meta
+                if load_enable_ai_fill_meta():
+                    logger.info("AI 填充文档元数据...")
+                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                else:
+                    logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
+                    import shutil
+                    shutil.copy2(meta_md_tpl, meta_filled_md)
             if os.path.exists(meta_filled_md):
                 meta_md = meta_filled_md
             fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
@@ -1484,7 +1687,7 @@ def main():
         if args.gen_cosmic:
             logger.info("生成 项目功能点拆分表.xlsx...")
             from cosmic_tool.docx_parser import FunctionModule
-            modules = _build_modules_from_md(tree_md)
+            modules = _build_modules_from_tree_md(tree_md)
             project = _read_project_name(meta_md) or (modules[0].name if modules else "项目")
 
             # 确保数据源存在，提示输入核减后工作量
@@ -1506,11 +1709,11 @@ def main():
                 items = parse_md_to_items(filled_md_path)
                 if items:
                     from cosmic_tool.excel_writer import write_to_template, write_environment_sheet
-                    write_to_template(cosmic_src_template, cosmic_template, items)
-                    total_cfp = sum(item.total_cfp() for item in items)
-                    logger.info(f"CFP 总和: {total_cfp}")
                     from cosmic_tool.gen_spec import _parse_meta_md
                     _meta = _parse_meta_md(meta_md)
+                    write_to_template(cosmic_src_template, cosmic_template, items, meta=_meta)
+                    total_cfp = sum(item.total_cfp() for item in items)
+                    logger.info(f"CFP 总和: {total_cfp}")
                     _target = _meta.get("建设目标", "")
                     _necessity = _meta.get("建设必要性", "")
                     if _target or _necessity:

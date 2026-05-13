@@ -42,3 +42,6 @@ gen_fpa_ai_limit: 0
 
 # COSMIC AI 只处理前 N 个功能过程（0=不限制）
 gen_cosmic_ai_limit: 0
+
+# 是否对文档元数据的 #AI生成# 标记走 AI 填充（false=保留原文 #AI生成# 标记）
+enable_ai_fill_meta: true

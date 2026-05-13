@@ -44,7 +44,25 @@ class CosmicItem:
         return len(self.movements)
 
     def to_rows(self) -> list[dict]:
-        """Convert to flat row dicts for Excel output."""
+        """Convert to flat row dicts for Excel output。无 movements 时至少生成一行，显示 L1/L2/L3/功能过程。"""
+        if not self.movements:
+            return [{
+                "project": self.project,
+                "module_l1": self.module_l1,
+                "module_l2": self.module_l2,
+                "module_l3": self.module_l3,
+                "user": self.user.replace("|", "\n") if self.user else "",
+                "trigger": self.trigger,
+                "process": self.process,
+                "sub_process": "",
+                "move_type": "",
+                "data_group": "",
+                "data_attrs": "",
+                "reuse": "",
+                "cfp": "",
+                "warnings": self.warnings,
+                "move_type_flagged": False,
+            }]
         rows = []
         for i, m in enumerate(self.movements):
             rows.append({

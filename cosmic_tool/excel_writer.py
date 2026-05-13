@@ -95,12 +95,17 @@ def write_to_template(
     template_path: str,
     output_path: str,
     items: list[CosmicItem],
+    *,
+    meta: dict[str, str] | None = None,
 ) -> None:
     """Write COSMIC items to Excel template.
 
     Preserves header rows (1-5) and formatting, fills data starting at row 6.
     Also preserves any existing footer rows from the template.
+    若提供 meta，替换第6行中的 ${...} 占位符（如 ${工单标题}）。
     """
+    if meta is None:
+        meta = {}
     wb = openpyxl.load_workbook(template_path)
     ws = wb['2、功能点拆分表']
 
@@ -110,7 +115,20 @@ def write_to_template(
         tmpl_format_row6[col_idx] = _get_ref_style(ws, 6, col_idx)
     _CFP_FILL_TMPL = copy.copy(ws.cell(row=6, column=13).fill)
 
-# --- Save existing footer notes (rows below header rows, before clearing) ---
+    # 保存第6行中带 ${...} 占位符的单元格值（模板的元数据行）
+    row6_placeholders: dict[int, str] = {}
+    row6_all_values: dict[int, object] = {}
+    for col_idx in range(1, FP_TOTAL_COLS):
+        val = ws.cell(row=6, column=col_idx).value
+        if val is not None:
+            row6_all_values[col_idx] = val
+        if val and isinstance(val, str) and '${' in val:
+            row6_placeholders[col_idx] = val
+
+    # 有占位符时，数据从第7行开始（第6行保留为元数据行）
+    _data_start_row = 7 if row6_placeholders else FP_DATA_START_ROW
+
+    # --- Save existing footer notes (rows below header rows, before clearing) ---
     footer_saved = []  # list of (merge_range_string, {col: (value, style_dict)})
 # Collect rows from max_row upward that are NOT sample data (footer notes)
     seen_merges = list(ws.merged_cells.ranges)
@@ -160,9 +178,9 @@ def write_to_template(
     for mr_str in merged_to_remove:
         ws.unmerge_cells(mr_str)
 
-    # 2. 删除数据区域所有行（第6行起），彻底清除旧数据及格式
-    if ws.max_row >= 6:
-        ws.delete_rows(6, ws.max_row - 5)
+    # 2. 删除数据区域所有行，彻底清除旧数据及格式
+    if ws.max_row >= _data_start_row:
+        ws.delete_rows(_data_start_row, ws.max_row - (_data_start_row - 1))
 
     # --- Flatten all rows ---
     all_rows = []
@@ -189,7 +207,7 @@ def write_to_template(
     # Column H (子过程描述) should be left-aligned
 
     # --- Write data rows ---
-    start_row = FP_DATA_START_ROW
+    start_row = _data_start_row
     for i, row_data in enumerate(all_rows):
         row_num = start_row + i
         for col_idx in range(1, FP_TOTAL_COLS):
@@ -360,6 +378,18 @@ def write_to_template(
 
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)
+
+    # 恢复第6行（包含替换后的 ${...} 占位符）
+    if row6_all_values:
+        for col_idx, raw_val in row6_all_values.items():
+            val = raw_val
+            if isinstance(val, str) and '${' in val:
+                for ph, replacement in meta.items():
+                    val = val.replace('${' + ph + '}', replacement)
+            ws.cell(row=6, column=col_idx, value=val)
+        # 应用模板第6行的原始格式
+        for col_idx in row6_all_values:
+            _apply_style(ws.cell(row=6, column=col_idx), tmpl_format_row6.get(col_idx, {}), skip_fill=True)
 
     try:
         wb.save(output_path)

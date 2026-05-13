@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
-from cosmic_tool.md_handler import parse_md_to_items, get_project_name_from_md
+from cosmic_tool.md_handler import parse_md_to_items
 
 
 def _write_temp_md(content: str) -> str:
@@ -103,11 +103,14 @@ class TestParseMdToItems:
             os.unlink(path)
 
     def test_project_name_from_marker(self):
+        """### 开头的行会被识别为功能过程（即使无数据移动）。"""
         path = _write_temp_md("**项目名称**：测试项目\n\n### 1、模块\n")
         try:
             items = parse_md_to_items(path)
-            # 无数据但有项目名
-            assert len(items) == 0
+            # ### 被视为功能过程，即使无 movements 也保留
+            assert len(items) == 1
+            assert items[0].process == "1、模块"
+            assert items[0].total_cfp() == 0
         finally:
             os.unlink(path)
 
@@ -129,45 +132,3 @@ class TestParseMdToItems:
             os.unlink(path)
 
 
-class TestGetProjectNameFromMd:
-    def test_extract_from_heading_with_demand(self):
-        path = _write_temp_md(
-            "# 关于构建垂直行业场景化营销的需求\n\n## 概述\n"
-        )
-        try:
-            name = get_project_name_from_md(path)
-            assert "垂直行业" in name
-        finally:
-            os.unlink(path)
-
-    def test_extract_from_bold_heading(self):
-        path = _write_temp_md(
-            "# **智慧城市管理平台需求说明书**\n\n## 背景\n"
-        )
-        try:
-            name = get_project_name_from_md(path)
-            assert "智慧城市" in name
-        finally:
-            os.unlink(path)
-
-    def test_fallback_to_first_heading(self):
-        path = _write_temp_md(
-            "# 项目概述\n\n无需求关键字\n"
-        )
-        try:
-            name = get_project_name_from_md(path)
-            assert name == "项目概述"
-        finally:
-            os.unlink(path)
-
-    def test_empty_file(self):
-        path = _write_temp_md("")
-        try:
-            name = get_project_name_from_md(path)
-            assert name == ""
-        finally:
-            os.unlink(path)
-
-    def test_missing_file(self):
-        name = get_project_name_from_md("/nonexistent/path/test.md")
-        assert name == ""

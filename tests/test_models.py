@@ -78,8 +78,13 @@ class TestCosmicItem:
 
     # ---- to_rows ----
     def test_to_rows_empty_movements(self):
+        """无 movements 时返回一行，显示 L1/L2/L3/功能过程信息。"""
         item = self._make_item()
-        assert item.to_rows() == []
+        rows = item.to_rows()
+        assert len(rows) == 1
+        assert rows[0]["module_l1"] == "系统管理"
+        assert rows[0]["sub_process"] == ""
+        assert rows[0]["move_type"] == ""
 
     def test_to_rows_basic(self):
         item = self._make_item(movements=[
