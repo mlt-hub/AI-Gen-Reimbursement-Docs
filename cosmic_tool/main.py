@@ -578,7 +578,7 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='第0步：生成功能清单模块树.md 和 文档元数据.md')
 
     parser.add_argument('--gen-all', action='store_true',
-                        help='全流程：按依赖顺序自动执行 --gen-basedata → --gen-fpa → --gen-cosmic → --gen-list')
+                        help='全流程：按依赖顺序自动执行 --gen-basedata → --gen-fpa → --gen-spec → --gen-cosmic → --gen-list')
 
     parser.add_argument('--output-dir', default='',
                         help='--from-excel 系列命令的输出目录（默认输入文件所在目录）')
@@ -1268,6 +1268,13 @@ def main():
 
             # Step 0: 生成数据源中间文件
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
+            # AI 填充元数据中的 #AI生成# 标记
+            if api_key and (not os.path.exists(meta_filled_md)):
+                logger.info("第0步: AI 填充文档元数据...")
+                _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+            # 切换到 AI 填充后的版本
+            if os.path.exists(meta_filled_md):
+                meta_md = meta_filled_md
             fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
 
             # Step 1: FPA（MD → 模板MD → AI填充FPA.md → Excel）
@@ -1294,11 +1301,19 @@ def main():
             # 读取核减后工作量（从 FPA Excel > 元数据 > 用户输入 > 默认值）
             fpa_reduced = _resolve_fpa_sum(fpa_sum_md)
 
-            # Step 2: COSMIC
+            # Step 2: 需求说明书
+            if not os.path.exists(doc_template):
+                logger.info("第2步：生成 项目需求说明书.docx...")
+                generate_spec(doc_src_template, doc_template, meta_md, tree_md,
+                              api_key=api_key, model=model, base_url=base_url)
+            else:
+                logger.info("项目需求说明书.docx 已存在，跳过")
+
+            # Step 3: COSMIC
             if not os.path.exists(cosmic_template):
-                logger.info("第2步：生成 项目功能点拆分表.xlsx...")
+                logger.info("第3步：生成 项目功能点拆分表.xlsx...")
                 # 使用现有链路：init_base_data_md + ai_fill_cosmic_data_md + write_to_template
-                logger.info("  步骤2a: 从模块树生成拆分表 MD...")
+                logger.info("  步骤3a: 从模块树生成拆分表 MD...")
                 from cosmic_tool.docx_parser import FunctionModule
                 modules = _build_modules_from_md(tree_md)
                 project = modules[0].name if modules else "项目"
@@ -1308,7 +1323,7 @@ def main():
                 export_empty_md(modules, project, init_md_path)
 
                 if api_key:
-                    logger.info("  步骤2b: AI 填充 COSMIC 数据...")
+                    logger.info("  步骤3b: AI 填充 COSMIC 数据...")
                     import shutil
                     shutil.copy2(init_md_path, filled_md_path)
                     from cosmic_tool.cosmic_llm import load_user_config_from_meta
@@ -1319,11 +1334,17 @@ def main():
                     logger.warning("  跳过 AI 填充（未设置 API Key）")
                     filled_md_path = init_md_path
 
-                logger.info("  步骤2c: 写入 Excel...")
+                logger.info("  步骤3c: 写入 Excel...")
                 items = parse_md_to_items(filled_md_path)
                 if items:
                     from cosmic_tool.excel_writer import write_to_template
-                    write_to_template(cosmic_src_template, cosmic_template, items)
+                    # 读取环境图数据（同一次 save，保留模板图片）
+                    from cosmic_tool.gen_spec import _parse_meta_md
+                    _meta = _parse_meta_md(meta_md)
+                    _target = _meta.get("建设目标", "")
+                    _necessity = _meta.get("建设必要性", "")
+                    write_to_template(cosmic_src_template, cosmic_template, items,
+                                      env_target=_target, env_necessity=_necessity)
                     total_cfp = sum(item.total_cfp() for item in items)
                     logger.info(f"  CFP 总和: {total_cfp}")
                 else:
@@ -1341,21 +1362,13 @@ def main():
                     cfp_total = sum(item.total_cfp() for item in items)
             logger.info(f"CFP 总和: {cfp_total}")
 
-            # Step 3: 需求清单
+            # Step 4: 需求清单
             if not os.path.exists(require_template):
-                logger.info("第3步：生成 项目需求清单.xlsx...")
+                logger.info("第4步：生成 项目需求清单.xlsx...")
                 generate_require_xlsx(meta_md, tree_md, require_src_template, require_template,
                                       cfp_total=cfp_total)
             else:
                 logger.info("项目需求清单.xlsx 已存在，跳过")
-
-            # Step 可选: docx
-            if not os.path.exists(doc_template):
-                logger.info("可选：生成 项目需求说明书.docx...")
-                generate_spec(doc_src_template, doc_template, meta_md, tree_md,
-                              api_key=api_key, model=model, base_url=base_url)
-            else:
-                logger.info("项目需求说明书.docx 已存在，跳过")
 
             _write_combined_ai_log()
             _section("全流程完成")
@@ -1428,6 +1441,11 @@ def main():
         # --gen-fpa: MD → FPA模板MD → AI填充FPA.md → Excel
         if args.gen_fpa:
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
+            if api_key and (not os.path.exists(meta_filled_md)):
+                logger.info("AI 填充文档元数据...")
+                _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+            if os.path.exists(meta_filled_md):
+                meta_md = meta_filled_md
             fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
             fpa_md = os.path.join(md_dir, 'FPA模板.md')
             fpa_filled_md = os.path.join(md_dir, 'AI填充FPA.md')
@@ -1475,7 +1493,12 @@ def main():
                 items = parse_md_to_items(filled_md_path)
                 if items:
                     from cosmic_tool.excel_writer import write_to_template
-                    write_to_template(cosmic_src_template, cosmic_template, items)
+                    from cosmic_tool.gen_spec import _parse_meta_md
+                    _meta = _parse_meta_md(meta_md)
+                    _target = _meta.get("建设目标", "")
+                    _necessity = _meta.get("建设必要性", "")
+                    write_to_template(cosmic_src_template, cosmic_template, items,
+                                      env_target=_target, env_necessity=_necessity)
                     total_cfp = sum(item.total_cfp() for item in items)
                     logger.info(f"CFP 总和: {total_cfp}")
                     _write_combined_ai_log()

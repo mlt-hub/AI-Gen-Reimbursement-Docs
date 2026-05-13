@@ -95,11 +95,15 @@ def write_to_template(
     template_path: str,
     output_path: str,
     items: list[CosmicItem],
+    *,
+    env_target: str = "",
+    env_necessity: str = "",
 ) -> None:
     """Write COSMIC items to Excel template.
 
     Preserves header rows (1-5) and formatting, fills data starting at row 6.
     Also preserves any existing footer rows from the template.
+    若提供 env_target/env_necessity，同步更新环境图 sheet（同一次 save，保留图片）。
     """
     wb = openpyxl.load_workbook(template_path)
     ws = wb['2、功能点拆分表']
@@ -174,6 +178,8 @@ def write_to_template(
 
     if not all_rows:
         logger.warning("No data rows to write.")
+        if env_target or env_necessity:
+            update_environment_sheet(wb, env_target, env_necessity)
         try:
             wb.save(output_path)
         except PermissionError:
@@ -361,6 +367,10 @@ def write_to_template(
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)
 
+    # 更新环境图（与数据写入同一 save 周期，保留模板中的图片）
+    if env_target or env_necessity:
+        update_environment_sheet(wb, env_target, env_necessity)
+
     try:
         wb.save(output_path)
     except PermissionError:
@@ -443,6 +453,36 @@ def _auto_fit(ws, start_row: int, end_row: int) -> None:
         ws.row_dimensions[r].height = max(15, min(max_lines * 18, 200))
 
 
+def update_environment_sheet(
+    wb,
+    target: str,
+    necessity: str
+) -> None:
+    """更新已加载的 workbook 中环境图 sheet 的建设目标和建设必要性。
+
+    直接修改传入的 workbook 对象，由调用方负责 save。
+    避免多次 load/save 导致图片丢失。
+    """
+    if '1、环境图' not in wb.sheetnames:
+        logger.warning("模板中未找到 '1、环境图' sheet，跳过更新")
+        return
+    ws = wb['1、环境图']
+
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=27):
+        for cell in row:
+            val = str(cell.value).strip() if cell.value else ""
+            if not val:
+                continue
+            if '建设目标' in val:
+                _write_to_merged_below(ws, cell, target)
+            elif '建设必要性' in val:
+                _write_to_merged_below(ws, cell, necessity)
+
+    logger.info("环境图 sheet 已更新: 建设目标=%s, 建设必要性=%s",
+                "有" if target else "无", "有" if necessity else "无")
+
+
+# 兼容旧调用方
 def write_environment_sheet(
     template_path: str,
     output_path: str,
@@ -450,32 +490,42 @@ def write_environment_sheet(
     target: str,
     necessity: str
 ) -> None:
-    """Write construction goals and necessity to the environment sheet."""
+    """更新环境图 sheet（独立 load/save，可能丢失图片）。推荐使用 update_environment_sheet。"""
     wb = openpyxl.load_workbook(template_path)
-    ws = wb['1、环境图']
-
-    # Find and update the target/necessity cells
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=27):
-        for cell in row:
-            if cell.value and isinstance(cell.value, str):
-                if '建设目标' in cell.value and len(cell.value) < 20:
-                    # The cell to the right is where the target text goes
-                    target_cell = ws.cell(row=cell.row, column=cell.column + 1)
-                    # Find the merged range containing this cell
-                    # Actually just write to the cell - it's part of a merged range
-                    if target:
-                        target_cell.value = target
-                if '建设必要性' in cell.value and len(cell.value) < 20:
-                    necessity_cell = ws.cell(row=cell.row, column=cell.column + 1)
-                    if necessity:
-                        necessity_cell.value = necessity
-
+    update_environment_sheet(wb, target, necessity)
     try:
         wb.save(output_path)
     except PermissionError:
         logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
         raise
-    logger.info(f"Updated 1、环境图 sheet with project info")
+
+
+def _write_to_merged_below(ws, label_cell, text: str) -> None:
+    """将文本写入标签单元格下方的合并单元格区域。
+
+    模板中建设目标/建设必要性的内容在标签的正下方一行，属于跨列合并区域。
+    先取消合并再重新合并，确保写入生效。
+    """
+    if not text:
+        return
+    target_row = label_cell.row + 1
+    target_col = label_cell.column
+
+    # 查找包含目标单元格的合并区域
+    merged_range = None
+    for mr in list(ws.merged_cells.ranges):
+        if (mr.min_row <= target_row <= mr.max_row
+                and mr.min_col <= target_col <= mr.max_col):
+            merged_range = mr
+            break
+
+    if merged_range:
+        range_str = str(merged_range)
+        ws.unmerge_cells(range_str)
+        ws.cell(row=target_row, column=target_col, value=text)
+        ws.merge_cells(range_str)
+    else:
+        ws.cell(row=target_row, column=target_col, value=text)
 
 
 def copy_template_sheets(
