@@ -391,71 +391,26 @@ def _replace_paragraph_text(doc: Document, text_fragment: str, new_text: str):
 def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
                       base_url: str = "", tag: str = "",
                       prompt_key: str = "metadata_gen") -> str:
-    """调用 AI 生成文本。"""
+    """调用 AI 生成文本（委托至 llm_client 公共模块）。"""
     if not api_key:
         logger.warning("AI生成需要 API Key，使用提示词原文")
         return prompt
 
-    from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt
-    max_tokens = load_max_tokens()
+    from cosmic_tool.config_utils import load_ai_system_prompt
     system_prompt = load_ai_system_prompt(prompt_key)
 
-    logger.info(f"AI 生成请求 [{tag}] 模型: {model}")
-
-    # 保存提示词
+    from cosmic_tool.llm_client import call_llm
     try:
-        base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), 'log'
+        result = call_llm(
+            prompt=prompt, system=system_prompt,
+            api_key=api_key, model=model, base_url=base_url, tag=tag,
         )
-        prompt_dir = os.path.join(base_log, 'ai_prompts')
-        os.makedirs(prompt_dir, exist_ok=True)
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        with open(os.path.join(prompt_dir, f'{ts}_{tag}_prompt.txt'), 'w', encoding='utf-8') as f:
-            f.write(f"# AI Prompt: {tag}\n")
-            f.write(f"# Model: {model}\n")
-            f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            f.write(prompt)
-    except Exception as e:
-        logger.debug(f"保存提示词失败: {e}")
-
-    try:
-        import anthropic
-        client_kwargs = {"api_key": api_key}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-        client = anthropic.Anthropic(**client_kwargs)
-        msg = client.messages.create(
-            model=model or "deepseek-v4-flash",
-            max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        # 取最后一个 TextBlock（跳过 ThinkingBlock）
-        resp_text = ""
-        for block in msg.content:
-            if hasattr(block, 'text'):
-                resp_text = block.text.strip()
-                break
-
-        # 保存响应
-        try:
-            resp_dir = os.path.join(base_log, 'ai_responses')
-            os.makedirs(resp_dir, exist_ok=True)
-            with open(os.path.join(resp_dir, f'{ts}_{tag}_response.txt'), 'w', encoding='utf-8') as f:
-                f.write(f"# AI Response: {tag}\n")
-                f.write(f"# Model: {model}\n")
-                f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                f.write(resp_text)
-        except Exception as e:
-            logger.debug(f"保存响应失败: {e}")
-
         # 归一化连续空行：3+换行 → 2换行
         import re as _rn
-        resp_text = _rn.sub(r'\n{3,}', '\n\n', resp_text)
-        logger.info(f"AI 生成完成 [{tag}] 长度: {len(resp_text)} 字")
-        return resp_text
+        result = _rn.sub(r'\n{3,}', '\n\n', result)
+        return result
     except Exception as e:
-        logger.warning(f"AI生成失败 [{tag}]: {e}，使用提示词原文")
+        logger.warning("AI生成失败 [%s]: %s，使用提示词原文", tag, e)
         return prompt
 
 
@@ -500,9 +455,6 @@ def export_spec_template_md(meta_md_path: str, tree_md_path: str,
                             raw = raw.replace("${功能过程描述}", r["功能过程描述"])
                             raw = raw.replace("【功能过程描述】", r["功能过程描述"])
                             f.write(f"#### {r['功能过程']}\n\n{raw}\n\n")
-
-    logger.info(f"spec 模板 MD 已生成: {output_path}")
-    return output_path
 
     logger.info(f"spec 模板 MD 已生成: {output_path}")
     return output_path

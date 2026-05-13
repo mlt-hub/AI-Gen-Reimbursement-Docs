@@ -427,67 +427,21 @@ def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_ur
 
 def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
                    tag: str = "") -> str:
-    """单次 LLM 调用，返回文本。保存 prompt 和 response 到日志文件。"""
+    """单次 LLM 调用，返回文本（委托至 llm_client 公共模块）。"""
     if not api_key:
         return ""
 
-    logger.info(f"AI 生成请求 [{tag}] 模型: {model}")
-
-    # 保存提示词
-    ts = ""
-    try:
-        base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), '..', 'log'
-        )
-        prompt_dir = os.path.join(base_log, 'ai_prompts')
-        os.makedirs(prompt_dir, exist_ok=True)
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        with open(os.path.join(prompt_dir, f'{ts}_{tag}_prompt.txt'), 'w', encoding='utf-8') as f:
-            f.write(f"# AI Prompt: {tag}\n")
-            f.write(f"# Model: {model}\n")
-            f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            f.write(prompt)
-    except Exception as e:
-        logger.debug(f"保存提示词失败: {e}")
-
-    from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt
-    max_tokens = load_max_tokens()
+    from cosmic_tool.config_utils import load_ai_system_prompt
     system_prompt = load_ai_system_prompt("metadata_gen")
 
+    from cosmic_tool.llm_client import call_llm
     try:
-        import anthropic
-        client_kwargs = {"api_key": api_key}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-        client = anthropic.Anthropic(**client_kwargs)
-        msg = client.messages.create(
-            model=model or "deepseek-v4-flash",
-            max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": prompt}],
+        return call_llm(
+            prompt=prompt, system=system_prompt,
+            api_key=api_key, model=model, base_url=base_url, tag=tag,
         )
-        resp = ""
-        for block in msg.content:
-            if hasattr(block, 'text'):
-                resp = block.text.strip()
-                break
-
-        # 保存响应
-        try:
-            resp_dir = os.path.join(base_log, 'ai_responses')
-            os.makedirs(resp_dir, exist_ok=True)
-            with open(os.path.join(resp_dir, f'{ts}_{tag}_response.txt'), 'w', encoding='utf-8') as f:
-                f.write(f"# AI Response: {tag}\n")
-                f.write(f"# Model: {model}\n")
-                f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                f.write(resp)
-        except Exception as e:
-            logger.debug(f"保存响应失败: {e}")
-
-        logger.info(f"AI 生成完成 [{tag}] 长度: {len(resp)} 字")
-        return resp
     except Exception as e:
-        logger.warning(f"AI 调用失败 [{tag}]: {e}")
+        logger.warning("AI 调用失败 [%s]: %s", tag, e)
         return ""
 
 
@@ -625,6 +579,8 @@ def main():
 
     parser.add_argument('--output-dir', default='',
                         help='--from-excel 系列命令的输出目录（默认输入文件所在目录）')
+    parser.add_argument('--project-name', default='',
+                        help='--from-excel 系列命令的输出文件夹名称（默认从 Excel 自动读取工单标题）')
 
     # 模板路径覆盖（优先级: CLI > Excel sheet 8 > data/templates/）
     parser.add_argument('--fpa-template', default='',
@@ -646,8 +602,14 @@ def main():
 
     parser.add_argument('--version', '-v', action='store_true',
                         help='显示版本号')
+    parser.add_argument('--test-sound', action='store_true',
+                        help='测试提示音')
+    parser.add_argument('--max-tokens', type=str, default='',
+                        help='覆盖 AI max_tokens（如 6000、8K、1M），默认取配置文件')
 
     args = parser.parse_args()
+    if args.max_tokens:
+        os.environ['COSMIC_MAX_TOKENS'] = args.max_tokens
     logger.debug(f"CLI args: {args}")
 
     # 版本信息
@@ -662,6 +624,21 @@ def main():
     # 配置迁移（新模板键自动追加到用户配置文件）
     from cosmic_tool.config_utils import _migrate_config
     _migrate_config()
+
+    # 测试提示音
+    if args.test_sound:
+        try:
+            import winsound
+            _ap = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                               'data', 'audio', 'ticktick_pop.wav')
+            if os.path.isfile(_ap):
+                winsound.PlaySound(_ap, winsound.SND_FILENAME | winsound.SND_SYNC)
+                print("提示音已播放")
+            else:
+                print(f"音频文件不存在: {_ap}")
+        except Exception as e:
+            print(f"提示音播放失败: {e}")
+        return
 
     # === Log viewer ===
     if getattr(sys, 'frozen', False):
@@ -1129,18 +1106,19 @@ def main():
             logger.error(f"文件不存在: {excel_path}")
             return
 
-        # 读取工单标题用于创建输出目录（优先从 md，无 md 则从 Excel）
-        _p_title = ''
-        _tmp_md_dir = os.path.join(os.path.dirname(os.path.abspath(excel_path)) if not args.output_dir else args.output_dir, 'md')
-        _tmp_md_path = os.path.join(_tmp_md_dir, '文档元数据模板.md')
-        if os.path.exists(_tmp_md_path):
-            import re as _re_t
-            with open(_tmp_md_path, encoding='utf-8') as _f_t:
-                for _l_t in _f_t:
-                    _m_t = _re_t.search(r'工单标题\s*\|\s*(.+?)(?:\s*\||$)', _l_t)
-                    if _m_t:
-                        _p_title = _m_t.group(1).strip()
-                        break
+        # 读取工单标题用于创建输出目录（优先 CLI --project-name，其次 md，最后 Excel）
+        _p_title = args.project_name.strip() if args.project_name else ''
+        if not _p_title:
+            _tmp_md_dir = os.path.join(os.path.dirname(os.path.abspath(excel_path)) if not args.output_dir else args.output_dir, 'md')
+            _tmp_md_path = os.path.join(_tmp_md_dir, '文档元数据模板.md')
+            if os.path.exists(_tmp_md_path):
+                import re as _re_t
+                with open(_tmp_md_path, encoding='utf-8') as _f_t:
+                    for _l_t in _f_t:
+                        _m_t = _re_t.search(r'工单标题\s*\|\s*(.+?)(?:\s*\||$)', _l_t)
+                        if _m_t:
+                            _p_title = _m_t.group(1).strip()
+                            break
         if not _p_title:
             import re as _re_title
             import openpyxl as _opxl
@@ -1230,6 +1208,12 @@ def main():
         cosmic_template = _resolve_output_filename("6、项目功能点拆分表-元数据录入", cosmic_template)
         require_template = _resolve_output_filename("7、项目需求清单-元数据录入", require_template)
         doc_template = _resolve_output_filename("4、项目需求说明书-元数据录入", doc_template)
+        from cosmic_tool.config_utils import load_spec_remind_update_toc
+        if load_spec_remind_update_toc():
+            _doc_dir, _doc_name = os.path.split(doc_template)
+            if not _doc_name.startswith("【提醒】请手动更新整个目录"):
+                doc_template = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
+                logger.info(f"需求说明书文件名已添加提醒前缀")
         fpa_sum_md = os.path.join(md_dir, 'FPA工作量-计算结果.md')
         meta_filled_md = os.path.join(md_dir, 'AI填充文档元数据.md')
 
@@ -1289,8 +1273,8 @@ def main():
                     import shutil
                     shutil.copy2(fpa_md, fpa_filled_md)
                     logger.info("第1步：AI 填充 FPA...")
-                    ai_fill_fpa_md(fpa_filled_md, meta_md, api_key=api_key, model=model, base_url=base_url)
-                logger.info("第1步：生成 FPA Excel...")
+                    ai_fill_fpa_md(fpa_filled_md, meta_md, template_path=fpa_src_template,
+                                   api_key=api_key, model=model, base_url=base_url)
                 fpa_src = fpa_filled_md if api_key else fpa_md
                 fpa_template_file = fpa_src_template
                 generate_fpa_xlsx_from_md(fpa_src, meta_md, fpa_template_file, fpa_template)
@@ -1370,10 +1354,28 @@ def main():
             _section("全流程完成")
             # 提示音（按配置）
             try:
-                from cosmic_tool.config_utils import _load_business_rules
-                if _load_business_rules().get('notify_sound', False):
+                import yaml as _y
+                _notify = False
+                for _p in [
+                    os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                 'config', 'system_config.yaml'),
+                    os.path.join(os.environ.get('USERPROFILE', os.environ.get('HOME', '')),
+                                 '.cosmic-tool', 'system_config.yaml'),
+                ]:
+                    if os.path.isfile(_p):
+                        with open(_p, encoding='utf-8') as _f:
+                            _c = _y.safe_load(_f)
+                        if _c and _c.get('notify_sound'):
+                            _notify = True
+                            break
+                if _notify:
                     import winsound
-                    winsound.MessageBeep()
+                    _audio_path = os.path.join(
+                        os.path.dirname(os.path.dirname(__file__)),
+                        'data', 'audio', 'ticktick_pop.wav'
+                    )
+                    if os.path.isfile(_audio_path):
+                        winsound.PlaySound(_audio_path, winsound.SND_FILENAME | winsound.SND_SYNC)
             except Exception:
                 pass
             # 输出汇总
@@ -1429,9 +1431,9 @@ def main():
                 logger.info("第2步: AI 填充 FPA 数据...")
                 import shutil
                 shutil.copy2(fpa_md, fpa_filled_md)
-                ai_fill_fpa_md(fpa_filled_md, meta_md, api_key=api_key, model=model, base_url=base_url)
+                ai_fill_fpa_md(fpa_filled_md, meta_md, template_path=fpa_src_template,
+                               api_key=api_key, model=model, base_url=base_url)
             else:
-                logger.warning("未设置 API Key，跳过 AI 填充")
                 fpa_filled_md = fpa_md
 
             logger.info("第3步: 生成 FPA 工作量评估 Excel...")

@@ -33,3 +33,12 @@ notify_sound: false
 
 # COSMIC 拆分表是否标记数据异常警告（默认 true）
 cosmic_warn_marker: true
+
+# 项目需求说明书文件名是否添加「【提醒】请手动更新整个目录」前缀（默认 true）
+spec_remind_update_toc: true
+
+# FPA AI 只处理前 N 个功能过程（0=不限制）
+gen_fpa_ai_limit: 0
+
+# COSMIC AI 只处理前 N 个功能过程（0=不限制）
+gen_cosmic_ai_limit: 0

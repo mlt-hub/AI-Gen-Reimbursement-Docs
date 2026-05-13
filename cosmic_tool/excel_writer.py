@@ -38,10 +38,11 @@ def _get_ref_style(ws, row: int, col: int) -> dict:
     }
 
 
-def _apply_style(cell, style: dict) -> None:
+def _apply_style(cell, style: dict, skip_fill: bool = False) -> None:
     """Apply style dict to a cell."""
     cell.font = style['font']
-    cell.fill = style['fill']
+    if not skip_fill and style.get('fill'):
+        cell.fill = style['fill']
     cell.alignment = style['alignment']
     cell.border = style['border']
     cell.number_format = style['number_format']
@@ -50,7 +51,7 @@ def _apply_style(cell, style: dict) -> None:
 def write_to_template(
     template_path: str,
     output_path: str,
-    items: list[CosmicItem]
+    items: list[CosmicItem],
 ) -> None:
     """Write COSMIC items to Excel template.
 
@@ -67,8 +68,8 @@ def write_to_template(
     _CFP_FILL_TMPL = copy.copy(ws.cell(row=6, column=13).fill)
 
 # --- Save existing footer notes (rows below header rows, before clearing) ---
-    # Collect rows from max_row upward that are NOT sample data (footer notes)
     footer_saved = []  # list of (merge_range_string, {col: (value, style_dict)})
+# Collect rows from max_row upward that are NOT sample data (footer notes)
     seen_merges = list(ws.merged_cells.ranges)
     for row_num in range(ws.max_row, 5, -1):
         cell_a = ws.cell(row=row_num, column=1).value
@@ -90,14 +91,24 @@ def write_to_template(
                     c = ws.cell(row=row_num, column=col)
                     if c.value is not None or col == 1:
                         row_vals[col] = (c.value, _get_ref_style(ws, row_num, col))
+                # Save row heights for merged range
+                _saved_heights: dict[int, float] = {}
+                for _mr in row_merges:
+                    _parts = _mr.split(':')
+                    _r1 = int(''.join(c for c in _parts[0] if c.isdigit()))
+                    _r2 = int(''.join(c for c in _parts[1] if c.isdigit()))
+                    for _r in range(_r1, _r2 + 1):
+                        _h = ws.row_dimensions[_r].height
+                        if _h is not None:
+                            _saved_heights[_r] = _h
                 if row_vals:
-                    footer_saved.insert(0, (row_merges, row_vals))
+                    footer_saved.insert(0, (row_merges, row_vals, _saved_heights))
                 continue
         # Stop at first non-footer row (contiguous from bottom)
         if footer_saved:
             break
 
-    # --- Clear existing data (rows 6+) ---
+# --- Clear existing data (rows 6+) ---
     # 1. Remove merged cells in data area
     merged_to_remove = []
     for mr in ws.merged_cells.ranges:
@@ -106,40 +117,9 @@ def write_to_template(
     for mr_str in merged_to_remove:
         ws.unmerge_cells(mr_str)
 
-    # 2. Clear cell values and styles
-    from openpyxl.styles import Font, PatternFill, Border, Alignment
-    for row in ws.iter_rows(min_row=6, max_row=ws.max_row, min_col=1, max_col=13):
-        for cell in row:
-            cell.value = None
-            cell.font = Font()
-            cell.fill = PatternFill(fill_type=None)
-            cell.border = Border()
-            cell.alignment = Alignment()
-            cell.number_format = 'General'
-
-    # 3. Reset CFP column fill to none for non-reference rows (template may have green in unused rows)
-    for row_num in range(7, ws.max_row + 1):
-        cell_m = ws.cell(row=row_num, column=13)
-        cell_m.fill = PatternFill(fill_type=None)
-
-    # 4. Clear data validations (if any) for data area
-    if ws.data_validations:
-        new_dvs = []
-        for dv in ws.data_validations.dataValidation:
-            # Keep validations that don't overlap with data area
-            keep = True
-            if hasattr(dv, 'sqref') and dv.sqref:
-                dv_range = str(dv.sqref)
-                # Simple check: if range refers to rows >= 6, remove it
-                try:
-                    min_row = int(dv_range.split(':')[0].replace('$', '').lstrip('ABCDEFGHIJKLM'))
-                    if min_row >= 6:
-                        keep = False
-                except (ValueError, IndexError):
-                    pass
-            if keep:
-                new_dvs.append(dv)
-        ws.data_validations.dataValidation = new_dvs
+    # 2. 删除数据区域所有行（第6行起），彻底清除旧数据及格式
+    if ws.max_row >= 6:
+        ws.delete_rows(6, ws.max_row - 5)
 
     # --- Flatten all rows ---
     all_rows = []
@@ -181,8 +161,8 @@ def write_to_template(
             else:
                 cell.value = row_data.get(key_map[col_idx], '')
 
-            # Apply template row 6 format
-            _apply_style(cell, tmpl_format_row6[col_idx])
+            # Apply template row 6 format（跳过 fill，避免空单元格带底色）
+            _apply_style(cell, tmpl_format_row6[col_idx], skip_fill=True)
 
             # CFP 列：绿色底色 + 分数格式（复用=1/3时显示分数）
             if col_idx == 13:
@@ -220,27 +200,87 @@ def write_to_template(
     _add_reuse_validation(ws, start_row, total_rows)
 
     # --- Restore saved footer notes (from template) below the new data ---
-    for i, (merges, vals) in enumerate(footer_saved):
-        note_row = start_row + total_rows + i
-        for mr_str in merges:
-            # Translate merged cell range to the new row number
-            parts = mr_str.split(':')
-            old_min = int(''.join(c for c in parts[0] if c.isdigit()))
-            old_max = int(''.join(c for c in parts[1] if c.isdigit()))
-            span = old_max - old_min
-            new_min_str = parts[0].rstrip('0123456789') + str(note_row)
-            new_max_str = parts[1].rstrip('0123456789') + str(note_row + span)
-            ws.merge_cells(f'{new_min_str}:{new_max_str}')
-        for col, (val, style) in vals.items():
-            cell = ws.cell(row=note_row, column=col)
-            cell.value = val
-            _apply_style(cell, style)
-        logger.debug(f"Restored footer note at row {note_row}")
+    for i, (merges, vals, row_heights) in enumerate(footer_saved):
+            note_row = start_row + total_rows + i
+            for mr_str in merges:
+                # Translate merged cell range to the new row number
+                parts = mr_str.split(':')
+                old_min = int(''.join(c for c in parts[0] if c.isdigit()))
+                old_max = int(''.join(c for c in parts[1] if c.isdigit()))
+                span = old_max - old_min
+                new_min_str = parts[0].rstrip('0123456789') + str(note_row)
+                new_max_str = parts[1].rstrip('0123456789') + str(note_row + span)
+                ws.merge_cells(f'{new_min_str}:{new_max_str}')
+            for col, (val, style) in vals.items():
+                cell = ws.cell(row=note_row, column=col)
+                cell.value = val
+                _apply_style(cell, style)
+            # 合并单元格后补全四周边框（WPS 需要四个角都设才渲染完整）
+            for mr_str in merges:
+                parts = mr_str.split(':')
+                old_min = int(''.join(c for c in parts[0] if c.isdigit()))
+                old_max = int(''.join(c for c in parts[1] if c.isdigit()))
+                span = old_max - old_min
+                new_min_row = note_row
+                new_max_row = note_row + span
+                new_min_col_str = parts[0].rstrip('0123456789')
+                new_max_col_str = parts[1].rstrip('0123456789')
+                import openpyxl.utils as _ou
+                new_min_col = _ou.column_index_from_string(new_min_col_str)
+                new_max_col = _ou.column_index_from_string(new_max_col_str)
+                # 从左上角单元格获取边框样式（强制黑色，WPS 对 auto 颜色渲染为浅灰）
+                _tl = ws.cell(new_min_row, new_min_col)
+                _b = _tl.border
+                _sides = {}
+                _black = 'FF000000'
+                for _side_name, _attr in [('left', 'left'), ('right', 'right'), ('top', 'top'), ('bottom', 'bottom')]:
+                    _s = getattr(_b, _attr)
+                    if _s and _s.style:
+                        _sides[_side_name] = Side(style=_s.style, color=_black)
+                if _sides:
+                    ws.cell(new_min_row, new_min_col).border = Border(
+                        left=_sides.get('left'), right=_sides.get('right'),
+                        top=_sides.get('top'), bottom=_sides.get('bottom'))
+                    if new_max_col > new_min_col:
+                        ws.cell(new_min_row, new_max_col).border = Border(
+                            left=None, right=_sides.get('right'),
+                            top=_sides.get('top'), bottom=None)
+                        # 顶行中间单元格也设上边框（WPS 需要顶行全部有 top=thin 才渲染实线）
+                        for _mid_col in range(new_min_col + 1, new_max_col):
+                            ws.cell(new_min_row, _mid_col).border = Border(
+                                left=None, right=None,
+                                top=_sides.get('top'), bottom=None)
+                    if new_max_row > new_min_row:
+                        ws.cell(new_max_row, new_min_col).border = Border(
+                            left=_sides.get('left'), right=None,
+                            top=None, bottom=_sides.get('bottom'))
+                    if new_max_col > new_min_col and new_max_row > new_min_row:
+                        ws.cell(new_max_row, new_max_col).border = Border(
+                            left=None, right=_sides.get('right'),
+                            top=None, bottom=_sides.get('bottom'))
+                        # 底行中间单元格也设下边框
+                        for _mid_col in range(new_min_col + 1, new_max_col):
+                            ws.cell(new_max_row, _mid_col).border = Border(
+                                left=None, right=None,
+                                top=None, bottom=_sides.get('bottom'))
+            # 恢复合并单元格的行高
+            for _mr_str in merges:
+                _parts = _mr_str.split(':')
+                _r1 = int(''.join(c for c in _parts[0] if c.isdigit()))
+                _r2 = int(''.join(c for c in _parts[1] if c.isdigit()))
+                for _off in range(_r2 - _r1 + 1):
+                    _old_r = _r1 + _off
+                    if _old_r in row_heights:
+                        ws.row_dimensions[note_row + _off].height = row_heights[_old_r]
+            logger.debug(f"Restored footer note at row {note_row}")
+
+
 
     # 合并后补回边框
     for row_num in range(start_row, start_row + total_rows):
         for col_idx in range(1, 14):
             ws.cell(row=row_num, column=col_idx).border = tmpl_format_row6[col_idx]['border']
+
 
     # --- Apply warning indicators (after merges, so they don't get overwritten) ---
     from cosmic_tool.config_utils import load_cosmic_warn_marker

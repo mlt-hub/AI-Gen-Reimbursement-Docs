@@ -392,17 +392,6 @@ def _filter_heading_paragraphs(paras: list[dict], max_length: int = 500) -> list
     return filtered
 
 
-def _extract_ai_text(content_blocks: list) -> str:
-    """Extract text from AI response content blocks."""
-    for block in content_blocks:
-        block_type = getattr(block, 'type', None) or type(block).__name__
-        if 'text' in block_type.lower() or block_type in ('text', 'TextBlock'):
-            return block.text
-    for block in content_blocks:
-        if hasattr(block, 'text'):
-            return block.text
-    return ""
-
 
 def _clean_json_from_heading(raw: str) -> str:
     """Clean malformed JSON from AI heading response."""
@@ -455,8 +444,6 @@ def ai_build_module_tree(
 
     Falls back to hardcoded build_module_tree on failure.
     """
-    import anthropic
-
     root = _read_docx_xml(docx_path)
     style_names = _load_style_names(docx_path)
     paras = _get_paragraphs(root, style_names)
@@ -479,42 +466,27 @@ def ai_build_module_tree(
         return build_module_tree(docx_path)
 
     base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
-    client_kwargs = {"api_key": api_key}
-    if base_url:
-        client_kwargs["base_url"] = base_url
-
-    client = anthropic.Anthropic(**client_kwargs)
-
-    from cosmic_tool.config_utils import load_max_tokens
-    max_tokens = load_max_tokens()
 
     logger.info("AI正在分析文档段落结构并推断模块层级...")
 
     try:
         _save_heading_prompt(docx_path, prompt)
-        response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=0.1,
+
+        from cosmic_tool.llm_client import call_llm
+        resp_text = call_llm(
+            prompt=prompt,
             system=_load_heading_system_prompt(),
-            messages=[{"role": "user", "content": prompt}]
+            api_key=api_key, model=model, base_url=base_url,
+            temperature=0.1, tag="heading_parse", save_logs=False,
         )
 
-        resp_text = _extract_ai_text(response.content)
         if not resp_text:
             raise ValueError("AI响应为空")
 
-        # 提取AI推理过程
-        reasoning = _extract_ai_thinking(response.content)
-
-        stop_reason = getattr(response, 'stop_reason', None) or ''
-        if stop_reason == 'max_tokens':
-            logger.warning("AI输出被截断，结果可能不完整")
-
         raw_modules = _parse_ai_heading_response(resp_text)
 
-        # 保存heading解析响应及推理过程
-        _save_heading_response(docx_path, resp_text, reasoning)
+        # 保存heading解析响应
+        _save_heading_response(docx_path, resp_text, "")
 
         modules = []
         for rm in raw_modules:
@@ -558,17 +530,6 @@ def _save_heading_prompt(docx_path: str, prompt: str) -> None:
         f.write(prompt)
     logger.info(f"AI解析提示词已保存: {filepath}")
 
-
-def _extract_ai_thinking(content_blocks: list) -> str:
-    """Extract thinking/reasoning from AI response content blocks."""
-    parts = []
-    for block in content_blocks:
-        block_type = getattr(block, 'type', None) or type(block).__name__
-        if 'thinking' in block_type.lower() or block_type == 'ThinkingBlock':
-            text = getattr(block, 'thinking', None) or getattr(block, 'text', '')
-            if text:
-                parts.append(str(text))
-    return "\n\n".join(parts) if parts else ""
 
 
 def _save_heading_response(docx_path: str, text: str, reasoning: str = "") -> None:
@@ -844,24 +805,6 @@ def build_module_tree(docx_path: str, mapping_name: str = "",
 
     logger.warning("无法解析模块层级：文档中未找到 ### 标记")
     return []
-
-def get_project_name(docx_path: str) -> str:
-    """Combine hierarchy + L3 modules into flat FunctionModule list."""
-    result = []
-    l1_added, l2_added = set(), set()
-
-    for name, info in hierarchy.items():
-        if info['level'] == 1 and name not in l1_added:
-            result.append(FunctionModule(name=name, level=1, parent=None))
-            l1_added.add(name)
-        elif info['level'] == 2 and name not in l2_added:
-            result.append(FunctionModule(name=name, level=2, parent=info['parent']))
-            l2_added.add(name)
-
-    for m in l3_modules:
-        m.children = processes.get(m.name, [])
-        result.append(m)
-    return result
 
 
 def _validate_tree(modules: list[FunctionModule]) -> bool:

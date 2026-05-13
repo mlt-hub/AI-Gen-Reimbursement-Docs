@@ -117,6 +117,31 @@ def _clean_model(name: str) -> str:
 clean_model_name = _clean_model
 
 
+def _get_system_config_value(key: str, default):
+    """从 system_config.yaml 中读取指定 key 的值（带缓存）。
+
+    Args:
+        key: 配置键名
+        default: 默认值（同时确定返回类型）
+
+    Returns:
+        配置值，未找到或读取失败返回 default
+    """
+    yaml_path = _config_dir() / "system_config.yaml"
+    if not yaml_path.exists():
+        return default
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        val = cfg.get(key)
+        if val is None:
+            return default
+        return type(default)(val) if not isinstance(val, type(default)) else val
+    except Exception:
+        return default
+
+
 def _load_business_rules() -> dict:
     """Load config/business_rules.yaml and return as dict."""
     yaml_path = _config_dir() / "business_rules.yaml"
@@ -140,9 +165,23 @@ def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3
 
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
+    CLI --max-tokens 通过环境变量 COSMIC_MAX_TOKENS 覆盖。
 
     Examples: 2000, 384K, 1M
     """
+    import os as _os
+    _env = _os.environ.get('COSMIC_MAX_TOKENS', '').strip()
+    if _env:
+        try:
+            _env = _env.upper()
+            if _env.endswith("M"):
+                return int(float(_env[:-1]) * 1_000_000)
+            elif _env.endswith("K"):
+                return int(float(_env[:-1]) * 1_000)
+            else:
+                return int(_env)
+        except Exception:
+            pass
     yaml_path = _config_dir() / "system_config.yaml"
     if yaml_path.exists():
         try:
@@ -194,45 +233,34 @@ def load_flow_max_ai(flow_name: str) -> int:
 
 def load_cosmic_warn_marker() -> bool:
     """读取 cosmic_warn_marker，true 时在拆分表中标记数据异常警告。"""
-    yaml_path = _config_dir() / "system_config.yaml"
-    if yaml_path.exists():
-        try:
-            import yaml
-            with open(yaml_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-            return bool(cfg.get('cosmic_warn_marker', True))
-        except Exception:
-            pass
-    return True
+    return _get_system_config_value('cosmic_warn_marker', True)
 
 
 def load_fpa_reduced_use_workload() -> bool:
     """读取 fpa_reduced_use_workload，true 时直接用 FPA 工作量值。"""
-    yaml_path = _config_dir() / "system_config.yaml"
-    if yaml_path.exists():
-        try:
-            import yaml
-            with open(yaml_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-            return bool(cfg.get('fpa_reduced_use_workload', False))
-        except Exception:
-            pass
-    return False
+    return _get_system_config_value('fpa_reduced_use_workload', False)
 
 
 def load_max_ai_l3_modules(default: int = 0) -> int:
     """读取 max_ai_l3_modules，0=不限制。"""
-    yaml_path = _config_dir() / "system_config.yaml"
-    if yaml_path.exists():
-        try:
-            import yaml
-            with open(yaml_path, 'r', encoding='utf-8') as f:
-                cfg = yaml.safe_load(f)
-            val = cfg.get('max_ai_l3_modules', default)
-            return int(val)
-        except Exception:
-            pass
-    return default
+    return _get_system_config_value('max_ai_l3_modules', default)
+
+
+def load_spec_remind_update_toc() -> bool:
+    """读取 spec_remind_update_toc，true 时在 docx 文件名加提醒前缀。"""
+    return _get_system_config_value('spec_remind_update_toc', True)
+
+
+def load_gen_fpa_ai_limit() -> int:
+    """读取 gen_fpa_ai_limit，限制 FPA AI 处理的功能过程数（0=不限制）。"""
+    val = _get_system_config_value('gen_fpa_ai_limit', 0)
+    return max(val, 0)
+
+
+def load_gen_cosmic_ai_limit() -> int:
+    """读取 gen_cosmic_ai_limit，限制 COSMIC AI 处理的功能过程数（0=不限制）。"""
+    val = _get_system_config_value('gen_cosmic_ai_limit', 0)
+    return max(val, 0)
 
 
 def load_ai_system_prompt(name: str) -> str:

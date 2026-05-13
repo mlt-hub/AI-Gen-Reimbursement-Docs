@@ -159,30 +159,6 @@ def _build_module_prompt(l3_module: FunctionModule, modules: list[FunctionModule
     return prompt
 
 
-def _extract_text(content_blocks: list) -> str:
-    """Extract text from response content blocks, handling ThinkingBlock."""
-    for block in content_blocks:
-        block_type = getattr(block, 'type', None) or type(block).__name__
-        if 'text' in block_type.lower() or block_type in ('text', 'TextBlock'):
-            return block.text
-    # Fallback: try to get text attribute from any block
-    for block in content_blocks:
-        if hasattr(block, 'text'):
-            return block.text
-    return ""
-
-
-def _extract_thinking(content_blocks: list) -> str:
-    """Extract thinking/reasoning content from response blocks."""
-    parts = []
-    for block in content_blocks:
-        block_type = getattr(block, 'type', None) or type(block).__name__
-        if 'thinking' in block_type.lower():
-            parts.append(block.thinking if hasattr(block, 'thinking') else str(block))
-        elif block_type == 'ThinkingBlock':
-            parts.append(block.thinking if hasattr(block, 'thinking') else str(block))
-    return "\n\n".join(parts) if parts else ""
-
 
 def _clean_json(raw: str) -> str:
     """Clean malformed JSON: trailing commas, single quotes, etc."""
@@ -334,8 +310,6 @@ def generate_cosmic_items(
     Returns:
         List of CosmicItem objects
     """
-    import anthropic
-
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise ValueError(
@@ -343,11 +317,6 @@ def generate_cosmic_items(
         )
 
     base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
-    client_kwargs = {"api_key": api_key}
-    if base_url:
-        client_kwargs["base_url"] = base_url
-
-    client = anthropic.Anthropic(**client_kwargs)
 
     # Filter L3 modules
     l3_modules = [m for m in modules if m.level == 3]
@@ -367,10 +336,13 @@ def generate_cosmic_items(
     all_items = []
     error_modules: list[tuple[str, str, str, str]] = []  # (l1, l2, l3, error_msg)
     total = len(l3_modules)
-    total_input_tokens = 0
-    total_output_tokens = 0
-
     logger.info(f"Generating COSMIC decompositions for {total} modules...")
+
+    from cosmic_tool.config_utils import load_gen_cosmic_ai_limit
+    _cosmic_proc_limit = load_gen_cosmic_ai_limit()
+    _cosmic_proc_count = 0
+    if _cosmic_proc_limit > 0:
+        logger.info(f"仅对前 {_cosmic_proc_limit} 个功能过程调用 AI，超过的跳过")
 
     for idx, l3 in enumerate(l3_modules, 1):
         l2_name = l3.parent or ""
@@ -379,6 +351,21 @@ def generate_cosmic_items(
             l2 = get_module_by_name(modules, l2_name)
             if l2 and l2.parent:
                 l1_name = l2.parent
+        # 按功能过程累计数跳过
+        if _cosmic_proc_limit > 0:
+            _module_procs = len(l3.children) if l3.children else 1
+            if _cosmic_proc_count >= _cosmic_proc_limit:
+                from cosmic_tool.models import CosmicItem
+                all_items.append(CosmicItem(
+                    project=project_name,
+                    module_l1=l1_name, module_l2=l2_name, module_l3=l3.name,
+                    process="", user="", trigger="", movements=[]
+                ))
+                logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过功能过程限制 {_cosmic_proc_limit}）")
+                continue
+            _cosmic_proc_count += _module_procs
+
+        # 超过现有限制的模块跳过 AI
 
         # 超过限制的模块跳过 AI
         if max_ai_l3 > 0 and idx > max_ai_l3:
@@ -403,65 +390,58 @@ def generate_cosmic_items(
         if interactive:
             input("Press Enter to continue (Ctrl+C to skip)...")
 
-        try:
-            _save_ai_prompt(l3.name, l2_name, l1_name, prompt, "generate_cosmic")
-            response = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=0.1,
-                system=load_ai_system_prompt("cosmic_split") + "\n\n" + load_ai_examples("cosmic_split"),
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            # Token usage monitoring
-            usage = getattr(response, 'usage', None)
-            inp_tok = getattr(usage, 'input_tokens', 0) if usage else 0
-            out_tok = getattr(usage, 'output_tokens', 0) if usage else 0
-            total_input_tokens += inp_tok
-            total_output_tokens += out_tok
-            # Per-call usage
-            logger.info(f"  [{idx}/{total}] tokens: ↑{inp_tok} ↓{out_tok}（累积 ↑{total_input_tokens} ↓{total_output_tokens}）")
-
-            # Check for truncation
-            stop_reason = getattr(response, 'stop_reason', None) or ''
-            if stop_reason == 'max_tokens':
-                logger.warning(f"  [{idx}/{total}] ⚠ AI输出被截断（{out_tok}/{max_tokens}），结果可能不完整")
-
-            resp_text = _extract_text(response.content)
-            if not resp_text:
-                raise ValueError("No text content in response")
-
-            # Extract thinking/reasoning from response content blocks
-            reasoning = _extract_thinking(response.content)
-
-            # Save raw AI response and reasoning to log file
-            _save_ai_response(l3.name, l2_name, l1_name, resp_text, reasoning)
-
-            items = _parse_llm_response(l3.name, user, trigger, resp_text,
-                                        project_name, l1_name, l2_name)
-            all_items.extend(items)
-            # Log warnings summary
-            warn_count = sum(1 for it in items if it.warnings)
-            if warn_count:
-                for it in items:
-                    if it.warnings:
-                        logger.warning(f"  [{idx}/{total}] ⚠ {it.process}: {'; '.join(it.warnings)}")
-            sub_count = sum(len(it.movements) for it in items)
-            logger.info(f"  [{idx}/{total}] → {sub_count} 个子过程描述"
-                        + (f"（{warn_count}个有警告）" if warn_count else ""))
-
-        except Exception as e:
-            logger.warning(f"  [{idx}/{total}] → ERROR: {e}")
-            error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
-            # Prompt user on error (only in interactive terminal)
+        _current_max_tokens = max_tokens
+        _abort_module = False
+        while True:
             try:
-                if sys.stdin.isatty():
-                    choice = input("  输入 q 结束（其他键继续）: ").strip().lower()
+                _save_ai_prompt(l3.name, l2_name, l1_name, prompt, "generate_cosmic")
+
+                from cosmic_tool.llm_client import call_llm
+                resp_text = call_llm(
+                    prompt=prompt,
+                    system=load_ai_system_prompt("cosmic_split") + "\n\n" + load_ai_examples("cosmic_split"),
+                    api_key=api_key, model=model, base_url=base_url,
+                    max_tokens=_current_max_tokens, temperature=0.1,
+                    tag=f"cosmic_{idx}", save_logs=False,
+                )
+
+                _save_ai_response(l3.name, l2_name, l1_name, resp_text, "")
+
+                items = _parse_llm_response(l3.name, user, trigger, resp_text,
+                                            project_name, l1_name, l2_name)
+                all_items.extend(items)
+                warn_count = sum(1 for it in items if it.warnings)
+                if warn_count:
+                    for it in items:
+                        if it.warnings:
+                            logger.warning(f"  [{idx}/{total}] ⚠ {it.process}: {'; '.join(it.warnings)}")
+                sub_count = sum(len(it.movements) for it in items)
+                logger.info(f"  [{idx}/{total}] → {sub_count} 个子过程描述"
+                            + (f"（{warn_count}个有警告）" if warn_count else ""))
+                break  # success, exit while loop
+
+            except Exception as e:
+                logger.warning(f"  [{idx}/{total}] → ERROR: {e}")
+                if not sys.stdin.isatty():
+                    error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
+                    break
+                try:
+                    choice = input(f"  错误: {e}\n  输入 r 12000 重试(r后有空格)，q 结束，Enter跳过: ").strip()
                     if choice == 'q':
-                        logger.warning(f"用户选择结束，已处理 {idx}/{total} 个模块")
+                        _abort_module = True
                         break
-            except (EOFError, KeyboardInterrupt):
-                break
+                    if choice.startswith('r ') and len(choice) > 2:
+                        _current_max_tokens = int(choice[2:].strip())
+                        logger.info(f"  重试，max_tokens 设为 {_current_max_tokens}")
+                        continue
+                    error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
+                    break
+                except (EOFError, KeyboardInterrupt):
+                    error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
+                    break
+        if _abort_module:
+            logger.warning(f"用户选择结束，已处理 {idx}/{total} 个模块")
+            break
 
     # --- 数据组名去重（从功能过程中提取动词作后缀） ---
     _seen_groups: dict[str, str] = {}
@@ -476,11 +456,24 @@ def generate_cosmic_items(
             else:
                 _seen_groups[_orig] = _verb
 
+    # --- 数据属性去重（全局唯一，重复时尾部加"等"） ---
+    _seen_attrs: set[str] = set()
+    for _item in all_items:
+        for _m in _item.movements:
+            _orig = _m.data_attrs
+            if not _orig:
+                continue
+            _key = _orig
+            while _key in _seen_attrs:
+                _key += "等"
+            if _key != _orig:
+                _m.data_attrs = _key
+            _seen_attrs.add(_key)
+
     # --- Final summary ---
     total_ok = len(all_items)
     warn_items = [it for it in all_items if it.warnings]
     logger.info(f"Total COSMIC items generated: {total_ok}")
-    logger.info(f"Token usage: ↑{total_input_tokens} 输入 / ↓{total_output_tokens} 输出（单次上限 {max_tokens}）")
     has_issues = warn_items or error_modules
     if has_issues:
         if warn_items:
