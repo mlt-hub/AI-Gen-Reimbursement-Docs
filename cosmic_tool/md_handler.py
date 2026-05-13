@@ -6,6 +6,7 @@ import os
 from datetime import date
 from typing import Optional
 
+from cosmic_tool.constants import DEFAULT_MODEL, DEFAULT_INITIATOR, DEFAULT_RECEIVER
 from cosmic_tool.models import CosmicItem, DataMovement
 from cosmic_tool.docx_parser import FunctionModule, get_module_by_name
 
@@ -282,10 +283,10 @@ def fill_md_with_ai(
     modules: list[FunctionModule],
     project_name: str,
     api_key: str,
-    model: str = "deepseek-v4-flash",
+    model: str = DEFAULT_MODEL,
     base_url: Optional[str] = None,
-    user_default_initiator: str = "操作员",
-    user_default_receiver: str = "地市后台",
+    user_default_initiator: str = DEFAULT_INITIATOR,
+    user_default_receiver: str = DEFAULT_RECEIVER,
     user_initiator_rules: list[tuple[str, str]] | None = None,
     user_receiver_rules: list[tuple[str, str]] | None = None,
 ) -> None:

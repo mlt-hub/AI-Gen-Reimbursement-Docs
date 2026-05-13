@@ -23,6 +23,7 @@ import shutil
 import sys
 from datetime import datetime
 
+from cosmic_tool.constants import DEFAULT_MODEL
 from cosmic_tool.docx_to_md import convert_to_md
 from cosmic_tool.md_handler import build_modules_from_md, get_project_name_from_md
 from cosmic_tool.docx_parser import build_module_tree, ai_build_module_tree, print_tree, get_project_name
@@ -182,7 +183,7 @@ def _build_modules(docx_path: str, use_ai: bool,
         modules = ai_build_module_tree(
             docx_path=docx_path,
             api_key=api_key or None,
-            model=model or "deepseek-v4-flash",
+            model=model or DEFAULT_MODEL,
             base_url=base_url or None,
         )
     elif tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
@@ -477,35 +478,36 @@ def _verify_against_json(modules: list, docx_path: str) -> None:
         logger.warning(f"读取JSON比较文件失败: {e}")
 
 
-def main():
+def _build_parser() -> argparse.ArgumentParser:
+    """构建 CLI 参数解析器。"""
     parser = argparse.ArgumentParser(
         description="COSMIC 功能点拆分工具 - 从需求说明书自动生成功能点拆分表（需指定参数，--docx-all可批量处理Word）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-工作流示例:
+    工作流示例:
 
-  # (推荐) MD中间件模式：docx → MD → 编辑MD → Excel
-  python -m cosmic_tool.main --docx 需求书.docx --init-md 需求书_拆分表.md
-  python -m cosmic_tool.main --fill-md 需求书_拆分表.md
-  python -m cosmic_tool.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
+      # (推荐) MD中间件模式：docx → MD → 编辑MD → Excel
+      python -m cosmic_tool.main --docx 需求书.docx --init-md 需求书_拆分表.md
+      python -m cosmic_tool.main --fill-md 需求书_拆分表.md
+      python -m cosmic_tool.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
 
-  # (快捷) 一键直出：docx → LLM → Excel
-  python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
+      # (快捷) 一键直出：docx → LLM → Excel
+      python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
 
-  # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含功能清单模块树.md和文档元数据.md）
-  python -m cosmic_tool.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
+      # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含功能清单模块树.md和文档元数据.md）
+      python -m cosmic_tool.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
 
-  # 仅查看模块树
-  python -m cosmic_tool.main --docx 需求书.docx --show-tree
+      # 仅查看模块树
+      python -m cosmic_tool.main --docx 需求书.docx --show-tree
 
-  # 初始化API Key配置
-  python -m cosmic_tool.main --init-config
+      # 初始化API Key配置
+      python -m cosmic_tool.main --init-config
 
-  # 批量处理当前目录下所有Word文件
-  python -m cosmic_tool.main --docx-all
+      # 批量处理当前目录下所有Word文件
+      python -m cosmic_tool.main --docx-all
 
-  # Excel 功能清单 → 全套交付物
-  python -m cosmic_tool.main --from-excel 功能清单.xlsx --gen-all
+      # Excel 功能清单 → 全套交付物
+      python -m cosmic_tool.main --from-excel 功能清单.xlsx --gen-all
         """
     )
 
@@ -607,6 +609,10 @@ def main():
     parser.add_argument('--max-tokens', type=str, default='',
                         help='覆盖 AI max_tokens（如 6000、8K、1M），默认取配置文件')
 
+    return parser
+
+def main():
+    parser = _build_parser()
     args = parser.parse_args()
     if args.max_tokens:
         os.environ['COSMIC_MAX_TOKENS'] = args.max_tokens
@@ -700,7 +706,7 @@ def main():
     # === Load config ===
     api_key = args.api_key or load_api_key()
     base_url = load_base_url()
-    model = args.model or load_model_name("deepseek-v4-flash")
+    model = args.model or load_model_name(DEFAULT_MODEL)
 
     if api_key:
         os.environ["ANTHROPIC_API_KEY"] = api_key
@@ -1219,7 +1225,7 @@ def main():
 
         # AI 配置
         api_key = args.api_key or load_api_key()
-        model = args.model or load_model_name("deepseek-v4-flash")
+        model = args.model or load_model_name(DEFAULT_MODEL)
         base_url = load_base_url()
 
         # MD 生成后再检查一次（首次运行模板刚生成，AI填充版还未创建）

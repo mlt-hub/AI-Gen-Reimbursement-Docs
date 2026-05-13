@@ -8,6 +8,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from typing import Optional
 
+from cosmic_tool.constants import DEFAULT_MODEL
 from cosmic_tool.models import FunctionModule
 
 NS = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
@@ -437,7 +438,7 @@ def _parse_ai_heading_response(response_text: str) -> list[dict]:
 def ai_build_module_tree(
     docx_path: str,
     api_key: Optional[str] = None,
-    model: str = "deepseek-v4-flash",
+    model: str = DEFAULT_MODEL,
     base_url: Optional[str] = None,
 ) -> list[FunctionModule]:
     """Build module tree using AI to infer heading hierarchy from docx paragraphs.

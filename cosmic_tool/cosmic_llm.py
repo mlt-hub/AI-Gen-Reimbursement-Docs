@@ -6,6 +6,7 @@ import os
 import sys
 from typing import Optional
 
+from cosmic_tool.constants import DEFAULT_MODEL, DEFAULT_INITIATOR, DEFAULT_RECEIVER
 from cosmic_tool.models import CosmicItem, DataMovement
 from cosmic_tool.docx_parser import FunctionModule, get_module_by_name
 
@@ -61,8 +62,8 @@ def load_user_config_from_meta(meta_md_path: str) -> dict:
     from cosmic_tool.gen_spec import _parse_meta_md
     meta = _parse_meta_md(meta_md_path)
     result = {
-        "user_default_initiator": "操作员",
-        "user_default_receiver": "地市后台",
+        "user_default_initiator": DEFAULT_INITIATOR,
+        "user_default_receiver": DEFAULT_RECEIVER,
         "user_initiator_rules": None,
         "user_receiver_rules": None,
     }
@@ -86,8 +87,8 @@ def load_user_config_from_meta(meta_md_path: str) -> dict:
 def _build_user(module: FunctionModule, modules: list[FunctionModule],
                 initiator_rules: list[tuple[str, str]] | None = None,
                 receiver_rules: list[tuple[str, str]] | None = None,
-                default_initiator: str = "操作员",
-                default_receiver: str = "地市后台") -> str:
+                default_initiator: str = DEFAULT_INITIATOR,
+                default_receiver: str = DEFAULT_RECEIVER) -> str:
     """Determine the user for a module using configurable keyword rules.
 
     Checks order: grandparent → parent → module name.
@@ -289,11 +290,11 @@ def generate_cosmic_items(
     modules: list[FunctionModule],
     project_name: str = "",
     api_key: Optional[str] = None,
-    model: str = "deepseek-v4-flash",
+    model: str = DEFAULT_MODEL,
     base_url: Optional[str] = None,
     interactive: bool = False,
-    user_default_initiator: str = "操作员",
-    user_default_receiver: str = "地市后台",
+    user_default_initiator: str = DEFAULT_INITIATOR,
+    user_default_receiver: str = DEFAULT_RECEIVER,
     user_initiator_rules: list[tuple[str, str]] | None = None,
     user_receiver_rules: list[tuple[str, str]] | None = None,
 ) -> list[CosmicItem]:

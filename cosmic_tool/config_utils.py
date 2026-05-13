@@ -89,12 +89,15 @@ def load_base_url(override: bool = True) -> str:
     return ""
 
 
-def load_model_name(default: str = "deepseek-v4-flash", override: bool = True) -> str:
+def load_model_name(default: str = None, override: bool = True) -> str:
     """Load ANTHROPIC_MODEL.
 
     override=True: config/.env > system env var > config.json > default
     override=False: system env var > config/.env > config.json > default
     """
+    if default is None:
+        from cosmic_tool.constants import DEFAULT_MODEL as _def_model
+        default = _def_model
     env_path = _config_dir() / ".env"
     loader = _from_env_override if override else _from_env
     model = loader("ANTHROPIC_MODEL", env_path)

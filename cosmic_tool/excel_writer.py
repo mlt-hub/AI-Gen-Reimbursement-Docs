@@ -7,6 +7,7 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
+from cosmic_tool.constants import FP_DATA_START_ROW, FP_LEFT_ALIGN_COLS, FP_TOTAL_COLS
 from cosmic_tool.models import CosmicItem
 from cosmic_tool.config_utils import load_cfp_formula
 
@@ -63,7 +64,7 @@ def write_to_template(
 
     # --- Save template row 6 format as reference ---
     tmpl_format_row6 = {}
-    for col_idx in range(1, 14):
+    for col_idx in range(1, FP_TOTAL_COLS):
         tmpl_format_row6[col_idx] = _get_ref_style(ws, 6, col_idx)
     _CFP_FILL_TMPL = copy.copy(ws.cell(row=6, column=13).fill)
 
@@ -142,10 +143,10 @@ def write_to_template(
     # Column H (子过程描述) should be left-aligned
 
     # --- Write data rows ---
-    start_row = 6
+    start_row = FP_DATA_START_ROW
     for i, row_data in enumerate(all_rows):
         row_num = start_row + i
-        for col_idx in range(1, 14):
+        for col_idx in range(1, FP_TOTAL_COLS):
             cell = ws.cell(row=row_num, column=col_idx)
             col_letter = get_column_letter(col_idx)
             key_map = {
@@ -170,7 +171,7 @@ def write_to_template(
                 cell.number_format = '[=1]0;[=0]0;# ?/?'
 
             # Long text columns: left-align
-            if col_idx in (8, 10, 11):
+            if col_idx in FP_LEFT_ALIGN_COLS:
                 cell.alignment = _LEFT_ALIGN
 
     # --- Apply merged cells for repeating values ---
@@ -278,7 +279,7 @@ def write_to_template(
 
     # 合并后补回边框
     for row_num in range(start_row, start_row + total_rows):
-        for col_idx in range(1, 14):
+        for col_idx in range(1, FP_TOTAL_COLS):
             ws.cell(row=row_num, column=col_idx).border = tmpl_format_row6[col_idx]['border']
 
 
@@ -380,7 +381,7 @@ def _auto_fit(ws, start_row: int, end_row: int) -> None:
     import math
     for r in range(start_row, end_row + 1):
         max_lines = 1
-        for col_idx in range(1, 14):
+        for col_idx in range(1, FP_TOTAL_COLS):
             cell = ws.cell(row=r, column=col_idx)
             if cell.value:
                 text = str(cell.value)
