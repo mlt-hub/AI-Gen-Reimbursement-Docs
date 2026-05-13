@@ -253,9 +253,9 @@ def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
     modules: list[FunctionModule] = []
     seen_l1: set[str] = set()
     seen_l2: dict[str, set[str]] = {}  # l1 → set of l2 names
-    seen_l3: dict[str, set[str]] = {}  # l2 → set of l3 names
-    l3_desc: dict[str, str] = {}       # l3 name → description
-    l3_procs: dict[str, set[str]] = {} # l3 name → set of process names
+    seen_l3: dict[tuple[str, str], set[str]] = {}  # (l1, l2) → set of l3 names
+    l3_desc: dict[str, str] = {}                     # l3 name → description
+    l3_procs: dict[tuple[str, str, str], list[str]] = {}  # (l1, l2, l3) → processes（保持原始顺序）
 
     for r in rows:
         l1 = r["一级模块"]
@@ -269,25 +269,35 @@ def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
             modules.append(FunctionModule(name=l1, level=1))
         if l1 not in seen_l2:
             seen_l2[l1] = set()
+        # L2 用 "L1/L2" 复合 parent 区分不同 L1 下的同名 L2
+        l2_parent = f"{l1}/{l2}" if l2 else ""
         if l2 and l2 not in seen_l2[l1]:
             seen_l2[l1].add(l2)
             modules.append(FunctionModule(name=l2, level=2, parent=l1))
-        if l2 not in seen_l3:
-            seen_l3[l2] = set()
-        if l3 not in seen_l3[l2]:
-            seen_l3[l2].add(l3)
-            modules.append(FunctionModule(name=l3, level=3, parent=l2,
+        l3_key = (l1, l2)
+        if l3_key not in seen_l3:
+            seen_l3[l3_key] = set()
+        if l3 not in seen_l3[l3_key]:
+            seen_l3[l3_key].add(l3)
+            # L3 parent 用 "L1/L2" 确保不同 L1 下同名 L2 的 L3 不串
+            modules.append(FunctionModule(name=l3, level=3, parent=l2_parent,
                                           description=desc))
             l3_desc[l3] = desc
-        if l3 not in l3_procs:
-            l3_procs[l3] = set()
-        if proc:
-            l3_procs[l3].add(proc)
+        procs_key = (l1, l2, l3)
+        if procs_key not in l3_procs:
+            l3_procs[procs_key] = []
+        if proc and proc not in l3_procs[procs_key]:
+            l3_procs[procs_key].append(proc)
 
-    # 将功能过程挂到 L3 的 children，同时去重
+    # 将功能过程挂到 L3 的 children（用 (L1,L2,L3) 三元组精确匹配，避免不同 L1 下同名模块串数据）
     for m in modules:
-        if m.level == 3 and m.name in l3_procs:
-            m.children = sorted(l3_procs[m.name])
+        if m.level == 3:
+            # parent 格式为 "L1/L2"，直接拆分得到完整路径
+            parent_parts = m.parent.split("/") if m.parent else []
+            l1_name = parent_parts[0] if len(parent_parts) >= 1 else ""
+            l2_name = parent_parts[1] if len(parent_parts) >= 2 else m.parent
+            procs_key = (l1_name, l2_name, m.name)
+            m.children = l3_procs.get(procs_key, [])
 
     l3_count = len([m for m in modules if m.level == 3])
     logger.info(f"从表格解析到模块层级: {len(seen_l1)}个L1, "
@@ -1337,16 +1347,20 @@ def main():
                 logger.info("  步骤3c: 写入 Excel...")
                 items = parse_md_to_items(filled_md_path)
                 if items:
-                    from cosmic_tool.excel_writer import write_to_template
-                    # 读取环境图数据（同一次 save，保留模板图片）
+                    from cosmic_tool.excel_writer import write_to_template, write_environment_sheet
+                    write_to_template(cosmic_src_template, cosmic_template, items)
+                    total_cfp = sum(item.total_cfp() for item in items)
+                    logger.info(f"  CFP 总和: {total_cfp}")
                     from cosmic_tool.gen_spec import _parse_meta_md
                     _meta = _parse_meta_md(meta_md)
                     _target = _meta.get("建设目标", "")
                     _necessity = _meta.get("建设必要性", "")
-                    write_to_template(cosmic_src_template, cosmic_template, items,
-                                      env_target=_target, env_necessity=_necessity)
-                    total_cfp = sum(item.total_cfp() for item in items)
-                    logger.info(f"  CFP 总和: {total_cfp}")
+                    if _target or _necessity:
+                        write_environment_sheet(
+                            cosmic_template, cosmic_template,
+                            _p_title, _target, _necessity
+                        )
+                        logger.info("  环境图 sheet 已更新")
                 else:
                     logger.warning("  MD 中无数据")
             else:
@@ -1355,7 +1369,6 @@ def main():
             # 读取 CFP 总和
             cfp_total = 0
             if os.path.exists(cosmic_template):
-                # 从已填充 MD 读取 CFP
                 filled_md_path = os.path.join(md_dir, 'AI填充cosmic.md')
                 if os.path.exists(filled_md_path):
                     items = parse_md_to_items(filled_md_path)
@@ -1492,15 +1505,20 @@ def main():
 
                 items = parse_md_to_items(filled_md_path)
                 if items:
-                    from cosmic_tool.excel_writer import write_to_template
+                    from cosmic_tool.excel_writer import write_to_template, write_environment_sheet
+                    write_to_template(cosmic_src_template, cosmic_template, items)
+                    total_cfp = sum(item.total_cfp() for item in items)
+                    logger.info(f"CFP 总和: {total_cfp}")
                     from cosmic_tool.gen_spec import _parse_meta_md
                     _meta = _parse_meta_md(meta_md)
                     _target = _meta.get("建设目标", "")
                     _necessity = _meta.get("建设必要性", "")
-                    write_to_template(cosmic_src_template, cosmic_template, items,
-                                      env_target=_target, env_necessity=_necessity)
-                    total_cfp = sum(item.total_cfp() for item in items)
-                    logger.info(f"CFP 总和: {total_cfp}")
+                    if _target or _necessity:
+                        write_environment_sheet(
+                            cosmic_template, cosmic_template,
+                            project, _target, _necessity
+                        )
+                        logger.info("环境图 sheet 已更新")
                     _write_combined_ai_log()
                     logger.info(f"项目功能点拆分表已生成: {cosmic_template}")
             else:

@@ -42,7 +42,9 @@ def export_empty_md(
             continue
 
         for l2 in l2_modules:
-            l3s = [m for m in l3_modules if m.parent == l2.name]
+            # L3.parent 为 "L1/L2" 格式，需用 L1+L2 路径匹配
+            l2_path = f"{l1.name}/{l2.name}"
+            l3s = [m for m in l3_modules if m.parent == l2_path or m.parent == l2.name]
             if not l3s:
                 continue
 
@@ -97,7 +99,8 @@ def export_filled_md(
             continue
 
         for l2 in l2_modules:
-            l3s = [m for m in modules if m.level == 3 and m.parent == l2.name]
+            l2_path = f"{l1.name}/{l2.name}"
+            l3s = [m for m in modules if m.level == 3 and (m.parent == l2_path or m.parent == l2.name)]
             if not l3s:
                 continue
 

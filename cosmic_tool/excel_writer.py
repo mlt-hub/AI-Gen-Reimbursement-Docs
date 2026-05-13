@@ -95,15 +95,11 @@ def write_to_template(
     template_path: str,
     output_path: str,
     items: list[CosmicItem],
-    *,
-    env_target: str = "",
-    env_necessity: str = "",
 ) -> None:
     """Write COSMIC items to Excel template.
 
     Preserves header rows (1-5) and formatting, fills data starting at row 6.
     Also preserves any existing footer rows from the template.
-    若提供 env_target/env_necessity，同步更新环境图 sheet（同一次 save，保留图片）。
     """
     wb = openpyxl.load_workbook(template_path)
     ws = wb['2、功能点拆分表']
@@ -178,8 +174,6 @@ def write_to_template(
 
     if not all_rows:
         logger.warning("No data rows to write.")
-        if env_target or env_necessity:
-            update_environment_sheet(wb, env_target, env_necessity)
         try:
             wb.save(output_path)
         except PermissionError:
@@ -367,10 +361,6 @@ def write_to_template(
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)
 
-    # 更新环境图（与数据写入同一 save 周期，保留模板中的图片）
-    if env_target or env_necessity:
-        update_environment_sheet(wb, env_target, env_necessity)
-
     try:
         wb.save(output_path)
     except PermissionError:
@@ -482,7 +472,7 @@ def update_environment_sheet(
                 "有" if target else "无", "有" if necessity else "无")
 
 
-# 兼容旧调用方
+# 兼容旧调用方（独立 load/save，可能丢失图片；推荐使用 update_environment_sheet + write_to_template）
 def write_environment_sheet(
     template_path: str,
     output_path: str,
