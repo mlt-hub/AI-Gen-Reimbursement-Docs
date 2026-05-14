@@ -9,8 +9,8 @@ import time
 from datetime import datetime
 from typing import Optional
 
-from cosmic_tool.config_utils import load_max_tokens
-from cosmic_tool.exceptions import AIError
+from ai_gen_reimbursement_docs.config_utils import load_max_tokens
+from ai_gen_reimbursement_docs.exceptions import AIError
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def call_llm(
     base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
     model = model or os.environ.get("ANTHROPIC_MODEL", "")
     if not model:
-        raise AIError("未配置模型名，请在 ~/.cosmic-tool/.env 中设置 ANTHROPIC_MODEL")
+        raise AIError("未配置模型名，请在 ~/.ai-gen-reimbursement-docs/.env 中设置 ANTHROPIC_MODEL")
     max_tokens = max_tokens or load_max_tokens()
 
     client_kwargs: dict = {"api_key": api_key}
@@ -145,7 +145,7 @@ def _resolve_log_dir(sub_dir: str, custom_dir: Optional[str] = None) -> str:
     """解析日志目录路径。"""
     if custom_dir:
         return custom_dir
-    base = os.environ.get("COSMIC_LOG_DIR", "") or os.path.join(
+    base = os.environ.get("AI_REIMBURSEMENT_LOG_DIR", "") or os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "log"
     )
     return os.path.join(base, sub_dir)

@@ -8,12 +8,12 @@
 
 | 文件 | 说明 |
 |------|------|
-| `cosmic_tool/main.py` | CLI 入口，参数解析，流程编排 |
-| `cosmic_tool/docx_parser.py` | docx 解析器，模块树构建，映射规则管理 |
-| `cosmic_tool/docx_to_md.py` | docx → Markdown 转换 |
-| `cosmic_tool/md_handler.py` | Markdown 模板导出/填充/解析 |
-| `cosmic_tool/config_utils.py` | 配置加载 |
-| `cosmic_tool/models.py` | 数据模型 |
+| `ai_gen_reimbursement_docs/main.py` | CLI 入口，参数解析，流程编排 |
+| `ai_gen_reimbursement_docs/docx_parser.py` | docx 解析器，模块树构建，映射规则管理 |
+| `ai_gen_reimbursement_docs/docx_to_md.py` | docx → Markdown 转换 |
+| `ai_gen_reimbursement_docs/md_handler.py` | Markdown 模板导出/填充/解析 |
+| `ai_gen_reimbursement_docs/config_utils.py` | 配置加载 |
+| `ai_gen_reimbursement_docs/models.py` | 数据模型 |
 | `config/docx_parse_mapping_rules.yaml.example` | 层级映射配置示例 |
 | `config/docx_expected_result.example.json` | 预期结果 JSON 示例 |
 | `data/word_template.docx` | Word 样式模板 |
@@ -25,7 +25,7 @@
 - **三种策略**：`标题样式`（style_id）、`多级列表格式`（numId, ilvl）、`编号格式`（ilvl + numFmt）
 - **章节检测**：`_find_chapter_boundaries()` 优先 `###文档开始###`/`###文档结束###`，降级为文本匹配
 - **原文生成**：`convert_to_md()` 将 docx 第4章转为 Markdown
-- **映射保存**：每次解析自动写入 `~/.cosmic-tool/docx_parse_mapping_rules.yaml`
+- **映射保存**：每次解析自动写入 `~/.ai-gen-reimbursement-docs/docx_parse_mapping_rules.yaml`
 
 ## CLI 参数
 

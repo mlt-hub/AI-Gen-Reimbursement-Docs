@@ -2,8 +2,8 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from cosmic_tool.llm_client import call_llm, _extract_text, _extract_thinking
-from cosmic_tool.exceptions import AIError
+from ai_gen_reimbursement_docs.llm_client import call_llm, _extract_text, _extract_thinking
+from ai_gen_reimbursement_docs.exceptions import AIError
 
 
 class TestExtractText:

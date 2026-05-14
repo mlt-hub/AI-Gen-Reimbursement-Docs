@@ -1,12 +1,12 @@
 """cosmic_llm 纯函数测试 —— _resolve_move_type, _clean_json, parse_user_rules。"""
 import pytest
-from cosmic_tool.cosmic_llm import (
+from ai_gen_reimbursement_docs.cosmic_llm import (
     _resolve_move_type,
     _clean_json,
     parse_user_rules,
     _build_trigger,
 )
-from cosmic_tool.models import FunctionModule
+from ai_gen_reimbursement_docs.models import FunctionModule
 
 
 class TestResolveMoveType:

@@ -4,7 +4,7 @@
 
 ```bash
 # 必要参数：指定源文件
-python -m cosmic_tool.main --from-excel "功能清单.xlsx"
+python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx"
 
 # 步骤参数（四选一，或 --gen-all 全流程）：
 --gen-fpa        第1步：生成 FPA工作量评估.xlsx
@@ -14,10 +14,10 @@ python -m cosmic_tool.main --from-excel "功能清单.xlsx"
 --gen-all        全流程：按依赖顺序自动执行
 
 # 示例
-python -m cosmic_tool.main --from-excel "功能清单.xlsx" --gen-fpa
-python -m cosmic_tool.main --from-excel "功能清单.xlsx" --gen-cosmic
-python -m cosmic_tool.main --from-excel "功能清单.xlsx" --gen-require
-python -m cosmic_tool.main --from-excel "功能清单.xlsx" --gen-all
+python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-fpa
+python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-cosmic
+python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-require
+python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-all
 ```
 
 可选 `--output-dir` 指定输出目录，默认输入文件所在目录。

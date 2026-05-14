@@ -2,7 +2,7 @@
 import os
 import pytest
 import openpyxl
-from cosmic_tool.excel_source import _resolve_inherited_rows
+from ai_gen_reimbursement_docs.excel_source import _resolve_inherited_rows
 
 # 测试数据路径（多来源查找）
 _EXCEL_PATHS = [
@@ -68,7 +68,7 @@ def test_resolved_unique_counts_match_raw():
 
 def test_module_tree_build():
     """验证 _build_modules_from_tree_md 构建的模块数与原始数据一致。"""
-    from cosmic_tool.main import _build_modules_from_tree_md
+    from ai_gen_reimbursement_docs.main import _build_modules_from_tree_md
 
     modules = _build_modules_from_tree_md(MD_TREE_PATH)
     l1 = {m.name for m in modules if m.level == 1}

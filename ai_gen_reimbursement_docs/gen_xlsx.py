@@ -9,7 +9,7 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import Alignment, Font, Border
 
-from cosmic_tool.constants import (
+from ai_gen_reimbursement_docs.constants import (
     FPA_COL_SEQ, FPA_COL_SUBSYSTEM, FPA_COL_ASSET, FPA_COL_FUNC_POINT,
     FPA_COL_TYPE, FPA_COL_CLASSIFICATION, FPA_COL_EXPLANATION, FPA_COL_STATUS,
     FPA_COL_FORMULA_BASE, FPA_COL_ADJUST, FPA_COL_ELEMENTS, FPA_COL_FORMULA_WORKLOAD,
@@ -18,10 +18,10 @@ from cosmic_tool.constants import (
     REQ_COL_L3, REQ_COL_PROC_TYPE, REQ_COL_WORKLOAD, REQ_COL_CFP, REQ_TOTAL_COLS,
     REQ_COL_KEY_MAP,
 )
-from cosmic_tool.excel_source import replace_placeholders, strip_ai_marker
-from cosmic_tool.md_table import parse_md_table_row
+from ai_gen_reimbursement_docs.excel_source import replace_placeholders, strip_ai_marker
+from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
-logger = logging.getLogger('cosmic_tool.gen_xlsx')
+logger = logging.getLogger('ai_gen_reimbursement_docs.gen_xlsx')
 
 
 # ============================================================
@@ -30,7 +30,7 @@ logger = logging.getLogger('cosmic_tool.gen_xlsx')
 
 def _load_meta_md(meta_md_path: str) -> dict[str, str]:
     """解析文档元数据.md 为扁平字典。支持跨多行的表格值。"""
-    from cosmic_tool.gen_spec import _parse_meta_md
+    from ai_gen_reimbursement_docs.gen_spec import _parse_meta_md
     return _parse_meta_md(meta_md_path)
 
 
@@ -90,7 +90,7 @@ def _receiver_from_client_type(client_type: str, rules_text: str) -> str:
 def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
               base_url: str, tag: str = "") -> str:
     """调用 LLM（委托至 llm_client 公共模块）。"""
-    from cosmic_tool.llm_client import call_llm
+    from ai_gen_reimbursement_docs.llm_client import call_llm
 
     try:
         return call_llm(
@@ -186,7 +186,7 @@ def _ai_fill_fpa(
         logger.warning("未设置 API Key，跳过 AI 填充 FPA")
         return fpa_rows
 
-    from cosmic_tool.config_utils import load_ai_system_prompt
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
     system_prompt = load_ai_system_prompt("fpa_eval") or (
         "你是一个 FPA 功能点评估助手。根据功能过程描述和类型，"
         "从判定原则中选择最匹配的一项，并展开计算依据说明。"
@@ -194,7 +194,7 @@ def _ai_fill_fpa(
     )
 
     total = len(fpa_rows)
-    from cosmic_tool.config_utils import load_flow_max_ai, load_gen_fpa_ai_limit
+    from ai_gen_reimbursement_docs.config_utils import load_flow_max_ai, load_gen_fpa_ai_limit
     _max_ai = load_flow_max_ai("gen_fpa")
     _proc_limit = load_gen_fpa_ai_limit()
     _seen_fpa_procs: list[str] = []  # 用 list 保持首次出现顺序，避免 set 无序
@@ -240,7 +240,7 @@ def _ai_fill_fpa(
         import json as _json
         if resp:
             try:
-                from cosmic_tool.llm_client import strip_markdown_code_block
+                from ai_gen_reimbursement_docs.llm_client import strip_markdown_code_block
                 _clean = strip_markdown_code_block(resp)
                 _data = _json.loads(_clean)
                 if isinstance(_data, list):
@@ -288,7 +288,7 @@ def _ai_fill_fpa(
         if _reasons:
             logger.warning(
                 "⚠ FPA AI 填充全部跳过（共 %d 行），请检查配置限制：%s。"
-                "如需 AI 填充，请在 ~/.cosmic-tool/system_config.yaml 中将对应值设为 0",
+                "如需 AI 填充，请在 ~/.ai-gen-reimbursement-docs/system_config.yaml 中将对应值设为 0",
                 total, "、".join(_reasons),
             )
 

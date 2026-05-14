@@ -8,11 +8,11 @@
 
 | 项目 | 说明 |
 |------|------|
-| **文件** | `cosmic_tool/cosmic_llm.py` |
+| **文件** | `ai_gen_reimbursement_docs/cosmic_llm.py` |
 | **函数** | `generate_cosmic_items()` |
 | **触发命令** | `--gen-cosmic`、`--fill-md`、`--all` |
 | **调用次数** | 每 L3 模块 1 次（19 模块 × 1 次 = 19 次） |
-| **max_tokens** | 6000（从 `~/.cosmic-tool/system_config.yaml` 读取） |
+| **max_tokens** | 6000（从 `~/.ai-gen-reimbursement-docs/system_config.yaml` 读取） |
 | **输入** | L3 模块的功能描述、功能过程列表 |
 | **输出** | `CosmicItem[]` — 每个功能过程的 COSMIC 子过程分解（移动类型、数据组、数据属性等） |
 | **特点** | 支持交互模式（`interactive=True`），调用前询问用户是否继续 |
@@ -30,7 +30,7 @@ fill_md_with_ai()          md_handler.py:280
 
 | 项目 | 说明 |
 |------|------|
-| **文件** | `cosmic_tool/gen_xlsx.py` |
+| **文件** | `ai_gen_reimbursement_docs/gen_xlsx.py` |
 | **函数** | `_ai_fill_fpa()` → `_call_llm()` |
 | **触发命令** | `--gen-fpa`、`--gen-all` |
 | **调用次数** | 每行 1 次（112 行 × 1 次 = 112 次） |
@@ -53,7 +53,7 @@ ai_fill_fpa_md()           gen_xlsx.py:303
 
 | 项目 | 说明 |
 |------|------|
-| **文件** | `cosmic_tool/docx_parser.py` |
+| **文件** | `ai_gen_reimbursement_docs/docx_parser.py` |
 | **函数** | `ai_build_module_tree()` |
 | **触发命令** | `--docx --parse-by-ai` |
 | **调用次数** | 每次解析 1 次 |
@@ -74,7 +74,7 @@ ai_build_module_tree()     docx_parser.py:438
 
 | 项目 | 说明 |
 |------|------|
-| **文件** | `cosmic_tool/gen_docx.py` |
+| **文件** | `ai_gen_reimbursement_docs/gen_docx.py` |
 | **函数** | `_call_llm()` |
 | **触发命令** | `--gen-spec`（通过 `#AI生成#` 标记触发） |
 | **调用次数** | 按模板中 `#AI生成#` 标记数 |
@@ -95,7 +95,7 @@ generate_docx()            gen_docx.py:378
 
 ## 公共 AI 配置
 
-所有调用统一从 `~/.cosmic-tool/.env` 读取：
+所有调用统一从 `~/.ai-gen-reimbursement-docs/.env` 读取：
 
 ```
 ANTHROPIC_API_KEY=sk-xxx     # API Key

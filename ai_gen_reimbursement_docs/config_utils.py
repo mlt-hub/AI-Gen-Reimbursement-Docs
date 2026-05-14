@@ -8,8 +8,8 @@ from pathlib import Path
 
 
 def _config_dir() -> Path:
-    """Path to user config directory: ~/.cosmic-tool/."""
-    return Path.home() / ".cosmic-tool"
+    """Path to user config directory: ~/.ai-gen-reimbursement-docs/."""
+    return Path.home() / ".ai-gen-reimbursement-docs"
 
 
 def _read_env_value(key: str, env_path: Path) -> str:
@@ -109,8 +109,8 @@ def load_model_name(default: str = "", override: bool = True) -> str:
         return _clean_model(model)
 
     if not default:
-        _log = logging.getLogger('cosmic_tool.config_utils')
-        _log.warning("未配置 ANTHROPIC_MODEL，请在 ~/.cosmic-tool/.env 中设置")
+        _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
+        _log.warning("未配置 ANTHROPIC_MODEL，请在 ~/.ai-gen-reimbursement-docs/.env 中设置")
     return default
 
 
@@ -171,12 +171,12 @@ def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3
 
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
-    CLI --max-tokens 通过环境变量 COSMIC_MAX_TOKENS 覆盖。
+    CLI --max-tokens 通过环境变量 AI_REIMBURSEMENT_MAX_TOKENS 覆盖。
 
     Examples: 2000, 384K, 1M
     """
     import os as _os
-    _env = _os.environ.get('COSMIC_MAX_TOKENS', '').strip()
+    _env = _os.environ.get('AI_REIMBURSEMENT_MAX_TOKENS', '').strip()
     if _env:
         try:
             _env = _env.upper()
@@ -204,7 +204,7 @@ def load_max_tokens(default: int = 2000) -> int:
                 else:
                     return int(val)
         except Exception as e:
-            logger = logging.getLogger('cosmic_tool.config_utils')
+            logger = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
             logger.warning(f"system_config.yaml 读取失败: {e}，使用默认值 {default}")
     return default
 
@@ -283,7 +283,7 @@ def load_sheet_names() -> dict[str, str]:
     """
     yaml_path = _config_dir() / "system_config.yaml"
     if not yaml_path.exists():
-        _log = logging.getLogger('cosmic_tool.config_utils')
+        _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
         _log.warning("未找到 system_config.yaml，Sheet 名称将为空，请运行 --init-config 初始化")
         return {}
     try:
@@ -292,11 +292,11 @@ def load_sheet_names() -> dict[str, str]:
             cfg = yaml.safe_load(f) or {}
         sheets = cfg.get('sheets', {})
         if not sheets:
-            _log = logging.getLogger('cosmic_tool.config_utils')
+            _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
             _log.warning("system_config.yaml 中未配置 sheets 段，Sheet 名称将为空，请补充 sheets 配置")
         return sheets
     except Exception:
-        _log = logging.getLogger('cosmic_tool.config_utils')
+        _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
         _log.warning("system_config.yaml 读取失败，Sheet 名称将为空")
         return {}
 
@@ -343,14 +343,14 @@ def load_ai_examples(name: str) -> str:
 def _migrate_config() -> None:
     """自动迁移配置：将模板中的新键追加到用户配置文件末尾。
 
-    比对 config/*.example 与 ~/.cosmic-tool/*，发现新键时自动追加。
+    比对 config/*.example 与 ~/.ai-gen-reimbursement-docs/*，发现新键时自动追加。
     """
-    home = Path.home() / ".cosmic-tool"
+    home = Path.home() / ".ai-gen-reimbursement-docs"
     local = Path(__file__).parent.parent / "config"
     if not home.exists():
         return
 
-    logger = logging.getLogger('cosmic_tool.config_utils')
+    logger = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
 
     # --- .env 合并 ---
     env_file = home / ".env"

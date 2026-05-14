@@ -7,14 +7,14 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
-from cosmic_tool.constants import (
+from ai_gen_reimbursement_docs.constants import (
     FP_DATA_START_ROW, FP_LEFT_ALIGN_COLS, FP_TOTAL_COLS,
     FP_COL_KEY_MAP, COL_FP_CFP, COL_FP_SUB_PROCESS, COL_FP_MOVE_TYPE,
 )
-from cosmic_tool.models import CosmicItem
-from cosmic_tool.config_utils import load_cfp_formula
+from ai_gen_reimbursement_docs.models import CosmicItem
+from ai_gen_reimbursement_docs.config_utils import load_cfp_formula
 
-logger = logging.getLogger('cosmic_tool.excel_writer')
+logger = logging.getLogger('ai_gen_reimbursement_docs.excel_writer')
 
 
 # Read a reference cell style from the template to apply to new cells
@@ -344,7 +344,7 @@ def generate_cosmic_xlsx_from_md(
 
 
     # --- Apply warning indicators (after merges, so they don't get overwritten) ---
-    from cosmic_tool.config_utils import load_cosmic_warn_marker
+    from ai_gen_reimbursement_docs.config_utils import load_cosmic_warn_marker
     _warn_enabled = load_cosmic_warn_marker()
     if not _warn_enabled:
         _warn_marker_disabled_skip = True
@@ -365,7 +365,7 @@ def generate_cosmic_xlsx_from_md(
             # Excel comment with warning text
             from openpyxl.comments import Comment
             ws.cell(row=row_num, column=COL_FP_SUB_PROCESS).comment = Comment(
-                "\n".join(f"⚠ {w}" for w in row_warnings), "COSMIC Tool"
+                "\n".join(f"⚠ {w}" for w in row_warnings), "AI生成项目报账文档"
             )
 
         if move_flagged:
@@ -433,7 +433,7 @@ def _save_source_data(rows: list[dict]) -> None:
     """Save flattened source data to log/source_data/ for debugging."""
     import json, os
     from datetime import datetime
-    base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
+    base_log = os.environ.get('AI_REIMBURSEMENT_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
     )
     log_dir = os.path.join(base_log, 'source_data')

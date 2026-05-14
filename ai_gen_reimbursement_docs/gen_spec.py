@@ -13,10 +13,10 @@ from docx.oxml.ns import qn
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-from cosmic_tool.excel_source import replace_placeholders, strip_ai_marker
-from cosmic_tool.md_table import parse_md_table_row
+from ai_gen_reimbursement_docs.excel_source import replace_placeholders, strip_ai_marker
+from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
-logger = logging.getLogger('cosmic_tool.gen_spec')
+logger = logging.getLogger('ai_gen_reimbursement_docs.gen_spec')
 
 
 
@@ -460,8 +460,8 @@ def ai_fill_spec_md(
     对每个（待 AI 填充）标记，取其上方功能过程的名称和原文描述，
     调用 AI 生成更完整、更规范的自然语言描述，替换标记。
     """
-    from cosmic_tool.llm_client import call_llm
-    from cosmic_tool.config_utils import load_ai_system_prompt, load_gen_spec_ai_limit
+    from ai_gen_reimbursement_docs.llm_client import call_llm
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt, load_gen_spec_ai_limit
 
     proc_limit = load_gen_spec_ai_limit()
     if proc_limit > 0:

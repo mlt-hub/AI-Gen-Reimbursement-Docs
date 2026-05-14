@@ -6,17 +6,17 @@ import os
 from datetime import date
 from typing import Optional
 
-from cosmic_tool.models import CosmicItem, DataMovement, FunctionModule
-from cosmic_tool.docx_parser import get_module_by_name
+from ai_gen_reimbursement_docs.models import CosmicItem, DataMovement, FunctionModule
+from ai_gen_reimbursement_docs.docx_parser import get_module_by_name
 
-logger = logging.getLogger('cosmic_tool.md_handler')
+logger = logging.getLogger('ai_gen_reimbursement_docs.md_handler')
 
 
-HEADER_TEMPLATE = """# COSMIC 功能点拆分表
+HEADER_TEMPLATE = """# 功能点拆分表
 
 **项目名称**：{project_name}
 **生成日期**：{date}
-**说明**：每个 ### 行代表一个功能过程。请为每个功能过程填写 COSMIC 数据移动表格。
+**说明**：每个 ### 行代表一个功能过程。请为每个功能过程填写数据移动表格。
    - 移动类型：E=Entry, X=eXit, R=Read, W=Write
    - 首步必为 E，末步必为 W 或 X
    - 每个过程至少 2 步
@@ -287,7 +287,7 @@ def fill_md_with_ai(
     user_receiver_rules: list[tuple[str, str]] | None = None,
 ) -> None:
     """Read MD, call AI to fill empty tables, write back."""
-    from cosmic_tool.cosmic_llm import generate_cosmic_items
+    from ai_gen_reimbursement_docs.cosmic_llm import generate_cosmic_items
 
     # Parse existing items from MD (if any were manually filled)
     existing_items = parse_md_to_items(md_path)

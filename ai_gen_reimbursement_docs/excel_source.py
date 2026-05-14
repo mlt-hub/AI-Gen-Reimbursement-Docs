@@ -7,9 +7,9 @@ from datetime import datetime
 
 import openpyxl
 
-from cosmic_tool.config_utils import load_sheet_names
+from ai_gen_reimbursement_docs.config_utils import load_sheet_names
 
-logger = logging.getLogger('cosmic_tool.excel_source')
+logger = logging.getLogger('ai_gen_reimbursement_docs.excel_source')
 
 
 def _cell_val(cell: object) -> str:
@@ -214,7 +214,7 @@ def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
     Returns:
         True 全部通过, False 有差异
     """
-    from cosmic_tool.md_table import parse_md_table_row
+    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
     # 从模块树 MD 统计
     entries: set[str] = set()

@@ -1,6 +1,6 @@
 """测试 Markdown 表格解析工具函数。"""
 
-from cosmic_tool.md_table import parse_md_table_row
+from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
 
 def test_正常行():

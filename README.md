@@ -2,6 +2,7 @@
 
 AI生成项目报账文档
 AI-Generated Project Reimbursement Documents
+
 ai_gen_reimbursement_docs
 
 # COSMIC 功能点拆分工具
@@ -126,7 +127,7 @@ cosmic --from-excel 功能清单-录入-模板.xlsx --gen-spec \
 ## 日志
 
 运行日志输出到 `{输出目录}/log/`，包含：
-- `global_cosmic_tool.log` — 全局日志（持续追加）
+- `global_ai_gen_reimbursement_docs.log` — 全局日志（持续追加）
 - `功能清单_run_{时间戳}.log` — 本次运行日志
 - `ai_prompts/` — 每次 AI 调用的提示词
 - `ai_responses/` — 每次 AI 调用的响应
@@ -161,4 +162,4 @@ cosmic --from-excel 功能清单-录入-模板.xlsx --gen-spec \
 
 ## 发布版（exe）
 
-从 [发布仓](https://github.com/mlt-hub/cosmic-tool-release/releases) 下载 `cosmic_v*.zip`，解压即可使用，无需安装 Python。
+从 [发布仓](https://github.com/mlt-hub/ai-gen-reimbursement-docs-release/releases) 下载 `cosmic_v*.zip`，解压即可使用，无需安装 Python。

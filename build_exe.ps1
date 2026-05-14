@@ -26,14 +26,14 @@ $root = $PSScriptRoot
 Write-Host "[打包] 生成 $exe_name.exe..." -ForegroundColor Yellow
 pyinstaller --onefile `
     --name $exe_name `
-    --add-data "$root\cosmic_tool;cosmic_tool" `
-    --add-data "$root\data\templates;data\templates" `
+    --add-data "$root\ai_gen_reimbursement_docs;ai_gen_reimbursement_docs" `
+    --add-data "$root\data\out_templates;data\out_templates" `
     --hidden-import "openpyxl.cell._writer" `
     --distpath dist `
     --workpath build `
     --specpath build `
     --console `
-    "$root\cosmic_tool\main.py"
+    "$root\ai_gen_reimbursement_docs\main.py"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[错误] 打包失败！" -ForegroundColor Red
@@ -46,10 +46,12 @@ Write-Host "[复制] 附加文件..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path "$root\dist\data" | Out-Null
 New-Item -ItemType Directory -Force -Path "$root\dist\config" | Out-Null
 # 生成版本标记文件
-"cosmic-tool v$ver" | Out-File -Encoding utf8 "$root\dist\cosmic_v$ver"
+"ai-gen-reimbursement-docs v$ver" | Out-File -Encoding utf8 "$root\dist\cosmic_v$ver"
 Copy-Item "$root\README.md" "$root\dist\README.md" -Force
 Copy-Item "$root\CHANGELOG.md" "$root\dist\CHANGELOG.md" -Force
-Copy-Item "$root\data\templates" "$root\dist\data\templates" -Recurse -Force
+Copy-Item "$root\data\out_templates" "$root\dist\data\out_templates" -Recurse -Force
+Copy-Item "$root\data\in_templates" "$root\dist\data\in_templates" -Recurse -Force
+Copy-Item "$root\data\audio" "$root\dist\data\audio" -Recurse -Force
 Copy-Item "$root\config\.env.example" "$root\dist\config\.env.example" -Force
 Copy-Item "$root\config\system_config.yaml.example" "$root\dist\config\system_config.yaml.example" -Force
 Copy-Item "$root\config\business_rules.yaml.example" "$root\dist\config\business_rules.yaml.example" -Force

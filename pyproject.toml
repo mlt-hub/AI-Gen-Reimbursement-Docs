@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cosmic-tool"
+name = "ai-gen-reimbursement-docs"
 version = "5.0.0"
-description = "COSMIC 功能点拆分工具 — 从需求说明书自动生成功能点拆分表"
+description = "AI生成项目报账文档 — 从功能清单自动生成全套报账文档"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
@@ -17,10 +17,10 @@ dependencies = [
 ]
 
 [project.scripts]
-cosmic = "cosmic_tool.main:main"
+cosmic = "ai_gen_reimbursement_docs.main:main"
 
 [tool.setuptools.packages.find]
-include = ["cosmic_tool*"]
+include = ["ai_gen_reimbursement_docs*"]
 
 [tool.setuptools.package-data]
-cosmic_tool = ["py.typed"]
+ai_gen_reimbursement_docs = ["py.typed"]

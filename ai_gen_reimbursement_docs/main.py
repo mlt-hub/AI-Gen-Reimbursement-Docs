@@ -1,19 +1,19 @@
-"""COSMIC 功能点拆分工具 - CLI入口
+"""AI生成项目报账文档 - CLI入口
 
 推荐工作流（MD中间件模式）:
-  0. python -m cosmic_tool.main --docx 需求书.docx --init-md 需求书_拆分表.md   (含原文转MD)
-  1. python -m cosmic_tool.main --fill-md 需求书_拆分表.md
+  0. python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --init-md 需求书_拆分表.md   (含原文转MD)
+  1. python -m ai_gen_reimbursement_docs.main --fill-md 需求书_拆分表.md
      (编辑拆分表.md 人工审核修正)
-  2. python -m cosmic_tool.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
+  2. python -m ai_gen_reimbursement_docs.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
 
 快捷模式（一键全流程）:
-  python -m cosmic_tool.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
+  python -m ai_gen_reimbursement_docs.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
 
 一键直出（跳过MD中间文件）:
-  python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
+  python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
 
 批量处理Word文件:
-  python -m cosmic_tool.main --docx-all
+  python -m ai_gen_reimbursement_docs.main --docx-all
 """
 
 import argparse
@@ -23,22 +23,22 @@ import shutil
 import sys
 from datetime import datetime
 
-from cosmic_tool.exceptions import ConfigError
-from cosmic_tool.models import FunctionModule
-from cosmic_tool.excel_writer import generate_cosmic_xlsx_from_md
-from cosmic_tool.config_utils import load_api_key, load_base_url, load_model_name, load_business_config
-from cosmic_tool.md_handler import (
+from ai_gen_reimbursement_docs.exceptions import ConfigError
+from ai_gen_reimbursement_docs.models import FunctionModule
+from ai_gen_reimbursement_docs.excel_writer import generate_cosmic_xlsx_from_md
+from ai_gen_reimbursement_docs.config_utils import load_api_key, load_base_url, load_model_name, load_business_config
+from ai_gen_reimbursement_docs.md_handler import (
     export_empty_md,
     export_filled_md,
     parse_md_to_items,
     fill_md_with_ai,
 )
-from cosmic_tool.excel_source import generate_md_files, read_template_config, verify_module_tree_stats
-from cosmic_tool.gen_spec import generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md
-from cosmic_tool.gen_xlsx import generate_fpa_xlsx_from_md, generate_list_xlsx_from_md
-from cosmic_tool.gen_xlsx import init_fpa_template_md, ai_fill_fpa_md
+from ai_gen_reimbursement_docs.excel_source import generate_md_files, read_template_config, verify_module_tree_stats
+from ai_gen_reimbursement_docs.gen_spec import generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md
+from ai_gen_reimbursement_docs.gen_xlsx import generate_fpa_xlsx_from_md, generate_list_xlsx_from_md
+from ai_gen_reimbursement_docs.gen_xlsx import init_fpa_template_md, ai_fill_fpa_md
 
-# 启动时自动清理 cosmic_tool 自身的字节码缓存，避免代码修改后缓存过期问题
+# 启动时自动清理 ai_gen_reimbursement_docs 自身的字节码缓存，避免代码修改后缓存过期问题
 _pycache = os.path.join(os.path.dirname(__file__), '__pycache__')
 if os.path.isdir(_pycache):
     shutil.rmtree(_pycache, ignore_errors=True)
@@ -47,18 +47,18 @@ if os.path.isdir(_pycache):
 def _init_global_logging():
     """初始化全局日志：项目根目录 log/（控制台 + 总日志 + 运行日志）"""
     if getattr(sys, 'frozen', False):
-        log_dir = os.path.join(os.path.expanduser('~'), '.cosmic-tool', 'log')
+        log_dir = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'log')
     else:
         log_dir = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), 'log'
         )
     os.makedirs(log_dir, exist_ok=True)
 
-    main_log = os.path.join(log_dir, 'cosmic_tool.log')
+    main_log = os.path.join(log_dir, 'ai_gen_reimbursement_docs.log')
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     run_log = os.path.join(log_dir, f'global_run_{run_stamp}.log')
 
-    logger = logging.getLogger('cosmic_tool')
+    logger = logging.getLogger('ai_gen_reimbursement_docs')
     logger.setLevel(logging.DEBUG)
 
     fmt = logging.Formatter(
@@ -67,7 +67,7 @@ def _init_global_logging():
     )
 
     # 全局总日志（持续追加，永不删除）
-    main_log = os.path.join(log_dir, 'global_cosmic_tool.log')
+    main_log = os.path.join(log_dir, 'global_ai_gen_reimbursement_docs.log')
     fh = logging.FileHandler(main_log, encoding='utf-8', mode='a')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(fmt)
@@ -114,7 +114,7 @@ def setup_logging(log_dir: str, docx_name: str = ""):
     seq_str = f"{_seq}_" if docx_name else ""
     run_log = os.path.join(log_dir, f'{prefix}run_{seq_str}{run_stamp}.log')
 
-    logger = logging.getLogger('cosmic_tool')
+    logger = logging.getLogger('ai_gen_reimbursement_docs')
 
     fmt = logging.Formatter(
         '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
@@ -150,7 +150,7 @@ def _setup_docx_logging(docx_path: str) -> str:
     log_dir = os.path.join(os.path.abspath(base_name), 'log')
     os.makedirs(log_dir, exist_ok=True)
     setup_logging(log_dir, base_name)
-    os.environ['COSMIC_LOG_DIR'] = log_dir
+    os.environ['AI_REIMBURSEMENT_LOG_DIR'] = log_dir
     return log_dir
 
 
@@ -200,7 +200,7 @@ def _build_modules_from_md(md_path: str, docx_path: str = "",
                             chapter_detection: str = "") -> list[FunctionModule]:
     """Build module tree from docx. Falls back to Markdown if no docx."""
     if docx_path:
-        from cosmic_tool.docx_parser import build_module_tree
+        from ai_gen_reimbursement_docs.docx_parser import build_module_tree
         modules = build_module_tree(docx_path, mapping_name=mapping_name,
                                     chapter_detection=chapter_detection)
         _verify_against_json(modules, docx_path)
@@ -224,7 +224,7 @@ def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
     表格列：入口 | 一级模块 | 二级模块 | 三级模块 | ... | 功能过程 | ...
     自动去重并构建 L1→L2→L3 层级，功能过程作为 L3 的 children。
     """
-    from cosmic_tool.md_table import parse_md_table_row
+    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
     rows: list[dict] = []
     with open(md_path, encoding='utf-8') as f:
@@ -336,7 +336,7 @@ def _ensure_basedata(excel_path: str, md_dir: str, meta_md: str, tree_md: str,
 
 def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
     """从 FPA工作量.md 读取值作为默认，提示用户输入FPA核减后工作量。"""
-    from cosmic_tool.config_utils import load_fpa_reduced_use_workload
+    from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
     if load_fpa_reduced_use_workload():
         import re
         if os.path.exists(fpa_sum_md_path):
@@ -423,7 +423,7 @@ def _write_combined_ai_log(stage: str = ""):
 
     stage: 当前 gen-* 阶段名（如 gen-basedata, gen-fpa 等），写入日志标记。
     """
-    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
+    log_dir = os.environ.get('AI_REIMBURSEMENT_LOG_DIR', '')
     if not log_dir:
         return
     prompt_dir = os.path.join(log_dir, 'ai_prompts')
@@ -489,7 +489,7 @@ def _play_notify_sound():
             os.path.join(os.path.dirname(os.path.dirname(__file__)),
                          'config', 'system_config.yaml'),
             os.path.join(os.environ.get('USERPROFILE', os.environ.get('HOME', '')),
-                         '.cosmic-tool', 'system_config.yaml'),
+                         '.ai-gen-reimbursement-docs', 'system_config.yaml'),
         ]:
             if os.path.isfile(_p):
                 with open(_p, encoding='utf-8') as _f:
@@ -511,7 +511,7 @@ def _play_notify_sound():
 
 def _collect_l3_names(tree_md: str) -> list[str]:
     """从功能清单-模块树.md 收集所有去重的三级模块名（保持原始顺序）。"""
-    from cosmic_tool.md_table import parse_md_table_row
+    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
     names: list[str] = []
     seen: set[str] = set()
     if not os.path.exists(tree_md):
@@ -530,9 +530,9 @@ def _collect_l3_names(tree_md: str) -> list[str]:
 def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
                    tag: str = "") -> str:
     """单次 LLM 调用（委托至 llm_client 公共模块）。"""
-    from cosmic_tool.config_utils import load_ai_system_prompt
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
     system_prompt = load_ai_system_prompt("metadata_gen")
-    from cosmic_tool.llm_client import call_llm
+    from ai_gen_reimbursement_docs.llm_client import call_llm
     try:
         return call_llm(
             prompt=prompt, system=system_prompt,
@@ -546,9 +546,9 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
 def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
                    tag: str = "") -> str:
     """单次 LLM 调用（委托至 llm_client 公共模块）。"""
-    from cosmic_tool.config_utils import load_ai_system_prompt
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
     system_prompt = load_ai_system_prompt("metadata_gen")
-    from cosmic_tool.llm_client import call_llm
+    from ai_gen_reimbursement_docs.llm_client import call_llm
     try:
         return call_llm(
             prompt=prompt, system=system_prompt,
@@ -566,8 +566,8 @@ def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_ur
     处理 #AI生成#（包含 #AI生成-XXX# 格式），跳过 #AI补充#。
     tree_md: 功能清单-模块树.md 路径，用于解析 ${三级模块} 等占位符。
     """
-    from cosmic_tool.excel_source import strip_ai_marker, replace_placeholders
-    from cosmic_tool.md_table import parse_md_table_row
+    from ai_gen_reimbursement_docs.excel_source import strip_ai_marker, replace_placeholders
+    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
     # 读取元数据模板，收集 project_info / fpa_meta 用于 ${} 替换
     meta_data = {}
@@ -628,10 +628,10 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
     if not api_key:
         return ""
 
-    from cosmic_tool.config_utils import load_ai_system_prompt
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
     system_prompt = load_ai_system_prompt("metadata_gen")
 
-    from cosmic_tool.llm_client import call_llm
+    from ai_gen_reimbursement_docs.llm_client import call_llm
     try:
         return call_llm(
             prompt=prompt, system=system_prompt,
@@ -677,33 +677,33 @@ def _verify_against_json(modules: list, docx_path: str) -> None:
 def _build_parser() -> argparse.ArgumentParser:
     """构建 CLI 参数解析器。"""
     parser = argparse.ArgumentParser(
-        description="COSMIC 功能点拆分工具 - 从需求说明书自动生成功能点拆分表（需指定参数，--docx-all可批量处理Word）",
+        description="AI生成项目报账文档 — 从功能清单自动生成全套报账交付物",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
     工作流示例:
 
       # (推荐) MD中间件模式：docx → MD → 编辑MD → Excel
-      python -m cosmic_tool.main --docx 需求书.docx --init-md 需求书_拆分表.md
-      python -m cosmic_tool.main --fill-md 需求书_拆分表.md
-      python -m cosmic_tool.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
+      python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --init-md 需求书_拆分表.md
+      python -m ai_gen_reimbursement_docs.main --fill-md 需求书_拆分表.md
+      python -m ai_gen_reimbursement_docs.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
 
       # (快捷) 一键直出：docx → LLM → Excel
-      python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
+      python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
 
       # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含功能清单-模块树.md和文档元数据.md）
-      python -m cosmic_tool.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
+      python -m ai_gen_reimbursement_docs.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
 
       # 仅查看模块树
-      python -m cosmic_tool.main --docx 需求书.docx --show-tree
+      python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --show-tree
 
       # 初始化API Key配置
-      python -m cosmic_tool.main --init-config
+      python -m ai_gen_reimbursement_docs.main --init-config
 
       # 批量处理当前目录下所有Word文件
-      python -m cosmic_tool.main --docx-all
+      python -m ai_gen_reimbursement_docs.main --docx-all
 
       # Excel 功能清单 → 全套交付物
-      python -m cosmic_tool.main --from-excel 功能清单.xlsx --gen-all
+      python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-all
         """
     )
 
@@ -742,10 +742,10 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='使用AI解析模块层级（默认用硬编码解析器）')
 
     parser.add_argument('--mapping', default='',
-                        help='指定层级映射名（来自 ~/.cosmic-tool/docx_parse_mapping_rules.yaml 中的 mapping 名称）')
+                        help='指定层级映射名（来自 ~/.ai-gen-reimbursement-docs/docx_parse_mapping_rules.yaml 中的 mapping 名称）')
 
     parser.add_argument('--chapter-detection', default='',
-                        help='指定章节检测配置名（来自 ~/.cosmic-tool/docx_parse_mapping_rules.yaml 中的 章节检测 分组）')
+                        help='指定章节检测配置名（来自 ~/.ai-gen-reimbursement-docs/docx_parse_mapping_rules.yaml 中的 章节检测 分组）')
 
     parser.add_argument('--all', action='store_true',
                         help='一键全流程: docx → MD → AI填充 → Excel')
@@ -781,14 +781,14 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='--from-excel 系列命令的输出文件夹名称（默认从 Excel 自动读取工单标题）')
 
     # 模板路径覆盖（优先级: CLI > Excel sheet 8 > data/out_templates/）
-    parser.add_argument('--fpa-template', default='',
-                        help='FPA工作量评估 模板路径')
-    parser.add_argument('--cosmic-template', default='',
-                        help='项目功能点拆分表 模板路径')
-    parser.add_argument('--list-template', default='',
-                        help='项目需求清单(Requirements List) 模板路径')
-    parser.add_argument('--spec-template', default='',
-                        help='项目需求说明书(Specification) 模板路径')
+    parser.add_argument('--fpa-out-template', default='',
+                        help='FPA工作量评估 输出模板路径')
+    parser.add_argument('--cosmic-out-template', default='',
+                        help='项目功能点拆分表 输出模板路径')
+    parser.add_argument('--list-out-template', default='',
+                        help='项目需求清单 输出模板路径')
+    parser.add_argument('--spec-out-template', default='',
+                        help='项目需求说明书 输出模板路径')
 
     parser.add_argument('--clean', action='store_true',
                         help='--from-excel 时，删除 Excel 同级目录下以工单标题命名的输出文件夹（如有），再重新生成')
@@ -812,20 +812,20 @@ def main():
     parser = _build_parser()
     args = parser.parse_args()
     if args.max_tokens:
-        os.environ['COSMIC_MAX_TOKENS'] = args.max_tokens
+        os.environ['AI_REIMBURSEMENT_MAX_TOKENS'] = args.max_tokens
     logger.debug(f"CLI args: {args}")
 
     # 版本信息
     ver = _get_version()
-    logger.info(f"COSMIC 工具 v{ver} — 从需求说明书自动生成功能点拆分表")
+    logger.info(f"AI生成项目报账文档 v{ver}")
     logger.debug(f"版本: v{ver}")
 
     # 当前配置目录
-    from cosmic_tool.config_utils import _config_dir
+    from ai_gen_reimbursement_docs.config_utils import _config_dir
     logger.info(f"配置文件目录: {_config_dir()}")
 
     # 配置迁移（新模板键自动追加到用户配置文件）
-    from cosmic_tool.config_utils import _migrate_config
+    from ai_gen_reimbursement_docs.config_utils import _migrate_config
     _migrate_config()
 
     # 测试提示音
@@ -845,7 +845,7 @@ def main():
 
     # === Log viewer ===
     if getattr(sys, 'frozen', False):
-        log_dir = os.path.join(os.path.expanduser('~'), '.cosmic-tool', 'log')
+        log_dir = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'log')
     else:
         log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'log')
     if args.log:
@@ -876,13 +876,13 @@ def main():
 
     # === Version ===
     if args.version:
-        print(f"cosmic-tool v{_get_version()}")
+        print(f"AI生成项目报账文档 v{_get_version()}")
         return
 
     # === Init config ===
     if args.init_config:
         config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
-        home_cfg = os.path.join(os.path.expanduser('~'), '.cosmic-tool')
+        home_cfg = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs')
         os.makedirs(home_cfg, exist_ok=True)
 
         # 直接从 .example 复制，保留注释
@@ -898,7 +898,7 @@ def main():
             shutil.copy2(src, dst)
             logger.info(f"已创建: {dst}")
 
-        logger.info("请编辑 ~/.cosmic-tool/.env 填入你的 API Key 后使用")
+        logger.info("请编辑 ~/.ai-gen-reimbursement-docs/.env 填入你的 API Key 后使用")
         return
     # === Load config ===
     api_key = args.api_key or load_api_key()
@@ -912,7 +912,7 @@ def main():
     logger.debug(f"API Key: {'已设置' if api_key else '未设置'}, 端点: {base_url or '默认'}, 模型: {model}")
 
     # 记录实际使用的配置值
-    from cosmic_tool.config_utils import load_max_tokens, load_business_config, load_cfp_formula
+    from ai_gen_reimbursement_docs.config_utils import load_max_tokens, load_business_config, load_cfp_formula
     logger.info(f"配置: MAX_TOKENS={load_max_tokens()}, CFP公式={load_cfp_formula()}")
     biz_cfg = load_business_config()
     logger.info(f"配置: REGENERATE_MD={biz_cfg['regenerate_md']}, ENABLE_AI_GENERATE_COSMIC={biz_cfg['enable_ai_generate_cosmic']}")
@@ -943,7 +943,7 @@ def main():
         failed: list[str] = []         # 处理失败的 docx
 
         # 加载业务配置（是否重新生成各阶段文件等）
-        from cosmic_tool.config_utils import load_business_config
+        from ai_gen_reimbursement_docs.config_utils import load_business_config
         biz_config = load_business_config()
         logger.info(f"  配置: ENABLE_AI_GENERATE_COSMIC={biz_config['enable_ai_generate_cosmic']}, "
                     f"REGENERATE_ALL={biz_config['regenerate_all']}")
@@ -969,7 +969,7 @@ def main():
             # Reconfigure logging and AI response paths for this docx
             docx_name = os.path.splitext(os.path.basename(docx_path))[0]
             setup_logging(log_dir, docx_name)
-            os.environ['COSMIC_LOG_DIR'] = log_dir
+            os.environ['AI_REIMBURSEMENT_LOG_DIR'] = log_dir
 
             try:
                 # --- Stage 0: docx → 原文 Markdown ---
@@ -1067,7 +1067,7 @@ def main():
         logger.info(f"模块层级: {l1_count} 个一级 / {l2_count} 个二级 / {l3_count} 个三级")
         export_empty_md(modules, project, args.init_md)
         logger.info(f"\n下一步:")
-        logger.info(f"  python -m cosmic_tool.main --docx \"{args.docx}\" --md         # 生成Excel")
+        logger.info(f"  python -m ai_gen_reimbursement_docs.main --docx \"{args.docx}\" --md         # 生成Excel")
         return
 
     # === Mode 2: fill-md (复制一份MD，AI填充到副本) ===
@@ -1117,7 +1117,7 @@ def main():
         proc_count = sum(len(m.children) for m in l3_modules if m.children)
         fill_md_with_ai(output_md, modules, project, api_key, model, base_url)
         logger.info(f"\n下一步:")
-        logger.info(f"  然后: python -m cosmic_tool.main --docx \"{docx_path}\" --md")
+        logger.info(f"  然后: python -m ai_gen_reimbursement_docs.main --docx \"{docx_path}\" --md")
         return
 
     # === Mode 3: md → Excel ===
@@ -1141,7 +1141,7 @@ def main():
             parser.error("无法自动确定MD文件，请指定 --md <路径> 或提供 --docx")
         if not os.path.exists(args.md):
             logger.error(f"MD文件不存在: {args.md}")
-            logger.info(f"  python -m cosmic_tool.main --docx \"{args.docx}\" --init-md")
+            logger.info(f"  python -m ai_gen_reimbursement_docs.main --docx \"{args.docx}\" --init-md")
             return
         if not args.output:
             args.output = args.md.replace('.md', '.xlsx')
@@ -1318,7 +1318,7 @@ def main():
         log_dir = os.path.join(out_dir, '日志')
         os.makedirs(log_dir, exist_ok=True)
         setup_logging(log_dir, 'AI生成项目报账文档')
-        os.environ['COSMIC_LOG_DIR'] = log_dir
+        os.environ['AI_REIMBURSEMENT_LOG_DIR'] = log_dir
         logger.info(f"日志目录: {log_dir}")
 
         # FPA 在根目录，其余在 cosmic文档 下
@@ -1377,7 +1377,7 @@ def main():
         cosmic_template = _resolve_output_filename("6、项目功能点拆分表-元数据录入", cosmic_template)
         require_template = _resolve_output_filename("7、项目需求清单-元数据录入", require_template)
         doc_template = _resolve_output_filename("4、项目需求说明书-元数据录入", doc_template)
-        from cosmic_tool.config_utils import load_spec_remind_update_toc
+        from ai_gen_reimbursement_docs.config_utils import load_spec_remind_update_toc
         if load_spec_remind_update_toc():
             _doc_dir, _doc_name = os.path.split(doc_template)
             if not _doc_name.startswith("【提醒】请手动更新整个目录"):
@@ -1411,24 +1411,20 @@ def main():
                         return cli_val
                     logger.warning(f"CLI 指定的模板路径不存在: {cli_val}")
             cfg_path = tpl_cfg.get(key, "")
-            if cfg_path and os.path.exists(cfg_path):
-                return cfg_path
             if cfg_path:
-                logger.warning("Sheet 8 中 %s 模板路径不存在: %s", key, cfg_path)
+                _from_proj = os.path.join(_project_root, cfg_path)
+                if os.path.exists(_from_proj):
+                    return _from_proj
+                logger.warning("Sheet 8 中 %s 模板路径不存在: %s，请检查配置", key, _from_proj)
             else:
                 logger.warning("Sheet 8 中未配置 %s 模板路径，请在 Excel 模板 Sheet「8、各文档-模板路径录入」中补充", key)
-            full = os.path.join(_project_root, 'data', 'out_templates', fallback)
-            full = os.path.normpath(full)
-            if os.path.exists(full):
-                logger.info("使用内置默认模板: %s", full)
-                return full
-            logger.warning("%s 模板未找到，Sheet 8 未配置且内置默认也不存在，将使用相对路径: %s", key, fallback)
-            return os.path.join('data', 'out_templates', fallback)
+            # 无配置或路径无效时，提示用户后继续（后续 openpyxl 会报 FileNotFoundError）
+            return os.path.join(_project_root, 'data', 'out_templates', fallback)
 
-        fpa_src_template = _tpl('FPA工作量评估-模板', 'FPA工作量评估-输出模板.xlsx', 'fpa_template')
-        cosmic_src_template = _tpl('项目功能点拆分表-模板', '项目功能点拆分表-输出模板.xlsx', 'cosmic_template')
-        require_src_template = _tpl('项目需求清单-模板', '项目需求清单-输出模板.xlsx', 'list_template')
-        doc_src_template = _tpl('项目需求说明书-模板', '项目需求说明书-输出模板.docx', 'spec_template')
+        fpa_src_template = _tpl('FPA工作量评估-模板', 'FPA工作量评估-输出模板.xlsx', 'fpa_out_template')
+        cosmic_src_template = _tpl('项目功能点拆分表-模板', '项目功能点拆分表-输出模板.xlsx', 'cosmic_out_template')
+        require_src_template = _tpl('项目需求清单-模板', '项目需求清单-输出模板.xlsx', 'list_out_template')
+        doc_src_template = _tpl('项目需求说明书-模板', '项目需求说明书-输出模板.docx', 'spec_out_template')
 
         # --gen-all: 按依赖顺序自动执行
         if args.gen_all:
@@ -1437,7 +1433,7 @@ def main():
             # Step 0: 生成数据源中间文件
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
             # AI 填充元数据中的 #AI生成# 标记（由 enable_ai_fill_meta 控制）
-            from cosmic_tool.config_utils import load_enable_ai_fill_meta
+            from ai_gen_reimbursement_docs.config_utils import load_enable_ai_fill_meta
             if api_key and (not os.path.exists(meta_filled_md)):
                 if load_enable_ai_fill_meta():
                     logger.info("第0步: AI 填充文档元数据...")
@@ -1510,7 +1506,7 @@ def main():
                 logger.info("第3步：生成 项目功能点拆分表.xlsx...")
                 # 使用现有链路：init_base_data_md + ai_fill_cosmic_data_md + generate_cosmic_xlsx_from_md
                 logger.info("  步骤3a: 从模块树生成拆分表 MD...")
-                from cosmic_tool.docx_parser import FunctionModule
+                from ai_gen_reimbursement_docs.docx_parser import FunctionModule
                 modules = _build_modules_from_tree_md(tree_md)
                 project = modules[0].name if modules else "项目"
 
@@ -1522,7 +1518,7 @@ def main():
                     logger.info("  步骤3b: AI 填充 COSMIC 数据...")
                     import shutil
                     shutil.copy2(init_md_path, filled_md_path)
-                    from cosmic_tool.cosmic_llm import load_user_config_from_meta
+                    from ai_gen_reimbursement_docs.cosmic_llm import load_user_config_from_meta
                     _user_cfg = load_user_config_from_meta(meta_md)
                     fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url,
                                     **_user_cfg)
@@ -1533,8 +1529,8 @@ def main():
                 logger.info("  步骤3c: 写入 Excel...")
                 items = parse_md_to_items(filled_md_path)
                 if items:
-                    from cosmic_tool.excel_writer import generate_cosmic_xlsx_from_md, write_environment_sheet
-                    from cosmic_tool.gen_spec import _parse_meta_md
+                    from ai_gen_reimbursement_docs.excel_writer import generate_cosmic_xlsx_from_md, write_environment_sheet
+                    from ai_gen_reimbursement_docs.gen_spec import _parse_meta_md
                     _meta = _parse_meta_md(meta_md)
                     generate_cosmic_xlsx_from_md(cosmic_src_template, cosmic_template, items, meta=_meta)
                     total_cfp = sum(item.total_cfp() for item in items)
@@ -1599,7 +1595,7 @@ def main():
             verify_module_tree_stats(tree_md, meta_md_tpl)
 
             if api_key and (not os.path.exists(meta_filled_md)):
-                from cosmic_tool.config_utils import load_enable_ai_fill_meta
+                from ai_gen_reimbursement_docs.config_utils import load_enable_ai_fill_meta
                 if load_enable_ai_fill_meta():
                     logger.info("第2步: AI 填充文档元数据...")
                     _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
@@ -1626,7 +1622,7 @@ def main():
         if args.gen_fpa:
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
             if api_key and (not os.path.exists(meta_filled_md)):
-                from cosmic_tool.config_utils import load_enable_ai_fill_meta
+                from ai_gen_reimbursement_docs.config_utils import load_enable_ai_fill_meta
                 if load_enable_ai_fill_meta():
                     logger.info("AI 填充文档元数据...")
                     _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
@@ -1661,7 +1657,7 @@ def main():
         # --gen-cosmic
         if args.gen_cosmic:
             logger.info("生成 项目功能点拆分表.xlsx...")
-            from cosmic_tool.docx_parser import FunctionModule
+            from ai_gen_reimbursement_docs.docx_parser import FunctionModule
             modules = _build_modules_from_tree_md(tree_md)
             project = _read_project_name(meta_md) or (modules[0].name if modules else "项目")
 
@@ -1676,15 +1672,15 @@ def main():
             if api_key:
                 import shutil
                 shutil.copy2(init_md_path, filled_md_path)
-                from cosmic_tool.cosmic_llm import load_user_config_from_meta
+                from ai_gen_reimbursement_docs.cosmic_llm import load_user_config_from_meta
                 _user_cfg = load_user_config_from_meta(meta_md)
                 fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url,
                                 **_user_cfg)
 
                 items = parse_md_to_items(filled_md_path)
                 if items:
-                    from cosmic_tool.excel_writer import generate_cosmic_xlsx_from_md, write_environment_sheet
-                    from cosmic_tool.gen_spec import _parse_meta_md
+                    from ai_gen_reimbursement_docs.excel_writer import generate_cosmic_xlsx_from_md, write_environment_sheet
+                    from ai_gen_reimbursement_docs.gen_spec import _parse_meta_md
                     _meta = _parse_meta_md(meta_md)
                     generate_cosmic_xlsx_from_md(cosmic_src_template, cosmic_template, items, meta=_meta)
                     total_cfp = sum(item.total_cfp() for item in items)
@@ -1720,7 +1716,7 @@ def main():
             # 确保基础数据（含 AI 填充元数据）
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
             if api_key and (not os.path.exists(meta_filled_md)):
-                from cosmic_tool.config_utils import load_enable_ai_fill_meta
+                from ai_gen_reimbursement_docs.config_utils import load_enable_ai_fill_meta
                 if load_enable_ai_fill_meta():
                     logger.info("AI 填充文档元数据...")
                     _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
@@ -1762,8 +1758,8 @@ def _project_root() -> str:
 
 
 def _default_template_path() -> str:
-    """Return template path from ~/.cosmic-tool/business_rules.yaml or default."""
-    rules_path = os.path.join(os.path.expanduser('~'), '.cosmic-tool', 'business_rules.yaml')
+    """Return template path from ~/.ai-gen-reimbursement-docs/business_rules.yaml or default."""
+    rules_path = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'business_rules.yaml')
     if os.path.exists(rules_path):
         try:
             import yaml

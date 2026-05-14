@@ -1,7 +1,7 @@
 """模块工具 —— FunctionModule 重导出 + 模块查找。"""
 from typing import Optional
 
-from cosmic_tool.models import FunctionModule
+from ai_gen_reimbursement_docs.models import FunctionModule
 
 
 def get_module_by_name(modules: list[FunctionModule], name: str) -> Optional[FunctionModule]:

@@ -7,12 +7,12 @@ import sys
 from datetime import datetime
 from typing import Optional
 
-from cosmic_tool.exceptions import ConfigError, ParseError
-from cosmic_tool.models import CosmicItem, DataMovement
-from cosmic_tool.models import FunctionModule
-from cosmic_tool.docx_parser import get_module_by_name
+from ai_gen_reimbursement_docs.exceptions import ConfigError, ParseError
+from ai_gen_reimbursement_docs.models import CosmicItem, DataMovement
+from ai_gen_reimbursement_docs.models import FunctionModule
+from ai_gen_reimbursement_docs.docx_parser import get_module_by_name
 
-logger = logging.getLogger('cosmic_tool.cosmic_llm')
+logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_llm')
 
 # Fuzzy matching for common move_type variations
 _MOVE_TYPE_FUZZY = {
@@ -61,7 +61,7 @@ def parse_user_rules(text: str) -> tuple[str, list[tuple[str, str]]]:
 
 def load_user_config_from_meta(meta_md_path: str) -> dict:
     """从文档元数据读取功能用户-发起者/接收者判定，返回配置字典。"""
-    from cosmic_tool.gen_spec import _parse_meta_md
+    from ai_gen_reimbursement_docs.gen_spec import _parse_meta_md
     meta = _parse_meta_md(meta_md_path)
     result: dict = {
         "user_default_initiator": "",
@@ -215,7 +215,7 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
     """Parse LLM JSON response into CosmicItem objects."""
     items = []
 
-    from cosmic_tool.llm_client import strip_markdown_code_block
+    from ai_gen_reimbursement_docs.llm_client import strip_markdown_code_block
     text = strip_markdown_code_block(response_text)
 
     # Find JSON array in text（找 [ 后紧跟 { 的位置，避免在思考文本中匹配到 [）
@@ -324,7 +324,7 @@ def generate_cosmic_items(
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise ConfigError(
-            "未配置 API Key，请在 ~/.cosmic-tool/.env 中设置 ANTHROPIC_API_KEY 或传入 --api-key"
+            "未配置 API Key，请在 ~/.ai-gen-reimbursement-docs/.env 中设置 ANTHROPIC_API_KEY 或传入 --api-key"
         )
 
     base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
@@ -336,7 +336,7 @@ def generate_cosmic_items(
         return []
 
     # Load config
-    from cosmic_tool.config_utils import load_max_tokens, load_ai_system_prompt, load_ai_examples, load_flow_max_ai
+    from ai_gen_reimbursement_docs.config_utils import load_max_tokens, load_ai_system_prompt, load_ai_examples, load_flow_max_ai
     max_tokens = load_max_tokens()
     logger.info(f"MAX_TOKENS = {max_tokens}")
 
@@ -349,7 +349,7 @@ def generate_cosmic_items(
     total = len(l3_modules)
     logger.info(f"Generating COSMIC decompositions for {total} modules...")
 
-    from cosmic_tool.config_utils import load_gen_cosmic_ai_limit
+    from ai_gen_reimbursement_docs.config_utils import load_gen_cosmic_ai_limit
     _cosmic_proc_limit = load_gen_cosmic_ai_limit()
     _cosmic_proc_count = 0
     if _cosmic_proc_limit > 0:
@@ -376,7 +376,7 @@ def generate_cosmic_items(
         if _cosmic_proc_limit > 0:
             _module_procs = len(l3.children) if l3.children else 1
             if _cosmic_proc_count >= _cosmic_proc_limit:
-                from cosmic_tool.models import CosmicItem
+                from ai_gen_reimbursement_docs.models import CosmicItem
                 # 每个功能过程生成一行（保留 L1/L2/L3 信息，movements 为空）
                 for _child in (l3.children or [l3.name]):
                     all_items.append(CosmicItem(
@@ -395,7 +395,7 @@ def generate_cosmic_items(
         if max_ai_l3 > 0 and idx > max_ai_l3:
             logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过 AI 限制 {max_ai_l3}）")
             _skip_ai_limit += 1
-            from cosmic_tool.models import CosmicItem
+            from ai_gen_reimbursement_docs.models import CosmicItem
             for _child in (l3.children or [l3.name]):
                 all_items.append(CosmicItem(
                     project=project_name,
@@ -422,7 +422,7 @@ def generate_cosmic_items(
                 _ai_called += 1
                 _save_ai_prompt(l3.name, l2_name, l1_name, prompt, "generate_cosmic")
 
-                from cosmic_tool.llm_client import call_llm
+                from ai_gen_reimbursement_docs.llm_client import call_llm
                 resp_text = call_llm(
                     prompt=prompt,
                     system=load_ai_system_prompt("cosmic_split") + "\n\n" + load_ai_examples("cosmic_split"),
@@ -506,7 +506,7 @@ def generate_cosmic_items(
         if _reasons:
             logger.warning(
                 "⚠ COSMIC AI 全部跳过（共 %d 个模块），请检查配置限制：%s。"
-                "如需 AI 填充，请在 ~/.cosmic-tool/system_config.yaml 中将对应值设为 0",
+                "如需 AI 填充，请在 ~/.ai-gen-reimbursement-docs/system_config.yaml 中将对应值设为 0",
                 total, "、".join(_reasons),
             )
 
@@ -539,7 +539,7 @@ def generate_cosmic_items(
 
 def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None:
     """Save full AI prompt text to log/ai_prompts/ for review."""
-    base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
+    base_log = os.environ.get('AI_REIMBURSEMENT_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
     )
     log_dir = os.path.join(base_log, 'ai_prompts')
@@ -561,7 +561,7 @@ def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None
 
 def _save_ai_response(l3: str, l2: str, l1: str, text: str, reasoning: str = "") -> None:
     """Save raw AI response text to log/ai_responses/ for review."""
-    base_log = os.environ.get('COSMIC_LOG_DIR', '') or os.path.join(
+    base_log = os.environ.get('AI_REIMBURSEMENT_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
     )
     log_dir = os.path.join(base_log, 'ai_responses')

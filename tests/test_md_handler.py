@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
-from cosmic_tool.md_handler import parse_md_to_items
+from ai_gen_reimbursement_docs.md_handler import parse_md_to_items
 
 
 def _write_temp_md(content: str) -> str:

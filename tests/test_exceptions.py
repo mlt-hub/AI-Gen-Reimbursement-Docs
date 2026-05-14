@@ -1,6 +1,6 @@
 """自定义异常类单元测试。"""
 import pytest
-from cosmic_tool.exceptions import (
+from ai_gen_reimbursement_docs.exceptions import (
     CosmicToolError, ConfigError, ParseError, AIError,
     TemplateError, ValidationError,
 )
