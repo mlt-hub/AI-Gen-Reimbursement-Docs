@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-cosmic = "ai_gen_reimbursement_docs.main:main"
+ard = "ai_gen_reimbursement_docs.main:main"
 
 [tool.setuptools.packages.find]
 include = ["ai_gen_reimbursement_docs*"]
