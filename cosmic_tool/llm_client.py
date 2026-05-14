@@ -60,7 +60,9 @@ def call_llm(
         raise AIError("未配置 API Key，请设置 ANTHROPIC_API_KEY 环境变量或传入 --api-key")
 
     base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
-    model = model or os.environ.get("ANTHROPIC_MODEL", "") or "deepseek-v4-flash"
+    model = model or os.environ.get("ANTHROPIC_MODEL", "")
+    if not model:
+        raise AIError("未配置模型名，请在 ~/.cosmic-tool/.env 中设置 ANTHROPIC_MODEL")
     max_tokens = max_tokens or load_max_tokens()
 
     client_kwargs: dict = {"api_key": api_key}

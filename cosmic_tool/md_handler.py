@@ -6,9 +6,7 @@ import os
 from datetime import date
 from typing import Optional
 
-from cosmic_tool.constants import DEFAULT_MODEL, DEFAULT_INITIATOR, DEFAULT_RECEIVER
-from cosmic_tool.models import CosmicItem, DataMovement
-from cosmic_tool.models import FunctionModule
+from cosmic_tool.models import CosmicItem, DataMovement, FunctionModule
 from cosmic_tool.docx_parser import get_module_by_name
 
 logger = logging.getLogger('cosmic_tool.md_handler')
@@ -281,10 +279,10 @@ def fill_md_with_ai(
     modules: list[FunctionModule],
     project_name: str,
     api_key: str,
-    model: str = DEFAULT_MODEL,
+    model: str = "",
     base_url: Optional[str] = None,
-    user_default_initiator: str = DEFAULT_INITIATOR,
-    user_default_receiver: str = DEFAULT_RECEIVER,
+    user_default_initiator: str = "",
+    user_default_receiver: str = "",
     user_initiator_rules: list[tuple[str, str]] | None = None,
     user_receiver_rules: list[tuple[str, str]] | None = None,
 ) -> None:

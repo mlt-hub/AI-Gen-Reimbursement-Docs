@@ -121,12 +121,13 @@ class TestBooleanLoaders:
 
 
 class TestLoadModelName:
-    def test_returns_default(self):
+    def test_returns_empty_when_not_configured(self):
+        """未配置模型名时返回空字符串（由调用方提醒用户）。"""
         with patch("cosmic_tool.config_utils._config_dir",
                    return_value=Path("/nonexistent")):
             with patch.dict(os.environ, {}, clear=True):
                 result = load_model_name()
-                assert "deepseek" in result or "flash" in result
+                assert result == ""
 
     def test_env_var_override(self):
         with patch("cosmic_tool.config_utils._config_dir",

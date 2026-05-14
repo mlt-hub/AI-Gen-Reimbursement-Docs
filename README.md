@@ -1,3 +1,9 @@
+# AI-Gen-Reimbursement-docs
+
+AI生成项目报账文档
+AI-Generated Project Reimbursement Documents
+ai_gen_reimbursement_docs
+
 # COSMIC 功能点拆分工具
 
 从需求说明书（.docx）自动生成 COSMIC 功能点拆分表（.xlsx），

@@ -8,14 +8,10 @@ from cosmic_tool.gen_xlsx import (
 
 
 class TestReceiverFromClientType:
-    def test_no_rules_maps_by_keyword(self):
-        """无规则时按硬编码关键词映射：后台→后台管理员。"""
-        assert _receiver_from_client_type("后台", "") == "后台管理员"
-        assert _receiver_from_client_type("前台", "") == "普通用户"
-        assert _receiver_from_client_type("渠道", "") == "渠道人员"
-
-    def test_no_rules_unknown_type_uses_default(self):
-        """无规则且无匹配关键词时返回默认值。"""
+    def test_no_rules_returns_default(self):
+        """无规则时返回默认值（Excel 模板未配置则用默认值）。"""
+        assert _receiver_from_client_type("后台", "") == "操作员"
+        assert _receiver_from_client_type("前台", "") == "操作员"
         assert _receiver_from_client_type("未知", "") == "操作员"
 
     def test_match_by_keyword(self):

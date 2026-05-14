@@ -43,5 +43,18 @@ gen_fpa_ai_limit: 0
 # COSMIC AI 只处理前 N 个功能过程（0=不限制）
 gen_cosmic_ai_limit: 0
 
+# spec AI 只完善前 N 个功能过程描述（0=不限制）
+gen_spec_ai_limit: 0
+
 # 是否对文档元数据的 #AI生成# 标记走 AI 填充（false=保留原文 #AI生成# 标记）
 enable_ai_fill_meta: true
+
+# 功能清单-录入模板.xlsx 的 Sheet 名称
+sheets:
+  meta: "1、工单需求-元数据录入"
+  func_content: "2、功能清单-内容录入"
+  fpa_meta: "3、FPA工作量评估-元数据录入"
+  spec_meta: "4、项目需求说明书-元数据录入"
+  cosmic_meta: "6、项目功能点拆分表-元数据录入"
+  require_meta: "7、项目需求清单-元数据录入"
+  template_config: "8、各文档-模板路径录入"

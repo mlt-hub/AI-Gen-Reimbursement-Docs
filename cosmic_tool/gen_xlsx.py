@@ -9,6 +9,15 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import Alignment, Font, Border
 
+from cosmic_tool.constants import (
+    FPA_COL_SEQ, FPA_COL_SUBSYSTEM, FPA_COL_ASSET, FPA_COL_FUNC_POINT,
+    FPA_COL_TYPE, FPA_COL_CLASSIFICATION, FPA_COL_EXPLANATION, FPA_COL_STATUS,
+    FPA_COL_FORMULA_BASE, FPA_COL_ADJUST, FPA_COL_ELEMENTS, FPA_COL_FORMULA_WORKLOAD,
+    FPA_TOTAL_COLS, FPA_COL_KEY_MAP,
+    REQ_COL_SEQ, REQ_COL_PROJECT, REQ_COL_SUBSYSTEM, REQ_COL_L1, REQ_COL_L2,
+    REQ_COL_L3, REQ_COL_PROC_TYPE, REQ_COL_WORKLOAD, REQ_COL_CFP, REQ_TOTAL_COLS,
+    REQ_COL_KEY_MAP,
+)
 from cosmic_tool.excel_source import replace_placeholders, strip_ai_marker
 from cosmic_tool.md_table import parse_md_table_row
 
@@ -59,12 +68,9 @@ def _receiver_from_client_type(client_type: str, rules_text: str) -> str:
     # 默认值
     default = "操作员"
     if not rules_text:
-        if "后台" in client_type:
-            return "后台管理员"
-        if "前台" in client_type:
-            return "普通用户"
-        if "渠道" in client_type:
-            return "渠道人员"
+        logger.warning(
+            "Excel 模板未配置「功能用户-接收者判定」，接收者将使用默认值，请在模板 Sheet 6 中补充"
+        )
         return default
 
     # 解析规则文本：后台：后台管理员\n前台：普通用户\n...
@@ -220,7 +226,7 @@ def _ai_fill_fpa(
         _rules_list = judgement_rules
         _numbered_rules = "\n".join(f"{i}) {r}" for i, r in enumerate(_rules_list, 1))
 
-        row_tag = f"fpa_{row['类型']}_{row['新增/修改功能点'][:30]}"
+        row_tag = f"fpa_{row['类型']}_{row['新增/修改功能点']}"
         prompt = (
             f"功能过程描述：{row['计算依据说明']}\n\n"
             f"判定原则列表（请返回最匹配的序号，序号从1开始）：\n{_numbered_rules}\n\n"
@@ -298,7 +304,7 @@ def init_fpa_template_md(
     """生成 FPA 模板 MD（规则骨架，F/G 列留空待 AI 填充）。
 
     Args:
-        summary_md_path: 非空时同步写入 FPA工作量-计算结果.md（调整值×要素数量 的求和）
+        summary_md_path: 非空时同步写入 FPA工作量-总和.md（调整值×要素数量 的求和）
     """
     logger.info("生成 FPA 模板 MD...")
     meta = _load_meta_md(meta_md_path)
@@ -438,17 +444,25 @@ def ai_fill_fpa_md(
 def _format_fpa_explanation(text: str) -> str:
     """格式化 FPA 计算依据说明：加换行排版，不改变原文内容。"""
     import re as _re
-    text = text.replace("具体如下", "具体如下" + chr(10))
-    text = text.replace("；", "；" + chr(10))
-    text = text.replace("事件流：", "事件流：" + chr(10))
-    text = text.replace("业务规则", chr(10) + "业务规则")
-    text = text.replace("业务数据", chr(10) + "业务数据")
-    text = text.replace("涉及表", chr(10) + "涉及表")
-    text = text.replace("涉及服务", chr(10) + "涉及服务")
-    text = text.replace("；涉及接口", "；" + chr(10) + "涉及接口")
-    text = _re.sub(_re.compile(r"(?<=\S)\s+(?=\d+\.)"), chr(10), text)
+    NL = chr(10)
+    # 去掉开头多余的冒号/空格
+    text = text.lstrip("：: ")
+    # 具体如下后空一行；触发事件、事件流前换行但冒号后不换行
+    text = text.replace("具体如下", "具体如下" + NL + NL)
+    text = text.replace("事件流：", NL + "事件流：")
+    text = text.replace("触发事件：", NL + "触发事件：")
+    # 分号换行
+    text = text.replace("；", "；" + NL)
+    text = text.replace("业务规则", NL + "业务规则")
+    text = text.replace("业务数据", NL + "业务数据")
+    text = text.replace("涉及表", NL + "涉及表")
+    text = text.replace("涉及服务", NL + "涉及服务")
+    text = text.replace("；涉及接口", "；" + NL + "涉及接口")
+    text = _re.sub(_re.compile(r"(?<=\S)\s+(?=\d+\.)"), NL, text)
     text = _re.sub(_re.compile(r"^[	 ]+", _re.MULTILINE), "", text)
-    text = _re.sub(_re.compile(chr(10) + "{3,}"), chr(10) + chr(10), text)
+    # 去掉只有分号或冒号的行
+    text = _re.sub(_re.compile(r'\n[：:;；]\s*\n'), '\n', text)
+    text = _re.sub(_re.compile(NL + "{3,}"), NL + NL, text)
     return text
 
 def generate_fpa_xlsx_from_md(
@@ -497,7 +511,7 @@ def generate_fpa_xlsx_from_md(
 
         # 保存模板第3行的格式作为参照（I 和 L 列沿用第2行标题样式）
     tmpl_format = {}
-    for col_idx in range(1, 15):
+    for col_idx in range(1, FPA_TOTAL_COLS):
         c = ws.cell(3, col_idx)
         tmpl_format[col_idx] = {
             'font': c.font.copy() if c.font else None,
@@ -506,8 +520,8 @@ def generate_fpa_xlsx_from_md(
             'number_format': c.number_format,
             'alignment': c.alignment.copy() if c.alignment else None,
         }
-    # I 列(9) 和 L 列(12)：沿用第2行标题单元格的背景色
-    for col_idx in (9, 12):
+    # I/L 列：沿用第2行标题单元格的背景色
+    for col_idx in (FPA_COL_FORMULA_BASE, FPA_COL_FORMULA_WORKLOAD):
         c = ws.cell(2, col_idx)
         if c.fill:
             tmpl_format[col_idx]['fill'] = c.fill.copy()
@@ -519,36 +533,32 @@ def generate_fpa_xlsx_from_md(
     # 写入数据
     for i, fpa_row in enumerate(fpa_rows):
         excel_row = i + 3
-        try:
-            ws.cell(excel_row, 1, int(fpa_row["序号"]))
-        except (ValueError, TypeError):
-            ws.cell(excel_row, 1, fpa_row["序号"])
-        ws.cell(excel_row, 2, fpa_row["子系统(模块)"])
-        ws.cell(excel_row, 3, fpa_row["资产标识"])
-        ws.cell(excel_row, 4, fpa_row["新增/修改功能点"])
-        ws.cell(excel_row, 5, fpa_row["类型"])
-        ws.cell(excel_row, 6, fpa_row["计算依据归类"])
-        ws.cell(excel_row, 7, _format_fpa_explanation(fpa_row["计算依据说明"]))
-        ws.cell(excel_row, 8, fpa_row["变更状态"])
+        # 通用列：从 dict 取值
+        for col_idx, key in FPA_COL_KEY_MAP.items():
+            val = fpa_row.get(key, "")
+            cell = ws.cell(excel_row, col_idx)
+            # int 转换列
+            if col_idx in (FPA_COL_SEQ, FPA_COL_ADJUST, FPA_COL_ELEMENTS):
+                try:
+                    cell.value = int(val)
+                except (ValueError, TypeError):
+                    cell.value = val
+            elif col_idx == FPA_COL_EXPLANATION:
+                cell.value = _format_fpa_explanation(val)
+            else:
+                cell.value = val
+        # 公式列
         if base_formula:
             formula = base_formula.replace("E3", f"E{excel_row}")                 .replace("H3", f"H{excel_row}").replace("I3", f"I{excel_row}")                 .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
-            ws.cell(excel_row, 9).value = f"={formula}" if not formula.startswith('=') else formula
-        try:
-            ws.cell(excel_row, 10, int(fpa_row["调整值"]))
-        except (ValueError, TypeError):
-            ws.cell(excel_row, 10, fpa_row["调整值"])
-        try:
-            ws.cell(excel_row, 11, int(fpa_row["要素数量"]))
-        except (ValueError, TypeError):
-            ws.cell(excel_row, 11, fpa_row["要素数量"])
+            ws.cell(excel_row, FPA_COL_FORMULA_BASE).value = f"={formula}" if not formula.startswith('=') else formula
         if workload_formula:
             formula = workload_formula.replace("J{row}", f"J{excel_row}")                 .replace("K{row}", f"K{excel_row}")                 .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
-            ws.cell(excel_row, 12).value = f"={formula}" if not formula.startswith('=') else formula
-        ws.cell(excel_row, 13, "")
-        ws.cell(excel_row, 14, "")
+            ws.cell(excel_row, FPA_COL_FORMULA_WORKLOAD).value = f"={formula}" if not formula.startswith('=') else formula
+        ws.cell(excel_row, FPA_TOTAL_COLS - 1, "")
+        ws.cell(excel_row, FPA_TOTAL_COLS, "")
 
         # 从模板第3行复制格式（跳过 fill，避免空单元格带底色；I/L 列除外）
-        for col_idx in range(1, 15):
+        for col_idx in range(1, FPA_TOTAL_COLS):
             c = ws.cell(excel_row, col_idx)
             fmt = tmpl_format.get(col_idx, {})
             if fmt.get('font'):
@@ -560,7 +570,7 @@ def generate_fpa_xlsx_from_md(
             # I 列(9) 和 L 列(12)：应用第2行标题的背景色
             if col_idx in (9, 12) and fmt.get('fill'):
                 c.fill = fmt['fill']
-            if col_idx in (4, 7):
+            if col_idx in (FPA_COL_FUNC_POINT, FPA_COL_EXPLANATION):
                 orig_align = fmt.get('alignment')
                 h = 'left' if col_idx == 7 else (orig_align.horizontal or 'center')
                 if orig_align:
@@ -577,7 +587,7 @@ def generate_fpa_xlsx_from_md(
 
     # 更新第1行合计公式
     last_data_row = len(fpa_rows) + 2
-    for col_idx in [9, 10, 11, 12, 13]:
+    for col_idx in [FPA_COL_FORMULA_BASE, FPA_COL_ADJUST, FPA_COL_ELEMENTS, FPA_COL_FORMULA_WORKLOAD, FPA_TOTAL_COLS - 1]:
         cell = ws.cell(1, col_idx)
         col_letter = openpyxl.utils.get_column_letter(col_idx)
         cell.value = f"=SUM({col_letter}3:{col_letter}{last_data_row})"
@@ -598,14 +608,19 @@ def generate_fpa_xlsx_from_md(
 #  项目需求清单.xlsx
 # ============================================================
 
-def generate_require_xlsx(
+def generate_list_xlsx_from_md(
     meta_md_path: str,
     tree_md_path: str,
     template_path: str,
     output_path: str,
     cfp_total: float = 0,
+    fpa_reduced: float = 0,
 ) -> str:
-    """生成项目需求清单.xlsx。"""
+    """生成项目需求清单.xlsx。
+
+    cfp_total: 送审功能点 = FPA工作量-总和.md 的原始值
+    fpa_reduced: 送审工作量 = FPA 核减后的工作量
+    """
     logger.info("开始生成项目需求清单.xlsx...")
 
     meta = _load_meta_md(meta_md_path)
@@ -630,10 +645,9 @@ def generate_require_xlsx(
     ws1.cell(3, 8, meta.get("项目信息概览-需求负责人", ""))
     ws1.cell(3, 9, meta.get("项目信息概览-需求负责人联系方式", ""))
 
-    # 送审工作量（保留公式）
-    sw_formula = meta.get("项目信息概览-送审工作量", "")
-    if sw_formula:
-        ws1.cell(3, 10).value = sw_formula if sw_formula.startswith('=') else float(sw_formula)
+    # 送审工作量 = FPA 核减后的工作量
+    if fpa_reduced > 0:
+        ws1.cell(3, 10, fpa_reduced)
 
     # 送审功能点 = CFP 总量
     if cfp_total > 0:
@@ -656,7 +670,6 @@ def generate_require_xlsx(
 
     project_name = meta.get("功能清单-项目名称", "")
     subsystem = meta.get("功能清单-子系统", "")
-    sw_formula2 = meta.get("功能清单-送审工作量", "")
 
     # 按三级模块去重写入（先存为列表，之后合并单元格）
     data_rows_data = []
@@ -676,23 +689,23 @@ def generate_require_xlsx(
             seen_modules.add(key)
             seq += 1
             row_idx = seq + 2
-            for col_idx in range(1, 10):
+            # 构建行数据 dict，统一通过 REQ_COL_KEY_MAP 写入
+            _req_data = {
+                "序号": seq, "项目名称": project_name, "子系统": subsystem,
+                "一级模块": r["一级模块"], "二级模块": r["二级模块"],
+                "三级模块": r["三级模块"], "功能过程类型": r["功能过程类型"],
+            }
+            for col_idx in range(1, REQ_TOTAL_COLS):
                 c = ws2.cell(row_idx, col_idx)
                 c.alignment = _center
                 c.border = _tmpl_border
-            ws2.cell(row_idx, 1, seq)
-            ws2.cell(row_idx, 2, project_name)
-            # B 列项目名称文字较长，合并后需自动换行
-            ws2.cell(row_idx, 2).alignment = _center_wrap
-            ws2.cell(row_idx, 3, subsystem)
-            ws2.cell(row_idx, 4, r["一级模块"])
-            ws2.cell(row_idx, 5, r["二级模块"])
-            ws2.cell(row_idx, 6, r["三级模块"])
-            ws2.cell(row_idx, 7, r["功能过程类型"])
-            if sw_formula2:
-                ws2.cell(row_idx, 8).value = sw_formula2 if sw_formula2.startswith('=') else float(sw_formula2)
+            for col_idx, key in REQ_COL_KEY_MAP.items():
+                ws2.cell(row_idx, col_idx, _req_data.get(key, ""))
+            ws2.cell(row_idx, REQ_COL_PROJECT).alignment = _center_wrap
+            if fpa_reduced > 0:
+                ws2.cell(row_idx, REQ_COL_WORKLOAD, fpa_reduced)
             if cfp_total > 0:
-                ws2.cell(row_idx, 9, cfp_total)
+                ws2.cell(row_idx, REQ_COL_CFP, cfp_total)
             data_rows_data.append({
                 "row": row_idx,
                 "project_name": project_name,
@@ -703,14 +716,15 @@ def generate_require_xlsx(
 
     # 合并行1标题居中（A~I列）
     if seq > 0:
-        ws2.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
+        ws2.merge_cells(start_row=1, start_column=1, end_row=1, end_column=REQ_TOTAL_COLS)
         ws2.cell(1, 1).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
     # 合并相同值的列：B(项目名称), C(子系统), D(一级模块), E(二级模块)
-    for col_idx in [2, 3, 4, 5]:
+    for col_idx in [REQ_COL_PROJECT, REQ_COL_SUBSYSTEM, REQ_COL_L1, REQ_COL_L2]:
         i = 0
         while i < len(data_rows_data):
-            val_key = ["project_name", "subsystem", "module_l1", "module_l2"][col_idx - 2]
+            val_key = {REQ_COL_PROJECT: "project_name", REQ_COL_SUBSYSTEM: "subsystem",
+                       REQ_COL_L1: "module_l1", REQ_COL_L2: "module_l2"}[col_idx]
             curr_val = data_rows_data[i][val_key]
             j = i
             while j < len(data_rows_data) and data_rows_data[j][val_key] == curr_val:
@@ -726,22 +740,23 @@ def generate_require_xlsx(
                 ws2.cell(data_rows_data[i]["row"], col_idx).border = _tmpl_border
             i = j
 
-    # 合并送审工作量(H/8列)和送审功能点(I/9列) — 所有行相同值
+    # 合并送审工作量和送审功能点列 — 所有行相同值
     if len(data_rows_data) > 1:
-        ws2.merge_cells(
-            start_row=data_rows_data[0]["row"],
-            start_column=8,
-            end_row=data_rows_data[-1]["row"],
-            end_column=8
-        )
-        ws2.cell(data_rows_data[0]["row"], 8).border = _tmpl_border
-        ws2.merge_cells(
-            start_row=data_rows_data[0]["row"],
-            start_column=9,
-            end_row=data_rows_data[-1]["row"],
-            end_column=9
-        )
-        ws2.cell(data_rows_data[0]["row"], 9).border = _tmpl_border
+        for _col in (REQ_COL_WORKLOAD, REQ_COL_CFP):
+            ws2.merge_cells(
+                start_row=data_rows_data[0]["row"],
+                start_column=_col,
+                end_row=data_rows_data[-1]["row"],
+                end_column=_col
+            )
+            _top_cell = ws2.cell(data_rows_data[0]["row"], _col)
+            _top_cell.border = _tmpl_border
+            _top_cell.alignment = _center
+
+        # 合并区域补全各单元格边框（合并后非左上角单元格边框丢失）
+        for _col in (REQ_COL_WORKLOAD, REQ_COL_CFP):
+            for _r in range(data_rows_data[0]["row"], data_rows_data[-1]["row"] + 1):
+                ws2.cell(_r, _col).border = _tmpl_border
 
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     try:

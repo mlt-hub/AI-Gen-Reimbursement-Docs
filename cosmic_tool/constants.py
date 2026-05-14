@@ -4,72 +4,12 @@
 后续可改为从配置文件读取，无需修改业务代码。
 """
 
-# ---- AI 默认值 ----
-DEFAULT_MODEL = "deepseek-v4-flash"
-DEFAULT_MAX_TOKENS = 6000
-
-# ---- COSMIC 业务默认值 ----
-DEFAULT_INITIATOR = "操作员"
-DEFAULT_RECEIVER = "地市后台"
-
-# ---- 章节检测默认值 ----
-DEFAULT_CHAPTER_NUMBER = "4"
-DEFAULT_CHAPTER_KEYWORD = "功能需求"
-DEFAULT_END_CHAPTER_NUMBER = "5"
-
-# ---- 模板目录 ----
-TEMPLATE_DIR = "data/templates"
-
-# ---- 模板文件路径 ----
-TEMPLATE_FUNC_POINT = f"{TEMPLATE_DIR}/项目功能点拆分表-模板.xlsx"
-TEMPLATE_FPA = f"{TEMPLATE_DIR}/FPA工作量评估-模板.xlsx"
-TEMPLATE_REQUIRE = f"{TEMPLATE_DIR}/项目需求清单-模板.xlsx"
-TEMPLATE_SPEC = f"{TEMPLATE_DIR}/项目需求说明书-模板.docx"
-
-# ---- 模板映射（用于 excel_source 中 resolve） ----
-TEMPLATE_MAP = {
-    "FPA工作量评估-模板": TEMPLATE_FPA,
-    "项目需求说明书-模板": TEMPLATE_SPEC,
-    "项目功能点拆分表-模板": TEMPLATE_FUNC_POINT,
-    "项目需求清单-模板": TEMPLATE_REQUIRE,
-}
-
-# ---- Excel Sheet 名称 ----
-SHEET_META = "1、工单需求-元数据录入"
-SHEET_FUNC_CONTENT = "2、功能清单-内容录入"
-SHEET_FPA_META = "3、FPA工作量评估-元数据录入"
-SHEET_SPEC_META = "4、项目需求说明书-元数据录入"
-SHEET_WORKLOAD_META = "5、预估工作量-元数据录入"
-SHEET_COSMIC_META = "6、项目功能点拆分表-元数据录入"
-SHEET_REQUIRE_META = "7、项目需求清单-元数据录入"
-SHEET_TEMPLATE_CONFIG = "8、各文档-模板路径录入"
-
-# 元数据 Sheet 列表（按解析顺序）
-META_SHEETS = [
-    (SHEET_META, "project_info"),
-    (SHEET_FPA_META, "fpa_meta"),
-    (SHEET_SPEC_META, "docx_meta"),
-    (SHEET_WORKLOAD_META, "workload_meta"),
-    (SHEET_COSMIC_META, "cosmic_meta"),
-    (SHEET_REQUIRE_META, "require_meta"),
-]
-
-# ---- Excel 功能点拆分表 列索引 ----
-COL_FP_PROJECT = 1
-COL_FP_MODULE_L1 = 2
-COL_FP_MODULE_L2 = 3
-COL_FP_MODULE_L3 = 4
-COL_FP_USER = 5
-COL_FP_TRIGGER = 6
-COL_FP_PROCESS = 7
-COL_FP_SUB_PROCESS = 8
-COL_FP_MOVE_TYPE = 9
-COL_FP_DATA_GROUP = 10
-COL_FP_DATA_ATTRS = 11
-COL_FP_REUSE = 12
-COL_FP_CFP = 13
-FP_DATA_START_ROW = 6
-FP_TOTAL_COLS = 14
+# ---- Excel 功能点拆分表 列索引（输出模板结构） ----
+COL_FP_SUB_PROCESS = 8   # 子过程描述（警告标记列）
+COL_FP_MOVE_TYPE = 9     # 数据移动类型
+COL_FP_CFP = 13          # CFP 公式列
+FP_DATA_START_ROW = 6    # 数据起始行
+FP_TOTAL_COLS = 14       # 总列数
 
 # 列号 → 字段名映射（excel_writer 写入时使用）
 FP_COL_KEY_MAP = {
@@ -82,10 +22,43 @@ FP_COL_KEY_MAP = {
 # 需要左对齐的列
 FP_LEFT_ALIGN_COLS = (8, 10, 11)
 
-# ---- FPA 接收方类型 ----
-RECEIVER_TYPE_MAP = {
-    "后台": "后台管理员",
-    "管理": "后台管理员",
-    "普通": "普通用户",
-    "渠道": "渠道人员",
+# ---- FPA 工作量评估 列索引 ----
+FPA_COL_SEQ = 1           # 序号
+FPA_COL_SUBSYSTEM = 2     # 子系统(模块)
+FPA_COL_ASSET = 3         # 资产标识
+FPA_COL_FUNC_POINT = 4    # 新增/修改功能点
+FPA_COL_TYPE = 5          # 类型
+FPA_COL_CLASSIFICATION = 6  # 计算依据归类
+FPA_COL_EXPLANATION = 7   # 计算依据说明（需左对齐换行）
+FPA_COL_STATUS = 8        # 变更状态
+FPA_COL_FORMULA_BASE = 9  # 基准值（公式列）
+FPA_COL_ADJUST = 10       # 调整值
+FPA_COL_ELEMENTS = 11     # 要素数量
+FPA_COL_FORMULA_WORKLOAD = 12  # FPA工作量（公式列）
+FPA_TOTAL_COLS = 14       # 总列数
+
+# 列号 → 字段名映射
+FPA_COL_KEY_MAP = {
+    1: "序号", 2: "子系统(模块)", 3: "资产标识", 4: "新增/修改功能点",
+    5: "类型", 6: "计算依据归类", 7: "计算依据说明", 8: "变更状态",
+    10: "调整值", 11: "要素数量",
 }
+
+# ---- 项目需求清单 列索引 ----
+REQ_COL_SEQ = 1           # 序号
+REQ_COL_PROJECT = 2       # 项目名称
+REQ_COL_SUBSYSTEM = 3     # 子系统
+REQ_COL_L1 = 4            # 一级模块
+REQ_COL_L2 = 5            # 二级模块
+REQ_COL_L3 = 6            # 三级模块
+REQ_COL_PROC_TYPE = 7     # 功能过程类型
+REQ_COL_WORKLOAD = 8      # 送审工作量
+REQ_COL_CFP = 9           # 送审功能点
+REQ_TOTAL_COLS = 9        # 总列数
+
+# 列号 → 字段名映射
+REQ_COL_KEY_MAP = {
+    1: "序号", 2: "项目名称", 3: "子系统", 4: "一级模块",
+    5: "二级模块", 6: "三级模块", 7: "功能过程类型",
+}
+

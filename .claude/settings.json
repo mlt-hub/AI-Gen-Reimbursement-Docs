@@ -106,14 +106,16 @@
       "Bash(python)",
       "Bash(rm -f ~/.cosmic-tool/docx_parse_hierarchical_structure_mapping_rules.yaml)",
       "Bash(ls ~/.cosmic-tool/docx_parse_mapping_rules.yaml)",
-      "Bash(python -m cosmic_tool.main --docx \"D:\\\\mlt\\\\test\\\\1ma2m\\\\2m.docx\" --show-tree)"
+      "Bash(python -m cosmic_tool.main --docx \"D:\\\\mlt\\\\test\\\\1ma2m\\\\2m.docx\" --show-tree)",
+      "Bash(python -c *)"
     ],
     "additionalDirectories": [
       "\\tmp",
       "C:\\Users\\Administrator\\.claude",
       "C:\\Users\\Administrator\\Desktop",
       "C:\\Users\\Administrator\\.cosmic-tool",
-      "d:\\mlt\\ws_tool\\config"
+      "d:\\mlt\\ws_tool\\config",
+      "F:\\mlt\\mlt-tests\\AI-Cosmic"
     ]
   }
 }

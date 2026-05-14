@@ -7,7 +7,10 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
-from cosmic_tool.constants import FP_DATA_START_ROW, FP_LEFT_ALIGN_COLS, FP_TOTAL_COLS
+from cosmic_tool.constants import (
+    FP_DATA_START_ROW, FP_LEFT_ALIGN_COLS, FP_TOTAL_COLS,
+    FP_COL_KEY_MAP, COL_FP_CFP, COL_FP_SUB_PROCESS, COL_FP_MOVE_TYPE,
+)
 from cosmic_tool.models import CosmicItem
 from cosmic_tool.config_utils import load_cfp_formula
 
@@ -69,7 +72,7 @@ def _save_footer_notes(ws) -> list:
                     if mr.min_row <= row_num <= mr.max_row:
                         row_merges.append(str(mr))
                 row_vals = {}
-                for col in range(1, 14):
+                for col in range(1, FP_TOTAL_COLS):
                     c = ws.cell(row=row_num, column=col)
                     if c.value is not None or col == 1:
                         row_vals[col] = (c.value, _get_ref_style(ws, row_num, col))
@@ -91,7 +94,7 @@ def _save_footer_notes(ws) -> list:
 
 
 
-def write_to_template(
+def generate_cosmic_xlsx_from_md(
     template_path: str,
     output_path: str,
     items: list[CosmicItem],
@@ -113,7 +116,7 @@ def write_to_template(
     tmpl_format_row6 = {}
     for col_idx in range(1, FP_TOTAL_COLS):
         tmpl_format_row6[col_idx] = _get_ref_style(ws, 6, col_idx)
-    _CFP_FILL_TMPL = copy.copy(ws.cell(row=6, column=13).fill)
+    _CFP_FILL_TMPL = copy.copy(ws.cell(row=6, column=COL_FP_CFP).fill)
 
     # 保存第6行中带 ${...} 占位符的单元格值（模板的元数据行）
     row6_placeholders: dict[int, str] = {}
@@ -148,7 +151,7 @@ def write_to_template(
                         row_merges.append(str(mr))
                 # Save cell values and styles
                 row_vals = {}
-                for col in range(1, 14):
+                for col in range(1, FP_TOTAL_COLS):
                     c = ws.cell(row=row_num, column=col)
                     if c.value is not None or col == 1:
                         row_vals[col] = (c.value, _get_ref_style(ws, row_num, col))
@@ -212,25 +215,18 @@ def write_to_template(
         row_num = start_row + i
         for col_idx in range(1, FP_TOTAL_COLS):
             cell = ws.cell(row=row_num, column=col_idx)
-            col_letter = get_column_letter(col_idx)
-            key_map = {
-                1: 'project', 2: 'module_l1', 3: 'module_l2', 4: 'module_l3',
-                5: 'user', 6: 'trigger', 7: 'process', 8: 'sub_process',
-                9: 'move_type', 10: 'data_group', 11: 'data_attrs',
-                12: 'reuse', 13: 'cfp'
-            }
-            if col_idx == 13:
+            if col_idx == COL_FP_CFP:
                 # CFP 列用公式（从配置文件读取）
                 cfp_formula = load_cfp_formula()
                 cell.value = '=' + cfp_formula.replace('{row}', str(row_num))
             else:
-                cell.value = row_data.get(key_map[col_idx], '')
+                cell.value = row_data.get(FP_COL_KEY_MAP[col_idx], '')
 
             # Apply template row 6 format（跳过 fill，避免空单元格带底色）
             _apply_style(cell, tmpl_format_row6[col_idx], skip_fill=True)
 
             # CFP 列：绿色底色 + 分数格式（复用=1/3时显示分数）
-            if col_idx == 13:
+            if col_idx == COL_FP_CFP:
                 cell.fill = _CFP_FILL
                 cell.number_format = '[=1]0;[=0]0;# ?/?'
 
@@ -364,17 +360,17 @@ def write_to_template(
         move_flagged = row_data.get('move_type_flagged', False)
 
         if row_warnings:
-            # Yellow highlight on the first visible data cell (col 8, sub_process)
-            ws.cell(row=row_num, column=8).fill = _WARN_FILL
+            # Yellow highlight on the first visible data cell (sub_process)
+            ws.cell(row=row_num, column=COL_FP_SUB_PROCESS).fill = _WARN_FILL
             # Excel comment with warning text
             from openpyxl.comments import Comment
-            ws.cell(row=row_num, column=8).comment = Comment(
+            ws.cell(row=row_num, column=COL_FP_SUB_PROCESS).comment = Comment(
                 "\n".join(f"⚠ {w}" for w in row_warnings), "COSMIC Tool"
             )
 
         if move_flagged:
             # Yellow on fuzzy-matched move_type cell (col 9)
-            ws.cell(row=row_num, column=9).fill = _WARN_FILL
+            ws.cell(row=row_num, column=COL_FP_MOVE_TYPE).fill = _WARN_FILL
 
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)
@@ -502,7 +498,7 @@ def update_environment_sheet(
                 "有" if target else "无", "有" if necessity else "无")
 
 
-# 兼容旧调用方（独立 load/save，可能丢失图片；推荐使用 update_environment_sheet + write_to_template）
+# 兼容旧调用方（独立 load/save，可能丢失图片；推荐使用 update_environment_sheet + generate_cosmic_xlsx_from_md）
 def write_environment_sheet(
     template_path: str,
     output_path: str,

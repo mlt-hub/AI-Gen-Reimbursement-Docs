@@ -7,6 +7,8 @@ from datetime import datetime
 
 import openpyxl
 
+from cosmic_tool.config_utils import load_sheet_names
+
 logger = logging.getLogger('cosmic_tool.excel_source')
 
 
@@ -40,22 +42,8 @@ def _key_value_sheet(ws: "openpyxl.worksheet.worksheet.Worksheet") -> dict[str, 
     return data
 
 
-def _calc_cfp_limit(wb: "openpyxl.Workbook") -> float:
-    """从 sheet 5 读取 CFP 限制值（如果含公式则计算）。"""
-    ws = wb['5、预估工作量-元数据录入']
-    b1 = _cell_val(ws.cell(2, 2).value)  # 预估工作量
-    b2 = _cell_val(ws.cell(3, 2).value)  # FPA核减后的工作量
-    b3 = _cell_val(ws.cell(4, 2).value)  # CFP数量限制倍数
-    b4 = _cell_val(ws.cell(5, 2).value)  # CFP数量限制值（公式）
-    try:
-        limit = float(b2) * float(b3) if b4.startswith('=') else float(b4)
-    except (ValueError, ZeroDivisionError):
-        limit = 0
-    return limit
-
-
 def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
-    """读取功能清单.xlsx，生成功能清单模块树.md 和 文档元数据模板.md。
+    """读取功能清单.xlsx，生成功能清单-模块树.md 和 录入文档元数据-模板.md。
 
     Args:
         excel_path: 功能清单.xlsx 路径
@@ -64,6 +52,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
     Returns:
         {"module_tree_md": 路径, "doc_meta_md": 路径}
     """
+    _s = load_sheet_names()
     if not output_dir:
         output_dir = os.path.dirname(os.path.abspath(excel_path))
     os.makedirs(output_dir, exist_ok=True)
@@ -73,45 +62,34 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
     # ========== 解析各个 sheet ==========
 
     # 1、工单需求-元数据录入
-    ws1 = wb['1、工单需求-元数据录入']
+    ws1 = wb[_s["meta"]]
     project_info = _key_value_sheet(ws1)
 
     # 2、功能清单-内容录入 — 模块树 + 功能过程
-    ws2 = wb['2、功能清单-内容录入']
+    ws2 = wb[_s["func_content"]]
     func_rows = _resolve_inherited_rows(ws2)
 
     # 3、FPA工作量评估-元数据录入
-    ws3 = wb['3、FPA工作量评估-元数据录入']
+    ws3 = wb[_s["fpa_meta"]]
     fpa_meta = _key_value_sheet(ws3)
 
     # 4、项目需求说明书-元数据录入
-    ws4 = wb['4、项目需求说明书-元数据录入']
+    ws4 = wb[_s["spec_meta"]]
     docx_meta = _key_value_sheet(ws4)
 
-    # 5、预估工作量-元数据录入
-    ws5 = wb['5、预估工作量-元数据录入']
-    workload_meta = _key_value_sheet(ws5)
-
     # 6、项目功能点拆分表-元数据录入
-    ws6 = wb['6、项目功能点拆分表-元数据录入']
+    ws6 = wb[_s["cosmic_meta"]]
     cosmic_meta = _key_value_sheet(ws6)
 
     # 7、项目需求清单-元数据录入
-    ws7 = wb['7、项目需求清单-元数据录入']
+    ws7 = wb[_s["require_meta"]]
     require_meta = _key_value_sheet(ws7)
 
     wb.close()
 
     # data_only=True 还原公式单元格的计算值
     wb_val = openpyxl.load_workbook(excel_path, data_only=True)
-    for row in wb_val['5、预估工作量-元数据录入'].iter_rows(min_row=2, values_only=True):
-        k, v = row[0], row[1]
-        if k and str(v).strip():
-            wk = str(k).strip()
-            wv = str(v).strip()
-            if wk in workload_meta and workload_meta[wk].startswith('='):
-                workload_meta[wk] = wv
-    for row in wb_val['7、项目需求清单-元数据录入'].iter_rows(min_row=2, values_only=True):
+    for row in wb_val[_s["require_meta"]].iter_rows(min_row=2, values_only=True):
         k, v = row[0], row[1]
         if k and str(v).strip():
             wk = str(k).strip()
@@ -129,9 +107,9 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
         "功能过程（个数）": str(len({r[6] for r in func_rows if r[6]})),
     }
 
-    # ========== 生成 功能清单模块树.md ==========
+    # ========== 生成 功能清单-模块树.md ==========
 
-    md_tree_path = os.path.join(output_dir, '功能清单模块树.md')
+    md_tree_path = os.path.join(output_dir, '功能清单-模块树.md')
     with open(md_tree_path, 'w', encoding='utf-8') as f:
         f.write("# 功能清单模块树\n\n")
         f.write(f"**来源文件**：{os.path.basename(excel_path)}\n")
@@ -146,9 +124,9 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
     logger.info(f"功能清单模块树已生成: {md_tree_path}")
 
-    # ========== 生成 文档元数据模板.md ==========
+    # ========== 生成 录入文档元数据-模板.md ==========
 
-    md_meta_path = os.path.join(output_dir, '文档元数据模板.md')
+    md_meta_path = os.path.join(output_dir, '录入文档元数据-模板.md')
     with open(md_meta_path, 'w', encoding='utf-8') as f:
         f.write("# 文档元数据\n\n")
         f.write(f"**来源文件**：{os.path.basename(excel_path)}\n")
@@ -156,12 +134,11 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
         # 按 sheet 分组写入
         sections = [
-            ("1、工单需求-元数据录入", project_info),
-            ("3、FPA工作量评估-元数据录入", fpa_meta),
-            ("4、项目需求说明书-元数据录入", docx_meta),
-            ("5、预估工作量-元数据录入", workload_meta),
-            ("6、项目功能点拆分表-元数据录入", cosmic_meta),
-            ("7、项目需求清单-元数据录入", require_meta),
+            (_s["meta"], project_info),
+            (_s["fpa_meta"], fpa_meta),
+            (_s["spec_meta"], docx_meta),
+            (_s["cosmic_meta"], cosmic_meta),
+            (_s["require_meta"], require_meta),
             ("9、测试元数据自动统计", stats_meta),
         ]
 
@@ -175,21 +152,11 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
                 for ph, src in [("${工单编号}", project_info.get("工单编号", "")),
                                  ("${工单名称}", project_info.get("工单标题", "")),
                                  ("${工单标题}", project_info.get("工单标题", "")),
-                                 ("${工单内容}", project_info.get("工单内容", "")),
                                  ("${子系统（模块）}", fpa_meta.get("子系统（模块）", ""))]:
                     v = v.replace(ph, src)
                 val_escaped = v.replace('|', '\\|').replace('\n', ' ').replace('\r', ' ')
                 f.write(f"| {key} | {val_escaped} |\n")
             f.write("\n")
-
-        # 附加：CFP 限制值
-        cfp_limit = _calc_cfp_limit(wb)
-        f.write("## 计算值\n\n")
-        f.write("| 项目 | 值 |\n")
-        f.write("|------|-----|\n")
-        f.write(f"| CFP数量限制值 | {cfp_limit} |\n")
-        f.write(f"| CFP数量限制倍数 | {workload_meta.get('CFP数量限制倍数', '1.5')} |\n")
-        f.write("\n")
 
     logger.info(f"文档元数据已生成: {md_meta_path}")
 
@@ -197,19 +164,13 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
 
 def read_template_config(excel_path: str) -> dict[str, str]:
-    """读取 功能清单-录入-模板.xlsx → sheet 8，返回模板名→路径的映射。
-
-    返回示例:
-        {"FPA工作量评估-模板": "data/templates/FPA工作量评估-模板.xlsx",
-         "项目需求说明书-模板": "data/templates/项目需求说明书-模板.docx",
-         "项目功能点拆分表-模板": "data/templates/项目功能点拆分表-模板.xlsx",
-         "项目需求清单-模板": "data/templates/项目需求清单-模板.xlsx"}
-    """
+    """读取 功能清单-录入模板.xlsx → sheet 8，返回模板名→路径的映射。"""
+    _s = load_sheet_names()
     result: dict[str, str] = {}
     try:
         wb = openpyxl.load_workbook(excel_path, data_only=True)
-        if '8、各文档-模板路径录入' in wb.sheetnames:
-            ws = wb['8、各文档-模板路径录入']
+        if _s["template_config"] in wb.sheetnames:
+            ws = wb[_s["template_config"]]
             for row in ws.iter_rows(min_row=2, max_row=ws.max_row,
                                     min_col=1, max_col=2, values_only=True):
                 name, path = row
@@ -245,7 +206,7 @@ def read_fpa_xlsx_sum(fpa_xlsx_path: str) -> float:
 
 
 def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
-    """验证功能清单模块树.md 的统计信息与文档元数据模板.md 中的期望值一致。
+    """验证功能清单-模块树.md 的统计信息与录入文档元数据-模板.md 中的期望值一致。
 
     读取模块树 MD 表格，统计入口/L1/L2/L3/功能过程数，
     与文档元数据中 ## 9、测试元数据自动统计 进行对比。

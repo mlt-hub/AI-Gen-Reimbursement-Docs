@@ -23,10 +23,9 @@ import shutil
 import sys
 from datetime import datetime
 
-from cosmic_tool.constants import DEFAULT_MODEL
 from cosmic_tool.exceptions import ConfigError
 from cosmic_tool.models import FunctionModule
-from cosmic_tool.excel_writer import write_to_template
+from cosmic_tool.excel_writer import generate_cosmic_xlsx_from_md
 from cosmic_tool.config_utils import load_api_key, load_base_url, load_model_name, load_business_config
 from cosmic_tool.md_handler import (
     export_empty_md,
@@ -35,8 +34,8 @@ from cosmic_tool.md_handler import (
     fill_md_with_ai,
 )
 from cosmic_tool.excel_source import generate_md_files, read_template_config, verify_module_tree_stats
-from cosmic_tool.gen_spec import generate_spec, export_spec_template_md, fill_spec_md
-from cosmic_tool.gen_xlsx import generate_fpa_xlsx_from_md, generate_require_xlsx
+from cosmic_tool.gen_spec import generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md
+from cosmic_tool.gen_xlsx import generate_fpa_xlsx_from_md, generate_list_xlsx_from_md
 from cosmic_tool.gen_xlsx import init_fpa_template_md, ai_fill_fpa_md
 
 # 启动时自动清理 cosmic_tool 自身的字节码缓存，避免代码修改后缓存过期问题
@@ -96,10 +95,24 @@ def setup_logging(log_dir: str, docx_name: str = ""):
     """添加 per-docx 日志处理器（保留全局日志）。"""
     os.makedirs(log_dir, exist_ok=True)
 
+    # 序号：扫描已有日志，自动递增
+    _seq = 1
+    if docx_name:
+        import re as _re_seq
+        _max_seq = 0
+        try:
+            for _fn in os.listdir(log_dir):
+                _m = _re_seq.match(re.escape(docx_name) + r'_run_(\d+)_\d{8}_\d{6}\.log$', _fn)
+                if _m:
+                    _max_seq = max(_max_seq, int(_m.group(1)))
+        except Exception:
+            pass
+        _seq = _max_seq + 1
+
     prefix = f"{docx_name}_" if docx_name else ""
-    main_log = os.path.join(log_dir, f'{prefix}cosmic_tool.log')
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_log = os.path.join(log_dir, f'{prefix}run_{run_stamp}.log')
+    seq_str = f"{_seq}_" if docx_name else ""
+    run_log = os.path.join(log_dir, f'{prefix}run_{seq_str}{run_stamp}.log')
 
     logger = logging.getLogger('cosmic_tool')
 
@@ -107,12 +120,6 @@ def setup_logging(log_dir: str, docx_name: str = ""):
         '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-
-    # 添加 per-docx 日志（不删除全局处理器）
-    fh = logging.FileHandler(main_log, encoding='utf-8', mode='a')
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(fmt)
-    logger.addHandler(fh)
 
     rh = logging.FileHandler(run_log, encoding='utf-8', mode='w')
     rh.setLevel(logging.DEBUG)
@@ -180,7 +187,7 @@ def _build_modules(docx_path: str, use_ai: bool,
         modules = ai_build_module_tree(
             docx_path=docx_path,
             api_key=api_key or None,
-            model=model or DEFAULT_MODEL,
+            model=model or "",
             base_url=base_url or None,
         )
     elif tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
@@ -212,7 +219,7 @@ def _build_modules_from_md(md_path: str, docx_path: str = "",
 
 
 def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
-    """从功能清单模块树.md 的表格格式构建 FunctionModule 列表。
+    """从功能清单-模块树.md 的表格格式构建 FunctionModule 列表。
 
     表格列：入口 | 一级模块 | 二级模块 | 三级模块 | ... | 功能过程 | ...
     自动去重并构建 L1→L2→L3 层级，功能过程作为 L3 的 children。
@@ -318,11 +325,11 @@ def _read_project_name(meta_md_path: str) -> str:
 
 def _ensure_basedata(excel_path: str, md_dir: str, meta_md: str, tree_md: str,
                      meta_md_tpl: str = "") -> None:
-    """确保数据源中间文件存在（功能清单模块树.md + 文档元数据模板.md）。"""
+    """确保数据源中间文件存在（功能清单-模块树.md + 录入文档元数据-模板.md）。"""
     tpl = meta_md_tpl or meta_md
     needs_md = not (os.path.exists(tpl) and os.path.exists(tree_md))
     if needs_md:
-        logger.info("第1步: 生成功能清单模块树.md 和 文档元数据模板.md...")
+        logger.info("第1步: 生成功能清单-模块树.md 和 录入文档元数据-模板.md...")
         generate_md_files(excel_path, md_dir)
     verify_module_tree_stats(tree_md, tpl)
 
@@ -353,7 +360,7 @@ def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
                     break
 
     if md_val > 0:
-        print(f"\nFPA工作量: {md_val}。请输入 FPA 核减后的工作量（直接回车使用FPA工作量）: ", end="")
+        print(f"\n请输入送审工作量（直接回车使用FPA工作量总和：{md_val}）: ", end="")
     else:
         print("\n请输入 FPA 核减后的工作量（人/天）: ", end="")
 
@@ -376,11 +383,46 @@ def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
     return 0
 
 
+def _prompt_list_values(fpa_sum_md_path: str) -> tuple[float, float]:
+    """提示用户输入送审功能点和送审工作量（gen-list 使用）。
+
+    从 FPA工作量-总和.md 读取默认值，用户可回车使用默认或输入新值。
+    返回 (cfp_total, fpa_reduced)。
+    """
+    import re as _re_plv
+    _fpa_raw = 0.0
+    if os.path.exists(fpa_sum_md_path):
+        with open(fpa_sum_md_path, encoding='utf-8') as _f:
+            for _line in _f:
+                _m = _re_plv.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', _line)
+                if _m:
+                    _fpa_raw = float(_m.group(1))
+                    break
+
+    # 送审功能点
+    if _fpa_raw > 0:
+        _prompt = f"\n请输入送审功能点（直接回车使用FPA工作量总和：{_fpa_raw}）: "
+    else:
+        _prompt = "\n请输入送审功能点: "
+    try:
+        _inp = input(_prompt).strip()
+        cfp_total = float(_inp) if _inp else _fpa_raw
+    except (EOFError, OSError, ValueError):
+        cfp_total = _fpa_raw
+        logger.info(f"送审功能点: {cfp_total}（默认值）")
+
+    # 送审工作量 = FPA 核减后
+    fpa_reduced = _resolve_fpa_sum(fpa_sum_md_path)
+
+    logger.info(f"送审功能点: {cfp_total}, 送审工作量: {fpa_reduced}")
+    return cfp_total, fpa_reduced
 
 
+def _write_combined_ai_log(stage: str = ""):
+    """增量追加 AI 对话日志（合并版 + prompts 版 + responses 版）。
 
-def _write_combined_ai_log():
-    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
+    stage: 当前 gen-* 阶段名（如 gen-basedata, gen-fpa 等），写入日志标记。
+    """
     log_dir = os.environ.get('COSMIC_LOG_DIR', '')
     if not log_dir:
         return
@@ -388,55 +430,101 @@ def _write_combined_ai_log():
     resp_dir = os.path.join(log_dir, 'ai_responses')
     if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
         return
-    all_files = {}
-    for d in [prompt_dir, resp_dir]:
-        if os.path.isdir(d):
-            for fname in os.listdir(d):
-                if fname.endswith('.txt'):
-                    all_files[fname] = os.path.join(d, fname)
-    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
+
     NL = chr(10)
-    with open(out_path, 'w', encoding='utf-8') as out:
-        out.write(f'# AI 对话日志{NL}')
-        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
-        for fname in sorted(all_files.keys()):
-            with open(all_files[fname], 'r', encoding='utf-8') as f:
-                fc = f.read()
-            ftype = '提示词' if 'prompt' in fname else '响应'
-            out.write(f'## {ftype}: {fname}{NL}{NL}')
-            out.write(fc)
-            out.write(f'{NL}{NL}---{NL}{NL}')
+    dirs = {
+        'ai_对话日志.md': (prompt_dir, resp_dir),
+        'ai_prompts_日志.md': (prompt_dir,),
+        'ai_responses_日志.md': (resp_dir,),
+    }
+
+    for out_name, sub_dirs in dirs.items():
+        out_path = os.path.join(log_dir, out_name)
+        # 收集文件
+        all_files = {}
+        for d in sub_dirs:
+            if os.path.isdir(d):
+                for fname in os.listdir(d):
+                    if fname.endswith('.txt'):
+                        all_files[fname] = os.path.join(d, fname)
+
+        # 已写入的不重复
+        logged_files: set[str] = set()
+        if os.path.exists(out_path):
+            with open(out_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.startswith('## ') and '.txt' in line:
+                        logged_files.add(line.split(':', 1)[1].strip())
+
+        new_count = 0
+        with open(out_path, 'a', encoding='utf-8') as out:
+            if not logged_files:
+                title = out_name.replace('.md', '').replace('_', ' ')
+                out.write(f'# {title}{NL}')
+                out.write(f'**首次生成**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
+            # 先收集本轮新文件
+            new_fnames = [f for f in sorted(all_files.keys()) if f not in logged_files]
+            if new_fnames and stage:
+                out.write(f'{NL}---{NL}')
+                out.write(f'## {stage}{NL}{NL}')
+            for fname in new_fnames:
+                new_count += 1
+                with open(all_files[fname], 'r', encoding='utf-8') as f:
+                    fc = f.read()
+                ftype = '提示词' if 'prompt' in fname else '响应'
+                out.write(f'## {ftype}: {fname}{NL}{NL}')
+                out.write(fc)
+                out.write(f'{NL}{NL}---{NL}{NL}')
+
+        if new_count > 0:
+            logger.info(f"{out_name} 追加 {new_count} 条新记录")
 
 
-def _write_combined_ai_log():
-    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
-    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
-    if not log_dir:
-        return
-    prompt_dir = os.path.join(log_dir, 'ai_prompts')
-    resp_dir = os.path.join(log_dir, 'ai_responses')
-    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
-        return
-    all_files = {}
-    for d in [prompt_dir, resp_dir]:
-        if os.path.isdir(d):
-            for fname in os.listdir(d):
-                if fname.endswith('.txt'):
-                    all_files[fname] = os.path.join(d, fname)
-    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
-    NL = chr(10)
-    with open(out_path, 'w', encoding='utf-8') as out:
-        out.write(f'# AI 对话日志{NL}')
-        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
-        for fname in sorted(all_files.keys()):
-            with open(all_files[fname], 'r', encoding='utf-8') as f:
-                fc = f.read()
-            ftype = '提示词' if 'prompt' in fname else '响应'
-            out.write(f'## {ftype}: {fname}{NL}{NL}')
-            out.write(fc)
-            out.write(f'{NL}{NL}---{NL}{NL}')
+def _play_notify_sound():
+    """根据 notify_sound 配置播放提示音。"""
+    try:
+        import yaml as _y
+        _notify = False
+        for _p in [
+            os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                         'config', 'system_config.yaml'),
+            os.path.join(os.environ.get('USERPROFILE', os.environ.get('HOME', '')),
+                         '.cosmic-tool', 'system_config.yaml'),
+        ]:
+            if os.path.isfile(_p):
+                with open(_p, encoding='utf-8') as _f:
+                    _c = _y.safe_load(_f)
+                if _c and _c.get('notify_sound'):
+                    _notify = True
+                    break
+        if _notify:
+            import winsound
+            _audio_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                'data', 'audio', 'ticktick_pop.wav'
+            )
+            if os.path.isfile(_audio_path):
+                winsound.PlaySound(_audio_path, winsound.SND_FILENAME | winsound.SND_SYNC)
+    except Exception:
+        pass
+
+
+def _collect_l3_names(tree_md: str) -> list[str]:
+    """从功能清单-模块树.md 收集所有去重的三级模块名（保持原始顺序）。"""
+    from cosmic_tool.md_table import parse_md_table_row
+    names: list[str] = []
+    seen: set[str] = set()
+    if not os.path.exists(tree_md):
+        return names
+    with open(tree_md, encoding='utf-8') as f:
+        for line in f:
+            cells = parse_md_table_row(line, min_cols=4)
+            if cells is not None and cells[3]:
+                name = cells[3].strip()
+                if name and name not in seen:
+                    seen.add(name)
+                    names.append(name)
+    return names
 
 
 def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
@@ -455,36 +543,6 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
         return ""
 
 
-def _write_combined_ai_log():
-    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
-    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
-    if not log_dir:
-        return
-    prompt_dir = os.path.join(log_dir, 'ai_prompts')
-    resp_dir = os.path.join(log_dir, 'ai_responses')
-    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
-        return
-    all_files = {}
-    for d in [prompt_dir, resp_dir]:
-        if os.path.isdir(d):
-            for fname in os.listdir(d):
-                if fname.endswith('.txt'):
-                    all_files[fname] = os.path.join(d, fname)
-    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
-    NL = chr(10)
-    with open(out_path, 'w', encoding='utf-8') as out:
-        out.write(f'# AI 对话日志{NL}')
-        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
-        for fname in sorted(all_files.keys()):
-            with open(all_files[fname], 'r', encoding='utf-8') as f:
-                fc = f.read()
-            ftype = '提示词' if 'prompt' in fname else '响应'
-            out.write(f'## {ftype}: {fname}{NL}{NL}')
-            out.write(fc)
-            out.write(f'{NL}{NL}---{NL}{NL}')
-
-
 def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
                    tag: str = "") -> str:
     """单次 LLM 调用（委托至 llm_client 公共模块）。"""
@@ -501,10 +559,12 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
         return ""
 
 
-def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url: str) -> str:
-    """读取文档元数据模板.md，AI 填充 #AI生成# 标记，写入 AI填充文档元数据.md。
+def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url: str,
+                     tree_md: str = "") -> str:
+    """读取录入文档元数据-模板.md，AI 填充 #AI生成# 标记，写入 AI填充-录入文档元数据.md。
 
     处理 #AI生成#（包含 #AI生成-XXX# 格式），跳过 #AI补充#。
+    tree_md: 功能清单-模块树.md 路径，用于解析 ${三级模块} 等占位符。
     """
     from cosmic_tool.excel_source import strip_ai_marker, replace_placeholders
     from cosmic_tool.md_table import parse_md_table_row
@@ -545,8 +605,12 @@ def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_ur
                         prompt_raw = f"基于{key}"
                     elif '${' in prompt_raw:
                         prompt_raw = replace_placeholders(prompt_raw, project_info, fpa_meta)
+                        # 解析 ${三级模块}：用所有 L3 模块名拼接
+                        if '${三级模块}' in prompt_raw and tree_md:
+                            _l3_names = _collect_l3_names(tree_md)
+                            prompt_raw = prompt_raw.replace('${三级模块}', '、'.join(_l3_names))
                     resp = _call_llm_once(prompt_raw, api_key, model, base_url,
-                                          tag=f"meta_{key[:16]}")
+                                          tag=f"meta_{key}")
                     if resp:
                         new_lines.append(f"| {key} | {resp} |\n")
                         continue
@@ -556,68 +620,6 @@ def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_ur
     with open(dst_md, 'w', encoding='utf-8') as f:
         f.writelines(new_lines)
     return dst_md
-
-
-
-
-def _write_combined_ai_log():
-    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
-    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
-    if not log_dir:
-        return
-    prompt_dir = os.path.join(log_dir, 'ai_prompts')
-    resp_dir = os.path.join(log_dir, 'ai_responses')
-    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
-        return
-    all_files = {}
-    for d in [prompt_dir, resp_dir]:
-        if os.path.isdir(d):
-            for fname in os.listdir(d):
-                if fname.endswith('.txt'):
-                    all_files[fname] = os.path.join(d, fname)
-    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
-    NL = chr(10)
-    with open(out_path, 'w', encoding='utf-8') as out:
-        out.write(f'# AI 对话日志{NL}')
-        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
-        for fname in sorted(all_files.keys()):
-            with open(all_files[fname], 'r', encoding='utf-8') as f:
-                fc = f.read()
-            ftype = '提示词' if 'prompt' in fname else '响应'
-            out.write(f'## {ftype}: {fname}{NL}{NL}')
-            out.write(fc)
-            out.write(f'{NL}{NL}---{NL}{NL}')
-
-
-def _write_combined_ai_log():
-    """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
-    log_dir = os.environ.get('COSMIC_LOG_DIR', '')
-    if not log_dir:
-        return
-    prompt_dir = os.path.join(log_dir, 'ai_prompts')
-    resp_dir = os.path.join(log_dir, 'ai_responses')
-    if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
-        return
-    all_files = {}
-    for d in [prompt_dir, resp_dir]:
-        if os.path.isdir(d):
-            for fname in os.listdir(d):
-                if fname.endswith('.txt'):
-                    all_files[fname] = os.path.join(d, fname)
-    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
-    NL = chr(10)
-    with open(out_path, 'w', encoding='utf-8') as out:
-        out.write(f'# AI 对话日志{NL}')
-        out.write(f'**生成时间**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}{NL}{NL}')
-        for fname in sorted(all_files.keys()):
-            with open(all_files[fname], 'r', encoding='utf-8') as f:
-                fc = f.read()
-            ftype = '提示词' if 'prompt' in fname else '响应'
-            out.write(f'## {ftype}: {fname}{NL}{NL}')
-            out.write(fc)
-            out.write(f'{NL}{NL}---{NL}{NL}')
 
 
 def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
@@ -688,7 +690,7 @@ def _build_parser() -> argparse.ArgumentParser:
       # (快捷) 一键直出：docx → LLM → Excel
       python -m cosmic_tool.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
 
-      # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含功能清单模块树.md和文档元数据.md）
+      # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含功能清单-模块树.md和文档元数据.md）
       python -m cosmic_tool.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
 
       # 仅查看模块树
@@ -719,7 +721,7 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='从MD文件生成Excel；省略路径时从docx自动查找')
 
     parser.add_argument('--template', '-t', default='',
-                        help='功能点拆分表 .xlsx 模板文件路径（默认 data/templates/）')
+                        help='功能点拆分表 .xlsx 模板文件路径（默认 data/out_templates/）')
 
     parser.add_argument('--output', '-o', default='',
                         help='输出 .xlsx 文件路径')
@@ -768,7 +770,7 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='从功能清单生成 项目需求说明书.docx（无依赖，可随时执行）')
 
     parser.add_argument('--gen-basedata', action='store_true',
-                        help='第0步：生成功能清单模块树.md 和 文档元数据.md')
+                        help='第0步：生成功能清单-模块树.md 和 文档元数据.md')
 
     parser.add_argument('--gen-all', action='store_true',
                         help='全流程：按依赖顺序自动执行 --gen-basedata → --gen-fpa → --gen-spec → --gen-cosmic → --gen-list')
@@ -778,7 +780,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--project-name', default='',
                         help='--from-excel 系列命令的输出文件夹名称（默认从 Excel 自动读取工单标题）')
 
-    # 模板路径覆盖（优先级: CLI > Excel sheet 8 > data/templates/）
+    # 模板路径覆盖（优先级: CLI > Excel sheet 8 > data/out_templates/）
     parser.add_argument('--fpa-template', default='',
                         help='FPA工作量评估 模板路径')
     parser.add_argument('--cosmic-template', default='',
@@ -792,7 +794,6 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='--from-excel 时，删除 Excel 同级目录下以工单标题命名的输出文件夹（如有），再重新生成')
     parser.add_argument('--init-config', action='store_true',
                         help='初始化 .env 配置文件')
-
 
 
     parser.add_argument('--log', nargs='?', const='tail', default=None,
@@ -902,7 +903,7 @@ def main():
     # === Load config ===
     api_key = args.api_key or load_api_key()
     base_url = load_base_url()
-    model = args.model or load_model_name(DEFAULT_MODEL)
+    model = args.model or load_model_name()
 
     if api_key:
         os.environ["ANTHROPIC_API_KEY"] = api_key
@@ -1008,7 +1009,7 @@ def main():
                     md_to_use = md_filled if os.path.exists(md_filled) else md_base
                     items = parse_md_to_items(md_to_use)
                     if items:
-                        write_to_template(_default_template_path(), out_xlsx, items)
+                        generate_cosmic_xlsx_from_md(_default_template_path(), out_xlsx, items)
                         total_cfp = sum(item.total_cfp() for item in items)
                         logger.info(f"  Excel已生成: {out_xlsx} ({len(items)} 过程, {total_cfp} CFP)")
                     else:
@@ -1150,7 +1151,7 @@ def main():
         if not items:
             logger.warning("⚠ MD中未解析到COSMIC数据，请先运行 --fill-md 或手动填写表格")
             return
-        write_to_template(args.template, args.output, items)
+        generate_cosmic_xlsx_from_md(args.template, args.output, items)
         total_cfp = sum(item.total_cfp() for item in items)
         logger.info(f"\n总计: {len(items)} 功能过程, {total_cfp} CFP")
         return
@@ -1201,12 +1202,12 @@ def main():
         md_to_use = filled_md if not args.no_llm else base_md
         items = parse_md_to_items(md_to_use)
         if items:
-            write_to_template(args.template, args.output, items)
+            generate_cosmic_xlsx_from_md(args.template, args.output, items)
             total_cfp = sum(item.total_cfp() for item in items)
             logger.info(f"\n总计: {len(items)} 功能过程, {total_cfp} CFP")
         else:
             logger.warning("⚠ MD中未解析到COSMIC数据，生成空白模板")
-            write_to_template(args.template, args.output, [])
+            generate_cosmic_xlsx_from_md(args.template, args.output, [])
         logger.info(f"中间文件: {md_raw}, {base_md}, {filled_md}")
         return
 
@@ -1245,47 +1246,13 @@ def main():
 
         if items:
             _section("阶段3: 生成Excel")
-            write_to_template(args.template, args.output, items)
+            generate_cosmic_xlsx_from_md(args.template, args.output, items)
             total_cfp = sum(item.total_cfp() for item in items)
             logger.info(f"\n总计: {len(items)} 功能过程, {total_cfp} CFP")
         elif args.no_llm:
-            write_to_template(args.template, args.output, [])
+            generate_cosmic_xlsx_from_md(args.template, args.output, [])
             logger.info("生成空白模板（无数据行）")
         return
-
-    def _write_combined_ai_log():
-        """合并 ai_prompts 和 ai_responses 为一个日志文件。"""
-        log_dir = os.environ.get('COSMIC_LOG_DIR', '')
-        if not log_dir:
-            return
-        prompt_dir = os.path.join(log_dir, 'ai_prompts')
-        resp_dir = os.path.join(log_dir, 'ai_responses')
-        if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
-            return
-
-        combined = []
-        # 按文件名排序，将 prompt 和对应 response 配对
-        all_files = {}
-        for d in [prompt_dir, resp_dir]:
-            if os.path.isdir(d):
-                for fname in os.listdir(d):
-                    if fname.endswith('.txt'):
-                        all_files[fname] = os.path.join(d, fname)
-
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        out_path = os.path.join(log_dir, f'ai_对话日志_{ts}.md')
-        with open(out_path, 'w', encoding='utf-8') as out:
-            out.write(f"# AI 对话日志\n")
-            out.write(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            for fname in sorted(all_files.keys()):
-                filepath = all_files[fname]
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                # 用文件类型作为标题（prompt / response）
-                ftype = "📤 提示词" if "prompt" in fname else "📥 响应"
-                out.write(f"## {ftype}: {fname}\n\n")
-                out.write(content)
-                out.write("\n\n---\n\n")
 
     # === Mode 6: --from-excel 系列（功能清单 → 全套交付物） ===
     if any([args.gen_basedata, args.gen_fpa, args.gen_cosmic, args.gen_list,
@@ -1296,13 +1263,13 @@ def main():
         excel_path = args.from_excel
         if not excel_path:
             import glob
-            for name in ["功能清单-录入-模板.xlsx", "功能清单.xlsx"]:
+            for name in ["功能清单-录入模板.xlsx", "功能清单.xlsx"]:
                 matches = glob.glob(name)
                 if matches:
                     excel_path = matches[0]
                     break
             if not excel_path:
-                logger.error("未指定 --from-excel，且当前目录未找到 功能清单-录入-模板.xlsx")
+                logger.error("未指定 --from-excel，且当前目录未找到 功能清单-录入模板.xlsx")
                 return
         if not os.path.exists(excel_path):
             logger.error(f"文件不存在: {excel_path}")
@@ -1312,7 +1279,7 @@ def main():
         _p_title = args.project_name.strip() if args.project_name else ''
         if not _p_title:
             _tmp_md_dir = os.path.join(os.path.dirname(os.path.abspath(excel_path)) if not args.output_dir else args.output_dir, 'md')
-            _tmp_md_path = os.path.join(_tmp_md_dir, '文档元数据模板.md')
+            _tmp_md_path = os.path.join(_tmp_md_dir, '录入文档元数据-模板.md')
             if os.path.exists(_tmp_md_path):
                 import re as _re_t
                 with open(_tmp_md_path, encoding='utf-8') as _f_t:
@@ -1350,7 +1317,7 @@ def main():
 
         log_dir = os.path.join(out_dir, '日志')
         os.makedirs(log_dir, exist_ok=True)
-        setup_logging(log_dir, '功能清单')
+        setup_logging(log_dir, 'AI生成项目报账文档')
         os.environ['COSMIC_LOG_DIR'] = log_dir
         logger.info(f"日志目录: {log_dir}")
 
@@ -1390,19 +1357,19 @@ def main():
         # 数据源中间文件路径
         md_dir = os.path.join(out_dir, 'md')
         os.makedirs(md_dir, exist_ok=True)
-        tree_md = os.path.join(md_dir, '功能清单模块树.md')
-        meta_md_tpl = os.path.join(md_dir, '文档元数据模板.md')
+        tree_md = os.path.join(md_dir, '功能清单-模块树.md')
+        meta_md_tpl = os.path.join(md_dir, '录入文档元数据-模板.md')
 
         # 是否需要先生成数据源中间文件
         needs_md = not (os.path.exists(meta_md_tpl) and os.path.exists(tree_md))
         if needs_md:
-            logger.info("第1步: 生成功能清单模块树.md 和 文档元数据模板.md...")
+            logger.info("第1步: 生成功能清单-模块树.md 和 录入文档元数据-模板.md...")
             generate_md_files(excel_path, md_dir)
         else:
             logger.info("数据源中间文件已存在，跳过生成")
 
         # 设置 meta_md（优先 AI填充版，无则回退模板）
-        meta_md = os.path.join(md_dir, 'AI填充文档元数据.md')
+        meta_md = os.path.join(md_dir, 'AI填充-录入文档元数据.md')
         if not os.path.exists(meta_md) and os.path.exists(meta_md_tpl):
             meta_md = meta_md_tpl
 
@@ -1416,27 +1383,27 @@ def main():
             if not _doc_name.startswith("【提醒】请手动更新整个目录"):
                 doc_template = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
                 logger.info(f"需求说明书文件名已添加提醒前缀")
-        fpa_sum_md = os.path.join(md_dir, 'FPA工作量-计算结果.md')
-        meta_filled_md = os.path.join(md_dir, 'AI填充文档元数据.md')
+        fpa_sum_md = os.path.join(md_dir, 'FPA工作量-总和.md')
+        meta_filled_md = os.path.join(md_dir, 'AI填充-录入文档元数据.md')
 
         # AI 配置
         api_key = args.api_key or load_api_key()
-        model = args.model or load_model_name(DEFAULT_MODEL)
+        model = args.model or load_model_name()
         base_url = load_base_url()
 
         # MD 生成后再检查一次（首次运行模板刚生成，AI填充版还未创建）
         if not os.path.exists(meta_md) and os.path.exists(meta_md_tpl):
             meta_md = meta_md_tpl
 
-        # 验证模块树统计（功能清单模块树.md ↔ 文档元数据模板.md ## 9）
+        # 验证模块树统计（功能清单-模块树.md ↔ 录入文档元数据-模板.md ## 9）
 
         verify_module_tree_stats(tree_md, meta_md)
-        # 读取模板路径配置（功能清单-录入-模板.xlsx → sheet 8）
+        # 读取模板路径配置（功能清单-录入模板.xlsx → sheet 8）
         tpl_cfg = read_template_config(excel_path)
         _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         def _tpl(key: str, fallback: str, cli_arg: str = "") -> str:
-            """解析模板路径，优先级：CLI > Excel sheet 8 > data/templates/。"""
+            """解析模板路径，优先级：CLI > Excel sheet 8 > data/out_templates/。"""
             if cli_arg:
                 cli_val = getattr(args, cli_arg, "").strip()
                 if cli_val:
@@ -1446,16 +1413,22 @@ def main():
             cfg_path = tpl_cfg.get(key, "")
             if cfg_path and os.path.exists(cfg_path):
                 return cfg_path
-            full = os.path.join(_project_root, 'data', 'templates', fallback)
+            if cfg_path:
+                logger.warning("Sheet 8 中 %s 模板路径不存在: %s", key, cfg_path)
+            else:
+                logger.warning("Sheet 8 中未配置 %s 模板路径，请在 Excel 模板 Sheet「8、各文档-模板路径录入」中补充", key)
+            full = os.path.join(_project_root, 'data', 'out_templates', fallback)
             full = os.path.normpath(full)
             if os.path.exists(full):
+                logger.info("使用内置默认模板: %s", full)
                 return full
-            return os.path.join('data', 'templates', fallback)
+            logger.warning("%s 模板未找到，Sheet 8 未配置且内置默认也不存在，将使用相对路径: %s", key, fallback)
+            return os.path.join('data', 'out_templates', fallback)
 
-        fpa_src_template = _tpl('FPA工作量评估-模板', 'FPA工作量评估-模板.xlsx', 'fpa_template')
-        cosmic_src_template = _tpl('项目功能点拆分表-模板', '项目功能点拆分表-模板.xlsx', 'cosmic_template')
-        require_src_template = _tpl('项目需求清单-模板', '项目需求清单-模板.xlsx', 'list_template')
-        doc_src_template = _tpl('项目需求说明书-模板', '项目需求说明书-模板.docx', 'spec_template')
+        fpa_src_template = _tpl('FPA工作量评估-模板', 'FPA工作量评估-输出模板.xlsx', 'fpa_template')
+        cosmic_src_template = _tpl('项目功能点拆分表-模板', '项目功能点拆分表-输出模板.xlsx', 'cosmic_template')
+        require_src_template = _tpl('项目需求清单-模板', '项目需求清单-输出模板.xlsx', 'list_template')
+        doc_src_template = _tpl('项目需求说明书-模板', '项目需求说明书-输出模板.docx', 'spec_template')
 
         # --gen-all: 按依赖顺序自动执行
         if args.gen_all:
@@ -1468,7 +1441,7 @@ def main():
             if api_key and (not os.path.exists(meta_filled_md)):
                 if load_enable_ai_fill_meta():
                     logger.info("第0步: AI 填充文档元数据...")
-                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
                 else:
                     logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
                     import shutil
@@ -1478,9 +1451,9 @@ def main():
                 meta_md = meta_filled_md
             fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
 
-            # Step 1: FPA（MD → 模板MD → AI填充FPA.md → Excel）
-            fpa_md = os.path.join(md_dir, 'FPA模板.md')
-            fpa_filled_md = os.path.join(md_dir, 'AI填充FPA.md')
+            # Step 1: FPA（MD → 模板MD → AI填充-FPA.md → Excel）
+            fpa_md = os.path.join(md_dir, 'FPA-模板.md')
+            fpa_filled_md = os.path.join(md_dir, 'AI填充-FPA.md')
             if not os.path.exists(fpa_template):
                 logger.info("第1步：FPA → 模板 MD...")
                 init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
@@ -1499,21 +1472,43 @@ def main():
                 generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_template_file, fpa_template)
             else:
                 logger.info("FPA Excel 已存在，跳过")
-            # 读取核减后工作量（从 FPA Excel > 元数据 > 用户输入 > 默认值）
-            fpa_reduced = _resolve_fpa_sum(fpa_sum_md)
+            # 送审工作量 = FPA工作量-总和.md 的值
+            fpa_reduced = 0.0
+            if os.path.exists(fpa_sum_md):
+                import re as _re_fpa3
+                with open(fpa_sum_md, encoding='utf-8') as _f3:
+                    for _line3 in _f3:
+                        _m3 = _re_fpa3.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', _line3)
+                        if _m3:
+                            fpa_reduced = float(_m3.group(1))
+                            break
+            logger.info(f"送审工作量（FPA工作量）: {fpa_reduced}")
 
             # Step 2: 需求说明书
             if not os.path.exists(doc_template):
                 logger.info("第2步：生成 项目需求说明书.docx...")
-                generate_spec(doc_src_template, doc_template, meta_md, tree_md,
-                              api_key=api_key, model=model, base_url=base_url)
+                spec_md = os.path.join(md_dir, 'spec-功能需求章节-模板.md')
+                spec_filled_md = os.path.join(md_dir, 'AI填充-spec-功能需求章节.md')
+                if not os.path.exists(spec_filled_md):
+                    logger.info("  步骤2a: 生成 spec 模板 MD...")
+                    init_spec_template_md(tree_md, meta_md, spec_md)
+                    if api_key:
+                        logger.info("  步骤2b: AI 填充模块功能描述...")
+                        ai_fill_spec_md(spec_md, spec_filled_md,
+                                        api_key, model, base_url)
+                    else:
+                        import shutil
+                        shutil.copy2(spec_md, spec_filled_md)
+                filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
+                generate_spec_docx_from_md(doc_src_template, doc_template, meta_md, tree_md,
+                                           filled_md_path=filled)
             else:
                 logger.info("项目需求说明书.docx 已存在，跳过")
 
             # Step 3: COSMIC
             if not os.path.exists(cosmic_template):
                 logger.info("第3步：生成 项目功能点拆分表.xlsx...")
-                # 使用现有链路：init_base_data_md + ai_fill_cosmic_data_md + write_to_template
+                # 使用现有链路：init_base_data_md + ai_fill_cosmic_data_md + generate_cosmic_xlsx_from_md
                 logger.info("  步骤3a: 从模块树生成拆分表 MD...")
                 from cosmic_tool.docx_parser import FunctionModule
                 modules = _build_modules_from_tree_md(tree_md)
@@ -1538,10 +1533,10 @@ def main():
                 logger.info("  步骤3c: 写入 Excel...")
                 items = parse_md_to_items(filled_md_path)
                 if items:
-                    from cosmic_tool.excel_writer import write_to_template, write_environment_sheet
+                    from cosmic_tool.excel_writer import generate_cosmic_xlsx_from_md, write_environment_sheet
                     from cosmic_tool.gen_spec import _parse_meta_md
                     _meta = _parse_meta_md(meta_md)
-                    write_to_template(cosmic_src_template, cosmic_template, items, meta=_meta)
+                    generate_cosmic_xlsx_from_md(cosmic_src_template, cosmic_template, items, meta=_meta)
                     total_cfp = sum(item.total_cfp() for item in items)
                     logger.info(f"  CFP 总和: {total_cfp}")
                     _target = _meta.get("建设目标", "")
@@ -1557,51 +1552,29 @@ def main():
             else:
                 logger.info("项目功能点拆分表.xlsx 已存在，跳过")
 
-            # 读取 CFP 总和
-            cfp_total = 0
-            if os.path.exists(cosmic_template):
-                filled_md_path = os.path.join(md_dir, 'AI填充cosmic.md')
-                if os.path.exists(filled_md_path):
-                    items = parse_md_to_items(filled_md_path)
-                    cfp_total = sum(item.total_cfp() for item in items)
-            logger.info(f"CFP 总和: {cfp_total}")
+            # 送审功能点 = FPA 工作量（从 FPA工作量-总和.md 读原始值）
+            cfp_total = 0.0
+            if os.path.exists(fpa_sum_md):
+                import re as _re_fpa
+                with open(fpa_sum_md, encoding='utf-8') as _f:
+                    for _line in _f:
+                        _m = _re_fpa.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', _line)
+                        if _m:
+                            cfp_total = float(_m.group(1))
+                            break
+            logger.info(f"送审功能点（FPA工作量）: {cfp_total}")
 
             # Step 4: 需求清单
             if not os.path.exists(require_template):
                 logger.info("第4步：生成 项目需求清单.xlsx...")
-                generate_require_xlsx(meta_md, tree_md, require_src_template, require_template,
-                                      cfp_total=cfp_total)
+                generate_list_xlsx_from_md(meta_md, tree_md, require_src_template, require_template,
+                                      cfp_total=cfp_total, fpa_reduced=fpa_reduced)
             else:
                 logger.info("项目需求清单.xlsx 已存在，跳过")
 
-            _write_combined_ai_log()
+            _write_combined_ai_log("gen-all")
             _section("全流程完成")
-            # 提示音（按配置）
-            try:
-                import yaml as _y
-                _notify = False
-                for _p in [
-                    os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                 'config', 'system_config.yaml'),
-                    os.path.join(os.environ.get('USERPROFILE', os.environ.get('HOME', '')),
-                                 '.cosmic-tool', 'system_config.yaml'),
-                ]:
-                    if os.path.isfile(_p):
-                        with open(_p, encoding='utf-8') as _f:
-                            _c = _y.safe_load(_f)
-                        if _c and _c.get('notify_sound'):
-                            _notify = True
-                            break
-                if _notify:
-                    import winsound
-                    _audio_path = os.path.join(
-                        os.path.dirname(os.path.dirname(__file__)),
-                        'data', 'audio', 'ticktick_pop.wav'
-                    )
-                    if os.path.isfile(_audio_path):
-                        winsound.PlaySound(_audio_path, winsound.SND_FILENAME | winsound.SND_SYNC)
-            except Exception:
-                pass
+            _play_notify_sound()
             # 输出汇总
             _summary_files = [
                 ("FPA 工作量评估", fpa_template),
@@ -1621,7 +1594,7 @@ def main():
 
         # --gen-basedata
         if args.gen_basedata:
-            logger.info("第1步: 生成功能清单模块树.md 和 文档元数据模板.md...")
+            logger.info("第1步: 生成功能清单-模块树.md 和 录入文档元数据-模板.md...")
             generate_md_files(excel_path, md_dir)
             verify_module_tree_stats(tree_md, meta_md_tpl)
 
@@ -1629,33 +1602,34 @@ def main():
                 from cosmic_tool.config_utils import load_enable_ai_fill_meta
                 if load_enable_ai_fill_meta():
                     logger.info("第2步: AI 填充文档元数据...")
-                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
                 else:
                     logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
                     import shutil
                     shutil.copy2(meta_md_tpl, meta_filled_md)
             elif os.path.exists(meta_filled_md):
-                logger.info("AI填充文档元数据.md 已存在，跳过")
+                logger.info("AI填充-录入文档元数据.md 已存在，跳过")
             else:
                 logger.warning("未设置 API Key，跳过 AI 填充")
                 import shutil
                 shutil.copy2(meta_md_tpl, meta_filled_md)
 
-            _write_combined_ai_log()
             logger.info("数据源中间文件已生成:")
             logger.info(f"  {meta_md_tpl}")
             if os.path.exists(meta_filled_md):
                 logger.info(f"  {meta_filled_md}")
+            _write_combined_ai_log("gen-basedata")
+            _play_notify_sound()
             return
 
-        # --gen-fpa: MD → FPA模板MD → AI填充FPA.md → Excel
+        # --gen-fpa: MD → FPA模板MD → AI填充-FPA.md → Excel
         if args.gen_fpa:
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
             if api_key and (not os.path.exists(meta_filled_md)):
                 from cosmic_tool.config_utils import load_enable_ai_fill_meta
                 if load_enable_ai_fill_meta():
                     logger.info("AI 填充文档元数据...")
-                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url)
+                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
                 else:
                     logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
                     import shutil
@@ -1663,8 +1637,8 @@ def main():
             if os.path.exists(meta_filled_md):
                 meta_md = meta_filled_md
             fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
-            fpa_md = os.path.join(md_dir, 'FPA模板.md')
-            fpa_filled_md = os.path.join(md_dir, 'AI填充FPA.md')
+            fpa_md = os.path.join(md_dir, 'FPA-模板.md')
+            fpa_filled_md = os.path.join(md_dir, 'AI填充-FPA.md')
             logger.info("第1步: 生成 FPA 模板 MD...")
             init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
 
@@ -1679,8 +1653,9 @@ def main():
 
             logger.info("第3步: 生成 FPA 工作量评估 Excel...")
             generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src_template, fpa_template)
-            _write_combined_ai_log()
             logger.info(f"FPA工作量评估已生成: {fpa_template}")
+            _write_combined_ai_log("gen-fpa")
+            _play_notify_sound()
             return
 
         # --gen-cosmic
@@ -1708,10 +1683,10 @@ def main():
 
                 items = parse_md_to_items(filled_md_path)
                 if items:
-                    from cosmic_tool.excel_writer import write_to_template, write_environment_sheet
+                    from cosmic_tool.excel_writer import generate_cosmic_xlsx_from_md, write_environment_sheet
                     from cosmic_tool.gen_spec import _parse_meta_md
                     _meta = _parse_meta_md(meta_md)
-                    write_to_template(cosmic_src_template, cosmic_template, items, meta=_meta)
+                    generate_cosmic_xlsx_from_md(cosmic_src_template, cosmic_template, items, meta=_meta)
                     total_cfp = sum(item.total_cfp() for item in items)
                     logger.info(f"CFP 总和: {total_cfp}")
                     _target = _meta.get("建设目标", "")
@@ -1722,73 +1697,56 @@ def main():
                             project, _target, _necessity
                         )
                         logger.info("环境图 sheet 已更新")
-                    _write_combined_ai_log()
                     logger.info(f"项目功能点拆分表已生成: {cosmic_template}")
             else:
                 logger.warning("未设置 API Key，无法生成 COSMIC 拆分数据")
+            _write_combined_ai_log("gen-cosmic")
+            _play_notify_sound()
             return
 
         # --gen-require
         if args.gen_list:
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
-            # 读取 CFP 总和
-            cfp_total = 0
-            filled_md_path = os.path.join(md_dir, 'AI填充cosmic.md')
-            if os.path.exists(filled_md_path):
-                items = parse_md_to_items(filled_md_path)
-                cfp_total = sum(item.total_cfp() for item in items)
-                logger.info(f"从已填充 MD 读取 CFP 总和: {cfp_total}")
-            elif os.path.exists(cosmic_template):
-                # 尝试从已生成的 xlsx 读取
-                import openpyxl
-                try:
-                    wb = openpyxl.load_workbook(cosmic_template, data_only=True)
-                    # 取功能点拆分表 sheet 的最后一列求和
-                    ws = wb['2、功能点拆分表']
-                    cfp_total = 0
-                    for row in ws.iter_rows(min_row=6, values_only=True):
-                        val = row[12] if len(row) > 12 else None  # M列
-                        if val:
-                            try:
-                                cfp_total += float(val)
-                            except (ValueError, TypeError):
-                                pass
-                    wb.close()
-                    logger.info(f"从 Excel 读取 CFP 总和: {cfp_total}")
-                except Exception as e:
-                    logger.warning(f"从 Excel 读取 CFP 失败: {e}")
-
-            generate_require_xlsx(meta_md, tree_md, require_src_template, require_template,
-                                  cfp_total=cfp_total)
-            _write_combined_ai_log()
+            _cfp, _workload = _prompt_list_values(fpa_sum_md)
+            generate_list_xlsx_from_md(meta_md, tree_md, require_src_template, require_template,
+                                  cfp_total=_cfp, fpa_reduced=_workload)
             logger.info(f"项目需求清单已生成: {require_template}")
+            _write_combined_ai_log("gen-list")
+            _play_notify_sound()
             return
 
         # --gen-spec
         if args.gen_spec:
+            # 确保基础数据（含 AI 填充元数据）
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
-            spec_md = os.path.join(md_dir, 'spec模板.md')
-            spec_filled = os.path.join(md_dir, 'AI填充spec.md')
+            if api_key and (not os.path.exists(meta_filled_md)):
+                from cosmic_tool.config_utils import load_enable_ai_fill_meta
+                if load_enable_ai_fill_meta():
+                    logger.info("AI 填充文档元数据...")
+                    _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
+            if os.path.exists(meta_filled_md):
+                meta_md = meta_filled_md
 
-            logger.info("第1步: 生成 spec 模板 MD...")
-            export_spec_template_md(meta_md_tpl, tree_md, spec_md)
+            spec_md = os.path.join(md_dir, 'spec-功能需求章节-模板.md')
+            spec_filled_md = os.path.join(md_dir, 'AI填充-spec-功能需求章节.md')
+            if not os.path.exists(spec_filled_md):
+                logger.info("生成 spec 模板 MD...")
+                init_spec_template_md(tree_md, meta_md, spec_md)
+                if api_key:
+                    logger.info("AI 填充模块功能描述...")
+                    ai_fill_spec_md(spec_md, spec_filled_md,
+                                    api_key, model, base_url)
+                else:
+                    import shutil
+                    shutil.copy2(spec_md, spec_filled_md)
+            filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
 
-            if api_key and os.path.exists(spec_filled):
-                logger.info("第2步: AI填充spec.md 已存在，跳过 AI 生成")
-            elif api_key:
-                logger.info("第2步: AI 填充 spec 数据...")
-                import shutil
-                shutil.copy2(spec_md, spec_filled)
-                fill_spec_md(spec_filled, meta_md, api_key=api_key, model=model, base_url=base_url)
-            else:
-                spec_filled = spec_md
-
-            logger.info("第3步: 生成 项目需求说明书.docx...")
-            generate_spec(doc_src_template, doc_template, meta_md, tree_md,
-                          filled_md_path=spec_filled,
-                          api_key=api_key, model=model, base_url=base_url)
-            _write_combined_ai_log()
+            logger.info("生成 项目需求说明书.docx...")
+            generate_spec_docx_from_md(doc_src_template, doc_template, meta_md, tree_md,
+                                       filled_md_path=filled)
             logger.info(f"项目需求说明书已生成: {doc_template}")
+            _write_combined_ai_log("gen-spec")
+            _play_notify_sound()
             return
 
     # === No valid mode ===
@@ -1819,8 +1777,8 @@ def _default_template_path() -> str:
                     return yaml_path
         except Exception:
             pass
-    # 优先 data/templates/项目功能点拆分表-模板.xlsx，回退 data/项目功能点拆分表.xlsx
-    tpl = os.path.join(_project_root(), 'data', 'templates', '项目功能点拆分表-模板.xlsx')
+    # 优先 data/out_templates/项目功能点拆分表-输出模板.xlsx，回退 data/项目功能点拆分表.xlsx
+    tpl = os.path.join(_project_root(), 'data', 'out_templates', '项目功能点拆分表-输出模板.xlsx')
     if os.path.exists(tpl):
         return tpl
     return os.path.join(_project_root(), 'data', '项目功能点拆分表.xlsx')

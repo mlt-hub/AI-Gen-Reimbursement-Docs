@@ -73,7 +73,7 @@ def _parse_meta_md(meta_md_path: str) -> dict[str, str]:
 
 
 def _parse_module_tree_md(tree_md_path: str) -> list[dict[str, str]]:
-    """解析功能清单模块树.md 为行字典列表。"""
+    """解析功能清单-模块树.md 为行字典列表。"""
     rows = []
     with open(tree_md_path, encoding='utf-8') as f:
         in_table = False
@@ -157,14 +157,17 @@ def _find_paragraph_by_text(doc: Document, text_fragment: str, start_idx: int = 
 
 
 def _generate_section4_content(doc: Document, tree: list[dict], rows: list[dict],
-                                 insert_before_elem, meta: dict):
+                                 insert_before_elem, meta: dict,
+                                 filled_sections: dict[str, str] | None = None,
+                                 filled_proc_descs: dict[str, str] | None = None):
     """在指定元素前插入 Section 4 内容（模块清单表 + 详细描述）。"""
     # 插入模块清单表
     module_tree = _build_module_tree(rows)
     _insert_module_table(doc, module_tree, insert_before_elem)
 
     # 插入详细模块内容
-    _insert_module_details(doc, tree, rows, insert_before_elem, meta)
+    _insert_module_details(doc, tree, rows, insert_before_elem, meta,
+                           filled_sections, filled_proc_descs)
 
 
 def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
@@ -251,8 +254,13 @@ def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
 
 
 def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
-                            insert_before_elem, meta: dict):
-    """插入模块详细内容：按入口→一级→二级→三级→功能过程，分层级编号输出。"""
+                            insert_before_elem, meta: dict,
+                            filled_sections: dict[str, str] | None = None,
+                            filled_proc_descs: dict[str, str] | None = None):
+    """插入模块详细内容：按入口→一级→二级→三级→功能过程，分层级编号输出。
+
+    功能过程描述优先取 AI 填充的 spec MD（filled_proc_descs），无则用 Excel 原文。
+    """
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
 
@@ -276,13 +284,6 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
         key = (r["入口"], r["一级模块"], r["二级模块"], r["三级模块"])
         proc_groups.setdefault(key, []).append(r)
 
-    # 获取模块描述（每模块一条）
-    module_descs = {}
-    for r in rows:
-        key = (r["入口"], r["一级模块"], r["二级模块"], r["三级模块"])
-        if r["三级模块整体功能描述"] and key not in module_descs:
-            module_descs[key] = r["三级模块整体功能描述"]
-
     # 按入口分组
     entry_data: dict[str, list] = {}
     entry_order: list[str] = []
@@ -298,7 +299,7 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
         for g in entry_data[entry]:
             l1_name = g["一级模块"]
             l1_seq += 1
-            children = sorted(g["children"], key=lambda x: (x["二级模块"], x["三级模块"]))
+            children = g["children"]
 
             # L1 标题：4.x. 一级模块
             p_l1 = doc.add_paragraph(f"4.{l1_seq}. {l1_name}")
@@ -312,9 +313,8 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
                 l2_groups.setdefault(child["二级模块"], []).append(child)
 
             l2_seq = 0  # 4.x.x
-            for l2_name in sorted(l2_groups.keys()):
+            for l2_name, l3_list in l2_groups.items():
                 l2_seq += 1
-                l3_list = sorted(l2_groups[l2_name], key=lambda x: x["三级模块"])
 
                 # L2 标题：4.x.x. 二级模块
                 p_l2 = doc.add_paragraph(f"4.{l1_seq}.{l2_seq}. {l2_name}")
@@ -328,7 +328,6 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
                     l3_seq += 1
                     key = (entry, l1_name, l2_name, l3_name)
                     procs = proc_groups.get(key, [])
-                    desc = module_descs.get(key, "")
 
                     # L3 标题：4.x.x.x. 三级模块
                     p_l3 = doc.add_paragraph(f"4.{l1_seq}.{l2_seq}.{l3_seq}. {l3_name}")
@@ -336,9 +335,13 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
                     _set_outline_lvl(p_l3, 3)  # heading 4
                     insert_before_elem.addprevious(p_l3._element)
 
-                    # 功能描述
-                    if desc:
-                        p_desc = doc.add_paragraph(f"功能描述：{desc}")
+                    # 功能描述：从 AI 填充的 spec 描述读取
+                    ai_desc = ""
+                    if filled_sections:
+                        section_key = f"{l1_name} > {l2_name} > {l3_name}"
+                        ai_desc = filled_sections.get(section_key, "")
+                    if ai_desc:
+                        p_desc = doc.add_paragraph(f"功能描述：{ai_desc}")
                         p_desc.style = doc.styles['Body Text']
                         insert_before_elem.addprevious(p_desc._element)
 
@@ -352,7 +355,12 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
                     for proc in procs:
                         proc_seq += 1
                         proc_name = proc["功能过程"]
-                        proc_desc = proc["功能过程描述"]
+                        # 功能过程描述：优先 AI 填充，回退 Excel 原文
+                        proc_key = f"{l1_name}>{l2_name}>{l3_name}>{proc_name}"
+                        ai_proc_desc = ""
+                        if filled_proc_descs:
+                            ai_proc_desc = filled_proc_descs.get(proc_key, "")
+                        proc_desc = ai_proc_desc or proc["功能过程描述"]
 
                         # 功能过程标题：4.x.x.x.x. 功能过程
                         p_proc = doc.add_paragraph(f"4.{l1_seq}.{l2_seq}.{l3_seq}.{proc_seq}. {proc_name}")
@@ -390,167 +398,201 @@ def _replace_paragraph_text(doc: Document, text_fragment: str, new_text: str):
 
 
 
-def _call_ai_for_text(prompt: str, api_key: str = "", model: str = "",
-                      base_url: str = "", tag: str = "",
-                      prompt_key: str = "metadata_gen") -> str:
-    """调用 AI 生成文本（委托至 llm_client 公共模块）。"""
-    if not api_key:
-        logger.warning("AI生成需要 API Key，使用提示词原文")
-        return prompt
-
-    from cosmic_tool.config_utils import load_ai_system_prompt
-    system_prompt = load_ai_system_prompt(prompt_key)
-
-    from cosmic_tool.llm_client import call_llm
-    try:
-        result = call_llm(
-            prompt=prompt, system=system_prompt,
-            api_key=api_key, model=model, base_url=base_url, tag=tag,
-        )
-        # 归一化连续空行：3+换行 → 2换行
-        import re as _rn
-        result = _rn.sub(r'\n{3,}', '\n\n', result)
-        return result
-    except Exception as e:
-        logger.warning("AI生成失败 [%s]: %s，使用提示词原文", tag, e)
-        return prompt
-
-
-
-def export_spec_template_md(meta_md_path: str, tree_md_path: str,
-                            output_path: str) -> str:
-    """生成 spec模板.md：从元数据 md 读取原始值（含 ${} 和 #AI生成#）。"""
-    meta = _parse_meta_md(meta_md_path)
-
+def init_spec_template_md(
+    tree_md_path: str,
+    meta_md_path: str,
+    output_md_path: str,
+) -> str:
+    """生成 spec-功能需求章节-模板.md：列出所有 L3 模块及其功能过程，留空待 AI 填充描述。"""
     rows = _parse_module_tree_md(tree_md_path)
-    tree = _build_module_tree(rows)
-    groups = _group_by_entry_and_l1(tree)
-
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write("# 项目需求说明书\n\n")
-
-        # 文档概述部分（从元数据读取 #AI生成# 标记）
-        for key, label in [("总体描述", "总体描述"), ("建设目标", "建设目标"),
-                           ("建设必要性", "建设必要性"), ("系统概况", "系统概况")]:
-            val = meta.get(key, "")
-            if val:
-                f.write(f"## {label}\n\n{val}\n\n")
-
-        # 功能模块部分（Section 4）
-        f.write("## 功能需求\n\n")
-        for entry, l1_name, children in [(g["入口"], g["一级模块"], g["children"]) for g in groups]:
-            for m in children:
-                l3_path = f"{entry} > {l1_name} > {m['二级模块']} > {m['三级模块']}"
-                f.write(f"### {l3_path}\n\n")
-                if m.get("三级模块整体功能描述"):
-                    raw = meta.get("功能需求-三级模块的描述", "")
-                    if raw:
-                        raw_desc = m["三级模块整体功能描述"]
-                        raw = raw.replace("${三级模块整体功能描述}", raw_desc)
-                        raw = raw.replace("【三级模块整体功能描述】", raw_desc)
-                        f.write(f"{raw}\n\n")
-                for r in rows:
-                    if (r["入口"] == entry and r["一级模块"] == l1_name
-                            and r["二级模块"] == m["二级模块"] and r["三级模块"] == m["三级模块"]):
-                        raw = meta.get("功能需求-功能过程的描述", "")
-                        if raw:
-                            raw = raw.replace("${功能过程描述}", r["功能过程描述"])
-                            raw = raw.replace("【功能过程描述】", r["功能过程描述"])
-                            f.write(f"#### {r['功能过程']}\n\n{raw}\n\n")
-
-    logger.info(f"spec 模板 MD 已生成: {output_path}")
-    return output_path
-
-def fill_spec_md(md_path: str, meta_md_path: str,
-                 api_key: str, model: str, base_url: str) -> str:
-    """AI填充 spec MD 中的 #AI生成# 标记。"""
     meta = _parse_meta_md(meta_md_path)
-    project_info = {k: v for k, v in meta.items() if k.startswith("1、工单需求-元数据录入.")}
-    fpa_meta = {k: v for k, v in meta.items() if k.startswith("3、FPA工作量评估-元数据录入.")}
+    project_name = meta.get("工单标题", "") or meta.get("1、工单需求-元数据录入.工单标题", "")
 
-    with open(md_path, 'r', encoding='utf-8') as f:
-        content = f.read()
+    # 按 (入口, L1, L2, L3) 分组
+    l3_groups: dict[tuple[str, str, str, str], dict] = {}
+    for r in rows:
+        key = (r["入口"], r["一级模块"], r["二级模块"], r["三级模块"])
+        if key not in l3_groups:
+            l3_groups[key] = {
+                "一级模块": r["一级模块"],
+                "二级模块": r["二级模块"],
+                "三级模块": r["三级模块"],
+                "描述": r.get("三级模块整体功能描述", ""),
+                "功能过程": [],  # list[dict] — {"名称": str, "描述": str}
+            }
+        proc = r.get("功能过程", "")
+        proc_desc = r.get("功能过程描述", "")
+        if proc and not any(p["名称"] == proc for p in l3_groups[key]["功能过程"]):
+            l3_groups[key]["功能过程"].append({"名称": proc, "描述": proc_desc})
 
-    from cosmic_tool.config_utils import load_flow_max_ai
-    _max_ai_spec = load_flow_max_ai("gen_spec")
-    _ai_count = 0
-    lines = content.split('\n')
+    with open(output_md_path, 'w', encoding='utf-8') as f:
+        f.write(f"# 项目需求说明书 - 模块功能过程描述\n\n")
+        f.write(f"**项目名称**：{project_name}\n")
+        f.write(f"**生成时间**：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+        for key, info in l3_groups.items():
+            info = l3_groups[key]
+            l1, l2, l3 = info["一级模块"], info["二级模块"], info["三级模块"]
+            f.write(f"## {l1} > {l2} > {l3}\n\n")
+            if info["描述"]:
+                f.write(f"模块描述：{info['描述']}\n\n")
+            if info["功能过程"]:
+                for proc in info["功能过程"]:
+                    f.write(f"### {proc['名称']}\n\n")
+                    desc = proc['描述'] or "（无）"
+                    f.write(f"> **原描述**：{desc}\n>\n")
+                    f.write(f"> **AI 生成描述**：（待 AI 填充）\n\n")
+                f.write("\n")
+
+    logger.info(f"spec 模板 MD 已生成: {output_md_path} ({len(l3_groups)} 个模块)")
+    return output_md_path
+
+
+def ai_fill_spec_md(
+    template_md_path: str,
+    output_md_path: str,
+    api_key: str,
+    model: str = "",
+    base_url: str = "",
+) -> str:
+    """AI 读取 spec-功能需求章节-模板.md，逐个功能过程完善描述。
+
+    对每个（待 AI 填充）标记，取其上方功能过程的名称和原文描述，
+    调用 AI 生成更完整、更规范的自然语言描述，替换标记。
+    """
+    from cosmic_tool.llm_client import call_llm
+    from cosmic_tool.config_utils import load_ai_system_prompt, load_gen_spec_ai_limit
+
+    proc_limit = load_gen_spec_ai_limit()
+    if proc_limit > 0:
+        logger.info(f"仅对前 {proc_limit} 个功能过程调用 AI，超过的保留原文")
+
+    system_prompt = load_ai_system_prompt("spec_proc_desc") or (
+        "你是一位软件需求分析师。根据功能过程的名称和原文描述，"
+        "生成一段更完整、更规范的自然语言功能过程描述。"
+        "补充触发条件、操作步骤、输入输出、业务规则等细节。"
+        "直接输出描述文本，不要加编号或 markdown 格式。"
+    )
+
+    with open(template_md_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
     new_lines = []
-    for line in lines:
-        if '#AI生成#' in line or '#AI生成-' in line:
-            _ai_count += 1
-            if _max_ai_spec > 0 and _ai_count > _max_ai_spec:
-                cleaned, _ = strip_ai_marker(line)
-                new_lines.append(cleaned or '')
-                logger.info(f"  AI填充跳过（超过限制 {_max_ai_spec}）")
-                continue
-            cleaned, _ = strip_ai_marker(line)
-            if cleaned:
-                final = replace_placeholders(cleaned, project_info, fpa_meta)
-                resp = _call_ai_for_text(final, api_key, model, base_url,
-                                         tag="spec_fill")
-                if resp:
-                    new_lines.append(resp)
-                    logger.info(f"  AI填充 → {len(resp)} 字")
-                else:
-                    new_lines.append(cleaned)
-            else:
-                new_lines.append('')
-        else:
-            new_lines.append(line)
+    i = 0
+    filled = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        # 检测 ### 功能过程标题行
+        if stripped.startswith('### '):
+            proc_name = stripped[4:].strip()
+            new_lines.append(line)  # ### 标题行保留
+            i += 1
+            # 收集引用块内容直到下一个 ## 或 ###
+            raw_desc = ""
+            while i < len(lines):
+                l = lines[i]
+                s = l.strip()
+                if s.startswith('## ') or s.startswith('### '):
+                    break
+                # 提取 > **原描述**：xxx
+                if s.startswith('> **原描述**：'):
+                    raw_desc = s.replace('> **原描述**：', '').strip()
+                # AI 生成描述行：替换标记
+                if '（待 AI 填充）' in s:
+                    filled += 1
+                    if proc_limit > 0 and filled > proc_limit:
+                        logger.info(f"  跳过第 {filled} 个功能过程（超过限制 {proc_limit}）")
+                        new_lines.append(f"> **AI 生成描述**：（超过 AI 限制，保留原文）\n")
+                    else:
+                        prompt = f"功能过程：{proc_name}\n原文描述：{raw_desc or '(无)'}\n\n请完善此功能过程的描述。"
+                        try:
+                            enhanced = call_llm(
+                                prompt=prompt, system=system_prompt,
+                                api_key=api_key, model=model, base_url=base_url,
+                                tag=f"spec_{proc_name}", save_logs=True,
+                            )
+                            new_lines.append(f"> **AI 生成描述**：{enhanced.strip()}\n")
+                            logger.info(f"  [{filled}] {proc_name} → {len(enhanced)} 字")
+                        except Exception as e:
+                            logger.warning(f"  [{filled}] AI 失败: {e}")
+                            new_lines.append(f"> **AI 生成描述**：（AI 生成失败）\n")
+                    i += 1
+                    continue
+                new_lines.append(l)
+                i += 1
+            continue
+        new_lines.append(line)
+        i += 1
 
-    with open(md_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(new_lines))
-    logger.info(f"spec AI 填充完成: {md_path}")
-    return md_path
+    with open(output_md_path, 'w', encoding='utf-8') as f:
+        f.writelines(new_lines)
+
+    logger.info(f"AI 填充 spec MD 完成: {output_md_path}（{filled} 个功能过程，限制 {proc_limit or '无'}）")
+    return output_md_path
 
 
-def generate_spec(
+def generate_spec_docx_from_md(
     template_path: str,
     output_path: str,
     meta_md_path: str,
     tree_md_path: str,
     filled_md_path: str = "",
-    api_key: str = "",
-    model: str = "",
-    base_url: str = "",
 ) -> str:
     """生成项目需求说明书.docx。
 
     Args:
         template_path: 模板 docx 路径
         output_path: 输出 docx 路径
-        meta_md_path: 文档元数据.md 路径
-        tree_md_path: 功能清单模块树.md 路径
-        filled_md_path: AI填充后的 spec MD 路径（有则用其内容替换 #AI生成#）
-        api_key/model/base_url: AI 配置（filled_md_path 为空时使用，原地 AI 调用）
+        meta_md_path: AI填充文档元数据.md 路径
+        tree_md_path: 功能清单-模块树.md 路径
+        filled_md_path: AI填充后的 spec MD 路径（可选）
 
     Returns:
         输出文件路径
+
+    所有数据从 MD 文件读取，不内部调用 AI。
+    #AI生成# 标记应在上游 _ai_fill_meta_md 中完成填充。
     """
     logger.info("开始生成项目需求说明书.docx...")
-    logger.info(f"AI 模型: {model}  端点: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
 
-    # 如果有 filled MD，从中提取各章节的 AI 填充内容
+    # 如果有 filled MD，提取模块描述和功能过程描述
     filled_sections: dict[str, str] = {}
+    filled_proc_descs: dict[str, str] = {}
     if filled_md_path:
         with open(filled_md_path, 'r', encoding='utf-8') as f:
-            current_section = ""
-            current_lines: list[str] = []
-            for line in f:
-                line_stripped = line.rstrip()
-                m = re.match(r'^##\s+(.+)$', line_stripped)
-                if m:
-                    if current_section and current_lines:
-                        filled_sections[current_section] = '\n'.join(current_lines).strip()
-                    current_section = m.group(1).strip()
-                    current_lines = []
-                elif line_stripped.startswith('###') or line_stripped.startswith('####'):
-                    # 子章节跳过多行，只记录第一个有效段落
-                    pass
-                elif line_stripped and current_section:
-                    if not line_stripped.startswith('#AI生成#') and not line_stripped.startswith('#AI生成-'):
-                        current_lines.append(line_stripped)
+            lines = f.readlines()
+        current_module = ""
+        current_proc = ""
+        for line in lines:
+            stripped = line.strip()
+            # ## L1 > L2 > L3
+            m = re.match(r'^##\s+(.+)$', stripped)
+            if m:
+                current_module = m.group(1).strip()
+                current_proc = ""
+                continue
+            # ### 功能过程名
+            m = re.match(r'^###\s+(.+)$', stripped)
+            if m:
+                current_proc = m.group(1).strip()
+                continue
+            # > **AI 生成描述**：xxx
+            if current_proc and stripped.startswith('> **AI 生成描述**：'):
+                desc = stripped.replace('> **AI 生成描述**：', '').strip()
+                if desc and '（待 AI 填充）' not in desc and '（AI 生成失败）' not in desc and '（超过 AI 限制' not in desc:
+                    # 统一空格：## 标题中 " > " 与 lookup key 的 ">" 对齐
+                    key = f"{current_module}>{current_proc}".replace(' > ', '>')
+                    filled_proc_descs[key] = desc
+                continue
+            # 模块描述（非引用块、非标题）
+            if current_module and stripped and not stripped.startswith('#') and not stripped.startswith('>') and not current_proc:
+                if current_module not in filled_sections:
+                    # 去掉模板中的"模块描述："前缀
+                    desc = stripped
+                    if desc.startswith('模块描述：'):
+                        desc = desc[5:]
+                    filled_sections[current_module] = desc
 
     # 读取中间文件
     meta = _parse_meta_md(meta_md_path)
@@ -606,7 +648,8 @@ def generate_spec(
             next_elem = insert_elem.getnext()
             insert_elem.getparent().remove(insert_elem)
             anchor = next_elem if next_elem is not None else insert_elem.getparent()
-            _generate_section4_content(doc, groups, rows, anchor, meta)
+            _generate_section4_content(doc, groups, rows, anchor, meta,
+                                         filled_sections, filled_proc_descs)
             continue
 
         # 优先取 AI填充MD，否则从 meta 取值（{{}} 名称与 Excel 项目名一致）
@@ -627,12 +670,7 @@ def generate_spec(
         raw_val = raw_val.replace("${三级模块}", "、".join(all_l3_names))
         raw_val = raw_val.replace("【功能过程描述】", "；".join(all_proc_descs))
         raw_val = raw_val.replace("${功能过程描述}", "；".join(all_proc_descs))
-        clean_val, needs_ai = strip_ai_marker(raw_val)
-        if needs_ai and api_key:
-            prompt_key = "reliability_desc" if placeholder == "调整因子中的可靠性描述" else "metadata_gen"
-            final_val = _call_ai_for_text(clean_val, api_key, model, base_url, tag=f"docx_{placeholder}", prompt_key=prompt_key)
-        else:
-            final_val = clean_val
+        final_val, _ = strip_ai_marker(raw_val)
         if not final_val:
             continue
         _replace_paragraph_text(doc, text, final_val)
@@ -652,11 +690,7 @@ def generate_spec(
                 rv = meta.get(p, "")
                 if rv:
                     rv = replace_placeholders(rv, project_info, fpa_meta)
-                    cv, na = strip_ai_marker(rv)
-                    if na and api_key:
-                        fv = _call_ai_for_text(cv, api_key, model, base_url, tag=f"docx_tbl_{p}")
-                    else:
-                        fv = cv
+                    fv, _ = strip_ai_marker(rv)
                     if fv:
                         # 替换单元格内第一个 run 的文本，保留模板字体样式
                         fp = cell.paragraphs[0]

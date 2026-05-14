@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -89,15 +90,13 @@ def load_base_url(override: bool = True) -> str:
     return ""
 
 
-def load_model_name(default: str = None, override: bool = True) -> str:
-    """Load ANTHROPIC_MODEL.
+def load_model_name(default: str = "", override: bool = True) -> str:
+    """Load ANTHROPIC_MODEL。
 
-    override=True: config/.env > system env var > config.json > default
-    override=False: system env var > config/.env > config.json > default
+    override=True: config/.env > system env var > config.json
+    override=False: system env var > config/.env > config.json
+    未配置时返回空字符串，由调用方决定是否提醒用户。
     """
-    if default is None:
-        from cosmic_tool.constants import DEFAULT_MODEL as _def_model
-        default = _def_model
     env_path = _config_dir() / ".env"
     loader = _from_env_override if override else _from_env
     model = loader("ANTHROPIC_MODEL", env_path)
@@ -108,6 +107,10 @@ def load_model_name(default: str = None, override: bool = True) -> str:
     model = _read_json_value("anthropic_model", config_path)
     if model:
         return _clean_model(model)
+
+    if not default:
+        _log = logging.getLogger('cosmic_tool.config_utils')
+        _log.warning("未配置 ANTHROPIC_MODEL，请在 ~/.cosmic-tool/.env 中设置")
     return default
 
 
@@ -264,6 +267,38 @@ def load_gen_cosmic_ai_limit() -> int:
     """读取 gen_cosmic_ai_limit，限制 COSMIC AI 处理的功能过程数（0=不限制）。"""
     val = _get_system_config_value('gen_cosmic_ai_limit', 0)
     return max(val, 0)
+
+
+def load_gen_spec_ai_limit() -> int:
+    """读取 gen_spec_ai_limit，限制 spec AI 完善的功能过程描述数（0=不限制）。"""
+    val = _get_system_config_value('gen_spec_ai_limit', 0)
+    return max(val, 0)
+
+
+@lru_cache(maxsize=1)
+def load_sheet_names() -> dict[str, str]:
+    """读取功能清单-录入模板.xlsx 的 Sheet 名称映射。
+
+    返回 key → Sheet 名的字典，未配置则返回空 dict 并提醒用户。
+    """
+    yaml_path = _config_dir() / "system_config.yaml"
+    if not yaml_path.exists():
+        _log = logging.getLogger('cosmic_tool.config_utils')
+        _log.warning("未找到 system_config.yaml，Sheet 名称将为空，请运行 --init-config 初始化")
+        return {}
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        sheets = cfg.get('sheets', {})
+        if not sheets:
+            _log = logging.getLogger('cosmic_tool.config_utils')
+            _log.warning("system_config.yaml 中未配置 sheets 段，Sheet 名称将为空，请补充 sheets 配置")
+        return sheets
+    except Exception:
+        _log = logging.getLogger('cosmic_tool.config_utils')
+        _log.warning("system_config.yaml 读取失败，Sheet 名称将为空")
+        return {}
 
 
 def load_enable_ai_fill_meta() -> bool:

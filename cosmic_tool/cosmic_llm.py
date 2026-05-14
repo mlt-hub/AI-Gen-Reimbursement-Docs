@@ -7,7 +7,6 @@ import sys
 from datetime import datetime
 from typing import Optional
 
-from cosmic_tool.constants import DEFAULT_MODEL, DEFAULT_INITIATOR, DEFAULT_RECEIVER
 from cosmic_tool.exceptions import ConfigError, ParseError
 from cosmic_tool.models import CosmicItem, DataMovement
 from cosmic_tool.models import FunctionModule
@@ -64,9 +63,9 @@ def load_user_config_from_meta(meta_md_path: str) -> dict:
     """从文档元数据读取功能用户-发起者/接收者判定，返回配置字典。"""
     from cosmic_tool.gen_spec import _parse_meta_md
     meta = _parse_meta_md(meta_md_path)
-    result = {
-        "user_default_initiator": DEFAULT_INITIATOR,
-        "user_default_receiver": DEFAULT_RECEIVER,
+    result: dict = {
+        "user_default_initiator": "",
+        "user_default_receiver": "",
         "user_initiator_rules": None,
         "user_receiver_rules": None,
     }
@@ -77,6 +76,8 @@ def load_user_config_from_meta(meta_md_path: str) -> dict:
             result["user_default_initiator"] = default
         if rules:
             result["user_initiator_rules"] = rules
+    else:
+        logger.warning("Excel 模板未配置「功能用户-发起者判定」，发起者将为空，请在模板 Sheet 6 中补充")
     receiver_text = meta.get("功能用户-接收者判定", "")
     if receiver_text:
         default, rules = parse_user_rules(receiver_text)
@@ -84,14 +85,16 @@ def load_user_config_from_meta(meta_md_path: str) -> dict:
             result["user_default_receiver"] = default
         if rules:
             result["user_receiver_rules"] = rules
+    else:
+        logger.warning("Excel 模板未配置「功能用户-接收者判定」，接收者将为空，请在模板 Sheet 6 中补充")
     return result
 
 
 def _build_user(module: FunctionModule, modules: list[FunctionModule],
                 initiator_rules: list[tuple[str, str]] | None = None,
                 receiver_rules: list[tuple[str, str]] | None = None,
-                default_initiator: str = DEFAULT_INITIATOR,
-                default_receiver: str = DEFAULT_RECEIVER) -> str:
+                default_initiator: str = "",
+                default_receiver: str = "") -> str:
     """Determine the user for a module using configurable keyword rules.
 
     Checks order: grandparent → parent → module name.
@@ -297,11 +300,11 @@ def generate_cosmic_items(
     modules: list[FunctionModule],
     project_name: str = "",
     api_key: Optional[str] = None,
-    model: str = DEFAULT_MODEL,
+    model: str = "",
     base_url: Optional[str] = None,
     interactive: bool = False,
-    user_default_initiator: str = DEFAULT_INITIATOR,
-    user_default_receiver: str = DEFAULT_RECEIVER,
+    user_default_initiator: str = "",
+    user_default_receiver: str = "",
     user_initiator_rules: list[tuple[str, str]] | None = None,
     user_receiver_rules: list[tuple[str, str]] | None = None,
 ) -> list[CosmicItem]:
@@ -544,7 +547,6 @@ def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None
 
     parts = [p for p in [l1, l2, l3] if p]
     safe_name = '_'.join(parts).replace('/', '_').replace('\\', '_').strip()
-    safe_name = safe_name[:100] if len(safe_name) > 100 else safe_name
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     tag_str = f'_{tag}' if tag else ''
     filename = f"{timestamp}_{safe_name}{tag_str}_prompt.txt"
@@ -568,7 +570,6 @@ def _save_ai_response(l3: str, l2: str, l1: str, text: str, reasoning: str = "")
     # Safe filename from module hierarchy
     parts = [p for p in [l1, l2, l3] if p]
     safe_name = '_'.join(parts).replace('/', '_').replace('\\', '_').strip()
-    safe_name = safe_name[:100] if len(safe_name) > 100 else safe_name
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"{timestamp}_{safe_name}.md"
