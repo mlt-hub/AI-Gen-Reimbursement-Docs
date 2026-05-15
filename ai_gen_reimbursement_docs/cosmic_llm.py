@@ -61,8 +61,8 @@ def parse_user_rules(text: str) -> tuple[str, list[tuple[str, str]]]:
 
 def load_user_config_from_meta(meta_md_path: str) -> dict:
     """从文档元数据读取功能用户-发起者/接收者判定，返回配置字典。"""
-    from ai_gen_reimbursement_docs.gen_spec import _parse_meta_md
-    meta = _parse_meta_md(meta_md_path)
+    from ai_gen_reimbursement_docs.gen_spec import parse_meta_md
+    meta = parse_meta_md(meta_md_path)
     result: dict = {
         "user_default_initiator": "",
         "user_default_receiver": "",

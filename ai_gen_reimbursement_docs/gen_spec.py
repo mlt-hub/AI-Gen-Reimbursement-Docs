@@ -35,7 +35,7 @@ def _safe_load_docx(path: str, label: str):
 
 
 @lru_cache(maxsize=4)
-def _parse_meta_md(meta_md_path: str) -> dict[str, str]:
+def parse_meta_md(meta_md_path: str) -> dict[str, str]:
     """解析文档元数据.md 为扁平字典。支持跨多行的表格值（带缓存）。"""
     meta = {}
     pending_key = None
@@ -418,7 +418,7 @@ def init_spec_template_md(
 ) -> str:
     """生成 gen-spec-spec-功能需求章节-模板.md：列出所有 L3 模块及其功能过程，留空待 AI 填充描述。"""
     rows = _parse_module_tree_md(tree_md_path)
-    meta = _parse_meta_md(meta_md_path)
+    meta = parse_meta_md(meta_md_path)
     project_name = meta.get("工单标题", "") or meta.get("1、工单需求-元数据录入.工单标题", "")
 
     # 按 (入口, L1, L2, L3) 分组
@@ -608,7 +608,7 @@ def generate_spec_docx_from_md(
                     filled_sections[current_module] = desc
 
     # 读取中间文件
-    meta = _parse_meta_md(meta_md_path)
+    meta = parse_meta_md(meta_md_path)
     rows = _parse_module_tree_md(tree_md_path)
     module_tree = _build_module_tree(rows)
     groups = _group_by_entry_and_l1(module_tree)

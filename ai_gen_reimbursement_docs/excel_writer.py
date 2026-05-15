@@ -563,9 +563,8 @@ def _write_to_merged_below(ws, label_cell, text: str) -> None:
 def copy_template_sheets(
     template_path: str,
     output_path: str,
-    func_point_sheet_only: bool = False
 ) -> None:
-    """Copy the complete template preserving all sheets."""
+    """完整复制模板文件。"""
     wb = _safe_load_workbook(template_path, '项目功能点拆分表')
     try:
         wb.save(output_path)

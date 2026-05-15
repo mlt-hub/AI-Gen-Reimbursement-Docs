@@ -67,10 +67,10 @@ def test_resolved_unique_counts_match_raw():
 
 
 def test_module_tree_build():
-    """验证 _build_modules_from_tree_md 构建的模块数与原始数据一致。"""
-    from ai_gen_reimbursement_docs.main import _build_modules_from_tree_md
+    """验证 build_modules_from_tree_md 构建的模块数与原始数据一致。"""
+    from ai_gen_reimbursement_docs.main import build_modules_from_tree_md
 
-    modules = _build_modules_from_tree_md(MD_TREE_PATH)
+    modules = build_modules_from_tree_md(MD_TREE_PATH)
     l1 = {m.name for m in modules if m.level == 1}
 
     wb = openpyxl.load_workbook(EXCEL_PATH)

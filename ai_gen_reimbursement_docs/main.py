@@ -28,7 +28,6 @@ from ai_gen_reimbursement_docs.md_handler import (
     parse_md_to_items,
     fill_md_with_ai,
 )
-from ai_gen_reimbursement_docs.excel_source import generate_md_files, verify_module_tree_stats
 from ai_gen_reimbursement_docs.gen_spec import generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md
 from ai_gen_reimbursement_docs.gen_xlsx import generate_fpa_xlsx_from_md, generate_list_xlsx_from_md
 from ai_gen_reimbursement_docs.gen_xlsx import init_fpa_template_md, ai_fill_fpa_md
@@ -131,7 +130,7 @@ def _get_version() -> str:
         # 先尝试项目根目录（开发模式），再尝试 _MEIPASS（PyInstaller 打包）
         toml_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'pyproject.toml')
         if not os.path.exists(toml_path):
-            toml_path = os.path.join(_project_root(), 'pyproject.toml')
+            toml_path = os.path.join(project_root(), 'pyproject.toml')
         with open(toml_path, 'rb') as f:
             return tomllib.load(f)['project']['version']
     except Exception:
@@ -147,7 +146,7 @@ def _section(title: str):
     logger.debug("--- section start ---")
 
 
-def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
+def build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
     """从gen-basedata-功能清单-模块树.md 的表格格式构建 FunctionModule 列表。
 
     表格列：入口 | 一级模块 | 二级模块 | 三级模块 | ... | 功能过程 | ...
@@ -238,7 +237,7 @@ def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
     return modules
 
 
-def _read_project_name(meta_md_path: str) -> str:
+def read_project_name(meta_md_path: str) -> str:
     """从gen-basedata-录入文档元数据-模板.md 读取项目名称（工单标题）。"""
     try:
         with open(meta_md_path, encoding='utf-8') as f:
@@ -252,18 +251,7 @@ def _read_project_name(meta_md_path: str) -> str:
     return ""
 
 
-def _ensure_basedata(excel_path: str, md_dir: str, meta_md: str, tree_md: str,
-                     meta_md_tpl: str = "") -> None:
-    """确保数据源中间文件存在（gen-basedata-功能清单-模块树.md + gen-basedata-录入文档元数据-模板.md）。"""
-    tpl = meta_md_tpl or meta_md
-    needs_md = not (os.path.exists(tpl) and os.path.exists(tree_md))
-    if needs_md:
-        logger.info("第1步: 生成gen-basedata-功能清单-模块树.md 和 gen-basedata-录入文档元数据-模板.md...")
-        generate_md_files(excel_path, md_dir)
-    verify_module_tree_stats(tree_md, tpl)
-
-
-def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
+def resolve_fpa_sum(fpa_sum_md_path: str) -> float:
     """从 FPA工作量.md 读取值作为默认，提示用户输入FPA核减后工作量。"""
     from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
     if load_fpa_reduced_use_workload():
@@ -312,7 +300,7 @@ def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
     return 0
 
 
-def _read_md_value(path: str, pattern: str) -> float:
+def read_md_value(path: str, pattern: str) -> float:
     """从 MD 文件中按正则提取数值，文件不存在返回 0。"""
     import re
     if not os.path.exists(path):
@@ -325,16 +313,16 @@ def _read_md_value(path: str, pattern: str) -> float:
     return 0.0
 
 
-def _prompt_list_values(fpa_sum_md_path: str) -> tuple[float, float]:
+def prompt_list_values(fpa_sum_md_path: str) -> tuple[float, float]:
     """提示用户输入送审功能点和送审工作量（gen-list 使用）。
 
     从 gen-cosmic-CFP-总和.md / gen-fpa-FPA工作量-总和.md 读取默认值。
     返回 (cfp_total, fpa_reduced)。
     """
-    _cfp_raw = _read_md_value(
+    _cfp_raw = read_md_value(
         os.path.join(os.path.dirname(fpa_sum_md_path), 'gen-cosmic-CFP-总和.md'),
         r'CFP 总和[：:]\s*([\d.]+)')
-    _fpa_raw = _read_md_value(fpa_sum_md_path,
+    _fpa_raw = read_md_value(fpa_sum_md_path,
         r'FPA工作量（人/天）[：:]\s*([\d.]+)')
 
     # 送审功能点
@@ -427,7 +415,7 @@ def _write_combined_ai_log(stage: str = ""):
             logger.info(f"{out_name} 追加 {new_count} 条新记录")
 
 
-def _write_cfp_sum(md_dir: str, total: float) -> None:
+def write_cfp_sum(md_dir: str, total: float) -> None:
     """将 CFP 总和写入 gen-cosmic-CFP-总和.md。"""
     path = os.path.join(md_dir, 'gen-cosmic-CFP-总和.md')
     with open(path, 'w', encoding='utf-8') as f:
@@ -483,7 +471,7 @@ def _collect_l3_names(tree_md: str) -> list[str]:
     return names
 
 
-def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url: str,
+def ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url: str,
                      tree_md: str = "") -> str:
     """读取gen-basedata-录入文档元数据-模板.md，AI 填充 #AI生成# 标记，写入 gen-basedata-AI填充-录入文档元数据.md。
 
@@ -666,12 +654,12 @@ def main():
     logger.info(f"AI生成项目报账文档 v{ver} ({run_mode}: {run_path})")
 
     # 当前配置目录
-    from ai_gen_reimbursement_docs.config_utils import _config_dir
-    logger.info(f"配置文件目录: {_config_dir()}")
+    from ai_gen_reimbursement_docs.config_utils import config_dir
+    logger.info(f"配置文件目录: {config_dir()}")
 
     # 配置迁移（新模板键自动追加到用户配置文件）
-    from ai_gen_reimbursement_docs.config_utils import _migrate_config
-    _migrate_config()
+    from ai_gen_reimbursement_docs.config_utils import migrate_config
+    migrate_config()
 
     # 测试提示音
     if args.test_sound:
@@ -857,7 +845,7 @@ def main():
 
 
 
-def _project_root() -> str:
+def project_root() -> str:
     """Get project root dir (works for both source and PyInstaller exe)."""
     if getattr(sys, 'frozen', False):
         # exe 所在目录（模板放同级 data/out_templates/ 下）

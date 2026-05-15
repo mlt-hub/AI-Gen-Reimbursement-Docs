@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 
 
-def _config_dir() -> Path:
+def config_dir() -> Path:
     """Path to user config directory: ~/.ai-gen-reimbursement-docs/."""
     return Path.home() / ".ai-gen-reimbursement-docs"
 
@@ -57,7 +57,7 @@ def load_api_key(override: bool = True) -> str:
     override=True: config/.env > system env var > config.json
     override=False: system env var > config/.env > config.json
     """
-    env_path = _config_dir() / ".env"
+    env_path = config_dir() / ".env"
     loader = _from_env_override if override else _from_env
     key = loader("ANTHROPIC_API_KEY", env_path)
     if key:
@@ -77,7 +77,7 @@ def load_base_url(override: bool = True) -> str:
     override=True: config/.env > system env var > config.json
     override=False: system env var > config/.env > config.json
     """
-    env_path = _config_dir() / ".env"
+    env_path = config_dir() / ".env"
     loader = _from_env_override if override else _from_env
     url = loader("ANTHROPIC_BASE_URL", env_path)
     if url:
@@ -97,16 +97,16 @@ def load_model_name(default: str = "", override: bool = True) -> str:
     override=False: system env var > config/.env > config.json
     未配置时返回空字符串，由调用方决定是否提醒用户。
     """
-    env_path = _config_dir() / ".env"
+    env_path = config_dir() / ".env"
     loader = _from_env_override if override else _from_env
     model = loader("ANTHROPIC_MODEL", env_path)
     if model:
-        return _clean_model(model)
+        return clean_model_name(model)
 
     config_path = Path(__file__).parent / "config.json"
     model = _read_json_value("anthropic_model", config_path)
     if model:
-        return _clean_model(model)
+        return clean_model_name(model)
 
     if not default:
         _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
@@ -114,13 +114,9 @@ def load_model_name(default: str = "", override: bool = True) -> str:
     return default
 
 
-def _clean_model(name: str) -> str:
-    """Return model name as-is (保留原始值，不过滤)。"""
+def clean_model_name(name: str) -> str:
+    """返回模型名（去除首尾空白）。"""
     return name.strip()
-
-
-# Backward compatibility alias
-clean_model_name = _clean_model
 
 
 def _get_system_config_value(key: str, default):
@@ -133,7 +129,7 @@ def _get_system_config_value(key: str, default):
     Returns:
         配置值，未找到或读取失败返回 default
     """
-    yaml_path = _config_dir() / "system_config.yaml"
+    yaml_path = config_dir() / "system_config.yaml"
     if not yaml_path.exists():
         return default
     try:
@@ -150,7 +146,7 @@ def _get_system_config_value(key: str, default):
 
 def _load_business_rules() -> dict:
     """Load config/business_rules.yaml and return as dict."""
-    yaml_path = _config_dir() / "business_rules.yaml"
+    yaml_path = config_dir() / "business_rules.yaml"
     if not yaml_path.exists():
         return {}
     try:
@@ -188,7 +184,7 @@ def load_max_tokens(default: int = 2000) -> int:
                 return int(_env)
         except Exception:
             pass
-    yaml_path = _config_dir() / "system_config.yaml"
+    yaml_path = config_dir() / "system_config.yaml"
     if yaml_path.exists():
         try:
             import yaml
@@ -217,7 +213,7 @@ def load_flow_max_ai(flow_name: str) -> int:
         flow_name: 'gen_fpa', 'gen_spec', 'gen_cosmic'
     """
     key = f"{flow_name}_max_ai_l3_modules"
-    yaml_path = _config_dir() / "system_config.yaml"
+    yaml_path = config_dir() / "system_config.yaml"
     if yaml_path.exists():
         try:
             import yaml
@@ -254,7 +250,7 @@ def load_out_templates() -> dict[str, str]:
         {'FPA工作量评估-模板': 'data/out_templates/...', ...}
         未配置时返回空 dict。
     """
-    yaml_path = _config_dir() / "system_config.yaml"
+    yaml_path = config_dir() / "system_config.yaml"
     if yaml_path.exists():
         try:
             import yaml
@@ -302,7 +298,7 @@ def load_sheet_names() -> dict[str, str]:
 
     返回 key → Sheet 名的字典，未配置则返回空 dict 并提醒用户。
     """
-    yaml_path = _config_dir() / "system_config.yaml"
+    yaml_path = config_dir() / "system_config.yaml"
     if not yaml_path.exists():
         _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
         _log.warning("未找到 system_config.yaml，Sheet 名称将为空，请运行 --init-config 初始化")
@@ -329,7 +325,7 @@ def load_enable_ai_fill_meta() -> bool:
 
 def load_ai_system_prompt(name: str) -> str:
     """从 ai_system_prompts_config.yaml 读取指定场景的 system prompt。"""
-    yaml_path = _config_dir() / "ai_system_prompts_config.yaml"
+    yaml_path = config_dir() / "ai_system_prompts_config.yaml"
     if not yaml_path.exists():
         return ""
     try:
@@ -344,7 +340,7 @@ def load_ai_system_prompt(name: str) -> str:
 
 def load_ai_examples(name: str) -> str:
     """从 ai_system_prompts_config.yaml 读取指定场景的示例。"""
-    yaml_path = _config_dir() / "ai_system_prompts_config.yaml"
+    yaml_path = config_dir() / "ai_system_prompts_config.yaml"
     if not yaml_path.exists():
         return ""
     try:
@@ -361,7 +357,7 @@ def load_ai_examples(name: str) -> str:
 
 
 
-def _migrate_config() -> None:
+def migrate_config() -> None:
     """自动迁移配置：将模板中的新键追加到用户配置文件末尾。
 
     比对 config/*.example 与 ~/.ai-gen-reimbursement-docs/*，发现新键时自动追加。
@@ -492,7 +488,7 @@ def load_business_config() -> dict:
         'docx_parse_by_template_style': True,
         'docx_parse_by_marker': True,
     }
-    yaml_path = _config_dir() / "system_config.yaml"
+    yaml_path = config_dir() / "system_config.yaml"
     if not yaml_path.exists():
         return config
 

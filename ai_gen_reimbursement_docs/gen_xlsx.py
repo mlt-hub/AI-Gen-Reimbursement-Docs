@@ -41,10 +41,10 @@ def _safe_load_workbook(path: str, label: str) -> openpyxl.Workbook:
 #  公用
 # ============================================================
 
-def _load_meta_md(meta_md_path: str) -> dict[str, str]:
+def parse_meta_md(meta_md_path: str) -> dict[str, str]:
     """解析文档元数据.md 为扁平字典。支持跨多行的表格值。"""
-    from ai_gen_reimbursement_docs.gen_spec import _parse_meta_md
-    return _parse_meta_md(meta_md_path)
+    from ai_gen_reimbursement_docs.gen_spec import parse_meta_md
+    return parse_meta_md(meta_md_path)
 
 
 def _load_module_rows(tree_md_path: str) -> list[dict[str, str]]:
@@ -320,7 +320,7 @@ def init_fpa_template_md(
         summary_md_path: 非空时同步写入 gen-fpa-FPA工作量-总和.md（调整值×要素数量 的求和）
     """
     logger.info("生成 FPA 模板 MD...")
-    meta = _load_meta_md(meta_md_path)
+    meta = parse_meta_md(meta_md_path)
     rows = _load_module_rows(tree_md_path)
     fpa_rows = _build_fpa_rule_rows(rows, meta)
 
@@ -373,7 +373,7 @@ def ai_fill_fpa_md(
     logger.info("AI 填充 FPA 数据...")
     logger.info(f"AI 模型: {model}  端点: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
 
-    meta = _load_meta_md(meta_md_path)
+    meta = parse_meta_md(meta_md_path)
     # 优先从模板附录 sheet 读取判定原则，兜底用元数据
     judgement_rules: list[str] = []
     if template_path:
@@ -487,7 +487,7 @@ def generate_fpa_xlsx_from_md(
     """从已填充的 FPA MD 生成 FPA工作量评估.xlsx。"""
     logger.info("从 FPA MD 生成 Excel...")
 
-    meta = _load_meta_md(meta_md_path)
+    meta = parse_meta_md(meta_md_path)
     base_formula = meta.get("基准值公式", "")
     workload_formula = meta.get("FPA工作量公式", "J{row}*K{row}")
 
@@ -636,7 +636,7 @@ def generate_list_xlsx_from_md(
     """
     logger.info("开始生成项目需求清单.xlsx...")
 
-    meta = _load_meta_md(meta_md_path)
+    meta = parse_meta_md(meta_md_path)
     rows = _load_module_rows(tree_md_path)
 
     wb = _safe_load_workbook(template_path, '项目需求清单')

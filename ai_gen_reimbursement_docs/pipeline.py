@@ -18,7 +18,7 @@ from ai_gen_reimbursement_docs.excel_source import (
 )
 from ai_gen_reimbursement_docs.excel_writer import generate_cosmic_xlsx_from_md, write_environment_sheet
 from ai_gen_reimbursement_docs.gen_spec import (
-    generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md, _parse_meta_md
+    generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md, parse_meta_md
 )
 from ai_gen_reimbursement_docs.gen_xlsx import (
     generate_fpa_xlsx_from_md, generate_list_xlsx_from_md,
@@ -96,15 +96,15 @@ def run_pipeline(
 
     # 项目名称
     if not project_name:
-        project_name = _read_project_name_from_excel(file_path)
+        project_name = read_project_name_from_excel(file_path)
     if not project_name:
-        from ai_gen_reimbursement_docs.main import _read_project_name
-        project_name = _read_project_name(meta_md_tpl) if os.path.exists(meta_md_tpl) else ""
+        from ai_gen_reimbursement_docs.main import read_project_name
+        project_name = read_project_name(meta_md_tpl) if os.path.exists(meta_md_tpl) else ""
     if not project_name:
         project_name = "products"
 
     # 模板解析（优先级：传入 > Sheet 8 > 默认 data/templates/）
-    tpl = _resolve_templates(file_path, templates)
+    templates_dict = _resolve_templates(file_path, templates)
 
     result = PipelineResult()
 
@@ -131,11 +131,11 @@ def run_pipeline(
 
     # ── 模式分发 ──
     if mode == "gen-all":
-        return _gen_all(
+        return _generate_all(
             file_path, output_dir, doc_dir, md_dir,
             tree_md, meta_md_tpl, meta_filled_md, fpa_sum_md,
             fpa_xlsx, cosmic_xlsx, require_xlsx, spec_docx,
-            tpl, api_key, model, base_url, project_name, result
+            templates_dict, api_key, model, base_url, project_name, result
         )
 
     if mode == "gen-basedata":
@@ -147,27 +147,27 @@ def run_pipeline(
     meta_md = _current_meta
 
     if mode == "gen-fpa":
-        return _gen_fpa(
+        return _generate_fpa(
             file_path, output_dir, md_dir, tree_md, meta_md, fpa_sum_md, fpa_xlsx,
-            tpl, api_key, model, base_url, result
+            templates_dict, api_key, model, base_url, result
         )
 
     if mode == "gen-cosmic":
-        return _gen_cosmic(
+        return _generate_cosmic(
             file_path, md_dir, tree_md, meta_md, fpa_sum_md, doc_dir, cosmic_xlsx,
-            tpl, api_key, model, base_url, project_name, result
+            templates_dict, api_key, model, base_url, project_name, result
         )
 
     if mode == "gen-list":
-        return _gen_list(
+        return _generate_list(
             md_dir, tree_md, meta_md, fpa_sum_md, doc_dir, require_xlsx,
-            tpl, result
+            templates_dict, result
         )
 
     if mode == "gen-spec":
-        return _gen_spec(
+        return _generate_spec(
             file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled_md,
-            doc_dir, spec_docx, tpl, api_key, model, base_url, result
+            doc_dir, spec_docx, templates_dict, api_key, model, base_url, result
         )
 
     return result
@@ -179,7 +179,7 @@ def run_pipeline(
 
 def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
     """解析模板路径，优先级：CLI 参数 > 配置文件 > data/templates/ 默认。"""
-    from ai_gen_reimbursement_docs.main import _project_root
+    from ai_gen_reimbursement_docs.main import project_root
 
     cfg_templates = load_out_templates()
     templates = {}
@@ -201,13 +201,13 @@ def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
         cfg_path = cfg_templates.get(config_name, '')
         if cfg_path:
             if not os.path.isabs(cfg_path):
-                cfg_path = os.path.join(_project_root(), cfg_path)
+                cfg_path = os.path.join(project_root(), cfg_path)
             if os.path.exists(cfg_path):
                 templates[key] = cfg_path
                 continue
 
         # 3. 默认 data/out_templates/
-        default = os.path.join(_project_root(), 'data', 'out_templates',
+        default = os.path.join(project_root(), 'data', 'out_templates',
                                default_filename)
         if os.path.exists(default):
             templates[key] = default
@@ -240,10 +240,10 @@ def _fill_meta_if_needed(meta_md_tpl: str, meta_filled_md: str, tree_md: str,
     """AI 填充元数据（如果尚未填充）。"""
     if not api_key or os.path.exists(meta_filled_md):
         return
-    from ai_gen_reimbursement_docs.main import _ai_fill_meta_md
+    from ai_gen_reimbursement_docs.main import ai_fill_meta_md
     if load_enable_ai_fill_meta():
         logger.info("AI 填充文档元数据...")
-        _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
+        ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
     else:
         logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
         shutil.copy2(meta_md_tpl, meta_filled_md)
@@ -289,7 +289,7 @@ def _resolve_output_filename(meta_md_path: str, sheet_name: str,
     return os.path.join(target_dir, name)
 
 
-def _read_project_name_from_excel(file_path: str) -> str:
+def read_project_name_from_excel(file_path: str) -> str:
     """从 Excel 的「1、工单需求-元数据录入」sheet 读取工单标题。"""
     try:
         import openpyxl
@@ -310,9 +310,9 @@ def _read_project_name_from_excel(file_path: str) -> str:
 #  各子模式实现
 # ═══════════════════════════════════════════════════════════════
 
-def _check_template(tpl: dict, key: str, name: str):
+def _check_template(templates_dict: dict, key: str, name: str):
     """检查模板路径，为空时抛出可读的错误。"""
-    path = tpl.get(key, '')
+    path = templates_dict.get(key, '')
     if not path:
         raise FileNotFoundError(
             f"未找到「{name}」模板。"
@@ -324,11 +324,11 @@ def _check_template(tpl: dict, key: str, name: str):
     return path
 
 
-def _gen_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
-             fpa_sum_md, fpa_xlsx, tpl, api_key, model, base_url, result):
+def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
+             fpa_sum_md, fpa_xlsx, templates_dict, api_key, model, base_url, result):
     """第1步：FPA 工作量评估。"""
     logger.info("第1步: 生成 FPA 工作量评估...")
-    fpa_src = _check_template(tpl, 'fpa', 'FPA工作量评估')
+    fpa_src = _check_template(templates_dict, 'fpa', 'FPA工作量评估')
 
     fpa_md = os.path.join(md_dir, 'gen-fpa-FPA-模板.md')
     fpa_filled_md = os.path.join(md_dir, 'gen-fpa-AI填充-FPA.md')
@@ -345,31 +345,31 @@ def _gen_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
 
     generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src, fpa_xlsx)
 
-    from ai_gen_reimbursement_docs.main import _read_md_value
-    result.fpa_reduced = _read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
+    from ai_gen_reimbursement_docs.main import read_md_value
+    result.fpa_reduced = read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
     result.fpa_xlsx = fpa_xlsx
     logger.info(f"FPA工作量评估已生成: {fpa_xlsx}")
     return result
 
 
-def _gen_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
-                doc_dir, cosmic_xlsx, tpl, api_key, model, base_url,
+def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
+                doc_dir, cosmic_xlsx, templates_dict, api_key, model, base_url,
                 project_name, result):
     """第2步：COSMIC 功能点拆分表。"""
     logger.info("生成 项目功能点拆分表...")
 
     from ai_gen_reimbursement_docs.main import (
-        _build_modules_from_tree_md, _resolve_fpa_sum, _read_project_name,
-        _write_cfp_sum,
+        build_modules_from_tree_md, resolve_fpa_sum, read_project_name,
+        write_cfp_sum,
     )
     from ai_gen_reimbursement_docs.cosmic_llm import load_user_config_from_meta
 
-    cosmic_src = _check_template(tpl, 'cosmic', '项目功能点拆分表')
+    cosmic_src = _check_template(templates_dict, 'cosmic', '项目功能点拆分表')
 
-    modules = _build_modules_from_tree_md(tree_md)
-    project = _read_project_name(meta_md) or (modules[0].name if modules else "项目")
+    modules = build_modules_from_tree_md(tree_md)
+    project = read_project_name(meta_md) or (modules[0].name if modules else "项目")
 
-    _resolve_fpa_sum(fpa_sum_md)
+    resolve_fpa_sum(fpa_sum_md)
 
     init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
     filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
@@ -381,10 +381,10 @@ def _gen_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
         fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url, **_user_cfg)
         items = parse_md_to_items(filled_md_path)
         if items:
-            _meta = _parse_meta_md(meta_md)
+            _meta = parse_meta_md(meta_md)
             generate_cosmic_xlsx_from_md(cosmic_src, cosmic_xlsx, items, meta=_meta)
             result.cfp_total = sum(item.total_cfp() for item in items)
-            _write_cfp_sum(md_dir, result.cfp_total)
+            write_cfp_sum(md_dir, result.cfp_total)
             _target = _meta.get("建设目标", "")
             _necessity = _meta.get("建设必要性", "")
             if _target or _necessity:
@@ -398,14 +398,14 @@ def _gen_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     return result
 
 
-def _gen_list(md_dir, tree_md, meta_md, fpa_sum_md,
-              doc_dir, require_xlsx, tpl, result):
+def _generate_list(md_dir, tree_md, meta_md, fpa_sum_md,
+              doc_dir, require_xlsx, templates_dict, result):
     """第3步：需求清单。"""
     logger.info("生成 项目需求清单...")
-    from ai_gen_reimbursement_docs.main import _prompt_list_values
-    require_src = _check_template(tpl, 'list', '项目需求清单')
+    from ai_gen_reimbursement_docs.main import prompt_list_values
+    require_src = _check_template(templates_dict, 'list', '项目需求清单')
 
-    cfp_val, fpa_val = _prompt_list_values(fpa_sum_md)
+    cfp_val, fpa_val = prompt_list_values(fpa_sum_md)
     generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
                                cfp_total=cfp_val, fpa_reduced=fpa_val)
     result.require_xlsx = require_xlsx
@@ -413,17 +413,17 @@ def _gen_list(md_dir, tree_md, meta_md, fpa_sum_md,
     return result
 
 
-def _gen_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled_md,
-              doc_dir, spec_docx, tpl, api_key, model, base_url, result):
+def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled_md,
+              doc_dir, spec_docx, templates_dict, api_key, model, base_url, result):
     """需求说明书（无固定顺序依赖）。"""
     logger.info("生成 项目需求说明书...")
-    spec_src = _check_template(tpl, 'spec', '项目需求说明书')
+    spec_src = _check_template(templates_dict, 'spec', '项目需求说明书')
 
     # 确保元数据已填充
     if api_key and not os.path.exists(meta_filled_md):
         if load_enable_ai_fill_meta():
-            from ai_gen_reimbursement_docs.main import _ai_fill_meta_md
-            _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
+            from ai_gen_reimbursement_docs.main import ai_fill_meta_md
+            ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
     if os.path.exists(meta_filled_md):
         meta_md = meta_filled_md
 
@@ -439,7 +439,7 @@ def _gen_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled_md,
     filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
 
     # 需求说明书文件名提醒
-    from ai_gen_reimbursement_docs.main import _project_root
+    from ai_gen_reimbursement_docs.main import project_root
     if load_spec_remind_update_toc():
         _doc_dir, _doc_name = os.path.split(spec_docx)
         if not _doc_name.startswith("【提醒】请手动更新整个目录"):
@@ -451,31 +451,31 @@ def _gen_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled_md,
     return result
 
 
-def _gen_all(file_path, output_dir, doc_dir, md_dir,
+def _generate_all(file_path, output_dir, doc_dir, md_dir,
              tree_md, meta_md_tpl, meta_filled_md, fpa_sum_md,
              fpa_xlsx, cosmic_xlsx, require_xlsx, spec_docx,
-             tpl, api_key, model, base_url, project_name, result):
+             templates_dict, api_key, model, base_url, project_name, result):
     """全流程：base → fpa → spec → cosmic → list（按现有依赖顺序）。"""
     logger.info("全流程模式：按依赖顺序执行...")
 
     from ai_gen_reimbursement_docs.main import (
-        _build_modules_from_tree_md, _read_project_name, _resolve_fpa_sum,
-        _read_md_value, _write_cfp_sum, _ai_fill_meta_md,
+        build_modules_from_tree_md, read_project_name, resolve_fpa_sum,
+        read_md_value, write_cfp_sum, ai_fill_meta_md,
     )
     from ai_gen_reimbursement_docs.cosmic_llm import load_user_config_from_meta
 
     # 入口检查所有模板
-    fpa_src = _check_template(tpl, 'fpa', 'FPA工作量评估')
-    cosmic_src = _check_template(tpl, 'cosmic', '项目功能点拆分表')
-    require_src = _check_template(tpl, 'list', '项目需求清单')
-    spec_src = _check_template(tpl, 'spec', '项目需求说明书')
+    fpa_src = _check_template(templates_dict, 'fpa', 'FPA工作量评估')
+    cosmic_src = _check_template(templates_dict, 'cosmic', '项目功能点拆分表')
+    require_src = _check_template(templates_dict, 'list', '项目需求清单')
+    spec_src = _check_template(templates_dict, 'spec', '项目需求说明书')
 
     # Step 0: 基础数据 + 元数据填充
     _ensure_basedata_impl(file_path, md_dir, tree_md, meta_md_tpl)
     if api_key and not os.path.exists(meta_filled_md):
         if load_enable_ai_fill_meta():
             logger.info("第0步: AI 填充文档元数据...")
-            _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
+            ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
         else:
             shutil.copy2(meta_md_tpl, meta_filled_md)
     meta_md = meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
@@ -492,7 +492,7 @@ def _gen_all(file_path, output_dir, doc_dir, md_dir,
     fpa_src_md = fpa_filled_md if api_key else fpa_md
     generate_fpa_xlsx_from_md(fpa_src_md, meta_md, fpa_src, fpa_xlsx)
     result.fpa_xlsx = fpa_xlsx
-    result.fpa_reduced = _read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
+    result.fpa_reduced = read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
 
     # Step 2: 需求说明书
     logger.info("第2步：生成 项目需求说明书...")
@@ -517,8 +517,8 @@ def _gen_all(file_path, output_dir, doc_dir, md_dir,
 
     # Step 3: COSMIC
     logger.info("第3步：生成 项目功能点拆分表...")
-    modules = _build_modules_from_tree_md(tree_md)
-    project = _read_project_name(meta_md) or (modules[0].name if modules else "项目")
+    modules = build_modules_from_tree_md(tree_md)
+    project = read_project_name(meta_md) or (modules[0].name if modules else "项目")
     init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
     filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
     export_empty_md(modules, project, init_md_path)
@@ -528,10 +528,10 @@ def _gen_all(file_path, output_dir, doc_dir, md_dir,
         fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url, **_user_cfg)
         items = parse_md_to_items(filled_md_path)
         if items:
-            _meta = _parse_meta_md(meta_md)
+            _meta = parse_meta_md(meta_md)
             generate_cosmic_xlsx_from_md(cosmic_src, cosmic_xlsx, items, meta=_meta)
             result.cfp_total = sum(item.total_cfp() for item in items)
-            _write_cfp_sum(md_dir, result.cfp_total)
+            write_cfp_sum(md_dir, result.cfp_total)
             _target = _meta.get("建设目标", "")
             _necessity = _meta.get("建设必要性", "")
             if _target or _necessity:
@@ -540,7 +540,7 @@ def _gen_all(file_path, output_dir, doc_dir, md_dir,
 
     # Step 4: 需求清单
     logger.info("第4步：生成 项目需求清单...")
-    cfp_total = _read_md_value(os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'), r'CFP 总和[：:]\s*([\d.]+)') or 0
+    cfp_total = read_md_value(os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'), r'CFP 总和[：:]\s*([\d.]+)') or 0
     generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
                                cfp_total=cfp_total, fpa_reduced=result.fpa_reduced)
     result.require_xlsx = require_xlsx
