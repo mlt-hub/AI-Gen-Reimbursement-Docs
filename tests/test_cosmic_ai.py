@@ -1,6 +1,6 @@
-"""cosmic_llm 纯函数测试 —— _resolve_move_type, _clean_json, parse_user_rules。"""
+"""cosmic_ai 纯函数测试 —— _resolve_move_type, _clean_json, parse_user_rules。"""
 import pytest
-from ai_gen_reimbursement_docs.cosmic_llm import (
+from ai_gen_reimbursement_docs.cosmic_ai import (
     _resolve_move_type,
     _clean_json,
     parse_user_rules,

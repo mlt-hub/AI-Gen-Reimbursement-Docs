@@ -13,7 +13,9 @@ from docx.oxml.ns import qn
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-from ai_gen_reimbursement_docs.excel_source import replace_placeholders, strip_ai_marker
+from ai_gen_reimbursement_docs.excel_source import (
+    replace_placeholders, strip_ai_marker, parse_module_tree_md,
+)
 from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_spec')
@@ -83,37 +85,6 @@ def parse_meta_md(meta_md_path: str) -> dict[str, str]:
                     _save_pending()
         _save_pending()
     return meta
-
-
-def _parse_module_tree_md(tree_md_path: str) -> list[dict[str, str]]:
-    """解析gen-basedata-功能清单-模块树.md 为行字典列表。"""
-    rows = []
-    with open(tree_md_path, encoding='utf-8') as f:
-        in_table = False
-        for line in f:
-            line = line.rstrip()
-            if "| 入口 | 一级模块" in line:
-                in_table = True
-                continue
-            if "|------" in line and in_table:
-                continue
-            if in_table:
-                cells = parse_md_table_row(line, min_cols=9)
-                if cells is not None:
-                    rows.append({
-                        "入口": cells[0],
-                        "一级模块": cells[1],
-                        "二级模块": cells[2],
-                        "三级模块": cells[3],
-                        "客户端类型": cells[4],
-                        "三级模块整体功能描述": cells[5],
-                        "功能过程": cells[6],
-                        "功能过程类型": cells[7],
-                        "功能过程描述": cells[8],
-                    })
-                else:
-                    break
-    return rows
 
 
 def _build_module_tree(rows: list[dict[str, str]]) -> list[dict[str, object]]:
@@ -417,7 +388,7 @@ def init_spec_template_md(
     output_md_path: str,
 ) -> str:
     """生成 gen-spec-spec-功能需求章节-模板.md：列出所有 L3 模块及其功能过程，留空待 AI 填充描述。"""
-    rows = _parse_module_tree_md(tree_md_path)
+    rows = parse_module_tree_md(tree_md_path)
     meta = parse_meta_md(meta_md_path)
     project_name = meta.get("工单标题", "") or meta.get("1、工单需求-元数据录入.工单标题", "")
 
@@ -609,7 +580,7 @@ def generate_spec_docx_from_md(
 
     # 读取中间文件
     meta = parse_meta_md(meta_md_path)
-    rows = _parse_module_tree_md(tree_md_path)
+    rows = parse_module_tree_md(tree_md_path)
     module_tree = _build_module_tree(rows)
     groups = _group_by_entry_and_l1(module_tree)
 

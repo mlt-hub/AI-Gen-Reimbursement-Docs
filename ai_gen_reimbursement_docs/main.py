@@ -20,7 +20,6 @@ from datetime import datetime
 
 from ai_gen_reimbursement_docs.exceptions import ConfigError
 from ai_gen_reimbursement_docs.models import FunctionModule
-from ai_gen_reimbursement_docs.excel_writer import generate_cosmic_xlsx_from_md
 from ai_gen_reimbursement_docs.config_utils import load_api_key, load_base_url, load_model_name, load_business_config
 from ai_gen_reimbursement_docs.md_handler import (
     export_empty_md,
@@ -147,36 +146,12 @@ def _section(title: str):
 
 
 def build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
-    """从gen-basedata-功能清单-模块树.md 的表格格式构建 FunctionModule 列表。
+    """从 功能清单-模块树.md 的表格格式构建 FunctionModule 列表。
 
-    表格列：入口 | 一级模块 | 二级模块 | 三级模块 | ... | 功能过程 | ...
     自动去重并构建 L1→L2→L3 层级，功能过程作为 L3 的 children。
     """
-    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
-
-    rows: list[dict] = []
-    with open(md_path, encoding='utf-8') as f:
-        in_table = False
-        for line in f:
-            if "| 入口 | 一级模块" in line:
-                in_table = True
-                continue
-            if "|------" in line and in_table:
-                continue
-            if in_table:
-                cells = parse_md_table_row(line, min_cols=9)
-                if cells is not None:
-                    rows.append({
-                        "入口": cells[0],
-                        "一级模块": cells[1],
-                        "二级模块": cells[2],
-                        "三级模块": cells[3],
-                        "客户端类型": cells[4],
-                        "三级模块整体功能描述": cells[5],
-                        "功能过程": cells[6],
-                        "功能过程类型": cells[7],
-                        "功能过程描述": cells[8],
-                    })
+    from ai_gen_reimbursement_docs.excel_source import parse_module_tree_md
+    rows = parse_module_tree_md(md_path)
 
     if not rows:
         return []
@@ -451,107 +426,6 @@ def _play_notify_sound():
                 winsound.PlaySound(_audio_path, winsound.SND_FILENAME | winsound.SND_SYNC)
     except Exception:
         pass
-
-
-def _collect_l3_names(tree_md: str) -> list[str]:
-    """从gen-basedata-功能清单-模块树.md 收集所有去重的三级模块名（保持原始顺序）。"""
-    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
-    names: list[str] = []
-    seen: set[str] = set()
-    if not os.path.exists(tree_md):
-        return names
-    with open(tree_md, encoding='utf-8') as f:
-        for line in f:
-            cells = parse_md_table_row(line, min_cols=4)
-            if cells is not None and cells[3]:
-                name = cells[3].strip()
-                if name and name not in seen:
-                    seen.add(name)
-                    names.append(name)
-    return names
-
-
-def ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url: str,
-                     tree_md: str = "") -> str:
-    """读取gen-basedata-录入文档元数据-模板.md，AI 填充 #AI生成# 标记，写入 gen-basedata-AI填充-录入文档元数据.md。
-
-    处理 #AI生成#（包含 #AI生成-XXX# 格式），跳过 #AI补充#。
-    tree_md: gen-basedata-功能清单-模块树.md 路径，用于解析 ${三级模块} 等占位符。
-    """
-    from ai_gen_reimbursement_docs.excel_source import strip_ai_marker, replace_placeholders
-    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
-
-    # 读取元数据模板，收集 project_info / fpa_meta 用于 ${} 替换
-    meta_data = {}
-    with open(src_md, encoding='utf-8') as f:
-        for line in f:
-            cells = parse_md_table_row(line, min_cols=2)
-            if cells is not None and cells[0]:
-                meta_data[cells[0]] = cells[1]
-
-    project_info = {}
-    for k, v in meta_data.items():
-        key = k.replace("1、工单需求-元数据录入.", "")
-        if key in ("工单编号", "工单标题", "工单内容", "总体描述",
-                    "建设目标", "建设必要性", "系统概况"):
-            project_info[key] = v
-    fpa_meta = {}
-    for k, v in meta_data.items():
-        key = k.replace("3、FPA工作量评估-元数据录入.", "")
-        if key in ("子系统（模块）",):
-            fpa_meta[key] = v
-
-    # 逐行处理
-    with open(src_md, encoding='utf-8') as f:
-        lines = f.readlines()
-
-    new_lines = []
-    for line in lines:
-        cells = parse_md_table_row(line, min_cols=2)
-        if cells is not None:
-            key, val = cells[0], cells[1]
-            if val and ('#AI生成#' in val or '#AI生成-' in val):
-                prompt_raw, needs_ai = strip_ai_marker(val)
-                if needs_ai:
-                    if not prompt_raw:
-                        prompt_raw = f"基于{key}"
-                    elif '${' in prompt_raw:
-                        prompt_raw = replace_placeholders(prompt_raw, project_info, fpa_meta)
-                        # 解析 ${三级模块}：用所有 L3 模块名拼接
-                        if '${三级模块}' in prompt_raw and tree_md:
-                            _l3_names = _collect_l3_names(tree_md)
-                            prompt_raw = prompt_raw.replace('${三级模块}', '、'.join(_l3_names))
-                    resp = _call_llm_once(prompt_raw, api_key, model, base_url,
-                                          tag=f"meta_{key}")
-                    if resp:
-                        new_lines.append(f"| {key} | {resp} |\n")
-                        continue
-            # #AI补充# 不做处理，原样保留
-        new_lines.append(line)
-
-    with open(dst_md, 'w', encoding='utf-8') as f:
-        f.writelines(new_lines)
-    return dst_md
-
-
-def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
-                   tag: str = "") -> str:
-    """单次 LLM 调用，返回文本（委托至 llm_client 公共模块）。"""
-    if not api_key:
-        return ""
-
-    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
-    system_prompt = load_ai_system_prompt("metadata_gen")
-
-    from ai_gen_reimbursement_docs.llm_client import call_llm
-    try:
-        return call_llm(
-            prompt=prompt, system=system_prompt,
-            api_key=api_key, model=model, base_url=base_url, tag=tag,
-        )
-    except Exception as e:
-        logger.warning("AI 调用失败 [%s]: %s", tag, e)
-        return ""
 
 
 def _build_parser() -> argparse.ArgumentParser:

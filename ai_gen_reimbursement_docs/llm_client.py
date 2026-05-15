@@ -1,6 +1,6 @@
 """LLM 调用公共模块 —— 统一封装 Anthropic API 调用、重试和日志记录。
 
-消除 cosmic_llm、module_utils、gen_xlsx、gen_spec、main 五处的重复实现。
+消除 cosmic_ai、module_utils、gen_xlsx、gen_spec、main 五处的重复实现。
 """
 
 import logging

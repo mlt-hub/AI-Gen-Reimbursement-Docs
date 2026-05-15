@@ -287,7 +287,7 @@ def fill_md_with_ai(
     user_receiver_rules: list[tuple[str, str]] | None = None,
 ) -> None:
     """Read MD, call AI to fill empty tables, write back."""
-    from ai_gen_reimbursement_docs.cosmic_llm import generate_cosmic_items
+    from ai_gen_reimbursement_docs.cosmic_ai import generate_cosmic_items
 
     # Parse existing items from MD (if any were manually filled)
     existing_items = parse_md_to_items(md_path)

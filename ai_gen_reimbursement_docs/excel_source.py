@@ -335,3 +335,140 @@ def strip_ai_marker(text: str) -> tuple[str, bool]:
         prompt = f"基于{hint}" if not rest else rest
         return prompt, True
     return text, False
+
+
+def parse_module_tree_md(tree_md_path: str) -> list[dict[str, str]]:
+    """解析 功能清单-模块树.md 表格为行字典列表。
+
+    表格列：入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 |
+            三级模块整体功能描述 | 功能过程 | 功能过程类型 | 功能过程描述
+    """
+    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
+    rows = []
+    with open(tree_md_path, encoding='utf-8') as f:
+        in_table = False
+        for line in f:
+            if "| 入口 | 一级模块" in line:
+                in_table = True
+                continue
+            if "|------" in line and in_table:
+                continue
+            if in_table:
+                cells = parse_md_table_row(line, min_cols=9)
+                if cells is not None:
+                    rows.append({
+                        "入口": cells[0],
+                        "一级模块": cells[1],
+                        "二级模块": cells[2],
+                        "三级模块": cells[3],
+                        "客户端类型": cells[4],
+                        "三级模块整体功能描述": cells[5],
+                        "功能过程": cells[6],
+                        "功能过程类型": cells[7],
+                        "功能过程描述": cells[8],
+                    })
+    return rows
+
+
+def safe_load_workbook(path: str, label: str):
+    """安全加载 xlsx 模板，失败时抛出可读的错误。"""
+    try:
+        return openpyxl.load_workbook(path)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"「{label}」模板文件不存在: {path}")
+    except Exception as e:
+        raise ValueError(
+            f"「{label}」模板无法打开，请检查文件是否为有效的 .xlsx 格式: {path}\n"
+            f"内部错误: {e}"
+        ) from e
+
+
+def _collect_l3_names(tree_md: str) -> list[str]:
+    """从 功能清单-模块树.md 收集所有去重的三级模块名（保持原始顺序）。"""
+    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
+    names: list[str] = []
+    seen: set[str] = set()
+    if not os.path.exists(tree_md):
+        return names
+    with open(tree_md, encoding='utf-8') as f:
+        for line in f:
+            cells = parse_md_table_row(line, min_cols=4)
+            if cells is not None and cells[3]:
+                name = cells[3].strip()
+                if name and name not in seen:
+                    seen.add(name)
+                    names.append(name)
+    return names
+
+
+def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
+                   tag: str = "") -> str:
+    """单次 LLM 调用，返回文本（委托至 llm_client 公共模块）。"""
+    if not api_key:
+        return ""
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
+    system_prompt = load_ai_system_prompt("metadata_gen")
+    from ai_gen_reimbursement_docs.llm_client import call_llm
+    try:
+        return call_llm(
+            prompt=prompt, system=system_prompt,
+            api_key=api_key, model=model, base_url=base_url, tag=tag,
+        )
+    except Exception as e:
+        logging.getLogger('ai_gen_reimbursement_docs.excel_source').warning(
+            "AI 调用失败 [%s]: %s", tag, e)
+        return ""
+
+
+def ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url: str,
+                     tree_md: str = "") -> str:
+    """AI 填充元数据 MD 中的 #AI生成# 标记，写入目标文件。"""
+    from ai_gen_reimbursement_docs.md_table import parse_md_table_row
+
+    meta_data = {}
+    with open(src_md, encoding='utf-8') as f:
+        for line in f:
+            cells = parse_md_table_row(line, min_cols=2)
+            if cells is not None and cells[0]:
+                meta_data[cells[0]] = cells[1]
+
+    project_info = {}
+    for k, v in meta_data.items():
+        key = k.replace("1、工单需求-元数据录入.", "")
+        if key in ("工单编号", "工单标题", "工单内容", "总体描述",
+                    "建设目标", "建设必要性", "系统概况"):
+            project_info[key] = v
+    fpa_meta = {}
+    for k, v in meta_data.items():
+        key = k.replace("3、FPA工作量评估-元数据录入.", "")
+        if key in ("子系统（模块）",):
+            fpa_meta[key] = v
+
+    with open(src_md, encoding='utf-8') as f:
+        lines = f.readlines()
+
+    new_lines = []
+    for line in lines:
+        cells = parse_md_table_row(line, min_cols=2)
+        if cells is not None:
+            key, val = cells[0], cells[1]
+            if val and ('#AI生成#' in val or '#AI生成-' in val):
+                prompt_raw, needs_ai = strip_ai_marker(val)
+                if needs_ai:
+                    if not prompt_raw:
+                        prompt_raw = f"基于{key}"
+                    elif '${' in prompt_raw:
+                        prompt_raw = replace_placeholders(prompt_raw, project_info, fpa_meta)
+                        if '${三级模块}' in prompt_raw and tree_md:
+                            _l3_names = _collect_l3_names(tree_md)
+                            prompt_raw = prompt_raw.replace('${三级模块}', '、'.join(_l3_names))
+                    resp = _call_llm_once(prompt_raw, api_key, model, base_url,
+                                          tag=f"meta_{key}")
+                    if resp:
+                        new_lines.append(f"| {key} | {resp} |\n")
+                        continue
+        new_lines.append(line)
+
+    with open(dst_md, 'w', encoding='utf-8') as f:
+        f.writelines(new_lines)
+    return dst_md

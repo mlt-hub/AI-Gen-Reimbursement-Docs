@@ -18,23 +18,13 @@ from ai_gen_reimbursement_docs.constants import (
     REQ_COL_L3, REQ_COL_PROC_TYPE, REQ_COL_WORKLOAD, REQ_COL_CFP, REQ_TOTAL_COLS,
     REQ_COL_KEY_MAP,
 )
-from ai_gen_reimbursement_docs.excel_source import replace_placeholders, strip_ai_marker
+from ai_gen_reimbursement_docs.excel_source import (
+    replace_placeholders, strip_ai_marker, parse_module_tree_md,
+    safe_load_workbook,
+)
 from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_xlsx')
-
-
-def _safe_load_workbook(path: str, label: str) -> openpyxl.Workbook:
-    """安全加载 xlsx，失败时抛出可读的错误而非 InvalidFileException。"""
-    try:
-        return openpyxl.load_workbook(path)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"「{label}」模板文件不存在: {path}")
-    except Exception as e:
-        raise ValueError(
-            f"「{label}」模板无法打开，请检查文件是否为有效的 .xlsx 格式: {path}\n"
-            f"内部错误: {e}"
-        ) from e
 
 
 # ============================================================
@@ -45,35 +35,6 @@ def parse_meta_md(meta_md_path: str) -> dict[str, str]:
     """解析文档元数据.md 为扁平字典。支持跨多行的表格值。"""
     from ai_gen_reimbursement_docs.gen_spec import parse_meta_md
     return parse_meta_md(meta_md_path)
-
-
-def _load_module_rows(tree_md_path: str) -> list[dict[str, str]]:
-    """解析功能清单模块树.md 为行字典列表。"""
-    rows = []
-    with open(tree_md_path, encoding='utf-8') as f:
-        in_table = False
-        for line in f:
-            line = line.rstrip()
-            if "| 入口 | 一级模块" in line:
-                in_table = True
-                continue
-            if "|------" in line and in_table:
-                continue
-            if in_table:
-                cells = parse_md_table_row(line, min_cols=9)
-                if cells is not None:
-                    rows.append({
-                        "入口": cells[0],
-                        "一级模块": cells[1],
-                        "二级模块": cells[2],
-                        "三级模块": cells[3],
-                        "客户端类型": cells[4],
-                        "三级模块整体功能描述": cells[5],
-                        "功能过程": cells[6],
-                        "功能过程类型": cells[7],
-                        "功能过程描述": cells[8],
-                    })
-    return rows
 
 
 def _receiver_from_client_type(client_type: str, rules_text: str) -> str:
@@ -321,7 +282,7 @@ def init_fpa_template_md(
     """
     logger.info("生成 FPA 模板 MD...")
     meta = parse_meta_md(meta_md_path)
-    rows = _load_module_rows(tree_md_path)
+    rows = parse_module_tree_md(tree_md_path)
     fpa_rows = _build_fpa_rule_rows(rows, meta)
 
     total = 0.0
@@ -519,7 +480,7 @@ def generate_fpa_xlsx_from_md(
                     })
 
     # 填充模板
-    wb = _safe_load_workbook(template_path, 'FPA工作量评估')
+    wb = safe_load_workbook(template_path, 'FPA工作量评估')
     ws = wb['FPA功能点估算']
 
         # 保存模板第3行的格式作为参照（I 和 L 列沿用第2行标题样式）
@@ -637,9 +598,9 @@ def generate_list_xlsx_from_md(
     logger.info("开始生成项目需求清单.xlsx...")
 
     meta = parse_meta_md(meta_md_path)
-    rows = _load_module_rows(tree_md_path)
+    rows = parse_module_tree_md(tree_md_path)
 
-    wb = _safe_load_workbook(template_path, '项目需求清单')
+    wb = safe_load_workbook(template_path, '项目需求清单')
 
     # ====== Sheet 1: 项目信息概览 ======
     ws1 = wb['项目信息概览']

@@ -1,4 +1,4 @@
-"""Generate COSMIC decompositions using Claude API."""
+"""COSMIC 功能点 AI 生成 —— 提示词构建、AI 调用、响应解析。"""
 
 import json
 import logging
@@ -12,7 +12,7 @@ from ai_gen_reimbursement_docs.models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.models import FunctionModule
 from ai_gen_reimbursement_docs.module_utils import get_module_by_name
 
-logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_llm')
+logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_ai')
 
 # Fuzzy matching for common move_type variations
 _MOVE_TYPE_FUZZY = {

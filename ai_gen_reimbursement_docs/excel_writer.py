@@ -13,21 +13,9 @@ from ai_gen_reimbursement_docs.constants import (
 )
 from ai_gen_reimbursement_docs.models import CosmicItem
 from ai_gen_reimbursement_docs.config_utils import load_cfp_formula
+from ai_gen_reimbursement_docs.excel_source import safe_load_workbook
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.excel_writer')
-
-
-def _safe_load_workbook(path: str, label: str) -> openpyxl.Workbook:
-    """安全加载 xlsx，失败时抛出可读的错误。"""
-    try:
-        return openpyxl.load_workbook(path)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"「{label}」模板文件不存在: {path}")
-    except Exception as e:
-        raise ValueError(
-            f"「{label}」模板无法打开，请检查文件是否为有效的 .xlsx 格式: {path}\n"
-            f"内部错误: {e}"
-        ) from e
 
 
 # Read a reference cell style from the template to apply to new cells
@@ -107,7 +95,7 @@ def _save_footer_notes(ws) -> list:
 
 
 
-def generate_cosmic_xlsx_from_md(
+def write_cosmic_xlsx(
     template_path: str,
     output_path: str,
     items: list[CosmicItem],
@@ -122,7 +110,7 @@ def generate_cosmic_xlsx_from_md(
     """
     if meta is None:
         meta = {}
-    wb = _safe_load_workbook(template_path, '项目功能点拆分表')
+    wb = safe_load_workbook(template_path, '项目功能点拆分表')
     ws = wb['2、功能点拆分表']
 
     # --- Save template row 6 format as reference ---
@@ -514,7 +502,7 @@ def update_environment_sheet(
                 "有" if target else "无", "有" if necessity else "无")
 
 
-# 兼容旧调用方（独立 load/save，可能丢失图片；推荐使用 update_environment_sheet + generate_cosmic_xlsx_from_md）
+# 兼容旧调用方（独立 load/save，可能丢失图片；推荐使用 update_environment_sheet + write_cosmic_xlsx）
 def write_environment_sheet(
     template_path: str,
     output_path: str,
@@ -523,7 +511,7 @@ def write_environment_sheet(
     necessity: str
 ) -> None:
     """更新环境图 sheet（独立 load/save，可能丢失图片）。推荐使用 update_environment_sheet。"""
-    wb = _safe_load_workbook(template_path, '项目功能点拆分表(环境图)')
+    wb = safe_load_workbook(template_path, '项目功能点拆分表(环境图)')
     update_environment_sheet(wb, target, necessity)
     try:
         wb.save(output_path)
@@ -565,7 +553,7 @@ def copy_template_sheets(
     output_path: str,
 ) -> None:
     """完整复制模板文件。"""
-    wb = _safe_load_workbook(template_path, '项目功能点拆分表')
+    wb = safe_load_workbook(template_path, '项目功能点拆分表')
     try:
         wb.save(output_path)
     except PermissionError:

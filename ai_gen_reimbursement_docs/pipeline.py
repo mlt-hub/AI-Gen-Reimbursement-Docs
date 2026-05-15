@@ -16,7 +16,7 @@ from ai_gen_reimbursement_docs.config_utils import (
 from ai_gen_reimbursement_docs.excel_source import (
     generate_md_files, verify_module_tree_stats
 )
-from ai_gen_reimbursement_docs.excel_writer import generate_cosmic_xlsx_from_md, write_environment_sheet
+from ai_gen_reimbursement_docs.excel_writer import write_cosmic_xlsx, write_environment_sheet
 from ai_gen_reimbursement_docs.gen_spec import (
     generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md, parse_meta_md
 )
@@ -240,7 +240,7 @@ def _fill_meta_if_needed(meta_md_tpl: str, meta_filled_md: str, tree_md: str,
     """AI 填充元数据（如果尚未填充）。"""
     if not api_key or os.path.exists(meta_filled_md):
         return
-    from ai_gen_reimbursement_docs.main import ai_fill_meta_md
+    from ai_gen_reimbursement_docs.excel_source import ai_fill_meta_md
     if load_enable_ai_fill_meta():
         logger.info("AI 填充文档元数据...")
         ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
@@ -362,7 +362,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
         build_modules_from_tree_md, resolve_fpa_sum, read_project_name,
         write_cfp_sum,
     )
-    from ai_gen_reimbursement_docs.cosmic_llm import load_user_config_from_meta
+    from ai_gen_reimbursement_docs.cosmic_ai import load_user_config_from_meta
 
     cosmic_src = _check_template(templates_dict, 'cosmic', '项目功能点拆分表')
 
@@ -382,7 +382,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
         items = parse_md_to_items(filled_md_path)
         if items:
             _meta = parse_meta_md(meta_md)
-            generate_cosmic_xlsx_from_md(cosmic_src, cosmic_xlsx, items, meta=_meta)
+            write_cosmic_xlsx(cosmic_src, cosmic_xlsx, items, meta=_meta)
             result.cfp_total = sum(item.total_cfp() for item in items)
             write_cfp_sum(md_dir, result.cfp_total)
             _target = _meta.get("建设目标", "")
@@ -422,7 +422,7 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
     # 确保元数据已填充
     if api_key and not os.path.exists(meta_filled_md):
         if load_enable_ai_fill_meta():
-            from ai_gen_reimbursement_docs.main import ai_fill_meta_md
+            from ai_gen_reimbursement_docs.excel_source import ai_fill_meta_md
             ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
     if os.path.exists(meta_filled_md):
         meta_md = meta_filled_md
@@ -460,9 +460,10 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
 
     from ai_gen_reimbursement_docs.main import (
         build_modules_from_tree_md, read_project_name, resolve_fpa_sum,
-        read_md_value, write_cfp_sum, ai_fill_meta_md,
+        read_md_value, write_cfp_sum,
     )
-    from ai_gen_reimbursement_docs.cosmic_llm import load_user_config_from_meta
+    from ai_gen_reimbursement_docs.excel_source import ai_fill_meta_md
+    from ai_gen_reimbursement_docs.cosmic_ai import load_user_config_from_meta
 
     # 入口检查所有模板
     fpa_src = _check_template(templates_dict, 'fpa', 'FPA工作量评估')
@@ -529,7 +530,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
         items = parse_md_to_items(filled_md_path)
         if items:
             _meta = parse_meta_md(meta_md)
-            generate_cosmic_xlsx_from_md(cosmic_src, cosmic_xlsx, items, meta=_meta)
+            write_cosmic_xlsx(cosmic_src, cosmic_xlsx, items, meta=_meta)
             result.cfp_total = sum(item.total_cfp() for item in items)
             write_cfp_sum(md_dir, result.cfp_total)
             _target = _meta.get("建设目标", "")
