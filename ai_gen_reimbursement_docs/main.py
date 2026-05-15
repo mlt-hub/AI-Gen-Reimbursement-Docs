@@ -683,6 +683,18 @@ def main():
             if val and os.path.exists(val):
                 templates[key] = val
 
+        # 交互式参数：在调 pipeline 之前提示用户（仅 gen-cosmic / gen-list）
+        _fpa_reduced = None
+        _cfp_total = None
+        if mode in ('gen-cosmic', 'gen-all'):
+            from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
+            if not load_fpa_reduced_use_workload():
+                _fpa_reduced = resolve_fpa_sum(
+                    os.path.join(out_dir, 'md', 'gen-fpa-FPA工作量-总和.md'))
+        if mode in ('gen-list',):
+            _cfp_total, _fpa_reduced = prompt_list_values(
+                os.path.join(out_dir, 'md', 'gen-fpa-FPA工作量-总和.md'))
+
         # 调用共享 pipeline
         from ai_gen_reimbursement_docs.pipeline import run_pipeline
         result = run_pipeline(
@@ -694,6 +706,8 @@ def main():
             base_url=base_url,
             project_name=args.project_name,
             templates=templates or None,
+            fpa_reduced=_fpa_reduced,
+            cfp_total=_cfp_total,
         )
 
         # 输出汇总
