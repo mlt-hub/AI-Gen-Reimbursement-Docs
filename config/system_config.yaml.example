@@ -58,3 +58,11 @@ sheets:
   cosmic_meta: "6、项目功能点拆分表-元数据录入"
   require_meta: "7、项目需求清单-元数据录入"
   template_config: "8、各文档-模板路径录入"
+
+# 输出文档模板路径（优先级：CLI参数 > 此配置 > data/templates/ 默认目录）
+# 相对路径基于项目根目录，也支持绝对路径
+out_templates:
+  FPA工作量评估-模板: data/out_templates/FPA工作量评估-输出模板.xlsx
+  项目需求说明书-模板: data/out_templates/项目需求说明书-输出模板.docx
+  项目功能点拆分表-模板: data/out_templates/项目功能点拆分表-输出模板.xlsx
+  项目需求清单-模板: data/out_templates/项目需求清单-输出模板.xlsx

@@ -247,6 +247,27 @@ def load_fpa_reduced_use_workload() -> bool:
     return _get_system_config_value('fpa_reduced_use_workload', False)
 
 
+def load_out_templates() -> dict[str, str]:
+    """读取 system_config.yaml 中 out_templates 配置。
+
+    Returns:
+        {'FPA工作量评估-模板': 'data/out_templates/...', ...}
+        未配置时返回空 dict。
+    """
+    yaml_path = _config_dir() / "system_config.yaml"
+    if yaml_path.exists():
+        try:
+            import yaml
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            templates = cfg.get('out_templates', {})
+            if isinstance(templates, dict):
+                return {str(k): str(v) for k, v in templates.items() if v}
+        except Exception:
+            pass
+    return {}
+
+
 def load_max_ai_l3_modules(default: int = 0) -> int:
     """读取 max_ai_l3_modules，0=不限制。"""
     return _get_system_config_value('max_ai_l3_modules', default)
@@ -379,7 +400,8 @@ def _migrate_config() -> None:
                 f.writelines(new_lines)
             logger.info(f"配置迁移: .env 新增 {len(new_lines)//2} 个配置项")
 
-    # --- YAML 合并（基于文本解析，支持注释中的键） ---
+    # --- YAML 合并 ---
+    # 对比 .example 和用户配置，自动追加新增的顶层键（含嵌套块）
     yaml_pairs = [
         (home / "system_config.yaml", local / "system_config.yaml.example", "system_config"),
         (home / "business_rules.yaml", local / "business_rules.yaml.example", "business_rules"),
@@ -393,39 +415,64 @@ def _migrate_config() -> None:
         if not yaml_file.exists() or not example_file.exists():
             continue
         try:
-            # 读取用户已有的 YAML 键（含注释中的默认值）
             with open(yaml_file, 'r', encoding='utf-8') as f:
-                user_content = f.read()
-            user_keys = set()
-            for line in user_content.split('\n'):
-                line = line.strip()
-                if line and not line.startswith('#') and ':' in line:
-                    user_keys.add(line.split(':', 1)[0].strip())
-
-            # 读取示例中的键（包括被注释的，排除描述性文字）
-            import re
-            example_keys = {}
+                user_yaml = yaml.safe_load(f) or {}
             with open(example_file, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    # 只匹配 key: value 或 # key: value 格式（key 为字母下划线组成）
-                    m = re.match(r'^#?\s*([a-zA-Z_]\w*)\s*:\s*(.+)$', line)
-                    if not m:
-                        continue
-                    key = m.group(1)
-                    if key not in user_keys:
-                        example_keys[key] = m.group(2).strip()
+                example_content = f.read()
+            example_yaml = yaml.safe_load(example_content) or {}
 
-            if example_keys:
-                new_lines = []
-                for key, val in example_keys.items():
-                    new_lines.append(f"\n# {key} 已新增至模板，请按需配置\n")
-                    new_lines.append(f"#{key}: {val}\n" if val.startswith('#') else f"{key}: {val}\n")
-                with open(yaml_file, 'a', encoding='utf-8') as f:
-                    f.writelines(new_lines)
-                logger.info(f"配置迁移: {name} 新增 {len(example_keys)} 个配置项")
+            # 找出 example 中存在但用户配置中不存在的顶层键
+            missing_keys = [k for k in example_yaml if k not in user_yaml]
+
+            if missing_keys:
+                # 从 example 文件中提取缺失键的原始文本块
+                import re
+                example_lines = example_content.split('\n')
+                new_blocks = []
+                for key in missing_keys:
+                    block = _extract_yaml_block(example_lines, key)
+                    if block:
+                        new_blocks.append(f"\n# {key} 已新增至模板，请按需配置\n")
+                        new_blocks.append(block + '\n')
+
+                if new_blocks:
+                    with open(yaml_file, 'a', encoding='utf-8') as f:
+                        f.writelines(new_blocks)
+                    logger.info(f"配置迁移: {name} 新增 {len(missing_keys)} 个配置项: {', '.join(missing_keys)}")
         except Exception as e:
             logger.debug(f"配置迁移跳过 {name}: {e}")
+
+
+def _extract_yaml_block(lines: list[str], key: str) -> str:
+    """从 YAML 行列表中提取一个顶层键的完整文本块（含嵌套子键）。"""
+    import re
+    # 找到 key: 开头（可选前缀注释或空行）
+    start = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # 匹配顶层键：以 key: 开头（行首无缩进）
+        if re.match(rf'^{re.escape(key)}\s*:', stripped) and not line.startswith((' ', '\t')):
+            start = i
+            break
+    if start is None:
+        return ""
+
+    # 收集从 start 到下一个顶层键或文件末尾的所有行
+    block_lines = [lines[start]]
+    for i in range(start + 1, len(lines)):
+        line = lines[i]
+        stripped = line.strip()
+        # 空行或仅注释行 → 属于当前块
+        if not stripped or stripped.startswith('#'):
+            block_lines.append(line)
+            continue
+        # 顶层键（行首无缩进，有 :）→ 新块开始，停止
+        if not line.startswith((' ', '\t')) and ':' in stripped:
+            break
+        # 缩进行 → 属于当前块的子键
+        block_lines.append(line)
+
+    return '\n'.join(block_lines).rstrip()
 
 
 

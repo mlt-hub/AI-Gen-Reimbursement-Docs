@@ -90,7 +90,7 @@ class TestCallLLM:
         mock_client_class.return_value = mock_client
         mock_client.messages.create.side_effect = Exception("持续失败")
 
-        with pytest.raises(AIError, match="持续失败"):
+        with pytest.raises(AIError, match="AI 调用失败.*已重试.*次"):
             call_llm(
                 prompt="测试",
                 api_key="test-key",

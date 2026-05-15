@@ -28,7 +28,7 @@ from ai_gen_reimbursement_docs.md_handler import (
     parse_md_to_items,
     fill_md_with_ai,
 )
-from ai_gen_reimbursement_docs.excel_source import generate_md_files, read_template_config, verify_module_tree_stats
+from ai_gen_reimbursement_docs.excel_source import generate_md_files, verify_module_tree_stats
 from ai_gen_reimbursement_docs.gen_spec import generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md
 from ai_gen_reimbursement_docs.gen_xlsx import generate_fpa_xlsx_from_md, generate_list_xlsx_from_md
 from ai_gen_reimbursement_docs.gen_xlsx import init_fpa_template_md, ai_fill_fpa_md
@@ -874,10 +874,15 @@ if __name__ == '__main__':
     _exit_code = 0
     try:
         main()
-    except Exception:
+    except Exception as _e:
         _exit_code = 1
-        import traceback
-        traceback.print_exc()
+        # 用户终端：简洁消息
+        print(f"\n  错误: {_e}", file=sys.stderr)
+        # 日志文件：完整堆栈（若 logger 已初始化）
+        try:
+            logger.debug("未捕获异常", exc_info=True)
+        except Exception:
+            pass
     if getattr(sys, 'frozen', False):
         input("\n按 Enter 键退出...")
     sys.exit(_exit_code)

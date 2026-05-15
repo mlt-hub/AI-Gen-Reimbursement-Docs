@@ -24,6 +24,19 @@ from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_xlsx')
 
 
+def _safe_load_workbook(path: str, label: str) -> openpyxl.Workbook:
+    """安全加载 xlsx，失败时抛出可读的错误而非 InvalidFileException。"""
+    try:
+        return openpyxl.load_workbook(path)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"「{label}」模板文件不存在: {path}")
+    except Exception as e:
+        raise ValueError(
+            f"「{label}」模板无法打开，请检查文件是否为有效的 .xlsx 格式: {path}\n"
+            f"内部错误: {e}"
+        ) from e
+
+
 # ============================================================
 #  公用
 # ============================================================
@@ -506,7 +519,7 @@ def generate_fpa_xlsx_from_md(
                     })
 
     # 填充模板
-    wb = openpyxl.load_workbook(template_path)
+    wb = _safe_load_workbook(template_path, 'FPA工作量评估')
     ws = wb['FPA功能点估算']
 
         # 保存模板第3行的格式作为参照（I 和 L 列沿用第2行标题样式）
@@ -626,7 +639,7 @@ def generate_list_xlsx_from_md(
     meta = _load_meta_md(meta_md_path)
     rows = _load_module_rows(tree_md_path)
 
-    wb = openpyxl.load_workbook(template_path)
+    wb = _safe_load_workbook(template_path, '项目需求清单')
 
     # ====== Sheet 1: 项目信息概览 ======
     ws1 = wb['项目信息概览']

@@ -57,7 +57,15 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
         output_dir = os.path.dirname(os.path.abspath(excel_path))
     os.makedirs(output_dir, exist_ok=True)
 
-    wb = openpyxl.load_workbook(excel_path, data_only=False)
+    try:
+        wb = openpyxl.load_workbook(excel_path, data_only=False)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"功能清单文件不存在: {excel_path}")
+    except Exception as e:
+        raise ValueError(
+            f"无法打开功能清单文件，请确认是有效的 .xlsx 格式: {excel_path}\n"
+            f"内部错误: {e}"
+        ) from e
 
     # ========== 解析各个 sheet ==========
 
@@ -88,7 +96,13 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
     wb.close()
 
     # data_only=True 还原公式单元格的计算值
-    wb_val = openpyxl.load_workbook(excel_path, data_only=True)
+    try:
+        wb_val = openpyxl.load_workbook(excel_path, data_only=True)
+    except Exception as e:
+        raise ValueError(
+            f"无法以 data_only 模式读取功能清单，文件可能已损坏: {excel_path}\n"
+            f"内部错误: {e}"
+        ) from e
     for row in wb_val[_s["require_meta"]].iter_rows(min_row=2, values_only=True):
         k, v = row[0], row[1]
         if k and str(v).strip():

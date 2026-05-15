@@ -447,12 +447,13 @@ def generate_cosmic_items(
                 break  # success, exit while loop
 
             except Exception as e:
-                logger.warning(f"  [{idx}/{total}] → ERROR: {e}")
+                _err_msg = str(e)
+                logger.warning(f"  [{idx}/{total}] → 出错: {_err_msg}")
                 if not sys.stdin.isatty():
-                    error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
+                    error_modules.append((l1_name, l2_name, l3.name, _err_msg[:200]))
                     break
                 try:
-                    choice = input(f"  错误: {e}\n  输入 r 12000 重试(r后有空格)，q 结束，Enter跳过: ").strip()
+                    choice = input(f"  AI 调用出错: {_err_msg}\n  输入 r 12000 重试（r后跟空格和数字），q 结束，Enter 跳过: ").strip()
                     if choice == 'q':
                         _abort_module = True
                         break

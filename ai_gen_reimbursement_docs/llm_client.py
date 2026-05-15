@@ -103,10 +103,10 @@ def call_llm(
                 time.sleep(_RETRY_DELAY_BASE * attempt)
 
     raise AIError(
-        f"LLM 调用失败，已重试 {_MAX_RETRIES} 次: {last_error}",
+        f"AI 调用失败，已重试 {_MAX_RETRIES} 次仍无法完成。请检查网络连接、API Key 和端点配置。",
         attempt=_MAX_RETRIES,
         model=model,
-    )
+    ) from last_error
 
 
 def strip_markdown_code_block(text: str) -> str:

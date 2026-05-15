@@ -17,6 +17,19 @@ from ai_gen_reimbursement_docs.config_utils import load_cfp_formula
 logger = logging.getLogger('ai_gen_reimbursement_docs.excel_writer')
 
 
+def _safe_load_workbook(path: str, label: str) -> openpyxl.Workbook:
+    """安全加载 xlsx，失败时抛出可读的错误。"""
+    try:
+        return openpyxl.load_workbook(path)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"「{label}」模板文件不存在: {path}")
+    except Exception as e:
+        raise ValueError(
+            f"「{label}」模板无法打开，请检查文件是否为有效的 .xlsx 格式: {path}\n"
+            f"内部错误: {e}"
+        ) from e
+
+
 # Read a reference cell style from the template to apply to new cells
 _REF_STYLE = Font(name='微软雅黑', size=11, color='FF000000')
 _REF_ALIGN = Alignment(horizontal='center', vertical='center', wrap_text=True)
@@ -109,7 +122,7 @@ def generate_cosmic_xlsx_from_md(
     """
     if meta is None:
         meta = {}
-    wb = openpyxl.load_workbook(template_path)
+    wb = _safe_load_workbook(template_path, '项目功能点拆分表')
     ws = wb['2、功能点拆分表']
 
     # --- Save template row 6 format as reference ---
@@ -510,7 +523,7 @@ def write_environment_sheet(
     necessity: str
 ) -> None:
     """更新环境图 sheet（独立 load/save，可能丢失图片）。推荐使用 update_environment_sheet。"""
-    wb = openpyxl.load_workbook(template_path)
+    wb = _safe_load_workbook(template_path, '项目功能点拆分表(环境图)')
     update_environment_sheet(wb, target, necessity)
     try:
         wb.save(output_path)
@@ -553,7 +566,7 @@ def copy_template_sheets(
     func_point_sheet_only: bool = False
 ) -> None:
     """Copy the complete template preserving all sheets."""
-    wb = openpyxl.load_workbook(template_path)
+    wb = _safe_load_workbook(template_path, '项目功能点拆分表')
     try:
         wb.save(output_path)
     except PermissionError:

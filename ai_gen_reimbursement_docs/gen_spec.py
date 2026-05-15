@@ -19,6 +19,19 @@ from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_spec')
 
 
+def _safe_load_docx(path: str, label: str):
+    """安全加载 docx，失败时抛出可读的错误。"""
+    try:
+        return Document(path)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"「{label}」模板文件不存在: {path}")
+    except Exception as e:
+        raise ValueError(
+            f"「{label}」模板无法打开，请检查文件是否为有效的 .docx 格式: {path}\n"
+            f"内部错误: {e}"
+        ) from e
+
+
 
 
 @lru_cache(maxsize=4)
@@ -625,11 +638,8 @@ def generate_spec_docx_from_md(
             seen_proc.add(proc)
             all_proc_descs.append(proc)
 
-    # 打开模板
-    doc = Document(template_path)
-
     # 加载模板
-    doc = Document(template_path)
+    doc = _safe_load_docx(template_path, '项目需求说明书')
 
     # ====== 替换段落中的 {{占位符}} ======
     PH_PATTERN = re.compile(r'\{\{([^}]+)\}\}')
