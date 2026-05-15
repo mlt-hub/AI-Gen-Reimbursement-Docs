@@ -73,7 +73,7 @@ def _parse_meta_md(meta_md_path: str) -> dict[str, str]:
 
 
 def _parse_module_tree_md(tree_md_path: str) -> list[dict[str, str]]:
-    """解析功能清单-模块树.md 为行字典列表。"""
+    """解析gen-basedata-功能清单-模块树.md 为行字典列表。"""
     rows = []
     with open(tree_md_path, encoding='utf-8') as f:
         in_table = False
@@ -403,7 +403,7 @@ def init_spec_template_md(
     meta_md_path: str,
     output_md_path: str,
 ) -> str:
-    """生成 spec-功能需求章节-模板.md：列出所有 L3 模块及其功能过程，留空待 AI 填充描述。"""
+    """生成 gen-spec-spec-功能需求章节-模板.md：列出所有 L3 模块及其功能过程，留空待 AI 填充描述。"""
     rows = _parse_module_tree_md(tree_md_path)
     meta = _parse_meta_md(meta_md_path)
     project_name = meta.get("工单标题", "") or meta.get("1、工单需求-元数据录入.工单标题", "")
@@ -455,7 +455,7 @@ def ai_fill_spec_md(
     model: str = "",
     base_url: str = "",
 ) -> str:
-    """AI 读取 spec-功能需求章节-模板.md，逐个功能过程完善描述。
+    """AI 读取 gen-spec-spec-功能需求章节-模板.md，逐个功能过程完善描述。
 
     对每个（待 AI 填充）标记，取其上方功能过程的名称和原文描述，
     调用 AI 生成更完整、更规范的自然语言描述，替换标记。
@@ -545,7 +545,7 @@ def generate_spec_docx_from_md(
         template_path: 模板 docx 路径
         output_path: 输出 docx 路径
         meta_md_path: AI填充文档元数据.md 路径
-        tree_md_path: 功能清单-模块树.md 路径
+        tree_md_path: gen-basedata-功能清单-模块树.md 路径
         filled_md_path: AI填充后的 spec MD 路径（可选）
 
     Returns:

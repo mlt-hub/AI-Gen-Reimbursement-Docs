@@ -76,7 +76,8 @@ class TestParseMdToItems:
             assert "操作员" in item.user
             assert "后台管理员" in item.user
             assert item.trigger == "用户点击注册按钮"
-            assert item.total_cfp() == 4
+            # 4 movements: 3 新增(×1) + 1 复用(×1/3) = 3.333...
+            assert abs(item.total_cfp() - (3 + 1/3)) < 0.01
             assert item.movements[0].sub_process == "接收注册请求"
             assert item.movements[0].move_type == "E"
         finally:

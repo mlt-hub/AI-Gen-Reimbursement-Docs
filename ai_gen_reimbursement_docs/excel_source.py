@@ -43,7 +43,7 @@ def _key_value_sheet(ws: "openpyxl.worksheet.worksheet.Worksheet") -> dict[str, 
 
 
 def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
-    """读取功能清单.xlsx，生成功能清单-模块树.md 和 录入文档元数据-模板.md。
+    """读取功能清单.xlsx，生成gen-basedata-功能清单-模块树.md 和 gen-basedata-录入文档元数据-模板.md。
 
     Args:
         excel_path: 功能清单.xlsx 路径
@@ -107,9 +107,9 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
         "功能过程（个数）": str(len({r[6] for r in func_rows if r[6]})),
     }
 
-    # ========== 生成 功能清单-模块树.md ==========
+    # ========== 生成 gen-basedata-功能清单-模块树.md ==========
 
-    md_tree_path = os.path.join(output_dir, '功能清单-模块树.md')
+    md_tree_path = os.path.join(output_dir, 'gen-basedata-功能清单-模块树.md')
     with open(md_tree_path, 'w', encoding='utf-8') as f:
         f.write("# 功能清单模块树\n\n")
         f.write(f"**来源文件**：{os.path.basename(excel_path)}\n")
@@ -124,9 +124,9 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
     logger.info(f"功能清单模块树已生成: {md_tree_path}")
 
-    # ========== 生成 录入文档元数据-模板.md ==========
+    # ========== 生成 gen-basedata-录入文档元数据-模板.md ==========
 
-    md_meta_path = os.path.join(output_dir, '录入文档元数据-模板.md')
+    md_meta_path = os.path.join(output_dir, 'gen-basedata-录入文档元数据-模板.md')
     with open(md_meta_path, 'w', encoding='utf-8') as f:
         f.write("# 文档元数据\n\n")
         f.write(f"**来源文件**：{os.path.basename(excel_path)}\n")
@@ -206,7 +206,7 @@ def read_fpa_xlsx_sum(fpa_xlsx_path: str) -> float:
 
 
 def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
-    """验证功能清单-模块树.md 的统计信息与录入文档元数据-模板.md 中的期望值一致。
+    """验证gen-basedata-功能清单-模块树.md 的统计信息与gen-basedata-录入文档元数据-模板.md 中的期望值一致。
 
     读取模块树 MD 表格，统计入口/L1/L2/L3/功能过程数，
     与文档元数据中 ## 9、测试元数据自动统计 进行对比。

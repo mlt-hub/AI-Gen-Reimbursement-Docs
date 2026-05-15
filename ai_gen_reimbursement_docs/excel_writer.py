@@ -225,10 +225,10 @@ def generate_cosmic_xlsx_from_md(
             # Apply template row 6 format（跳过 fill，避免空单元格带底色）
             _apply_style(cell, tmpl_format_row6[col_idx], skip_fill=True)
 
-            # CFP 列：绿色底色 + 分数格式（复用=1/3时显示分数）
+            # CFP 列：绿色底色 + 整数/分数格式（1→"1"，1/3→"1/3"）
             if col_idx == COL_FP_CFP:
                 cell.fill = _CFP_FILL
-                cell.number_format = '[=1]0;[=0]0;# ?/?'
+                cell.number_format = '# ?/?'
 
             # Long text columns: left-align
             if col_idx in FP_LEFT_ALIGN_COLS:
@@ -383,9 +383,12 @@ def generate_cosmic_xlsx_from_md(
                 for ph, replacement in meta.items():
                     val = val.replace('${' + ph + '}', replacement)
             ws.cell(row=6, column=col_idx, value=val)
-        # 应用模板第6行的原始格式
+        # 应用模板第6行的原始格式（CFP 列额外加绿色底色和分数格式）
         for col_idx in row6_all_values:
             _apply_style(ws.cell(row=6, column=col_idx), tmpl_format_row6.get(col_idx, {}), skip_fill=True)
+        if COL_FP_CFP in row6_all_values:
+            ws.cell(row=6, column=COL_FP_CFP).fill = _CFP_FILL
+            ws.cell(row=6, column=COL_FP_CFP).number_format = '# ?/?'
 
     try:
         wb.save(output_path)

@@ -1,11 +1,7 @@
 {
   "permissions": {
-    "additionalDirectories": [
-      "F:\\mlt\\mlt-tests\\AI-Cosmic",
-      "F:\\mlt\\mlt-projects\\ai_cosmic"
-    ],
     "allow": [
-	      "Bash(python *)",
+      "Bash(python *)",
       "Bash(mkdir -p d:/mlt/ws_tool/help)",
       "Bash(mv d:/mlt/ws_tool/config/docx_style_reference.docx d:/mlt/ws_tool/help/)",
       "Bash(python -c ' *)",
@@ -28,7 +24,16 @@
       "Bash(python -m ai_gen_reimbursement_docs.main --from-excel \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/products/test_out\")",
       "Bash(python -m ai_gen_reimbursement_docs.main --from-excel \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/4/out_test\")",
       "Bash(python -m ai_gen_reimbursement_docs.main --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/tmp/out_test\")",
-      "Bash(python -m ai_gen_reimbursement_docs.main --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/tmp/out2\")"
+      "Bash(python -m ai_gen_reimbursement_docs.main --from-excel \"data/功能清单-录入-模板.xlsx\" --gen-spec --output-dir \"F:/tmp/out2\")",
+      "Bash(python3 -c \"from ai_gen_reimbursement_docs.gen_spec import _set_update_fields_on_open, generate_spec_docx_from_md; print\\('gen_spec OK'\\)\")",
+      "Bash(python3 -c \"from ai_gen_reimbursement_docs.config_utils import load_spec_remind_update_toc; print\\(f'remind_update_toc 默认值: {load_spec_remind_update_toc\\(\\)}'\\)\")",
+      "Bash(python3 -c \"from ai_gen_reimbursement_docs.config_utils import _get_system_config_value; print\\(_get_system_config_value\\('spec_remind_update_toc', 'NOTFOUND'\\)\\)\")",
+      "Read(//c/Users/Administrator/.cosmic-tool/**)",
+      "Bash(python3 -c \"from ai_gen_reimbursement_docs.main import main; from ai_gen_reimbursement_docs.gen_spec import generate_spec_docx_from_md; from ai_gen_reimbursement_docs.gen_xlsx import generate_fpa_xlsx_from_md; from ai_gen_reimbursement_docs.excel_source import generate_md_files; print\\('语法检查通过'\\)\")"
+    ],
+    "additionalDirectories": [
+      "F:\\mlt\\mlt-tests\\AI-Cosmic",
+      "F:\\mlt\\mlt-projects\\ai_cosmic"
     ]
   },
   "_comment": "本地私有配置，包含命令权限白名单，不提交到 git"

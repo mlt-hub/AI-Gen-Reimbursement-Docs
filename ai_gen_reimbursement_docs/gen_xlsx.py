@@ -304,7 +304,7 @@ def init_fpa_template_md(
     """生成 FPA 模板 MD（规则骨架，F/G 列留空待 AI 填充）。
 
     Args:
-        summary_md_path: 非空时同步写入 FPA工作量-总和.md（调整值×要素数量 的求和）
+        summary_md_path: 非空时同步写入 gen-fpa-FPA工作量-总和.md（调整值×要素数量 的求和）
     """
     logger.info("生成 FPA 模板 MD...")
     meta = _load_meta_md(meta_md_path)
@@ -618,7 +618,7 @@ def generate_list_xlsx_from_md(
 ) -> str:
     """生成项目需求清单.xlsx。
 
-    cfp_total: 送审功能点 = FPA工作量-总和.md 的原始值
+    cfp_total: 送审功能点 = gen-fpa-FPA工作量-总和.md 的原始值
     fpa_reduced: 送审工作量 = FPA 核减后的工作量
     """
     logger.info("开始生成项目需求清单.xlsx...")

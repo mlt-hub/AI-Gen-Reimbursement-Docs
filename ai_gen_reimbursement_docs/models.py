@@ -39,9 +39,15 @@ class CosmicItem:
     movements: list[DataMovement] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
-    def total_cfp(self) -> int:
-        """Calculate total CFP (each data movement = 1 for '新增')."""
-        return len(self.movements)
+    def total_cfp(self) -> float:
+        """Calculate total CFP（新增=1，复用=1/3，与 Excel 公式一致）。"""
+        total = 0.0
+        for m in self.movements:
+            if m.reuse == "复用":
+                total += 1.0 / 3.0
+            else:
+                total += 1.0
+        return total
 
     def to_rows(self) -> list[dict]:
         """Convert to flat row dicts for Excel output。无 movements 时至少生成一行，显示 L1/L2/L3/功能过程。"""

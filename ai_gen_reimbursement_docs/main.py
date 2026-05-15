@@ -135,9 +135,11 @@ logger, _run_log_path = _init_global_logging()
 def _get_version() -> str:
     """Read version from pyproject.toml (single source of truth)."""
     import tomllib
-    import re
     try:
+        # 先尝试项目根目录（开发模式），再尝试 _MEIPASS（PyInstaller 打包）
         toml_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'pyproject.toml')
+        if not os.path.exists(toml_path):
+            toml_path = os.path.join(_project_root(), 'pyproject.toml')
         with open(toml_path, 'rb') as f:
             return tomllib.load(f)['project']['version']
     except Exception:
@@ -219,7 +221,7 @@ def _build_modules_from_md(md_path: str, docx_path: str = "",
 
 
 def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
-    """从功能清单-模块树.md 的表格格式构建 FunctionModule 列表。
+    """从gen-basedata-功能清单-模块树.md 的表格格式构建 FunctionModule 列表。
 
     表格列：入口 | 一级模块 | 二级模块 | 三级模块 | ... | 功能过程 | ...
     自动去重并构建 L1→L2→L3 层级，功能过程作为 L3 的 children。
@@ -310,7 +312,7 @@ def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
 
 
 def _read_project_name(meta_md_path: str) -> str:
-    """从文档元数据.md 读取项目名称（工单标题）。"""
+    """从gen-basedata-录入文档元数据-模板.md 读取项目名称（工单标题）。"""
     try:
         with open(meta_md_path, encoding='utf-8') as f:
             for line in f:
@@ -325,11 +327,11 @@ def _read_project_name(meta_md_path: str) -> str:
 
 def _ensure_basedata(excel_path: str, md_dir: str, meta_md: str, tree_md: str,
                      meta_md_tpl: str = "") -> None:
-    """确保数据源中间文件存在（功能清单-模块树.md + 录入文档元数据-模板.md）。"""
+    """确保数据源中间文件存在（gen-basedata-功能清单-模块树.md + gen-basedata-录入文档元数据-模板.md）。"""
     tpl = meta_md_tpl or meta_md
     needs_md = not (os.path.exists(tpl) and os.path.exists(tree_md))
     if needs_md:
-        logger.info("第1步: 生成功能清单-模块树.md 和 录入文档元数据-模板.md...")
+        logger.info("第1步: 生成gen-basedata-功能清单-模块树.md 和 gen-basedata-录入文档元数据-模板.md...")
         generate_md_files(excel_path, md_dir)
     verify_module_tree_stats(tree_md, tpl)
 
@@ -383,36 +385,54 @@ def _resolve_fpa_sum(fpa_sum_md_path: str) -> float:
     return 0
 
 
+def _read_md_value(path: str, pattern: str) -> float:
+    """从 MD 文件中按正则提取数值，文件不存在返回 0。"""
+    import re
+    if not os.path.exists(path):
+        return 0.0
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            m = re.search(pattern, line)
+            if m:
+                return float(m.group(1))
+    return 0.0
+
+
 def _prompt_list_values(fpa_sum_md_path: str) -> tuple[float, float]:
     """提示用户输入送审功能点和送审工作量（gen-list 使用）。
 
-    从 FPA工作量-总和.md 读取默认值，用户可回车使用默认或输入新值。
+    从 gen-cosmic-CFP-总和.md / gen-fpa-FPA工作量-总和.md 读取默认值。
     返回 (cfp_total, fpa_reduced)。
     """
-    import re as _re_plv
-    _fpa_raw = 0.0
-    if os.path.exists(fpa_sum_md_path):
-        with open(fpa_sum_md_path, encoding='utf-8') as _f:
-            for _line in _f:
-                _m = _re_plv.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', _line)
-                if _m:
-                    _fpa_raw = float(_m.group(1))
-                    break
+    _cfp_raw = _read_md_value(
+        os.path.join(os.path.dirname(fpa_sum_md_path), 'gen-cosmic-CFP-总和.md'),
+        r'CFP 总和[：:]\s*([\d.]+)')
+    _fpa_raw = _read_md_value(fpa_sum_md_path,
+        r'FPA工作量（人/天）[：:]\s*([\d.]+)')
 
     # 送审功能点
-    if _fpa_raw > 0:
-        _prompt = f"\n请输入送审功能点（直接回车使用FPA工作量总和：{_fpa_raw}）: "
+    if _cfp_raw > 0:
+        _prompt = f"\n请输入送审功能点（直接回车使用CFP总和：{_cfp_raw}）: "
     else:
         _prompt = "\n请输入送审功能点: "
     try:
         _inp = input(_prompt).strip()
-        cfp_total = float(_inp) if _inp else _fpa_raw
+        cfp_total = float(_inp) if _inp else _cfp_raw
     except (EOFError, OSError, ValueError):
-        cfp_total = _fpa_raw
+        cfp_total = _cfp_raw
         logger.info(f"送审功能点: {cfp_total}（默认值）")
 
-    # 送审工作量 = FPA 核减后
-    fpa_reduced = _resolve_fpa_sum(fpa_sum_md_path)
+    # 送审工作量
+    if _fpa_raw > 0:
+        _prompt2 = f"请输入送审工作量（直接回车使用FPA工作量总和：{_fpa_raw}）: "
+    else:
+        _prompt2 = "请输入送审工作量: "
+    try:
+        _inp2 = input(_prompt2).strip()
+        fpa_reduced = float(_inp2) if _inp2 else _fpa_raw
+    except (EOFError, OSError, ValueError):
+        fpa_reduced = _fpa_raw
+        logger.info(f"送审工作量: {fpa_reduced}（默认值）")
 
     logger.info(f"送审功能点: {cfp_total}, 送审工作量: {fpa_reduced}")
     return cfp_total, fpa_reduced
@@ -480,6 +500,15 @@ def _write_combined_ai_log(stage: str = ""):
             logger.info(f"{out_name} 追加 {new_count} 条新记录")
 
 
+def _write_cfp_sum(md_dir: str, total: float) -> None:
+    """将 CFP 总和写入 gen-cosmic-CFP-总和.md。"""
+    path = os.path.join(md_dir, 'gen-cosmic-CFP-总和.md')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(f"# CFP 总和\n\n")
+        f.write(f"CFP 总和: {total}\n")
+    logger.info(f"CFP 总和已写入: {path}")
+
+
 def _play_notify_sound():
     """根据 notify_sound 配置播放提示音。"""
     try:
@@ -510,7 +539,7 @@ def _play_notify_sound():
 
 
 def _collect_l3_names(tree_md: str) -> list[str]:
-    """从功能清单-模块树.md 收集所有去重的三级模块名（保持原始顺序）。"""
+    """从gen-basedata-功能清单-模块树.md 收集所有去重的三级模块名（保持原始顺序）。"""
     from ai_gen_reimbursement_docs.md_table import parse_md_table_row
     names: list[str] = []
     seen: set[str] = set()
@@ -561,10 +590,10 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
 
 def _ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url: str,
                      tree_md: str = "") -> str:
-    """读取录入文档元数据-模板.md，AI 填充 #AI生成# 标记，写入 AI填充-录入文档元数据.md。
+    """读取gen-basedata-录入文档元数据-模板.md，AI 填充 #AI生成# 标记，写入 gen-basedata-AI填充-录入文档元数据.md。
 
     处理 #AI生成#（包含 #AI生成-XXX# 格式），跳过 #AI补充#。
-    tree_md: 功能清单-模块树.md 路径，用于解析 ${三级模块} 等占位符。
+    tree_md: gen-basedata-功能清单-模块树.md 路径，用于解析 ${三级模块} 等占位符。
     """
     from ai_gen_reimbursement_docs.excel_source import strip_ai_marker, replace_placeholders
     from ai_gen_reimbursement_docs.md_table import parse_md_table_row
@@ -690,7 +719,7 @@ def _build_parser() -> argparse.ArgumentParser:
       # (快捷) 一键直出：docx → LLM → Excel
       python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
 
-      # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含功能清单-模块树.md和文档元数据.md）
+      # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含gen-basedata-功能清单-模块树.md和gen-basedata-录入文档元数据-模板.md）
       python -m ai_gen_reimbursement_docs.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
 
       # 仅查看模块树
@@ -770,7 +799,7 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='从功能清单生成 项目需求说明书.docx（无依赖，可随时执行）')
 
     parser.add_argument('--gen-basedata', action='store_true',
-                        help='第0步：生成功能清单-模块树.md 和 文档元数据.md')
+                        help='第0步：生成gen-basedata-功能清单-模块树.md 和 gen-basedata-录入文档元数据-模板.md')
 
     parser.add_argument('--gen-all', action='store_true',
                         help='全流程：按依赖顺序自动执行 --gen-basedata → --gen-fpa → --gen-spec → --gen-cosmic → --gen-list')
@@ -817,8 +846,9 @@ def main():
 
     # 版本信息
     ver = _get_version()
-    logger.info(f"AI生成项目报账文档 v{ver}")
-    logger.debug(f"版本: v{ver}")
+    run_mode = "exe" if getattr(sys, 'frozen', False) else "源码"
+    run_path = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(__file__))
+    logger.info(f"AI生成项目报账文档 v{ver} ({run_mode}: {run_path})")
 
     # 当前配置目录
     from ai_gen_reimbursement_docs.config_utils import _config_dir
@@ -1279,7 +1309,7 @@ def main():
         _p_title = args.project_name.strip() if args.project_name else ''
         if not _p_title:
             _tmp_md_dir = os.path.join(os.path.dirname(os.path.abspath(excel_path)) if not args.output_dir else args.output_dir, 'md')
-            _tmp_md_path = os.path.join(_tmp_md_dir, '录入文档元数据-模板.md')
+            _tmp_md_path = os.path.join(_tmp_md_dir, 'gen-basedata-录入文档元数据-模板.md')
             if os.path.exists(_tmp_md_path):
                 import re as _re_t
                 with open(_tmp_md_path, encoding='utf-8') as _f_t:
@@ -1357,19 +1387,19 @@ def main():
         # 数据源中间文件路径
         md_dir = os.path.join(out_dir, 'md')
         os.makedirs(md_dir, exist_ok=True)
-        tree_md = os.path.join(md_dir, '功能清单-模块树.md')
-        meta_md_tpl = os.path.join(md_dir, '录入文档元数据-模板.md')
+        tree_md = os.path.join(md_dir, 'gen-basedata-功能清单-模块树.md')
+        meta_md_tpl = os.path.join(md_dir, 'gen-basedata-录入文档元数据-模板.md')
 
         # 是否需要先生成数据源中间文件
         needs_md = not (os.path.exists(meta_md_tpl) and os.path.exists(tree_md))
         if needs_md:
-            logger.info("第1步: 生成功能清单-模块树.md 和 录入文档元数据-模板.md...")
+            logger.info("第1步: 生成gen-basedata-功能清单-模块树.md 和 gen-basedata-录入文档元数据-模板.md...")
             generate_md_files(excel_path, md_dir)
         else:
             logger.info("数据源中间文件已存在，跳过生成")
 
         # 设置 meta_md（优先 AI填充版，无则回退模板）
-        meta_md = os.path.join(md_dir, 'AI填充-录入文档元数据.md')
+        meta_md = os.path.join(md_dir, 'gen-basedata-AI填充-录入文档元数据.md')
         if not os.path.exists(meta_md) and os.path.exists(meta_md_tpl):
             meta_md = meta_md_tpl
 
@@ -1383,8 +1413,8 @@ def main():
             if not _doc_name.startswith("【提醒】请手动更新整个目录"):
                 doc_template = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
                 logger.info(f"需求说明书文件名已添加提醒前缀")
-        fpa_sum_md = os.path.join(md_dir, 'FPA工作量-总和.md')
-        meta_filled_md = os.path.join(md_dir, 'AI填充-录入文档元数据.md')
+        fpa_sum_md = os.path.join(md_dir, 'gen-fpa-FPA工作量-总和.md')
+        meta_filled_md = os.path.join(md_dir, 'gen-basedata-AI填充-录入文档元数据.md')
 
         # AI 配置
         api_key = args.api_key or load_api_key()
@@ -1395,31 +1425,34 @@ def main():
         if not os.path.exists(meta_md) and os.path.exists(meta_md_tpl):
             meta_md = meta_md_tpl
 
-        # 验证模块树统计（功能清单-模块树.md ↔ 录入文档元数据-模板.md ## 9）
+        # 验证模块树统计（gen-basedata-功能清单-模块树.md ↔ gen-basedata-录入文档元数据-模板.md ## 9）
 
         verify_module_tree_stats(tree_md, meta_md)
         # 读取模板路径配置（功能清单-录入模板.xlsx → sheet 8）
         tpl_cfg = read_template_config(excel_path)
-        _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         def _tpl(key: str, fallback: str, cli_arg: str = "") -> str:
             """解析模板路径，优先级：CLI > Excel sheet 8 > data/out_templates/。"""
+            _source = ""
             if cli_arg:
                 cli_val = getattr(args, cli_arg, "").strip()
                 if cli_val:
                     if os.path.exists(cli_val):
+                        _source = "CLI"
+                        logger.info("模板 %s: %s（来源: %s）", key, cli_val, _source)
                         return cli_val
                     logger.warning(f"CLI 指定的模板路径不存在: {cli_val}")
             cfg_path = tpl_cfg.get(key, "")
             if cfg_path:
-                _from_proj = os.path.join(_project_root, cfg_path)
+                _from_proj = os.path.join(_project_root(), cfg_path)
                 if os.path.exists(_from_proj):
+                    _source = "Sheet 8"
+                    logger.info("模板 %s: %s（来源: %s）", key, _from_proj, _source)
                     return _from_proj
                 logger.warning("Sheet 8 中 %s 模板路径不存在: %s，请检查配置", key, _from_proj)
             else:
                 logger.warning("Sheet 8 中未配置 %s 模板路径，请在 Excel 模板 Sheet「8、各文档-模板路径录入」中补充", key)
-            # 无配置或路径无效时，提示用户后继续（后续 openpyxl 会报 FileNotFoundError）
-            return os.path.join(_project_root, 'data', 'out_templates', fallback)
+            return ""
 
         fpa_src_template = _tpl('FPA工作量评估-模板', 'FPA工作量评估-输出模板.xlsx', 'fpa_out_template')
         cosmic_src_template = _tpl('项目功能点拆分表-模板', '项目功能点拆分表-输出模板.xlsx', 'cosmic_out_template')
@@ -1447,9 +1480,9 @@ def main():
                 meta_md = meta_filled_md
             fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
 
-            # Step 1: FPA（MD → 模板MD → AI填充-FPA.md → Excel）
-            fpa_md = os.path.join(md_dir, 'FPA-模板.md')
-            fpa_filled_md = os.path.join(md_dir, 'AI填充-FPA.md')
+            # Step 1: FPA（MD → 模板MD → gen-fpa-AI填充-FPA.md → Excel）
+            fpa_md = os.path.join(md_dir, 'gen-fpa-FPA-模板.md')
+            fpa_filled_md = os.path.join(md_dir, 'gen-fpa-AI填充-FPA.md')
             if not os.path.exists(fpa_template):
                 logger.info("第1步：FPA → 模板 MD...")
                 init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
@@ -1468,7 +1501,7 @@ def main():
                 generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_template_file, fpa_template)
             else:
                 logger.info("FPA Excel 已存在，跳过")
-            # 送审工作量 = FPA工作量-总和.md 的值
+            # 送审工作量 = gen-fpa-FPA工作量-总和.md 的值
             fpa_reduced = 0.0
             if os.path.exists(fpa_sum_md):
                 import re as _re_fpa3
@@ -1483,8 +1516,8 @@ def main():
             # Step 2: 需求说明书
             if not os.path.exists(doc_template):
                 logger.info("第2步：生成 项目需求说明书.docx...")
-                spec_md = os.path.join(md_dir, 'spec-功能需求章节-模板.md')
-                spec_filled_md = os.path.join(md_dir, 'AI填充-spec-功能需求章节.md')
+                spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
+                spec_filled_md = os.path.join(md_dir, 'gen-spec-AI填充-spec-功能需求章节.md')
                 if not os.path.exists(spec_filled_md):
                     logger.info("  步骤2a: 生成 spec 模板 MD...")
                     init_spec_template_md(tree_md, meta_md, spec_md)
@@ -1510,8 +1543,8 @@ def main():
                 modules = _build_modules_from_tree_md(tree_md)
                 project = modules[0].name if modules else "项目"
 
-                init_md_path = os.path.join(md_dir, 'cosmic模板.md')
-                filled_md_path = os.path.join(md_dir, 'AI填充cosmic.md')
+                init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
+                filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
                 export_empty_md(modules, project, init_md_path)
 
                 if api_key:
@@ -1535,6 +1568,7 @@ def main():
                     generate_cosmic_xlsx_from_md(cosmic_src_template, cosmic_template, items, meta=_meta)
                     total_cfp = sum(item.total_cfp() for item in items)
                     logger.info(f"  CFP 总和: {total_cfp}")
+                    _write_cfp_sum(md_dir, total_cfp)
                     _target = _meta.get("建设目标", "")
                     _necessity = _meta.get("建设必要性", "")
                     if _target or _necessity:
@@ -1548,17 +1582,11 @@ def main():
             else:
                 logger.info("项目功能点拆分表.xlsx 已存在，跳过")
 
-            # 送审功能点 = FPA 工作量（从 FPA工作量-总和.md 读原始值）
-            cfp_total = 0.0
-            if os.path.exists(fpa_sum_md):
-                import re as _re_fpa
-                with open(fpa_sum_md, encoding='utf-8') as _f:
-                    for _line in _f:
-                        _m = _re_fpa.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', _line)
-                        if _m:
-                            cfp_total = float(_m.group(1))
-                            break
-            logger.info(f"送审功能点（FPA工作量）: {cfp_total}")
+            # 送审功能点 = CFP 总和（从 gen-cosmic-CFP-总和.md 读）
+            cfp_total = _read_md_value(
+                os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
+                r'CFP 总和[：:]\s*([\d.]+)')
+            logger.info(f"送审功能点（CFP总和）: {cfp_total}")
 
             # Step 4: 需求清单
             if not os.path.exists(require_template):
@@ -1590,7 +1618,7 @@ def main():
 
         # --gen-basedata
         if args.gen_basedata:
-            logger.info("第1步: 生成功能清单-模块树.md 和 录入文档元数据-模板.md...")
+            logger.info("第1步: 生成gen-basedata-功能清单-模块树.md 和 gen-basedata-录入文档元数据-模板.md...")
             generate_md_files(excel_path, md_dir)
             verify_module_tree_stats(tree_md, meta_md_tpl)
 
@@ -1604,7 +1632,7 @@ def main():
                     import shutil
                     shutil.copy2(meta_md_tpl, meta_filled_md)
             elif os.path.exists(meta_filled_md):
-                logger.info("AI填充-录入文档元数据.md 已存在，跳过")
+                logger.info("gen-basedata-AI填充-录入文档元数据.md 已存在，跳过")
             else:
                 logger.warning("未设置 API Key，跳过 AI 填充")
                 import shutil
@@ -1618,7 +1646,7 @@ def main():
             _play_notify_sound()
             return
 
-        # --gen-fpa: MD → FPA模板MD → AI填充-FPA.md → Excel
+        # --gen-fpa: MD → FPA模板MD → gen-fpa-AI填充-FPA.md → Excel
         if args.gen_fpa:
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
             if api_key and (not os.path.exists(meta_filled_md)):
@@ -1633,8 +1661,8 @@ def main():
             if os.path.exists(meta_filled_md):
                 meta_md = meta_filled_md
             fpa_template = _resolve_output_filename("3、FPA工作量评估-元数据录入", fpa_template, target_dir=out_dir)
-            fpa_md = os.path.join(md_dir, 'FPA-模板.md')
-            fpa_filled_md = os.path.join(md_dir, 'AI填充-FPA.md')
+            fpa_md = os.path.join(md_dir, 'gen-fpa-FPA-模板.md')
+            fpa_filled_md = os.path.join(md_dir, 'gen-fpa-AI填充-FPA.md')
             logger.info("第1步: 生成 FPA 模板 MD...")
             init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
 
@@ -1665,8 +1693,8 @@ def main():
             _ensure_basedata(excel_path, md_dir, meta_md, tree_md, meta_md_tpl)
             _resolve_fpa_sum(fpa_sum_md)
 
-            init_md_path = os.path.join(md_dir, 'cosmic模板.md')
-            filled_md_path = os.path.join(md_dir, 'AI填充cosmic.md')
+            init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
+            filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
             export_empty_md(modules, project, init_md_path)
 
             if api_key:
@@ -1685,6 +1713,7 @@ def main():
                     generate_cosmic_xlsx_from_md(cosmic_src_template, cosmic_template, items, meta=_meta)
                     total_cfp = sum(item.total_cfp() for item in items)
                     logger.info(f"CFP 总和: {total_cfp}")
+                    _write_cfp_sum(md_dir, total_cfp)
                     _target = _meta.get("建设目标", "")
                     _necessity = _meta.get("建设必要性", "")
                     if _target or _necessity:
@@ -1723,8 +1752,8 @@ def main():
             if os.path.exists(meta_filled_md):
                 meta_md = meta_filled_md
 
-            spec_md = os.path.join(md_dir, 'spec-功能需求章节-模板.md')
-            spec_filled_md = os.path.join(md_dir, 'AI填充-spec-功能需求章节.md')
+            spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
+            spec_filled_md = os.path.join(md_dir, 'gen-spec-AI填充-spec-功能需求章节.md')
             if not os.path.exists(spec_filled_md):
                 logger.info("生成 spec 模板 MD...")
                 init_spec_template_md(tree_md, meta_md, spec_md)
@@ -1753,7 +1782,8 @@ def main():
 def _project_root() -> str:
     """Get project root dir (works for both source and PyInstaller exe)."""
     if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
+        # exe 所在目录（模板放同级 data/out_templates/ 下）
+        return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(__file__))
 
 
