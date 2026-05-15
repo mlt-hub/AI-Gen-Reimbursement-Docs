@@ -7,7 +7,7 @@ from datetime import date
 from typing import Optional
 
 from ai_gen_reimbursement_docs.models import CosmicItem, DataMovement, FunctionModule
-from ai_gen_reimbursement_docs.docx_parser import get_module_by_name
+from ai_gen_reimbursement_docs.module_utils import get_module_by_name
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.md_handler')
 

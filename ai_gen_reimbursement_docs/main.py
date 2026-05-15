@@ -1,19 +1,14 @@
 """AI生成项目报账文档 - CLI入口
 
-推荐工作流（MD中间件模式）:
-  0. python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --init-md 需求书_拆分表.md   (含原文转MD)
-  1. python -m ai_gen_reimbursement_docs.main --fill-md 需求书_拆分表.md
-     (编辑拆分表.md 人工审核修正)
-  2. python -m ai_gen_reimbursement_docs.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
+推荐工作流（Excel 功能清单）:
+  python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-all
 
-快捷模式（一键全流程）:
-  python -m ai_gen_reimbursement_docs.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
-
-一键直出（跳过MD中间文件）:
-  python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
-
-批量处理Word文件:
-  python -m ai_gen_reimbursement_docs.main --docx-all
+分步执行:
+  python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-basedata
+  python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-fpa
+  python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-cosmic
+  python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-list
+  python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-spec
 """
 
 import argparse
@@ -163,61 +158,6 @@ def _section(title: str):
     logger.info(title)
     logger.info(sep)
     logger.debug("--- section start ---")
-
-
-def _build_modules(docx_path: str, use_ai: bool,
-                   api_key: str = "", model: str = "",
-                   base_url: str = "",
-                   mapping_name: str = "",
-                   chapter_detection: str = "") -> list[FunctionModule]:
-    """Build module tree from docx; fall back to AI if configured."""
-    modules = build_module_tree(docx_path, mapping_name=mapping_name,
-                                 chapter_detection=chapter_detection)
-    _verify_against_json(modules, docx_path)
-
-    l1 = [m for m in modules if m.level == 1]
-    l2 = [m for m in modules if m.level == 2]
-    l3 = [m for m in modules if m.level == 3]
-    l3_parents_valid = all(
-        not m.parent or any(p.name == m.parent for p in l2) or any(gp.name == m.parent for gp in l1)
-        for m in l3
-    )
-    tree_ok = len(l1) > 0 and len(l3) > 0 and l3_parents_valid
-
-    if not tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
-        logger.warning(f"硬编码解析层级不完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），尝试AI解析...")
-        modules = ai_build_module_tree(
-            docx_path=docx_path,
-            api_key=api_key or None,
-            model=model or "",
-            base_url=base_url or None,
-        )
-    elif tree_ok and (use_ai or load_business_config().get('parse_docx_by_ai', False)):
-        logger.info(f"硬编码解析层级完整（L1:{len(l1)} L2:{len(l2)} L3:{len(l3)}），跳过AI解析")
-    return modules
-
-
-def _build_modules_from_md(md_path: str, docx_path: str = "",
-                            mapping_name: str = "",
-                            chapter_detection: str = "") -> list[FunctionModule]:
-    """Build module tree from docx. Falls back to Markdown if no docx."""
-    if docx_path:
-        from ai_gen_reimbursement_docs.docx_parser import build_module_tree
-        modules = build_module_tree(docx_path, mapping_name=mapping_name,
-                                    chapter_detection=chapter_detection)
-        _verify_against_json(modules, docx_path)
-        return modules
-    modules = build_modules_from_md(md_path)
-    # 标题解析结果可能为空或错误（如把文档标题当作 L1），
-    # 检测是否有 L2/L3 层级，无则尝试表格格式解析
-    has_hierarchy = any(m.level >= 2 for m in modules)
-    if not has_hierarchy:
-        table_modules = _build_modules_from_tree_md(md_path)
-        if table_modules:
-            modules = table_modules
-    if not modules:
-        logger.warning("Markdown中未解析到模块层次，结果可能为空")
-    return modules
 
 
 def _build_modules_from_tree_md(md_path: str) -> list[FunctionModule]:
@@ -671,116 +611,34 @@ def _call_llm_once(prompt: str, api_key: str, model: str, base_url: str,
         return ""
 
 
-def _verify_against_json(modules: list, docx_path: str) -> None:
-    """Compare parsing result with expected counts from a JSON file."""
-    json_path = os.path.splitext(docx_path)[0] + '.json'
-    if not os.path.exists(json_path):
-        logger.info(f"未找到预期结果文件: [{os.path.basename(json_path)}]，跳过比较")
-        return
-    try:
-        import json
-        with open(json_path, 'r', encoding='utf-8') as f:
-            expected = json.load(f)
-        actual = {
-            'L1': len([m for m in modules if m.level == 1]),
-            'L2': len([m for m in modules if m.level == 2]),
-            'L3': len([m for m in modules if m.level == 3]),
-            'proc': sum(len(m.children) for m in modules if m.level == 3),
-        }
-        diffs = []
-        for key in ('L1', 'L2', 'L3', 'proc'):
-            exp = expected.get(key)
-            if exp is None:
-                continue
-            act = actual[key]
-            if act != exp:
-                diffs.append(f"{key}: 预期={exp} 实际={act}")
-        if diffs:
-            logger.warning(f"解析结果与JSON不一致: {'; '.join(diffs)}")
-        else:
-            logger.info(f"解析结果同JSON文件一致")
-    except Exception as e:
-        logger.warning(f"读取JSON比较文件失败: {e}")
-
-
 def _build_parser() -> argparse.ArgumentParser:
     """构建 CLI 参数解析器。"""
     parser = argparse.ArgumentParser(
         description="AI生成项目报账文档 — 从功能清单自动生成全套报账交付物",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-    工作流示例:
-
-      # (推荐) MD中间件模式：docx → MD → 编辑MD → Excel
-      python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --init-md 需求书_拆分表.md
-      python -m ai_gen_reimbursement_docs.main --fill-md 需求书_拆分表.md
-      python -m ai_gen_reimbursement_docs.main --md 需求书_拆分表.md --template 模板.xlsx --output 结果.xlsx
-
-      # (快捷) 一键直出：docx → LLM → Excel
-      python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --template 模板.xlsx --output 结果.xlsx
-
-      # (快捷) 一键全流程：docx → MD → AI填充 → Excel（含gen-basedata-功能清单-模块树.md和gen-basedata-录入文档元数据-模板.md）
-      python -m ai_gen_reimbursement_docs.main --docx "需求书.docx" --template "模板.xlsx" --output "结果.xlsx" --all
-
-      # 仅查看模块树
-      python -m ai_gen_reimbursement_docs.main --docx 需求书.docx --show-tree
+        epilog="""工作流示例:
 
       # 初始化API Key配置
       python -m ai_gen_reimbursement_docs.main --init-config
 
-      # 批量处理当前目录下所有Word文件
-      python -m ai_gen_reimbursement_docs.main --docx-all
-
       # Excel 功能清单 → 全套交付物
       python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-all
+
+      # 分步执行
+      python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-basedata
+      python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-fpa
+      python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-cosmic
+      python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-list
+      python -m ai_gen_reimbursement_docs.main --from-excel 功能清单.xlsx --gen-spec
         """
     )
 
     # === CLI Arguments ===
-    parser.add_argument('--docx', '-d', default='',
-                        help='需求说明书 .docx 文件路径')
-
-    parser.add_argument('--init-md', nargs='?', const='', default=None,
-                        help='生成拆分表模板MD（含模块结构，数据表为空）；省略路径时从docx自动命名')
-
-    parser.add_argument('--fill-md', nargs='?', const='', default=None,
-                        help='AI填充COSMIC数据到模板MD；省略路径时从docx自动命名')
-
-    parser.add_argument('--md', nargs='?', const='', default=None,
-                        help='从MD文件生成Excel；省略路径时从docx自动查找')
-
-    parser.add_argument('--template', '-t', default='',
-                        help='功能点拆分表 .xlsx 模板文件路径（默认 data/out_templates/）')
-
-    parser.add_argument('--output', '-o', default='',
-                        help='输出 .xlsx 文件路径')
-
     parser.add_argument('--api-key', '-k', default='',
                         help='API Key（默认从 .env 读取）')
 
     parser.add_argument('--model', '-m', default='',
                         help='模型名称（默认从 .env 读取，否则 deepseek-v4-flash）')
-
-    parser.add_argument('--show-tree', '-s', action='store_true',
-                        help='仅显示模块树结构')
-
-    parser.add_argument('--no-llm', action='store_true',
-                        help='跳过AI阶段')
-
-    parser.add_argument('--parse-by-ai', action='store_true',
-                        help='使用AI解析模块层级（默认用硬编码解析器）')
-
-    parser.add_argument('--mapping', default='',
-                        help='指定层级映射名（来自 ~/.ai-gen-reimbursement-docs/docx_parse_mapping_rules.yaml 中的 mapping 名称）')
-
-    parser.add_argument('--chapter-detection', default='',
-                        help='指定章节检测配置名（来自 ~/.ai-gen-reimbursement-docs/docx_parse_mapping_rules.yaml 中的 章节检测 分组）')
-
-    parser.add_argument('--all', action='store_true',
-                        help='一键全流程: docx → MD → AI填充 → Excel')
-
-    parser.add_argument('--docx-all', action='store_true',
-                        help='批量处理当前目录下所有Word文件')
 
     # === Excel 功能清单 → 全套交付物 ===
     parser.add_argument('--from-excel', default='',
@@ -946,344 +804,6 @@ def main():
     logger.info(f"配置: MAX_TOKENS={load_max_tokens()}, CFP公式={load_cfp_formula()}")
     biz_cfg = load_business_config()
     logger.info(f"配置: REGENERATE_MD={biz_cfg['regenerate_md']}, ENABLE_AI_GENERATE_COSMIC={biz_cfg['enable_ai_generate_cosmic']}")
-
-    # === Show tree ===
-    if args.docx and args.show_tree:
-        modules = _build_modules(args.docx, args.parse_by_ai, api_key, model, base_url,
-                                  mapping_name=args.mapping, chapter_detection=args.chapter_detection)
-        project = get_project_name(args.docx)
-        logger.info(f"项目名称: {project}")
-        print_tree(modules)
-        logger.debug("show-tree completed")
-        return
-
-    # === 批量处理模式: 处理当前目录下所有 Word 文件 ===
-    if args.docx_all:
-        _section("批量处理模式（Word → AI → Excel）")
-        import glob
-        docx_files = [f for f in glob.glob("*.docx") + glob.glob("*.docm")
-                      if not f.startswith("~$")]
-        if not docx_files:
-            logger.warning("当前目录没有找到 docx 文件")
-            return
-
-        total = len(docx_files)
-        excel_ok: list[str] = []       # 成功生成 Excel 的 docx
-        processed_no_excel: list[str] = []  # 处理了但没生成 Excel
-        failed: list[str] = []         # 处理失败的 docx
-
-        # 加载业务配置（是否重新生成各阶段文件等）
-        from ai_gen_reimbursement_docs.config_utils import load_business_config
-        biz_config = load_business_config()
-        logger.info(f"  配置: ENABLE_AI_GENERATE_COSMIC={biz_config['enable_ai_generate_cosmic']}, "
-                    f"REGENERATE_ALL={biz_config['regenerate_all']}")
-
-        for idx, docx_path in enumerate(docx_files, 1):
-            base_name = os.path.splitext(docx_path)[0]
-            out_dir = os.path.abspath(base_name)
-            md_dir = os.path.join(out_dir, 'md')
-            log_dir = os.path.join(out_dir, 'log')
-
-            xlsx_path = _auto_output_path(docx_path)
-            out_xlsx = os.path.join(out_dir, os.path.basename(xlsx_path))
-            docx_name = os.path.splitext(os.path.basename(docx_path))[0]
-            md_raw = os.path.join(md_dir, f'{docx_name}_原文.md')
-            md_base = os.path.join(md_dir, f'{docx_name}_拆分表.md')
-            md_filled = os.path.join(md_dir, f'{docx_name}_AI填充cosmic.md')
-
-            os.makedirs(md_dir, exist_ok=True)
-            os.makedirs(log_dir, exist_ok=True)
-
-            logger.info(f"  [{idx}/{total}] {docx_path}")
-
-            # Reconfigure logging and AI response paths for this docx
-            docx_name = os.path.splitext(os.path.basename(docx_path))[0]
-            setup_logging(log_dir, docx_name)
-            os.environ['AI_REIMBURSEMENT_LOG_DIR'] = log_dir
-
-            try:
-                # --- Stage 0: docx → 原文 Markdown ---
-                if os.path.exists(md_raw) and not biz_config['regenerate_md']:
-                    logger.info(f"  原文MD已存在，跳过（REGENERATE_MD=false）")
-                else:
-                    convert_to_md(docx_path, md_raw, args.chapter_detection)
-                    logger.info(f"  原文MD已生成: {md_raw}")
-
-                # --- Stage 1: 原文 MD → 生成 COSMIC 模板 ---
-                if os.path.exists(md_base) and not biz_config['regenerate_md']:
-                    logger.info(f"  模板MD已存在，跳过（REGENERATE_MD=false）")
-                    modules = _build_modules_from_md(md_raw, docx_path, args.mapping, args.chapter_detection)
-                    project = get_project_name_from_md(md_raw)
-                else:
-                    modules = _build_modules_from_md(md_raw, docx_path, args.mapping, args.chapter_detection)
-                    project = get_project_name_from_md(md_raw)
-                    export_empty_md(modules, project, md_base)
-                    logger.info(f"  模板MD已生成: {md_base}")
-
-                # --- Stage 2: AI 填充 ---
-                if not biz_config['enable_ai_generate_cosmic']:
-                    logger.info(f"  AI已禁用（ENABLE_AI_GENERATE_COSMIC=false），跳过填充")
-                elif os.path.exists(md_filled) and not biz_config['regenerate_filled']:
-                    logger.info(f"  已填充MD已存在，跳过（REGENERATE_FILLED=false）")
-                else:
-                    if not api_key:
-                        raise ConfigError("API Key 未设置")
-                    shutil.copy2(md_base, md_filled)
-                    fill_md_with_ai(md_filled, modules, project, api_key, model, base_url)
-
-                # --- Stage 3: 生成 Excel ---
-                if os.path.exists(out_xlsx) and not biz_config['regenerate_excel']:
-                    logger.info(f"  Excel已存在，跳过（REGENERATE_EXCEL=false）")
-                else:
-                    # 优先用已填充的MD，没有则用模板MD
-                    md_to_use = md_filled if os.path.exists(md_filled) else md_base
-                    items = parse_md_to_items(md_to_use)
-                    if items:
-                        generate_cosmic_xlsx_from_md(_default_template_path(), out_xlsx, items)
-                        total_cfp = sum(item.total_cfp() for item in items)
-                        logger.info(f"  Excel已生成: {out_xlsx} ({len(items)} 过程, {total_cfp} CFP)")
-                    else:
-                        logger.warning(f"  MD中无数据，跳过Excel生成")
-
-                if os.path.exists(out_xlsx):
-                    excel_ok.append(docx_path)
-                else:
-                    processed_no_excel.append(docx_path)
-                logger.info("")  # 分隔空行
-
-            except Exception as e:
-                logger.error(f"  ❌ 处理失败: {e}")
-                failed.append(docx_path)
-                logger.info("")  # 分隔空行
-
-        _section("批量处理完成")
-        if excel_ok:
-            logger.info("成功:")
-            for d in excel_ok:
-                logger.info(f"  ✅ {d}")
-        if processed_no_excel:
-            logger.info("已处理但未生成Excel（如无AI数据、--no-llm等）:")
-            for d in processed_no_excel:
-                logger.info(f"  ⚠ {d}")
-        if failed:
-            logger.info("失败:")
-            for d in failed:
-                logger.info(f"  ❌ {d}")
-        return
-
-    # === Mode 1: init-md (docx → empty MD) ===
-    if args.init_md is not None:  # "" is auto-name, explicit path is used as-is
-        if not args.docx:
-            parser.error("--init-md 需要 --docx")
-        if not args.init_md:
-            args.init_md = _auto_md_path(args.docx, '_拆分表')
-        _setup_docx_logging(args.docx)
-        # 生成原文MD（与模板MD同目录）
-        docx_name = os.path.splitext(os.path.basename(args.docx))[0]
-        md_dir = os.path.dirname(args.init_md) or '.'
-        raw_md = os.path.join(md_dir, f'{docx_name}_原文.md')
-        _section("阶段0: 需求说明书 → 原文Markdown")
-        convert_to_md(args.docx, raw_md, args.chapter_detection)
-        logger.info(f"  原文MD已生成: {raw_md}")
-
-        _section("阶段1: 原文MD → 生成COSMIC模板")
-        modules = _build_modules_from_md(raw_md, args.docx, args.mapping, args.chapter_detection)
-        project = get_project_name_from_md(raw_md)
-        # Statistics
-        l1_count = len([m for m in modules if m.level == 1])
-        l2_count = len([m for m in modules if m.level == 2])
-        l3_count = len([m for m in modules if m.level == 3])
-        proc_count = sum(len(m.children) for m in modules if m.level == 3 and m.children)
-        logger.info(f"模块层级: {l1_count} 个一级 / {l2_count} 个二级 / {l3_count} 个三级")
-        export_empty_md(modules, project, args.init_md)
-        logger.info(f"\n下一步:")
-        logger.info(f"  python -m ai_gen_reimbursement_docs.main --docx \"{args.docx}\" --md         # 生成Excel")
-        return
-
-    # === Mode 2: fill-md (复制一份MD，AI填充到副本) ===
-    if args.fill_md is not None:
-        if not api_key:
-            logger.warning("⚠ 未设置 API Key。请先运行 --init-config 或设置环境变量")
-            return
-        _section("阶段2: AI填充COSMIC数据到MD副本")
-        if not args.fill_md:
-            # 自动推导MD路径：从docx找对应MD文件
-            if args.docx:
-                args.fill_md = _auto_md_path(args.docx, '_拆分表')
-            else:
-                # 尝试在当前目录找 _拆分表.md 文件
-                for f in os.listdir('.'):
-                    if f.endswith('_拆分表.md'):
-                        args.fill_md = f
-                        break
-        if not args.fill_md:
-            logger.error("MD文件不存在，请先运行阶段1生成模板MD：")
-            return
-        if not os.path.exists(args.fill_md):
-            logger.error(f"MD文件不存在: {args.fill_md}")
-            return
-        docx_path = args.docx or _find_docx_from_md(args.fill_md)
-        if not docx_path:
-            parser.error("--fill-md 需要 --docx 或将MD放在docx同目录下")
-
-        # 设置专属日志目录
-        _setup_docx_logging(docx_path)
-
-        # 生成输出路径：在原名基础上加 _已填充
-        if args.fill_md.endswith('.md'):
-            output_md = args.fill_md[:-3] + '_已填充.md'
-        else:
-            output_md = args.fill_md + '_已填充.md'
-
-        # 复制原MD → 填充副本
-        shutil.copy2(args.fill_md, output_md)
-        logger.info(f"源文件: {args.fill_md}")
-
-        modules = _build_modules(docx_path, args.parse_by_ai, api_key, model, base_url,
-                                  mapping_name=args.mapping, chapter_detection=args.chapter_detection)
-        project = get_project_name(docx_path)
-        # 统计实际功能过程数（来自docx，非模板MD）
-        l3_modules = [m for m in modules if m.level == 3]
-        proc_count = sum(len(m.children) for m in l3_modules if m.children)
-        fill_md_with_ai(output_md, modules, project, api_key, model, base_url)
-        logger.info(f"\n下一步:")
-        logger.info(f"  然后: python -m ai_gen_reimbursement_docs.main --docx \"{docx_path}\" --md")
-        return
-
-    # === Mode 3: md → Excel ===
-    if args.md is not None:
-        if not args.template:
-            args.template = _default_template_path()
-        # Auto-find MD from docx if not specified
-        if not args.md:
-            if args.docx:
-                # Prefer _已填充.md, fall back to _拆分表.md
-                filled = _auto_md_path(args.docx, '_AI填充cosmic')
-                base = _auto_md_path(args.docx, '_拆分表')
-                args.md = filled if os.path.exists(filled) else base
-            else:
-                # Try to find any _拆分表.md in current dir
-                for f in sorted(os.listdir('.'), reverse=True):
-                    if f.endswith('_拆分表.md'):
-                        args.md = f
-                        break
-        if not args.md:
-            parser.error("无法自动确定MD文件，请指定 --md <路径> 或提供 --docx")
-        if not os.path.exists(args.md):
-            logger.error(f"MD文件不存在: {args.md}")
-            logger.info(f"  python -m ai_gen_reimbursement_docs.main --docx \"{args.docx}\" --init-md")
-            return
-        if not args.output:
-            args.output = args.md.replace('.md', '.xlsx')
-        _setup_docx_logging(args.docx or args.md)
-        _section("阶段3: 从MD生成Excel拆分表")
-        items = parse_md_to_items(args.md)
-        if not items:
-            logger.warning("⚠ MD中未解析到COSMIC数据，请先运行 --fill-md 或手动填写表格")
-            return
-        generate_cosmic_xlsx_from_md(args.template, args.output, items)
-        total_cfp = sum(item.total_cfp() for item in items)
-        logger.info(f"\n总计: {len(items)} 功能过程, {total_cfp} CFP")
-        return
-
-    # === Mode 4: --all (docx → MD → AI填充 → Excel) ===
-    if args.all:
-        if not args.docx:
-            parser.error("--all 需要 --docx")
-        if not args.template:
-            args.template = _default_template_path()
-        # Auto-generate output and MD paths from docx
-        if not args.output:
-            args.output = _auto_output_path(args.docx)
-
-        _setup_docx_logging(args.docx)
-        # All md files named after the source docx
-        docx_name = os.path.splitext(os.path.basename(args.docx))[0]
-        out_dir = os.path.dirname(args.output) or '.'
-        md_raw = os.path.join(out_dir, f'{docx_name}_原文.md')
-        base_md = os.path.join(out_dir, f'{docx_name}_拆分表.md')
-        filled_md = os.path.join(out_dir, f'{docx_name}_AI填充cosmic.md')
-        _section("阶段0: 需求说明书 → 原文Markdown")
-        convert_to_md(args.docx, md_raw, args.chapter_detection)
-        logger.info(f"  原文MD已生成: {md_raw}")
-
-        # Stage 1: 原文 MD → 生成 COSMIC 模板
-        _section("阶段1: 原文MD → 生成COSMIC模板")
-        modules = _build_modules_from_md(md_raw, args.docx)
-        project = get_project_name_from_md(md_raw)
-        l1_count = len([m for m in modules if m.level == 1])
-        l2_count = len([m for m in modules if m.level == 2])
-        l3_count = len([m for m in modules if m.level == 3])
-        proc_count = sum(len(m.children) for m in modules if m.level == 3 and m.children)
-        logger.info(f"模块层级: {l1_count} 个一级 / {l2_count} 个二级 / {l3_count} 个三级")
-        export_empty_md(modules, project, base_md)
-
-        # Stage 2: AI fill MD
-        if not args.no_llm:
-            if not api_key:
-                logger.warning("⚠ 未设置 API Key。请先运行 --init-config 或设置环境变量")
-                return
-            _section("阶段2: AI填充COSMIC数据到MD副本")
-            shutil.copy2(base_md, filled_md)
-            fill_md_with_ai(filled_md, modules, project, api_key, model, base_url)
-
-        # Stage 3: MD → Excel
-        _section("阶段3: 从MD生成Excel拆分表")
-        md_to_use = filled_md if not args.no_llm else base_md
-        items = parse_md_to_items(md_to_use)
-        if items:
-            generate_cosmic_xlsx_from_md(args.template, args.output, items)
-            total_cfp = sum(item.total_cfp() for item in items)
-            logger.info(f"\n总计: {len(items)} 功能过程, {total_cfp} CFP")
-        else:
-            logger.warning("⚠ MD中未解析到COSMIC数据，生成空白模板")
-            generate_cosmic_xlsx_from_md(args.template, args.output, [])
-        logger.info(f"中间文件: {md_raw}, {base_md}, {filled_md}")
-        return
-
-    # === Mode 5: Direct docx → LLM → Excel (one shot) ===
-    if args.docx:
-        if not args.template:
-            args.template = _default_template_path()
-        if not args.output:
-            args.output = _auto_output_path(args.docx)
-        _setup_docx_logging(args.docx)
-        docx_name = os.path.splitext(os.path.basename(args.docx))[0]
-        out_dir = os.path.dirname(args.output) or '.'
-        _section("阶段0: 需求说明书 → 原文Markdown")
-        md_raw = os.path.join(out_dir, f'{docx_name}_原文.md')
-        convert_to_md(args.docx, md_raw, args.chapter_detection)
-        logger.info(f"  原文MD已生成: {md_raw}")
-
-        _section("阶段1: 原文MD → 构建模块树")
-        modules = _build_modules_from_md(md_raw, args.docx)
-        project = get_project_name_from_md(md_raw)
-        logger.info(f"项目: {project}")
-        print_tree(modules)
-
-        items = []
-        if not args.no_llm:
-            if not api_key:
-                logger.warning("⚠ 未设置 API Key。请先运行 --init-config 或设置环境变量")
-                return
-            _section("阶段2: AI生成COSMIC功能点拆分")
-            if base_url:
-                logger.info(f"端点: {base_url}")
-            items = generate_cosmic_items(
-                modules=modules, project_name=project,
-                api_key=api_key, base_url=base_url, model=model,
-            )
-
-        if items:
-            _section("阶段3: 生成Excel")
-            generate_cosmic_xlsx_from_md(args.template, args.output, items)
-            total_cfp = sum(item.total_cfp() for item in items)
-            logger.info(f"\n总计: {len(items)} 功能过程, {total_cfp} CFP")
-        elif args.no_llm:
-            generate_cosmic_xlsx_from_md(args.template, args.output, [])
-            logger.info("生成空白模板（无数据行）")
-        return
-
     # === Mode 6: --from-excel 系列（功能清单 → 全套交付物） ===
     if any([args.gen_basedata, args.gen_fpa, args.gen_cosmic, args.gen_list,
              args.gen_spec, args.gen_all]):
@@ -1539,7 +1059,7 @@ def main():
                 logger.info("第3步：生成 项目功能点拆分表.xlsx...")
                 # 使用现有链路：init_base_data_md + ai_fill_cosmic_data_md + generate_cosmic_xlsx_from_md
                 logger.info("  步骤3a: 从模块树生成拆分表 MD...")
-                from ai_gen_reimbursement_docs.docx_parser import FunctionModule
+                from ai_gen_reimbursement_docs.module_utils import FunctionModule
                 modules = _build_modules_from_tree_md(tree_md)
                 project = modules[0].name if modules else "项目"
 
@@ -1685,7 +1205,7 @@ def main():
         # --gen-cosmic
         if args.gen_cosmic:
             logger.info("生成 项目功能点拆分表.xlsx...")
-            from ai_gen_reimbursement_docs.docx_parser import FunctionModule
+            from ai_gen_reimbursement_docs.module_utils import FunctionModule
             modules = _build_modules_from_tree_md(tree_md)
             project = _read_project_name(meta_md) or (modules[0].name if modules else "项目")
 
@@ -1785,68 +1305,6 @@ def _project_root() -> str:
         # exe 所在目录（模板放同级 data/out_templates/ 下）
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(__file__))
-
-
-def _default_template_path() -> str:
-    """Return template path from ~/.ai-gen-reimbursement-docs/business_rules.yaml or default."""
-    rules_path = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'business_rules.yaml')
-    if os.path.exists(rules_path):
-        try:
-            import yaml
-            with open(rules_path, 'r', encoding='utf-8') as f:
-                rules = yaml.safe_load(f) or {}
-            yaml_path = (rules.get('template_path') or '').strip()
-            if yaml_path:
-                if not os.path.isabs(yaml_path):
-                    yaml_path = os.path.join(_project_root(), yaml_path)
-                if os.path.exists(yaml_path):
-                    return yaml_path
-        except Exception:
-            pass
-    # 优先 data/out_templates/项目功能点拆分表-输出模板.xlsx，回退 data/项目功能点拆分表.xlsx
-    tpl = os.path.join(_project_root(), 'data', 'out_templates', '项目功能点拆分表-输出模板.xlsx')
-    if os.path.exists(tpl):
-        return tpl
-    return os.path.join(_project_root(), 'data', '项目功能点拆分表.xlsx')
-
-
-def _auto_md_path(docx_path: str, suffix: str = '') -> str:
-    """Derive MD file path from docx filename.
-
-    suffix: '_拆分表' or '' (auto-chooses based on existing files)
-    """
-    base = os.path.basename(docx_path)
-    name, _ = os.path.splitext(base)
-    return os.path.join(os.path.dirname(docx_path), name + suffix + '.md')
-
-
-def _auto_output_path(docx_path: str) -> str:
-    """Derive Excel output path from docx filename automatically.
-
-    规则:
-      - docx 中的"需求说明书" → "功能点拆分表"
-      - "附件1" → "附件2"
-      - .docx → .xlsx
-    """
-    base = os.path.basename(docx_path)
-    name, _ = os.path.splitext(base)
-    name = name.replace('需求说明书', '功能点拆分表')
-    if name.startswith('附件1'):
-        name = name.replace('附件1', '附件2', 1)
-    return os.path.join(os.path.dirname(docx_path), name + '.xlsx')
-
-
-def _find_docx_from_md(md_path: str) -> str:
-    """Try to find the corresponding docx for an MD file."""
-    md_dir = os.path.dirname(os.path.abspath(md_path))
-    for f in os.listdir(md_dir):
-        if f.endswith('.docx') and not f.startswith('~$'):
-            return os.path.join(md_dir, f)
-    parent = os.path.dirname(md_dir)
-    for f in os.listdir(parent):
-        if f.endswith('.docx') and not f.startswith('~$'):
-            return os.path.join(parent, f)
-    return ""
 
 
 if __name__ == '__main__':

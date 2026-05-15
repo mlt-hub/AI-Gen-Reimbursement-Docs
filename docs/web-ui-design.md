@@ -90,7 +90,7 @@ ai_cosmic/                          # 现有项目，不动
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `file` | file | 是 | .docx 或 .xlsx 文件 |
+| `file` | file | 是 | .xlsx 功能清单文件 |
 | `mode` | string | 是 | 操作模式，见下表 |
 | `api_key` | string | 否 | Anthropic API Key，不填则用系统配置 |
 | `model` | string | 否 | 模型名，默认 `deepseek-v4-flash` |
@@ -100,20 +100,18 @@ ai_cosmic/                          # 现有项目，不动
 | `list_template` | file | 否 | 自定义需求清单模板 |
 | `spec_template` | file | 否 | 自定义需求说明书模板 |
 
-**操作模式**：
+**操作模式**（仅支持 from-excel 流程）：
 
 | mode 值 | 对应 CLI | 输入文件类型 |
 |---------|----------|-------------|
-| `docx-all` | `--docx x.docx --all` | .docx |
-| `docx-init-md` | `--docx x.docx --init-md` | .docx |
-| `docx-fill-md` | `--docx x.docx --fill-md` | .docx |
-| `docx-to-excel` | `--docx x.docx --md` | .docx |
 | `from-excel-gen-all` | `--from-excel x.xlsx --gen-all` | .xlsx |
 | `from-excel-gen-basedata` | `--from-excel x.xlsx --gen-basedata` | .xlsx |
 | `from-excel-gen-fpa` | `--from-excel x.xlsx --gen-fpa` | .xlsx |
 | `from-excel-gen-cosmic` | `--from-excel x.xlsx --gen-cosmic` | .xlsx |
 | `from-excel-gen-list` | `--from-excel x.xlsx --gen-list` | .xlsx |
 | `from-excel-gen-spec` | `--from-excel x.xlsx --gen-spec` | .xlsx |
+
+> 注：`--docx` 管道（Word → COSMIC 拆分表）在当前代码中已有调用但缺少函数定义（`convert_to_md`、`get_project_name_from_md` 不存在），暂不支持。
 
 **响应**：
 
@@ -320,10 +318,6 @@ _parent.addHandler(SessionHandler())
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = BASE_DIR / 'data' / 'templates'
 MODE_INFO = {
-    "docx-all":               {"label": "Word → COSMIC 拆分表（全流程）", "ext": ".docx"},
-    "docx-init-md":           {"label": "Word → 生成模板 MD",           "ext": ".docx"},
-    "docx-fill-md":           {"label": "Word → AI 填充 MD",           "ext": ".docx"},
-    "docx-to-excel":          {"label": "Word → 生成 Excel",           "ext": ".docx"},
     "from-excel-gen-all":     {"label": "Excel → 全套交付物",           "ext": ".xlsx"},
     "from-excel-gen-basedata":{"label": "Excel → 功能清单模块树+元数据", "ext": ".xlsx"},
     "from-excel-gen-fpa":     {"label": "Excel → FPA 工作量评估",      "ext": ".xlsx"},
@@ -457,7 +451,7 @@ async def download(session_id: str):
 
 def _execute_mode(mode: str, file_path: Path, output_dir: Path,
                   custom_t_dir: Path, api_key: str, model: str, base_url: str):
-    """根据 mode 调用现有核心函数"""
+    """根据 mode 调用现有核心函数（仅支持 from-excel-* 模式）"""
     from ai_gen_reimbursement_docs.config_utils import (
         load_api_key, load_base_url, load_model_name
     )
@@ -474,61 +468,8 @@ def _execute_mode(mode: str, file_path: Path, output_dir: Path,
     logger = logging.getLogger('ai_gen_reimbursement_docs')
     logger.info(f"模式: {mode}, 文件: {file_path.name}")
 
-    if mode.startswith("docx"):
-        _execute_docx_mode(mode, str(file_path), str(output_dir),
-                          api_key, model, base_url)
-    elif mode.startswith("from-excel"):
-        _execute_excel_mode(mode, str(file_path), str(output_dir),
-                           api_key, model, base_url, str(custom_t_dir))
-
-
-def _execute_docx_mode(mode: str, docx_path: str, output_dir: str,
-                       api_key: str, model: str, base_url: str):
-    """处理 docx 相关模式"""
-    import os
-    from ai_gen_reimbursement_docs.main import (
-        get_project_name_from_md, _build_modules_from_md, convert_to_md
-    )
-    from ai_gen_reimbursement_docs.md_handler import (
-        export_empty_md, fill_md_with_ai, parse_md_to_items
-    )
-    from ai_gen_reimbursement_docs.excel_writer import generate_cosmic_xlsx_from_md
-    from ai_gen_reimbursement_docs.config_utils import load_business_config
-
-    cfg = load_business_config()
-    docx_name = os.path.splitext(os.path.basename(docx_path))[0]
-    md_raw = os.path.join(output_dir, f'{docx_name}_原文.md')
-    md_base = os.path.join(output_dir, f'{docx_name}_拆分表.md')
-    md_filled = os.path.join(output_dir, f'{docx_name}_AI填充.md')
-
-    if mode == "docx-init-md":
-        convert_to_md(docx_path, md_raw)
-        modules = _build_modules_from_md(md_raw, docx_path)
-        project = get_project_name_from_md(md_raw)
-        export_empty_md(modules, project, md_base)
-
-    elif mode == "docx-fill-md":
-        convert_to_md(docx_path, md_raw)
-        modules = _build_modules_from_md(md_raw, docx_path)
-        project = get_project_name_from_md(md_raw)
-        export_empty_md(modules, project, md_base)
-        fill_md_with_ai(md_base, modules, project, api_key, model, base_url)
-
-    elif mode == "docx-to-excel":
-        md_to_use = md_filled if os.path.exists(md_filled) else md_base
-        items = parse_md_to_items(md_to_use)
-        xlsx_out = os.path.join(output_dir, f'{docx_name}_COSMIC拆分表.xlsx')
-        generate_cosmic_xlsx_from_md(md_to_use, items, output=xlsx_out)
-
-    elif mode == "docx-all":
-        convert_to_md(docx_path, md_raw)
-        modules = _build_modules_from_md(md_raw, docx_path)
-        project = get_project_name_from_md(md_raw)
-        export_empty_md(modules, project, md_base)
-        fill_md_with_ai(md_base, modules, project, api_key, model, base_url)
-        items = parse_md_to_items(md_base)
-        xlsx_out = os.path.join(output_dir, f'{docx_name}_COSMIC拆分表.xlsx')
-        generate_cosmic_xlsx_from_md(md_base, items, output=xlsx_out)
+    _execute_excel_mode(mode, str(file_path), str(output_dir),
+                       api_key, model, base_url, str(custom_t_dir))
 
 
 def _execute_excel_mode(mode: str, xlsx_path: str, output_dir: str,
@@ -965,7 +906,7 @@ gunicorn web_app.server:app -w 4 -k uvicorn.workers.UvicornWorker
 - [ ] 新建 `web_app/static/index.html`，实现前端页面
 - [ ] `pyproject.toml` 添加 fastapi / uvicorn / python-multipart 依赖
 - [ ] 补全 `_execute_excel_mode` 中各模式的具体调用链
-- [ ] 测试：上传 docx → 全流程 → 下载 xlsx
 - [ ] 测试：上传 xlsx → 全套 → 下载 zip
+- [ ] 测试：上传 xlsx → 单个模式（fpa/cosmic/list/spec）→ 下载产物
 - [ ] 测试：两个浏览器同时访问，日志不串
 - [ ] 测试：CLI 和 Web 同时使用，互不影响

@@ -10,7 +10,7 @@ from typing import Optional
 from ai_gen_reimbursement_docs.exceptions import ConfigError, ParseError
 from ai_gen_reimbursement_docs.models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.models import FunctionModule
-from ai_gen_reimbursement_docs.docx_parser import get_module_by_name
+from ai_gen_reimbursement_docs.module_utils import get_module_by_name
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_llm')
 
@@ -311,7 +311,7 @@ def generate_cosmic_items(
     """Generate COSMIC decompositions for all L3 modules using Claude API.
 
     Args:
-        modules: Flat list of FunctionModules from docx_parser
+        modules: Flat list of FunctionModules from module_utils
         project_name: Project name
         api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
         model: Claude model to use (default: deepseek-v4-flash)

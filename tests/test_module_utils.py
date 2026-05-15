@@ -1,6 +1,6 @@
-"""docx_parser 测试 —— get_module_by_name。"""
+"""module_utils 测试 —— get_module_by_name。"""
 from ai_gen_reimbursement_docs.models import FunctionModule
-from ai_gen_reimbursement_docs.docx_parser import get_module_by_name
+from ai_gen_reimbursement_docs.module_utils import get_module_by_name
 
 
 class TestGetModuleByName:
