@@ -11,7 +11,7 @@ COL_FP_CFP = 13          # CFP 公式列
 FP_DATA_START_ROW = 6    # 数据起始行
 FP_TOTAL_COLS = 14       # 总列数
 
-# 列号 → 字段名映射（excel_writer 写入时使用）
+# 列号 → 字段名映射（cosmic_writer 写入时使用）
 FP_COL_KEY_MAP = {
     1: "project", 2: "module_l1", 3: "module_l2", 4: "module_l3",
     5: "user", 6: "trigger", 7: "process", 8: "sub_process",

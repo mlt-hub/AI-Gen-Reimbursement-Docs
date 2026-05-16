@@ -16,16 +16,15 @@ from ai_gen_reimbursement_docs.config_utils import (
 from ai_gen_reimbursement_docs.excel_source import (
     generate_md_files, verify_module_tree_stats
 )
-from ai_gen_reimbursement_docs.excel_writer import write_cosmic_xlsx, write_environment_sheet
 from ai_gen_reimbursement_docs.gen_spec import (
     generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md, parse_meta_md
 )
-from ai_gen_reimbursement_docs.gen_xlsx import (
-    generate_fpa_xlsx_from_md, generate_list_xlsx_from_md,
-    init_fpa_template_md, ai_fill_fpa_md,
+from ai_gen_reimbursement_docs.gen_fpa import (
+    generate_fpa_xlsx_from_md, init_fpa_template_md, ai_fill_fpa_md,
 )
-from ai_gen_reimbursement_docs.md_handler import (
-    export_empty_md, parse_md_to_items, fill_md_with_ai,
+from ai_gen_reimbursement_docs.gen_list import generate_list_xlsx_from_md
+from ai_gen_reimbursement_docs.gen_cosmic import (
+    init_cosmic_template_md, ai_fill_cosmic_md, generate_cosmic_xlsx_from_md,
 )
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.pipeline')
@@ -375,17 +374,11 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     """第2步：COSMIC 功能点拆分表。"""
     logger.info("生成 项目功能点拆分表...")
 
-    from ai_gen_reimbursement_docs.excel_source import (
-        build_modules_from_tree_md, read_project_name, write_cfp_sum,
-    )
-    from ai_gen_reimbursement_docs.cosmic_ai import load_user_config_from_meta
+    from ai_gen_reimbursement_docs.excel_source import read_project_name, read_md_value
 
     cosmic_src = _check_template(templates_dict, 'cosmic', '项目功能点拆分表')
+    project = read_project_name(meta_md)
 
-    modules = build_modules_from_tree_md(tree_md)
-    project = read_project_name(meta_md) or (modules[0].name if modules else "项目")
-
-    # FPA 核减后工作量：优先用传入值，否则从 MD 读取
     if fpa_reduced is not None:
         result.fpa_reduced = fpa_reduced
     else:
@@ -393,24 +386,16 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
 
     init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
     filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
-    export_empty_md(modules, project, init_md_path)
+    init_cosmic_template_md(tree_md, project, init_md_path)
 
     if api_key:
         shutil.copy2(init_md_path, filled_md_path)
-        _user_cfg = load_user_config_from_meta(meta_md)
-        fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url, **_user_cfg)
-        items = parse_md_to_items(filled_md_path)
-        if items:
-            _meta = parse_meta_md(meta_md)
-            write_cosmic_xlsx(cosmic_src, cosmic_xlsx, items, meta=_meta)
-            result.cfp_total = sum(item.total_cfp() for item in items)
-            write_cfp_sum(md_dir, result.cfp_total)
-            _target = _meta.get("建设目标", "")
-            _necessity = _meta.get("建设必要性", "")
-            if _target or _necessity:
-                write_environment_sheet(cosmic_xlsx, cosmic_xlsx, project_name, _target, _necessity)
-                logger.info("环境图 sheet 已更新")
-            logger.info(f"CFP 总和: {result.cfp_total}")
+        ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md)
+        generate_cosmic_xlsx_from_md(filled_md_path, cosmic_src, cosmic_xlsx, meta_md,
+                                     md_dir=md_dir, project_name=project_name)
+        result.cfp_total = read_md_value(
+            os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
+            r'CFP 总和[：:]\s*([\d.]+)') or 0
     else:
         logger.warning("未设置 API Key，无法生成 COSMIC 拆分数据")
 
@@ -488,11 +473,9 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     logger.info("全流程模式：按依赖顺序执行...")
 
     from ai_gen_reimbursement_docs.excel_source import (
-        build_modules_from_tree_md, read_project_name,
-        read_md_value, write_cfp_sum,
+        read_project_name, read_md_value,
     )
     from ai_gen_reimbursement_docs.excel_source import ai_fill_meta_md
-    from ai_gen_reimbursement_docs.cosmic_ai import load_user_config_from_meta
 
     # 入口检查所有模板
     fpa_src = _check_template(templates_dict, 'fpa', 'FPA工作量评估')
@@ -548,25 +531,18 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
 
     # Step 3: COSMIC
     logger.info("第3步：生成 项目功能点拆分表...")
-    modules = build_modules_from_tree_md(tree_md)
-    project = read_project_name(meta_md) or (modules[0].name if modules else "项目")
+    project = read_project_name(meta_md) or project_name
     init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
     filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
-    export_empty_md(modules, project, init_md_path)
+    init_cosmic_template_md(tree_md, project, init_md_path)
     if api_key:
         shutil.copy2(init_md_path, filled_md_path)
-        _user_cfg = load_user_config_from_meta(meta_md)
-        fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url, **_user_cfg)
-        items = parse_md_to_items(filled_md_path)
-        if items:
-            _meta = parse_meta_md(meta_md)
-            write_cosmic_xlsx(cosmic_src, cosmic_xlsx, items, meta=_meta)
-            result.cfp_total = sum(item.total_cfp() for item in items)
-            write_cfp_sum(md_dir, result.cfp_total)
-            _target = _meta.get("建设目标", "")
-            _necessity = _meta.get("建设必要性", "")
-            if _target or _necessity:
-                write_environment_sheet(cosmic_xlsx, cosmic_xlsx, project_name or project, _target, _necessity)
+        ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md)
+        generate_cosmic_xlsx_from_md(filled_md_path, cosmic_src, cosmic_xlsx, meta_md,
+                                     md_dir=md_dir, project_name=project_name or project)
+        result.cfp_total = read_md_value(
+            os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
+            r'CFP 总和[：:]\s*([\d.]+)') or 0
     result.cosmic_xlsx = cosmic_xlsx
 
     # Step 4: 需求清单

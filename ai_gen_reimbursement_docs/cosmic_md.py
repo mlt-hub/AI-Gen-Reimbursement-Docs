@@ -6,10 +6,11 @@ import os
 from datetime import date
 from typing import Optional
 
-from ai_gen_reimbursement_docs.models import CosmicItem, DataMovement, FunctionModule
+from ai_gen_reimbursement_docs.models import FunctionModule
+from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.module_utils import get_module_by_name
 
-logger = logging.getLogger('ai_gen_reimbursement_docs.md_handler')
+logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_md')
 
 
 HEADER_TEMPLATE = """# 功能点拆分表

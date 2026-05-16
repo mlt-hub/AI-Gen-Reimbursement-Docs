@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 from ai_gen_reimbursement_docs.exceptions import ConfigError, ParseError
-from ai_gen_reimbursement_docs.models import CosmicItem, DataMovement
+from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.models import FunctionModule
 from ai_gen_reimbursement_docs.module_utils import get_module_by_name
 
@@ -376,7 +376,7 @@ def generate_cosmic_items(
         if _cosmic_proc_limit > 0:
             _module_procs = len(l3.children) if l3.children else 1
             if _cosmic_proc_count >= _cosmic_proc_limit:
-                from ai_gen_reimbursement_docs.models import CosmicItem
+                from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
                 # 每个功能过程生成一行（保留 L1/L2/L3 信息，movements 为空）
                 for _child in (l3.children or [l3.name]):
                     all_items.append(CosmicItem(
@@ -395,7 +395,7 @@ def generate_cosmic_items(
         if max_ai_l3 > 0 and idx > max_ai_l3:
             logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过 AI 限制 {max_ai_l3}）")
             _skip_ai_limit += 1
-            from ai_gen_reimbursement_docs.models import CosmicItem
+            from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
             for _child in (l3.children or [l3.name]):
                 all_items.append(CosmicItem(
                     project=project_name,

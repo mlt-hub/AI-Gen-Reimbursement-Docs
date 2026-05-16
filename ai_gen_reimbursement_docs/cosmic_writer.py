@@ -11,11 +11,11 @@ from ai_gen_reimbursement_docs.constants import (
     FP_DATA_START_ROW, FP_LEFT_ALIGN_COLS, FP_TOTAL_COLS,
     FP_COL_KEY_MAP, COL_FP_CFP, COL_FP_SUB_PROCESS, COL_FP_MOVE_TYPE,
 )
-from ai_gen_reimbursement_docs.models import CosmicItem
+from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
 from ai_gen_reimbursement_docs.config_utils import load_cfp_formula
 from ai_gen_reimbursement_docs.excel_source import safe_load_workbook
 
-logger = logging.getLogger('ai_gen_reimbursement_docs.excel_writer')
+logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_writer')
 
 
 # Read a reference cell style from the template to apply to new cells

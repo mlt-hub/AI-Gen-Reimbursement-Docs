@@ -1,6 +1,7 @@
 """数据模型单元测试 —— FunctionModule, DataMovement, CosmicItem。"""
 import pytest
-from ai_gen_reimbursement_docs.models import FunctionModule, DataMovement, CosmicItem
+from ai_gen_reimbursement_docs.models import FunctionModule
+from ai_gen_reimbursement_docs.cosmic_models import DataMovement, CosmicItem
 
 
 class TestFunctionModule:

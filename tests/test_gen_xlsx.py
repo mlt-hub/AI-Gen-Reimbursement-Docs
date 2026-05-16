@@ -1,6 +1,6 @@
 """gen_xlsx 核心逻辑测试 —— FPA 行构建、接收者判定、说明格式化。"""
 import pytest
-from ai_gen_reimbursement_docs.gen_xlsx import (
+from ai_gen_reimbursement_docs.gen_fpa import (
     _build_fpa_rule_rows,
     _receiver_from_client_type,
     _format_fpa_explanation,
