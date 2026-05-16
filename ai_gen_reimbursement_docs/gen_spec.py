@@ -475,8 +475,8 @@ def ai_fill_spec_md(
             # 收集引用块内容直到下一个 ## 或 ###
             raw_desc = ""
             while i < len(lines):
-                l = lines[i]
-                s = l.strip()
+                line_text = lines[i]
+                s = line_text.strip()
                 if s.startswith('## ') or s.startswith('### '):
                     break
                 # 提取 > **原描述**：xxx
@@ -503,7 +503,7 @@ def ai_fill_spec_md(
                             new_lines.append(f"> **AI 生成描述**：（AI 生成失败）\n")
                     i += 1
                     continue
-                new_lines.append(l)
+                new_lines.append(line_text)
                 i += 1
             continue
         new_lines.append(line)

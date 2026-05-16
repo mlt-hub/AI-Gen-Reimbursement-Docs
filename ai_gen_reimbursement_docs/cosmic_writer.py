@@ -17,7 +17,6 @@ from ai_gen_reimbursement_docs.excel_source import safe_load_workbook
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_writer')
 
-
 # Read a reference cell style from the template to apply to new cells
 _REF_STYLE = Font(name='微软雅黑', size=11, color='FF000000')
 _REF_ALIGN = Alignment(horizontal='center', vertical='center', wrap_text=True)
@@ -55,7 +54,7 @@ def _apply_style(cell, style: dict, skip_fill: bool = False) -> None:
 
 def _save_footer_notes(ws) -> list:
     """保存模板中第6行之后的脚注行（合并单元格、值、样式、行高）。
-    
+
     从底部向上扫描，检测 A 列文本长度 > 20 且其余列为空的行作为脚注。
     """
     footer_saved = []
@@ -92,7 +91,6 @@ def _save_footer_notes(ws) -> list:
         if footer_saved:
             break
     return footer_saved
-
 
 
 def write_cosmic_xlsx(
@@ -263,86 +261,83 @@ def write_cosmic_xlsx(
 
     # --- Restore saved footer notes (from template) below the new data ---
     for i, (merges, vals, row_heights) in enumerate(footer_saved):
-            note_row = start_row + total_rows + i
-            for mr_str in merges:
-                # Translate merged cell range to the new row number
-                parts = mr_str.split(':')
-                old_min = int(''.join(c for c in parts[0] if c.isdigit()))
-                old_max = int(''.join(c for c in parts[1] if c.isdigit()))
-                span = old_max - old_min
-                new_min_str = parts[0].rstrip('0123456789') + str(note_row)
-                new_max_str = parts[1].rstrip('0123456789') + str(note_row + span)
-                ws.merge_cells(f'{new_min_str}:{new_max_str}')
-            for col, (val, style) in vals.items():
-                cell = ws.cell(row=note_row, column=col)
-                cell.value = val
-                _apply_style(cell, style)
-            # 合并单元格后补全四周边框（WPS 需要四个角都设才渲染完整）
-            for mr_str in merges:
-                parts = mr_str.split(':')
-                old_min = int(''.join(c for c in parts[0] if c.isdigit()))
-                old_max = int(''.join(c for c in parts[1] if c.isdigit()))
-                span = old_max - old_min
-                new_min_row = note_row
-                new_max_row = note_row + span
-                new_min_col_str = parts[0].rstrip('0123456789')
-                new_max_col_str = parts[1].rstrip('0123456789')
-                import openpyxl.utils as _ou
-                new_min_col = _ou.column_index_from_string(new_min_col_str)
-                new_max_col = _ou.column_index_from_string(new_max_col_str)
-                # 从左上角单元格获取边框样式（强制黑色，WPS 对 auto 颜色渲染为浅灰）
-                _tl = ws.cell(new_min_row, new_min_col)
-                _b = _tl.border
-                _sides = {}
-                _black = 'FF000000'
-                for _side_name, _attr in [('left', 'left'), ('right', 'right'), ('top', 'top'), ('bottom', 'bottom')]:
-                    _s = getattr(_b, _attr)
-                    if _s and _s.style:
-                        _sides[_side_name] = Side(style=_s.style, color=_black)
-                if _sides:
-                    ws.cell(new_min_row, new_min_col).border = Border(
-                        left=_sides.get('left'), right=_sides.get('right'),
-                        top=_sides.get('top'), bottom=_sides.get('bottom'))
-                    if new_max_col > new_min_col:
-                        ws.cell(new_min_row, new_max_col).border = Border(
-                            left=None, right=_sides.get('right'),
+        note_row = start_row + total_rows + i
+        for mr_str in merges:
+            # Translate merged cell range to the new row number
+            parts = mr_str.split(':')
+            old_min = int(''.join(c for c in parts[0] if c.isdigit()))
+            old_max = int(''.join(c for c in parts[1] if c.isdigit()))
+            span = old_max - old_min
+            new_min_str = parts[0].rstrip('0123456789') + str(note_row)
+            new_max_str = parts[1].rstrip('0123456789') + str(note_row + span)
+            ws.merge_cells(f'{new_min_str}:{new_max_str}')
+        for col, (val, style) in vals.items():
+            cell = ws.cell(row=note_row, column=col)
+            cell.value = val
+            _apply_style(cell, style)
+        # 合并单元格后补全四周边框（WPS 需要四个角都设才渲染完整）
+        for mr_str in merges:
+            parts = mr_str.split(':')
+            old_min = int(''.join(c for c in parts[0] if c.isdigit()))
+            old_max = int(''.join(c for c in parts[1] if c.isdigit()))
+            span = old_max - old_min
+            new_min_row = note_row
+            new_max_row = note_row + span
+            new_min_col_str = parts[0].rstrip('0123456789')
+            new_max_col_str = parts[1].rstrip('0123456789')
+            import openpyxl.utils as _ou
+            new_min_col = _ou.column_index_from_string(new_min_col_str)
+            new_max_col = _ou.column_index_from_string(new_max_col_str)
+            # 从左上角单元格获取边框样式（强制黑色，WPS 对 auto 颜色渲染为浅灰）
+            _tl = ws.cell(new_min_row, new_min_col)
+            _b = _tl.border
+            _sides = {}
+            _black = 'FF000000'
+            for _side_name, _attr in [('left', 'left'), ('right', 'right'), ('top', 'top'), ('bottom', 'bottom')]:
+                _s = getattr(_b, _attr)
+                if _s and _s.style:
+                    _sides[_side_name] = Side(style=_s.style, color=_black)
+            if _sides:
+                ws.cell(new_min_row, new_min_col).border = Border(
+                    left=_sides.get('left'), right=_sides.get('right'),
+                    top=_sides.get('top'), bottom=_sides.get('bottom'))
+                if new_max_col > new_min_col:
+                    ws.cell(new_min_row, new_max_col).border = Border(
+                        left=None, right=_sides.get('right'),
+                        top=_sides.get('top'), bottom=None)
+                    # 顶行中间单元格也设上边框（WPS 需要顶行全部有 top=thin 才渲染实线）
+                    for _mid_col in range(new_min_col + 1, new_max_col):
+                        ws.cell(new_min_row, _mid_col).border = Border(
+                            left=None, right=None,
                             top=_sides.get('top'), bottom=None)
-                        # 顶行中间单元格也设上边框（WPS 需要顶行全部有 top=thin 才渲染实线）
-                        for _mid_col in range(new_min_col + 1, new_max_col):
-                            ws.cell(new_min_row, _mid_col).border = Border(
-                                left=None, right=None,
-                                top=_sides.get('top'), bottom=None)
-                    if new_max_row > new_min_row:
-                        ws.cell(new_max_row, new_min_col).border = Border(
-                            left=_sides.get('left'), right=None,
+                if new_max_row > new_min_row:
+                    ws.cell(new_max_row, new_min_col).border = Border(
+                        left=_sides.get('left'), right=None,
+                        top=None, bottom=_sides.get('bottom'))
+                if new_max_col > new_min_col and new_max_row > new_min_row:
+                    ws.cell(new_max_row, new_max_col).border = Border(
+                        left=None, right=_sides.get('right'),
+                        top=None, bottom=_sides.get('bottom'))
+                    # 底行中间单元格也设下边框
+                    for _mid_col in range(new_min_col + 1, new_max_col):
+                        ws.cell(new_max_row, _mid_col).border = Border(
+                            left=None, right=None,
                             top=None, bottom=_sides.get('bottom'))
-                    if new_max_col > new_min_col and new_max_row > new_min_row:
-                        ws.cell(new_max_row, new_max_col).border = Border(
-                            left=None, right=_sides.get('right'),
-                            top=None, bottom=_sides.get('bottom'))
-                        # 底行中间单元格也设下边框
-                        for _mid_col in range(new_min_col + 1, new_max_col):
-                            ws.cell(new_max_row, _mid_col).border = Border(
-                                left=None, right=None,
-                                top=None, bottom=_sides.get('bottom'))
-            # 恢复合并单元格的行高
-            for _mr_str in merges:
-                _parts = _mr_str.split(':')
-                _r1 = int(''.join(c for c in _parts[0] if c.isdigit()))
-                _r2 = int(''.join(c for c in _parts[1] if c.isdigit()))
-                for _off in range(_r2 - _r1 + 1):
-                    _old_r = _r1 + _off
-                    if _old_r in row_heights:
-                        ws.row_dimensions[note_row + _off].height = row_heights[_old_r]
-            logger.debug(f"Restored footer note at row {note_row}")
-
-
+        # 恢复合并单元格的行高
+        for _mr_str in merges:
+            _parts = _mr_str.split(':')
+            _r1 = int(''.join(c for c in _parts[0] if c.isdigit()))
+            _r2 = int(''.join(c for c in _parts[1] if c.isdigit()))
+            for _off in range(_r2 - _r1 + 1):
+                _old_r = _r1 + _off
+                if _old_r in row_heights:
+                    ws.row_dimensions[note_row + _off].height = row_heights[_old_r]
+        logger.debug(f"Restored footer note at row {note_row}")
 
     # 合并后补回边框
     for row_num in range(start_row, start_row + total_rows):
         for col_idx in range(1, FP_TOTAL_COLS):
             ws.cell(row=row_num, column=col_idx).border = tmpl_format_row6[col_idx]['border']
-
 
     # --- Apply warning indicators (after merges, so they don't get overwritten) ---
     from ai_gen_reimbursement_docs.config_utils import load_cosmic_warn_marker
@@ -435,7 +430,8 @@ def _add_reuse_validation(ws, start_row, total_rows):
 
 def _save_source_data(rows: list[dict]) -> None:
     """Save flattened source data to log/source_data/ for debugging."""
-    import json, os
+    import json
+    import os
     from datetime import datetime
     base_log = os.environ.get('AI_REIMBURSEMENT_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
@@ -501,8 +497,9 @@ def update_environment_sheet(
     logger.info("环境图 sheet 已更新: 建设目标=%s, 建设必要性=%s",
                 "有" if target else "无", "有" if necessity else "无")
 
-
 # 兼容旧调用方（独立 load/save，可能丢失图片；推荐使用 update_environment_sheet + write_cosmic_xlsx）
+
+
 def write_environment_sheet(
     template_path: str,
     output_path: str,

@@ -36,8 +36,8 @@ def _resolve_move_type(raw: str) -> tuple[str, bool]:
     t_lower = raw.strip().lower()
     if t_lower in _MOVE_TYPE_FUZZY:
         return _MOVE_TYPE_FUZZY[t_lower], True
-    # Completely unknown: default to E and flag
     return 'E', True
+
 
 def parse_user_rules(text: str) -> tuple[str, list[tuple[str, str]]]:
     """解析"默认：操作员\\n分销：分销员" → ("操作员", [("分销","分销员")])"""
@@ -77,7 +77,9 @@ def load_user_config_from_meta(meta_md_path: str) -> dict:
         if rules:
             result["user_initiator_rules"] = rules
     else:
-        logger.warning("Excel 模板未配置「功能用户-发起者判定」，发起者将为空，请在模板 Sheet 6 中补充")
+        logger.warning(
+            "Excel 模板未配置「功能用户-发起者判定」，发起者将为空，请在模板 Sheet 6 中补充"
+        )
     receiver_text = meta.get("功能用户-接收者判定", "")
     if receiver_text:
         default, rules = parse_user_rules(receiver_text)
@@ -86,7 +88,9 @@ def load_user_config_from_meta(meta_md_path: str) -> dict:
         if rules:
             result["user_receiver_rules"] = rules
     else:
-        logger.warning("Excel 模板未配置「功能用户-接收者判定」，接收者将为空，请在模板 Sheet 6 中补充")
+        logger.warning(
+            "Excel 模板未配置「功能用户-接收者判定」，接收者将为空，请在模板 Sheet 6 中补充"
+        )
     return result
 
 
@@ -95,15 +99,8 @@ def _build_user(module: FunctionModule, modules: list[FunctionModule],
                 receiver_rules: list[tuple[str, str]] | None = None,
                 default_initiator: str = "",
                 default_receiver: str = "") -> str:
-    """Determine the user for a module using configurable keyword rules.
-
-    Checks order: grandparent → parent → module name.
-    Initiator and receiver are matched independently against their respective rule sets.
-    Falls back to defaults for any unmatched role.
-    """
-    # Collect ancestor names to check
+    """Determine the user for a module using configurable keyword rules."""
     names_to_check = [module.name]
-    # L3.parent 可能是 "L1/L2" 复合格式
     _raw_parent = module.parent or ""
     if "/" in _raw_parent:
         _l1_name, _l2_name = _raw_parent.split("/", 1)
@@ -118,7 +115,6 @@ def _build_user(module: FunctionModule, modules: list[FunctionModule],
                 if grandparent:
                     names_to_check.append(grandparent.name)
 
-    # Match initiator
     initiator = default_initiator
     if initiator_rules:
         for keyword, val in initiator_rules:
@@ -129,7 +125,6 @@ def _build_user(module: FunctionModule, modules: list[FunctionModule],
             if initiator != default_initiator:
                 break
 
-    # Match receiver
     receiver = default_receiver
     if receiver_rules:
         for keyword, val in receiver_rules:
@@ -150,12 +145,12 @@ def _build_trigger(module: FunctionModule) -> str:
     return "用户触发"
 
 
-def _build_module_prompt(l3_module: FunctionModule, modules: list[FunctionModule]) -> str:
+def _build_module_prompt(l3_module: FunctionModule,
+                         modules: list[FunctionModule]) -> str:
     """Build the prompt for a single L3 module."""
     parent = ""
     _raw_parent = l3_module.parent or ""
     if "/" in _raw_parent:
-        # 复合格式 "L1/L2" → 直接拼接
         _l1, _l2 = _raw_parent.split("/", 1)
         parent = f"{_l1} > {_l2} > "
     elif _raw_parent:
@@ -178,22 +173,18 @@ def _build_module_prompt(l3_module: FunctionModule, modules: list[FunctionModule
     return prompt
 
 
-
 def _clean_json(raw: str) -> str:
     """Clean malformed JSON: trailing commas, single quotes, etc."""
     import re
     text = raw.strip()
-
-    # Remove trailing commas before ] or }
     text = re.sub(r',\s*([}\]])', r'\1', text)
 
-    # Replace single quotes used as string delimiters
     in_string = False
     chars = []
     i = 0
     while i < len(text):
         c = text[i]
-        if c == '"' and (i == 0 or text[i-1] != '\\'):
+        if c == '"' and (i == 0 or text[i - 1] != '\\'):
             in_string = not in_string
             chars.append(c)
         elif c == "'" and not in_string:
@@ -203,9 +194,7 @@ def _clean_json(raw: str) -> str:
         i += 1
     text = ''.join(chars)
 
-    # Remove line comments
     text = re.sub(r'//[^\n]*', '', text)
-
     return text.strip()
 
 
@@ -218,19 +207,17 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
     from ai_gen_reimbursement_docs.llm_client import strip_markdown_code_block
     text = strip_markdown_code_block(response_text)
 
-    # Find JSON array in text（找 [ 后紧跟 { 的位置，避免在思考文本中匹配到 [）
     start = text.find('[{')
     if start == -1:
         start = text.find('[')
     end = text.rfind(']')
     if start == -1 or end == -1:
-        raise ParseError(f"No JSON array found in response for module: {module_name}")
+        raise ParseError(
+            f"No JSON array found in response for module: {module_name}"
+        )
 
-    json_str = text[start:end+1]
-
-    # Clean common JSON issues before parsing
+    json_str = text[start:end + 1]
     json_str = _clean_json(json_str)
-
     data = json.loads(json_str)
 
     for proc in data:
@@ -239,20 +226,25 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
         raw_movements = proc.get('movements', [])
 
         for i, m in enumerate(raw_movements, 1):
-            # Resolve move_type with fuzzy matching
             raw_type = m.get('move_type', 'E')
             move_type, flagged = _resolve_move_type(raw_type)
             data_attrs = m.get('data_attrs', '')
             data_group = m.get('data_group', '')
 
-            # Movement-level validations
             if flagged:
-                item_warnings.append(f"步{i}: 移动类型「{raw_type}」→ {move_type}（模糊匹配）")
+                item_warnings.append(
+                    f"步{i}: 移动类型「{raw_type}」→ {move_type}（模糊匹配）"
+                )
 
             if data_attrs:
-                attr_count = len([a for a in data_attrs.replace('、', ',').split(',') if a.strip()])
+                attr_count = len(
+                    [a for a in data_attrs.replace('、', ',').split(',')
+                     if a.strip()]
+                )
                 if attr_count < 3:
-                    item_warnings.append(f"步{i}: 数据属性仅{attr_count}个（建议≥3）")
+                    item_warnings.append(
+                        f"步{i}: 数据属性仅{attr_count}个（建议≥3）"
+                    )
 
             if not data_attrs:
                 item_warnings.append(f"步{i}: 数据属性为空")
@@ -267,15 +259,20 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
                 move_type_flagged=flagged,
             ))
 
-        # Process-level validations
         if len(movements) < 2:
-            item_warnings.append(f"数据移动仅{len(movements)}步（建议≥2）")
+            item_warnings.append(
+                f"数据移动仅{len(movements)}步（建议≥2）"
+            )
 
         if movements and movements[0].move_type != 'E':
-            item_warnings.append(f"首步应为E（当前为{movements[0].move_type}）")
+            item_warnings.append(
+                f"首步应为E（当前为{movements[0].move_type}）"
+            )
 
         if movements and movements[-1].move_type not in ('W', 'X'):
-            item_warnings.append(f"末步应为W或X（当前为{movements[-1].move_type}）")
+            item_warnings.append(
+                f"末步应为W或X（当前为{movements[-1].move_type}）"
+            )
 
         process_name = proc.get('process', '')
         if not process_name:
@@ -296,194 +293,138 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
     return items
 
 
-def generate_cosmic_items(
-    modules: list[FunctionModule],
-    project_name: str = "",
-    api_key: Optional[str] = None,
-    model: str = "",
-    base_url: Optional[str] = None,
-    interactive: bool = False,
-    user_default_initiator: str = "",
-    user_default_receiver: str = "",
-    user_initiator_rules: list[tuple[str, str]] | None = None,
-    user_receiver_rules: list[tuple[str, str]] | None = None,
-) -> list[CosmicItem]:
-    """Generate COSMIC decompositions for all L3 modules using Claude API.
+def _resolve_l1_l2(l3: FunctionModule,
+                   modules: list[FunctionModule]) -> tuple[str, str]:
+    """从 L3 模块的 parent 解析出 L1/L2 名称。"""
+    _parent_raw = l3.parent or ""
+    if "/" in _parent_raw:
+        _parts = _parent_raw.split("/", 1)
+        return _parts[0], _parts[1]
+    l2_name = _parent_raw
+    l1_name = ""
+    if l2_name:
+        l2 = get_module_by_name(modules, l2_name)
+        if l2 and l2.parent:
+            l1_name = l2.parent
+    return l1_name, l2_name
 
-    Args:
-        modules: Flat list of FunctionModules from module_utils
-        project_name: Project name
-        api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
-        model: Claude model to use (default: deepseek-v4-flash)
-        base_url: Custom API base URL (e.g., for DeepSeek compat)
-        interactive: If True, prompt user before each API call
+
+def _make_empty_cosmic_item(project_name: str, l1_name: str, l2_name: str,
+                            l3_name: str, child: str) -> CosmicItem:
+    """为跳过的模块生成空占位 CosmicItem。"""
+    return CosmicItem(
+        project=project_name,
+        module_l1=l1_name, module_l2=l2_name, module_l3=l3_name,
+        process=child, user="", trigger="", movements=[]
+    )
+
+
+def _process_module_with_retry(
+    l3: FunctionModule, modules: list[FunctionModule],
+    l1_name: str, l2_name: str, project_name: str,
+    api_key: str, model: str, base_url: str,
+    max_tokens: int, idx: int, total: int,
+    user_initiator_rules, user_receiver_rules,
+    user_default_initiator, user_default_receiver,
+    interactive: bool,
+) -> tuple[list[CosmicItem], int, bool]:
+    """对单个 L3 模块调用 AI 生成 COSMIC 分解，带交互式重试。
 
     Returns:
-        List of CosmicItem objects
+        (items, ai_called_count, aborted)
     """
-    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ConfigError(
-            "未配置 API Key，请在 ~/.ai-gen-reimbursement-docs/.env 中设置 ANTHROPIC_API_KEY 或传入 --api-key"
-        )
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_ai_system_prompt, load_ai_examples,
+    )
 
-    base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
+    user = _build_user(l3, modules, user_initiator_rules, user_receiver_rules,
+                       user_default_initiator, user_default_receiver)
+    trigger = _build_trigger(l3)
+    prompt = _build_module_prompt(l3, modules)
 
-    # Filter L3 modules
-    l3_modules = [m for m in modules if m.level == 3]
-    if not l3_modules:
-        logger.warning("No L3 modules found in the module tree.")
-        return []
+    logger.info(f"  [{idx}/{total}] {l1_name} > {l2_name} > {l3.name}...")
 
-    # Load config
-    from ai_gen_reimbursement_docs.config_utils import load_max_tokens, load_ai_system_prompt, load_ai_examples, load_flow_max_ai
-    max_tokens = load_max_tokens()
-    logger.info(f"MAX_TOKENS = {max_tokens}")
+    if interactive:
+        input("Press Enter to continue (Ctrl+C to skip)...")
 
-    max_ai_l3 = load_flow_max_ai("gen_cosmic")
-    if max_ai_l3 > 0:
-        logger.info(f"仅对前 {max_ai_l3} 个 L3 模块调用 AI，超过的跳过")
-
-    all_items = []
-    error_modules: list[tuple[str, str, str, str]] = []  # (l1, l2, l3, error_msg)
-    total = len(l3_modules)
-    logger.info(f"Generating COSMIC decompositions for {total} modules...")
-
-    from ai_gen_reimbursement_docs.config_utils import load_gen_cosmic_ai_limit
-    _cosmic_proc_limit = load_gen_cosmic_ai_limit()
-    _cosmic_proc_count = 0
-    if _cosmic_proc_limit > 0:
-        logger.info(f"仅对前 {_cosmic_proc_limit} 个功能过程调用 AI，超过的跳过")
-    _skip_ai_limit = 0
-    _skip_proc_limit = 0
+    _current_max_tokens = max_tokens
     _ai_called = 0
 
-    for idx, l3 in enumerate(l3_modules, 1):
-        # L3.parent 可能是 "L1/L2" 复合格式，需拆分
-        _parent_raw = l3.parent or ""
-        if "/" in _parent_raw:
-            _parts = _parent_raw.split("/", 1)
-            l1_name = _parts[0]
-            l2_name = _parts[1]
-        else:
-            l2_name = _parent_raw
-            l1_name = ""
-            if l2_name:
-                l2 = get_module_by_name(modules, l2_name)
-                if l2 and l2.parent:
-                    l1_name = l2.parent
-        # 按功能过程累计数跳过
-        if _cosmic_proc_limit > 0:
-            _module_procs = len(l3.children) if l3.children else 1
-            if _cosmic_proc_count >= _cosmic_proc_limit:
-                from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
-                # 每个功能过程生成一行（保留 L1/L2/L3 信息，movements 为空）
-                for _child in (l3.children or [l3.name]):
-                    all_items.append(CosmicItem(
-                        project=project_name,
-                        module_l1=l1_name, module_l2=l2_name, module_l3=l3.name,
-                        process=_child, user="", trigger="", movements=[]
-                    ))
-                logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过功能过程限制 {_cosmic_proc_limit}）")
-                _skip_proc_limit += 1
-                continue
-            _cosmic_proc_count += _module_procs
+    while True:
+        try:
+            _ai_called += 1
+            _save_ai_prompt(l3.name, l2_name, l1_name, prompt,
+                            "generate_cosmic")
 
-        # 超过现有限制的模块跳过 AI
+            from ai_gen_reimbursement_docs.llm_client import call_llm
+            resp_text = call_llm(
+                prompt=prompt,
+                system=(load_ai_system_prompt("cosmic_split") + "\n\n"
+                        + load_ai_examples("cosmic_split")),
+                api_key=api_key, model=model, base_url=base_url,
+                max_tokens=_current_max_tokens, temperature=0.1,
+                tag=f"cosmic_{idx}", save_logs=False,
+            )
 
-        # 超过限制的模块跳过 AI
-        if max_ai_l3 > 0 and idx > max_ai_l3:
-            logger.info(f"    [{idx}/{total}] 跳过 {l3.name}（超过 AI 限制 {max_ai_l3}）")
-            _skip_ai_limit += 1
-            from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
-            for _child in (l3.children or [l3.name]):
-                all_items.append(CosmicItem(
-                    project=project_name,
-                    module_l1=l1_name, module_l2=l2_name, module_l3=l3.name,
-                    process=_child, user="", trigger="", movements=[]
-                ))
-            continue
+            _save_ai_response(l3.name, l2_name, l1_name, resp_text, "")
 
-        user = _build_user(l3, modules, user_initiator_rules, user_receiver_rules,
-                           user_default_initiator, user_default_receiver)
-        trigger = _build_trigger(l3)
+            items = _parse_llm_response(l3.name, user, trigger, resp_text,
+                                        project_name, l1_name, l2_name)
+            warn_count = sum(1 for it in items if it.warnings)
+            if warn_count:
+                for it in items:
+                    if it.warnings:
+                        logger.warning(
+                            f"  [{idx}/{total}] ⚠ {it.process}: "
+                            f"{'; '.join(it.warnings)}"
+                        )
+            sub_count = sum(len(it.movements) for it in items)
+            logger.info(
+                f"  [{idx}/{total}] → {sub_count} 个子过程描述"
+                + (f"（{warn_count}个有警告）" if warn_count else "")
+            )
+            return items, _ai_called, False
 
-        prompt = _build_module_prompt(l3, modules)
-
-        logger.info(f"  [{idx}/{total}] {l1_name} > {l2_name} > {l3.name}...")
-
-        if interactive:
-            input("Press Enter to continue (Ctrl+C to skip)...")
-
-        _current_max_tokens = max_tokens
-        _abort_module = False
-        while True:
+        except Exception as e:
+            _err_msg = str(e)
+            logger.warning(f"  [{idx}/{total}] → 出错: {_err_msg}")
+            if not sys.stdin.isatty():
+                return [], _ai_called, False
             try:
-                _ai_called += 1
-                _save_ai_prompt(l3.name, l2_name, l1_name, prompt, "generate_cosmic")
+                choice = input(
+                    f"  AI 调用出错: {_err_msg}\n"
+                    f"  输入 r 12000 重试（r后跟空格和数字），"
+                    f"q 结束，Enter 跳过: "
+                ).strip()
+                if choice == 'q':
+                    return [], _ai_called, True
+                if choice.startswith('r ') and len(choice) > 2:
+                    _current_max_tokens = int(choice[2:].strip())
+                    logger.info(
+                        f"  重试，max_tokens 设为 {_current_max_tokens}"
+                    )
+                    continue
+                return [], _ai_called, False
+            except (EOFError, KeyboardInterrupt):
+                return [], _ai_called, False
 
-                from ai_gen_reimbursement_docs.llm_client import call_llm
-                resp_text = call_llm(
-                    prompt=prompt,
-                    system=load_ai_system_prompt("cosmic_split") + "\n\n" + load_ai_examples("cosmic_split"),
-                    api_key=api_key, model=model, base_url=base_url,
-                    max_tokens=_current_max_tokens, temperature=0.1,
-                    tag=f"cosmic_{idx}", save_logs=False,
-                )
 
-                _save_ai_response(l3.name, l2_name, l1_name, resp_text, "")
-
-                items = _parse_llm_response(l3.name, user, trigger, resp_text,
-                                            project_name, l1_name, l2_name)
-                all_items.extend(items)
-                warn_count = sum(1 for it in items if it.warnings)
-                if warn_count:
-                    for it in items:
-                        if it.warnings:
-                            logger.warning(f"  [{idx}/{total}] ⚠ {it.process}: {'; '.join(it.warnings)}")
-                sub_count = sum(len(it.movements) for it in items)
-                logger.info(f"  [{idx}/{total}] → {sub_count} 个子过程描述"
-                            + (f"（{warn_count}个有警告）" if warn_count else ""))
-                break  # success, exit while loop
-
-            except Exception as e:
-                _err_msg = str(e)
-                logger.warning(f"  [{idx}/{total}] → 出错: {_err_msg}")
-                if not sys.stdin.isatty():
-                    error_modules.append((l1_name, l2_name, l3.name, _err_msg[:200]))
-                    break
-                try:
-                    choice = input(f"  AI 调用出错: {_err_msg}\n  输入 r 12000 重试（r后跟空格和数字），q 结束，Enter 跳过: ").strip()
-                    if choice == 'q':
-                        _abort_module = True
-                        break
-                    if choice.startswith('r ') and len(choice) > 2:
-                        _current_max_tokens = int(choice[2:].strip())
-                        logger.info(f"  重试，max_tokens 设为 {_current_max_tokens}")
-                        continue
-                    error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
-                    break
-                except (EOFError, KeyboardInterrupt):
-                    error_modules.append((l1_name, l2_name, l3.name, str(e)[:200]))
-                    break
-        if _abort_module:
-            logger.warning(f"用户选择结束，已处理 {idx}/{total} 个模块")
-            break
-
-    # --- 数据组名去重（从功能过程中提取动词作后缀） ---
+def _deduplicate_data_groups(all_items: list[CosmicItem]) -> None:
+    """数据组名去重——从功能过程中提取动词作后缀。"""
     _seen_groups: dict[str, str] = {}
     for _item in all_items:
         _verb = _item.process[:2] if len(_item.process) >= 2 else _item.process
         for _m in _item.movements:
             _orig = _m.data_group
             if _orig in _seen_groups:
-                _first_verb = _seen_groups[_orig]
-                if _first_verb != _verb:
+                if _seen_groups[_orig] != _verb:
                     _m.data_group = f"{_orig}{_verb}"
             else:
                 _seen_groups[_orig] = _verb
 
-    # --- 数据属性去重（全局唯一，重复时尾部加"等"） ---
+
+def _deduplicate_data_attrs(all_items: list[CosmicItem]) -> None:
+    """数据属性去重——全局唯一，重复时尾部加"等"。"""
     _seen_attrs: set[str] = set()
     for _item in all_items:
         for _m in _item.movements:
@@ -497,21 +438,35 @@ def generate_cosmic_items(
                 _m.data_attrs = _key
             _seen_attrs.add(_key)
 
-    # 汇总：全部跳过时提示配置限制
-    if _ai_called == 0 and total > 0:
+
+def _summarize_cosmic_results(
+    all_items: list[CosmicItem],
+    error_modules: list[tuple[str, str, str, str]],
+    ai_called: int, total: int,
+    max_ai_l3: int, skip_ai_limit: int,
+    cosmic_proc_limit: int, skip_proc_limit: int,
+) -> None:
+    """汇总 COSMIC 生成结果——警告输出 + 全部跳过提示。"""
+    if ai_called == 0 and total > 0:
         _reasons = []
-        if max_ai_l3 > 0 and _skip_ai_limit > 0:
-            _reasons.append(f"max_ai_l3_modules={max_ai_l3}（跳过 {_skip_ai_limit} 个模块）")
-        if _cosmic_proc_limit > 0 and _skip_proc_limit > 0:
-            _reasons.append(f"gen_cosmic_ai_limit={_cosmic_proc_limit}（跳过 {_skip_proc_limit} 个模块）")
+        if max_ai_l3 > 0 and skip_ai_limit > 0:
+            _reasons.append(
+                f"max_ai_l3_modules={max_ai_l3}（跳过 {skip_ai_limit} 个模块）"
+            )
+        if cosmic_proc_limit > 0 and skip_proc_limit > 0:
+            _reasons.append(
+                f"gen_cosmic_ai_limit={cosmic_proc_limit}"
+                f"（跳过 {skip_proc_limit} 个模块）"
+            )
         if _reasons:
             logger.warning(
                 "⚠ COSMIC AI 全部跳过（共 %d 个模块），请检查配置限制：%s。"
-                "如需 AI 填充，请在 ~/.ai-gen-reimbursement-docs/system_config.yaml 中将对应值设为 0",
+                "如需 AI 填充，请在 "
+                "~/.ai-gen-reimbursement-docs/system_config.yaml "
+                "中将对应值设为 0",
                 total, "、".join(_reasons),
             )
 
-    # --- Final summary ---
     total_ok = len(all_items)
     warn_items = [it for it in all_items if it.warnings]
     logger.info(f"Total COSMIC items generated: {total_ok}")
@@ -520,25 +475,146 @@ def generate_cosmic_items(
         if warn_items:
             module_warns: dict[str, list] = {}
             for it in warn_items:
-                mod_path = f"{it.module_l1}>{it.module_l2}>{it.module_l3}"
+                mod_path = (f"{it.module_l1}>{it.module_l2}>{it.module_l3}")
                 module_warns.setdefault(mod_path, []).append(it)
-            logger.warning(f"⚠ {len(module_warns)} 个模块存在数据异常（共{len(warn_items)}个功能过程）:")
+            logger.warning(
+                f"⚠ {len(module_warns)} 个模块存在数据异常"
+                f"（共{len(warn_items)}个功能过程）:"
+            )
             for mod_path, processes in module_warns.items():
-                logger.warning(f"  • {mod_path}（{len(processes)}个过程）")
+                logger.warning(
+                    f"  • {mod_path}（{len(processes)}个过程）"
+                )
                 for it in processes:
                     for w in it.warnings:
                         logger.warning(f"    - [{it.process}] {w}")
         if error_modules:
-            logger.warning(f"❌ {len(error_modules)} 个模块解析失败:")
+            logger.warning(
+                f"❌ {len(error_modules)} 个模块解析失败:"
+            )
             for l1, l2, l3, err in error_modules:
                 mod_path = f"{l1}>{l2}>{l3}" if l1 else l3
                 logger.warning(f"  • {mod_path}: {err}")
     else:
         logger.info("所有模块数据正常，无异常")
+
+
+def generate_cosmic_items(
+    modules: list[FunctionModule],
+    project_name: str = "",
+    api_key: Optional[str] = None,
+    model: str = "",
+    base_url: Optional[str] = None,
+    interactive: bool = False,
+    user_default_initiator: str = "",
+    user_default_receiver: str = "",
+    user_initiator_rules: list[tuple[str, str]] | None = None,
+    user_receiver_rules: list[tuple[str, str]] | None = None,
+) -> list[CosmicItem]:
+    """Generate COSMIC decompositions for all L3 modules using Claude API."""
+    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ConfigError(
+            "未配置 API Key，请在 ~/.ai-gen-reimbursement-docs/.env 中"
+            "设置 ANTHROPIC_API_KEY 或传入 --api-key"
+        )
+
+    base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
+
+    l3_modules = [m for m in modules if m.level == 3]
+    if not l3_modules:
+        logger.warning("No L3 modules found in the module tree.")
+        return []
+
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_max_tokens, load_flow_max_ai, load_gen_cosmic_ai_limit,
+    )
+    max_tokens = load_max_tokens()
+    logger.info(f"MAX_TOKENS = {max_tokens}")
+
+    max_ai_l3 = load_flow_max_ai("gen_cosmic")
+    if max_ai_l3 > 0:
+        logger.info(f"仅对前 {max_ai_l3} 个 L3 模块调用 AI，超过的跳过")
+
+    all_items: list[CosmicItem] = []
+    error_modules: list[tuple[str, str, str, str]] = []
+    total = len(l3_modules)
+    logger.info(f"Generating COSMIC decompositions for {total} modules...")
+
+    _cosmic_proc_limit = load_gen_cosmic_ai_limit()
+    _cosmic_proc_count = 0
+    if _cosmic_proc_limit > 0:
+        logger.info(
+            f"仅对前 {_cosmic_proc_limit} 个功能过程调用 AI，超过的跳过"
+        )
+    _skip_ai_limit = 0
+    _skip_proc_limit = 0
+    _ai_called = 0
+
+    for idx, l3 in enumerate(l3_modules, 1):
+        l1_name, l2_name = _resolve_l1_l2(l3, modules)
+
+        # 按功能过程累计数跳过
+        if _cosmic_proc_limit > 0:
+            _module_procs = len(l3.children) if l3.children else 1
+            if _cosmic_proc_count >= _cosmic_proc_limit:
+                for _child in (l3.children or [l3.name]):
+                    all_items.append(_make_empty_cosmic_item(
+                        project_name, l1_name, l2_name, l3.name, _child,
+                    ))
+                logger.info(
+                    f"    [{idx}/{total}] 跳过 {l3.name}"
+                    f"（超过功能过程限制 {_cosmic_proc_limit}）"
+                )
+                _skip_proc_limit += 1
+                continue
+            _cosmic_proc_count += _module_procs
+
+        # 超过 L3 模块数量限制
+        if max_ai_l3 > 0 and idx > max_ai_l3:
+            logger.info(
+                f"    [{idx}/{total}] 跳过 {l3.name}"
+                f"（超过 AI 限制 {max_ai_l3}）"
+            )
+            _skip_ai_limit += 1
+            for _child in (l3.children or [l3.name]):
+                all_items.append(_make_empty_cosmic_item(
+                    project_name, l1_name, l2_name, l3.name, _child,
+                ))
+            continue
+
+        items, called, aborted = _process_module_with_retry(
+            l3, modules, l1_name, l2_name, project_name,
+            api_key, model, base_url, max_tokens, idx, total,
+            user_initiator_rules, user_receiver_rules,
+            user_default_initiator, user_default_receiver,
+            interactive,
+        )
+        _ai_called += called
+        if items:
+            all_items.extend(items)
+        else:
+            error_modules.append((l1_name, l2_name, l3.name, ""))
+
+        if aborted:
+            logger.warning(
+                f"用户选择结束，已处理 {idx}/{total} 个模块"
+            )
+            break
+
+    _deduplicate_data_groups(all_items)
+    _deduplicate_data_attrs(all_items)
+
+    _summarize_cosmic_results(
+        all_items, error_modules, _ai_called, total,
+        max_ai_l3, _skip_ai_limit,
+        _cosmic_proc_limit, _skip_proc_limit,
+    )
     return all_items
 
 
-def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None:
+def _save_ai_prompt(l3: str, l2: str, l1: str, text: str,
+                    tag: str = "") -> None:
     """Save full AI prompt text to log/ai_prompts/ for review."""
     base_log = os.environ.get('AI_REIMBURSEMENT_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
@@ -560,7 +636,8 @@ def _save_ai_prompt(l3: str, l2: str, l1: str, text: str, tag: str = "") -> None
     logger.debug(f"AI提示词已保存: {filepath}")
 
 
-def _save_ai_response(l3: str, l2: str, l1: str, text: str, reasoning: str = "") -> None:
+def _save_ai_response(l3: str, l2: str, l1: str, text: str,
+                      reasoning: str = "") -> None:
     """Save raw AI response text to log/ai_responses/ for review."""
     base_log = os.environ.get('AI_REIMBURSEMENT_LOG_DIR', '') or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'log'
@@ -568,7 +645,6 @@ def _save_ai_response(l3: str, l2: str, l1: str, text: str, reasoning: str = "")
     log_dir = os.path.join(base_log, 'ai_responses')
     os.makedirs(log_dir, exist_ok=True)
 
-    # Safe filename from module hierarchy
     parts = [p for p in [l1, l2, l3] if p]
     safe_name = '_'.join(parts).replace('/', '_').replace('\\', '_').strip()
 
@@ -606,10 +682,10 @@ def save_to_json(items: list[CosmicItem], output_path: str) -> None:
                     "sub_process": m.sub_process,
                     "move_type": m.move_type,
                     "data_group": m.data_group,
-                    "data_attrs": m.data_attrs
+                    "data_attrs": m.data_attrs,
                 }
                 for m in item.movements
-            ]
+            ],
         })
 
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -625,7 +701,7 @@ def load_from_json(input_path: str) -> list[CosmicItem]:
     items = []
     for d in data:
         movements = [
-            DataMovement(order=i+1, **m)
+            DataMovement(order=i + 1, **m)
             for i, m in enumerate(d.get('movements', []))
         ]
         items.append(CosmicItem(
@@ -636,6 +712,6 @@ def load_from_json(input_path: str) -> list[CosmicItem]:
             user=d.get('user', ''),
             trigger=d.get('trigger', ''),
             process=d.get('process', ''),
-            movements=movements
+            movements=movements,
         ))
     return items

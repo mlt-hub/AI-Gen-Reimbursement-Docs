@@ -131,5 +131,3 @@ class TestParseMdToItems:
             assert items[0].movements[0].data_attrs == "用户名,密码,手机号"
         finally:
             os.unlink(path)
-
-

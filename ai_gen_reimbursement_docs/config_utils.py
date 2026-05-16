@@ -164,7 +164,6 @@ def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3
     return formula if formula else default
 
 
-
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
     CLI --max-tokens 通过环境变量 AI_REIMBURSEMENT_MAX_TOKENS 覆盖。
@@ -205,10 +204,9 @@ def load_max_tokens(default: int = 2000) -> int:
     return default
 
 
-
 def load_flow_max_ai(flow_name: str) -> int:
     """读取流程对应的 AI 限制数。优先走专有参数，fallback 到 max_ai_l3_modules。
-    
+
     Args:
         flow_name: 'gen_fpa', 'gen_spec', 'gen_cosmic'
     """
@@ -229,8 +227,6 @@ def load_flow_max_ai(flow_name: str) -> int:
         except Exception:
             pass
     return 0
-
-
 
 
 def load_cosmic_warn_marker() -> bool:
@@ -355,8 +351,6 @@ def load_ai_examples(name: str) -> str:
         return ""
 
 
-
-
 def migrate_config() -> None:
     """自动迁移配置：将模板中的新键追加到用户配置文件末尾。
 
@@ -394,7 +388,7 @@ def migrate_config() -> None:
         if new_lines:
             with open(env_file, 'a', encoding='utf-8') as f:
                 f.writelines(new_lines)
-            logger.info(f"配置迁移: .env 新增 {len(new_lines)//2} 个配置项")
+            logger.info(f"配置迁移: .env 新增 {len(new_lines) // 2} 个配置项")
 
     # --- YAML 合并 ---
     # 对比 .example 和用户配置，自动追加新增的顶层键（含嵌套块）
@@ -469,7 +463,6 @@ def _extract_yaml_block(lines: list[str], key: str) -> str:
         block_lines.append(line)
 
     return '\n'.join(block_lines).rstrip()
-
 
 
 def load_business_config() -> dict:
