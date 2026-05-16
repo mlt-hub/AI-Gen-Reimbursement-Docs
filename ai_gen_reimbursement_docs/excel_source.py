@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import sys
 from datetime import datetime
 
 import openpyxl
@@ -472,3 +473,111 @@ def ai_fill_meta_md(src_md: str, dst_md: str, api_key: str, model: str, base_url
     with open(dst_md, 'w', encoding='utf-8') as f:
         f.writelines(new_lines)
     return dst_md
+
+
+# ═══════════════════════════════════════════════════════════
+#  共享工具函数
+# ═══════════════════════════════════════════════════════════
+
+def project_root() -> str:
+    """项目根目录（兼容源码和 PyInstaller exe）。"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(__file__))
+
+
+def read_md_value(path: str, pattern: str) -> float:
+    """从 MD 文件中按正则提取数值，文件不存在返回 0。"""
+    import re
+    if not os.path.exists(path):
+        return 0.0
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            m = re.search(pattern, line)
+            if m:
+                return float(m.group(1))
+    return 0.0
+
+
+def write_cfp_sum(md_dir: str, total: float) -> None:
+    """将 CFP 总和写入 gen-cosmic-CFP-总和.md。"""
+    path = os.path.join(md_dir, 'gen-cosmic-CFP-总和.md')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write("# CFP 总和\n\n")
+        f.write(f"CFP 总和: {total}\n")
+    logger.info(f"CFP 总和已写入: {path}")
+
+
+def read_project_name(meta_md_path: str) -> str:
+    """从 录入文档元数据.md 读取项目名称（工单标题）。"""
+    try:
+        with open(meta_md_path, encoding='utf-8') as f:
+            for line in f:
+                if '| 工单标题' in line and '|' in line:
+                    parts = [c.strip() for c in line.split('|')]
+                    if len(parts) >= 3 and parts[2]:
+                        return parts[2]
+    except Exception:
+        pass
+    return ""
+
+
+def build_modules_from_tree_md(md_path: str) -> list:
+    """从 功能清单-模块树.md 构建 FunctionModule 列表。
+
+    自动去重并构建 L1→L2→L3 层级，功能过程作为 L3 的 children。
+    """
+    from ai_gen_reimbursement_docs.models import FunctionModule
+    rows = parse_module_tree_md(md_path)
+
+    if not rows:
+        return []
+
+    modules = []
+    seen_l1 = set()
+    seen_l2 = {}
+    seen_l3 = {}
+    l3_procs = {}
+
+    for r in rows:
+        l1 = r["一级模块"]
+        l2 = r["二级模块"]
+        l3 = r["三级模块"]
+        proc = r["功能过程"]
+        desc = r["三级模块整体功能描述"]
+
+        if l1 not in seen_l1:
+            seen_l1.add(l1)
+            modules.append(FunctionModule(name=l1, level=1))
+        if l1 not in seen_l2:
+            seen_l2[l1] = set()
+        l2_parent = f"{l1}/{l2}" if l2 else ""
+        if l2 and l2 not in seen_l2[l1]:
+            seen_l2[l1].add(l2)
+            modules.append(FunctionModule(name=l2, level=2, parent=l1))
+        l3_key = (l1, l2)
+        if l3_key not in seen_l3:
+            seen_l3[l3_key] = set()
+        if l3 not in seen_l3[l3_key]:
+            seen_l3[l3_key].add(l3)
+            modules.append(FunctionModule(name=l3, level=3, parent=l2_parent,
+                                          description=desc))
+        procs_key = (l1, l2, l3)
+        if procs_key not in l3_procs:
+            l3_procs[procs_key] = []
+        if proc and proc not in l3_procs[procs_key]:
+            l3_procs[procs_key].append(proc)
+
+    for m in modules:
+        if m.level == 3:
+            parent_parts = m.parent.split("/") if m.parent else []
+            l1_name = parent_parts[0] if len(parent_parts) >= 1 else ""
+            l2_name = parent_parts[1] if len(parent_parts) >= 2 else m.parent
+            procs_key = (l1_name, l2_name, m.name)
+            m.children = l3_procs.get(procs_key, [])
+
+    l3_count = len([m for m in modules if m.level == 3])
+    logger.info(f"从表格解析到模块层级: {len(seen_l1)}个L1, "
+                f"{sum(len(v) for v in seen_l2.values())}个L2, "
+                f"{l3_count}个L3")
+    return modules

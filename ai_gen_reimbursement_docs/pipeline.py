@@ -100,7 +100,7 @@ def run_pipeline(
     if not project_name:
         project_name = read_project_name_from_excel(file_path)
     if not project_name:
-        from ai_gen_reimbursement_docs.main import read_project_name
+        from ai_gen_reimbursement_docs.excel_source import read_project_name
         project_name = read_project_name(meta_md_tpl) if os.path.exists(meta_md_tpl) else ""
     if not project_name:
         project_name = "products"
@@ -196,7 +196,7 @@ def _read_fpa_sum(fpa_sum_md_path: str) -> float:
 
 def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
     """解析模板路径，优先级：CLI 参数 > 配置文件 > data/templates/ 默认。"""
-    from ai_gen_reimbursement_docs.main import project_root
+    from ai_gen_reimbursement_docs.excel_source import project_root
 
     cfg_templates = load_out_templates()
     templates = {}
@@ -362,7 +362,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
 
     generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src, fpa_xlsx)
 
-    from ai_gen_reimbursement_docs.main import read_md_value
+    from ai_gen_reimbursement_docs.excel_source import read_md_value
     result.fpa_reduced = read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
     result.fpa_xlsx = fpa_xlsx
     logger.info(f"FPA工作量评估已生成: {fpa_xlsx}")
@@ -375,7 +375,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     """第2步：COSMIC 功能点拆分表。"""
     logger.info("生成 项目功能点拆分表...")
 
-    from ai_gen_reimbursement_docs.main import (
+    from ai_gen_reimbursement_docs.excel_source import (
         build_modules_from_tree_md, read_project_name, write_cfp_sum,
     )
     from ai_gen_reimbursement_docs.cosmic_ai import load_user_config_from_meta
@@ -425,7 +425,7 @@ def _generate_list(md_dir, tree_md, meta_md, fpa_sum_md,
     logger.info("生成 项目需求清单...")
     require_src = _check_template(templates_dict, 'list', '项目需求清单')
 
-    from ai_gen_reimbursement_docs.main import read_md_value
+    from ai_gen_reimbursement_docs.excel_source import read_md_value
     if cfp_total is None:
         cfp_total = read_md_value(
             os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
@@ -467,7 +467,7 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
     filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
 
     # 需求说明书文件名提醒
-    from ai_gen_reimbursement_docs.main import project_root
+    from ai_gen_reimbursement_docs.excel_source import project_root
     if load_spec_remind_update_toc():
         _doc_dir, _doc_name = os.path.split(spec_docx)
         if not _doc_name.startswith("【提醒】请手动更新整个目录"):
@@ -487,7 +487,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     """全流程：base → fpa → spec → cosmic → list（按现有依赖顺序）。"""
     logger.info("全流程模式：按依赖顺序执行...")
 
-    from ai_gen_reimbursement_docs.main import (
+    from ai_gen_reimbursement_docs.excel_source import (
         build_modules_from_tree_md, read_project_name,
         read_md_value, write_cfp_sum,
     )
