@@ -2,23 +2,30 @@
 
 ## 1. 概述
 
-为现有 CLI 工具 `ai-gen-reimbursement-docs` 添加 Web 界面，用户通过浏览器上传文件、配置参数、选择操作模式，实时查看日志，下载生成产物。
+为现有 CLI 工具 `ai-gen-reimbursement-docs` 添加 Web 界面，实时查看日志，下载生成产物。支持两种使用方式。
+
+### 两种模式
+
+| 模式 | 适用场景 | 文件输入 | 产物输出 |
+|---|---|---|---|
+| **本机模式** | 单人在本机使用 | 直接读本地路径 | 写到本地目录，点按钮打开 |
+| **服务模式** | 多人远程访问 | 浏览器上传文件 | 下载 ZIP |
+
+同一套 server + 同一套前端，前端切换模式。
 
 ### 核心原则
 
 - **零侵入**：不修改 `ai_gen_reimbursement_docs/` 下任何文件
 - **可并存**：Web 和 CLI 各自独立进程，同时使用互不影响
-- **多用户**：支持 3-5 人同时使用，日志和文件完全隔离
 
 ### 技术栈
 
 | 层 | 选择 | 原因 |
 |---|---|---|
-| Web 框架 | FastAPI | 异步、原生 SSE、文件上传简单 |
+| Web 框架 | FastAPI | 异步、原生 SSE |
 | 前端 | 单 HTML + vanilla JS + CSS | 无构建工具、无 npm、开箱即用 |
 | 并发 | `asyncio.to_thread` + 线程池 | 同步 AI 调用放线程池，不阻塞事件循环 |
 | 日志隔离 | `contextvars` + 自定义 Handler | 日志按会话路由到不同 SSE 连接 |
-| 存储 | `tempfile.mkdtemp()` | 每个请求独立临时目录，产物打包 ZIP |
 
 ---
 
@@ -56,17 +63,27 @@ ai_cosmic/                          # 现有项目，不动
 │  GET /                        返回 index.html                              
 │ ──────────────────────────────────────────────────────────────→            
 │                                                                           
-│  POST /api/run                                                             
-│  (上传文件+参数)                                                             
-│ ───────────────────────────→  1. 保存文件到 /tmp/req_{session}/             
-│                               2. session_var.set(session_id)               
-│                               3. asyncio.to_thread(run_pipeline)            
-│                               4. run_pipeline 调用现有函数:                  
-│                                  fill_md_with_ai(...) ──────────→          
-│                                  generate_cosmic_xlsx_from_md(...) ──→     
-│                               5. 打包产物 ZIP                               
-│                               6. 返回 FileResponse(zip)                    
-│ ←───────────────────────────                                               │
+│  ┌─ 本机模式 ──────────────────────────────────────────────┐               
+│  │ POST /api/run-local                                      │              
+│  │ (xlsx路径+输出目录+参数)                                    │              
+│  │ ───────────────────────→  直接读本地 xlsx                   │              
+│  │                           asyncio.to_thread(run_pipeline)  │              
+│  │                           产物写本地目录                     │              
+│  │ ←─ {session_id} ───────                                   │              
+│  │ GET /api/open-folder?session=xxx                           │              
+│  │ ───────────────────────→  os.startfile(output_dir)         │              
+│  └──────────────────────────────────────────────────────────┘              
+│                                                                           
+│  ┌─ 服务模式 ──────────────────────────────────────────────┐               
+│  │ POST /api/run-upload                                     │              
+│  │ (上传文件+参数)                                            │              
+│  │ ───────────────────────→  保存到 /tmp/ard_web_{session}/             
+│  │                           asyncio.to_thread(run_pipeline)  │              
+│  │                           打包产物 ZIP                     │              
+│  │ ←─ {session_id} ───────                                   │              
+│  │ GET /api/download/{session_id}                             │              
+│  │ ←─ ZIP 下载 ──────────                                     │              
+│  └──────────────────────────────────────────────────────────┘              
 │                                                                           
 │  GET /api/log-stream?session=xxx                                           
 │ ───────────────────────────→  SSE 推送该 session 的日志队列                 
@@ -84,61 +101,71 @@ ai_cosmic/                          # 现有项目，不动
 
 返回前端页面。
 
-### 4.2 POST `/api/run`
+### 4.2 共用参数
+
+**操作模式**（仅支持 from-excel 流程）：
+
+| mode 值 | 对应 CLI |
+|---------|----------|
+| `from-excel-gen-all` | `--from-excel x.xlsx --gen-all` |
+| `from-excel-gen-basedata` | `--from-excel x.xlsx --gen-basedata` |
+| `from-excel-gen-fpa` | `--from-excel x.xlsx --gen-fpa` |
+| `from-excel-gen-cosmic` | `--from-excel x.xlsx --gen-cosmic` |
+| `from-excel-gen-list` | `--from-excel x.xlsx --gen-list` |
+| `from-excel-gen-spec` | `--from-excel x.xlsx --gen-spec` |
+
+**可选参数**（两种模式共用）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `api_key` | string | API Key，不填用系统配置 |
+| `model` | string | 模型名，默认 `deepseek-v4-flash` |
+| `base_url` | string | API 端点，默认用系统配置 |
+
+### 4.3 POST `/api/run-local`（本机模式）
+
+直接操作本地文件，无上传无下载。
+
+**请求**（JSON）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `xlsx_path` | string | 是 | 本地 .xlsx 路径 |
+| `output_dir` | string | 否 | 输出目录，默认 xlsx 同级 |
+| `mode` | string | 是 | 操作模式 |
+| `api_key` | string | 否 | 同上 |
+| `model` | string | 否 | 同上 |
+| `base_url` | string | 否 | 同上 |
+
+**响应**：
+
+- 成功：`{"session_id": "xxx", "output_dir": "/path/to/output"}`
+- 失败：`{"error": "..."}`
+
+### 4.4 POST `/api/run-upload`（服务模式）
+
+上传文件，完成后下载 ZIP。
 
 **请求**（multipart/form-data）：
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `file` | file | 是 | .xlsx 功能清单文件 |
-| `mode` | string | 是 | 操作模式，见下表 |
-| `api_key` | string | 否 | Anthropic API Key，不填则用系统配置 |
-| `model` | string | 否 | 模型名，默认 `deepseek-v4-flash` |
-| `base_url` | string | 否 | API 端点，默认用系统配置 |
-| `fpa_template` | file | 否 | 自定义 FPA 模板 |
-| `cosmic_template` | file | 否 | 自定义 COSMIC 模板 |
-| `list_template` | file | 否 | 自定义需求清单模板 |
-| `spec_template` | file | 否 | 自定义需求说明书模板 |
-
-**操作模式**（仅支持 from-excel 流程）：
-
-| mode 值 | 对应 CLI | 输入文件类型 |
-|---------|----------|-------------|
-| `from-excel-gen-all` | `--from-excel x.xlsx --gen-all` | .xlsx |
-| `from-excel-gen-basedata` | `--from-excel x.xlsx --gen-basedata` | .xlsx |
-| `from-excel-gen-fpa` | `--from-excel x.xlsx --gen-fpa` | .xlsx |
-| `from-excel-gen-cosmic` | `--from-excel x.xlsx --gen-cosmic` | .xlsx |
-| `from-excel-gen-list` | `--from-excel x.xlsx --gen-list` | .xlsx |
-| `from-excel-gen-spec` | `--from-excel x.xlsx --gen-spec` | .xlsx |
-
-> 注：`--docx` 管道（Word → COSMIC 拆分表）在当前代码中已有调用但缺少函数定义（`convert_to_md`、`get_project_name_from_md` 不存在），暂不支持。
+| `mode` | string | 是 | 操作模式 |
+| `api_key` | string | 否 | 同上 |
+| `model` | string | 否 | 同上 |
+| `base_url` | string | 否 | 同上 |
+| `fpa_template` | file | 否 | 自定义模板 |
+| `cosmic_template` | file | 否 | 同上 |
+| `list_template` | file | 否 | 同上 |
+| `spec_template` | file | 否 | 同上 |
 
 **响应**：
 
-- 成功：返回 `application/zip`，文件名 `产物_{时间戳}.zip`
-- 失败：返回 `application/json`，`{"error": "错误信息"}`
+- 成功：`{"session_id": "xxx", "has_download": true}`
+- 失败：`{"error": "..."}`
 
-**流程**：
-
-```
-POST /api/run
-  │
-  ├─ 生成 session_id (uuid4 前8位)
-  ├─ 创建 /tmp/ard_web_{session}/
-  │   ├─ input/    ← 上传的文件放这里
-  │   ├─ output/   ← 产物输出到这里
-  │   └─ custom_templates/  ← 自定义模板（如有）
-  │
-  ├─ 设置 contextvars.session_id
-  ├─ asyncio.to_thread(pipeline, ...)
-  │   ├─ 根据 mode 调用现有函数
-  │   └─ 产物写入 output/
-  │
-  ├─ shutil.make_archive(output/, 'zip')
-  └─ 返回 FileResponse，返回后清理临时目录
-```
-
-### 4.3 GET `/api/log-stream?session=xxx`
+### 4.5 GET `/api/log-stream?session=xxx`
 
 SSE 端点，推送指定 session 的实时日志。
 
@@ -153,6 +180,14 @@ data: {"level": "DONE"}
 ```
 
 前端连接此端点后持续接收日志，收到 `DONE` 后断开。
+
+### 4.6 GET `/api/download/{session_id}`（服务模式）
+
+下载产物 ZIP，下载完成后 5 分钟自动清理临时目录。
+
+### 4.7 GET `/api/open-folder?session=xxx`（本机模式）
+
+调用 `os.startfile(output_dir)` 在资源管理器中打开产物目录。
 
 ---
 
@@ -212,6 +247,28 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
                                     SSE 端点取出 → 推给对应浏览器
 ```
 
+### 5.4 临时文件清理（仅服务模式）
+
+服务模式下每个请求在 `/tmp/ard_web_{session}/` 下创建独立工作目录。本机模式产物直接写用户指定目录，无需清理。
+
+```
+┌─ 请求到达 → 创建 /tmp/ard_web_{abc123}/
+│
+├─ 管道执行 → 产物写入 output/
+├─ 打包 ZIP  → /tmp/ard_web_{abc123}/产物_abc123.zip
+│
+├─ 用户下载 → 返回 ZIP
+│
+└─ 下载后 5 分钟 → 删除整个 /tmp/ard_web_{abc123}/
+     ├─ session_dirs.pop(session_id)
+     ├─ session_queues.pop(session_id)
+     ├─ session_zips.pop(session_id)
+     └─ shutil.rmtree(work_dir)
+```
+
+- 未下载的会话：服务重启时 `/tmp` 由系统清理
+- 边缘情况：下载失败/用户离开 → 临时目录残留，重启后自动回收
+
 ---
 
 ## 6. 前端页面
@@ -224,41 +281,58 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
 ├──────────────────────┬───────────────────────────────┤
 │  📋 配置              │  📄 实时日志                   │
 │                      │                               │
-│  操作模式             │  ┌──────────────────────────┐ │
-│  [下拉选择        ▾] │  │ 14:30:01  解析模块...     │ │
-│                      │  │ 14:30:05  AI 填充中...    │ │
-│  上传文件             │  │ 14:30:20  生成 Excel ✓   │ │
-│  [选择文件         ] │  │ 14:30:21  打包完成        │ │
-│  已选: 功能清单.xlsx  │  │ 14:30:22  ── 完成 ──     │ │
-│                      │  └──────────────────────────┘ │
-│  ── 高级选项 ──      │                               │
-│  API Key              │  状态: ● 运行中               │
+│  使用方式 ●本机 ○远程  │  ┌──────────────────────────┐ │
+│                      │  │ 14:30:01  解析模块...     │ │
+│  操作模式             │  │ 14:30:05  AI 填充中...    │ │
+│  [下拉选择        ▾] │  │ 14:30:20  生成 Excel ✓   │ │
+│                      │  │ 14:30:21  打包完成        │ │
+│  ── 本机：文件路径 ── │  │ 14:30:22  ── 完成 ──     │ │
+│  xlsx 路径            │  │                           │ │
+│  [C:\...\功能清单.xlsx]│  └──────────────────────────┘ │
+│  输出目录（默认同级）    │                               │
+│  [C:\...\output     ] │  状态: ● 运行中               │
+│                      │                               │
+│  [浏览...] [▶ 开始]   │  📂 [打开产物目录]            │
+│                      │                               │
+│  ── 远程：上传文件 ── │  ┌─ 切换远程模式后显示 ────┐ │
+│  [选择文件         ] │  │ 📦 [⬇ 下载产物.zip]    │ │
+│  已选: 功能清单.xlsx  │  └──────────────────────────┘ │
+│                      │                               │
+│  ── 高级选项 ─────── │                               │
+│  API Key              │                               │
 │  [··············  ]  │                               │
-│  模型                 │  📦 产物                      │
-│  [deepseek-v4-flash] │  [⬇ 下载产物.zip]             │
+│  模型                 │                               │
+│  [[deepseek-v4-flash]]│                               │
 │  自定义端点            │                               │
 │  [留空用默认        ] │                               │
-│                      │                               │
-│  [▶ 开始生成]         │                               │
-│                      │                               │
 └──────────────────────┴───────────────────────────────┘
 ```
 
 ### 6.2 交互逻辑
 
 ```
-1. 用户选择 mode、上传 file、填写 API Key
+本机模式：
+1. 用户选择模式「本机」、操作模式、填写 xlsx 路径和输出目录
 2. 点击 [开始生成]
-3. 前端 POST /api/run → 拿到 session_id
-4. 前端 GET /api/log-stream?session=xxx → 建立 SSE 连接
-5. 日志实时显示在右侧面板
-6. 收到 DONE → 下载按钮激活，自动下载 ZIP
-7. 面板状态: ● 运行中 → ✓ 完成（绿色）/ ✗ 失败（红色）
+3. 前端 POST /api/run-local → 拿到 session_id
+4. 前端 GET /api/log-stream → SSE 实时日志
+5. 收到 DONE → [打开产物目录] 按钮激活
+6. 点击按钮 → GET /api/open-folder → 资源管理器打开目录
+
+服务模式：
+1. 用户选择模式「远程」、操作模式、选择上传文件
+2. 点击 [开始生成]
+3. 前端 POST /api/run-upload → 拿到 session_id
+4. 前端 GET /api/log-stream → SSE 实时日志
+5. 收到 DONE → [下载产物.zip] 按钮激活
+6. 下载完成后 5 分钟服务端自动清理
 ```
 
 ### 6.3 技术细节
 
 - 纯 HTML + CSS + vanilla JS，无框架
+- 模式切换时动态显示/隐藏对应区域（`display:none` / `display:block`）
+- 本机模式发 JSON（`Content-Type: application/json`），服务模式发 FormData
 - 使用 `EventSource` 接收 SSE
 - 使用 `fetch` + `FormData` 上传
 - 模式描述通过 JS 字典映射（操作模式 ↔ 说明文案 ↔ 接受的文件类型）
@@ -294,6 +368,9 @@ from fastapi.staticfiles import StaticFiles
 
 session_var: contextvars.ContextVar[str | None] = contextvars.ContextVar('session_id', default=None)
 session_queues: dict[str, queue.Queue] = {}
+session_outputs: dict[str, Path] = {}     # session_id → 产物目录（两种模式共用）
+session_zips: dict[str, Path] = {}        # session_id → zip 文件路径（服务模式）
+session_dirs: dict[str, Path] = {}        # session_id → 临时工作目录（服务模式）
 
 class SessionHandler(logging.Handler):
     def emit(self, record):
@@ -341,8 +418,47 @@ async def index():
 
 # ── 核心 API ──────────────────────────────────────────
 
-@app.post("/api/run")
-async def api_run(
+@app.post("/api/run-local")
+async def api_run_local(
+    xlsx_path: str = Form(...),
+    output_dir: str = Form(""),
+    mode: str = Form(...),
+    api_key: str = Form(""),
+    model: str = Form(""),
+    base_url: str = Form(""),
+):
+    """本机模式：直接读本地文件，产物写本地目录。"""
+    if mode not in MODE_INFO:
+        raise HTTPException(400, f"未知模式: {mode}")
+
+    xlsx = Path(xlsx_path)
+    if not xlsx.exists():
+        raise HTTPException(400, f"文件不存在: {xlsx_path}")
+
+    out = Path(output_dir) if output_dir else xlsx.parent
+    out.mkdir(parents=True, exist_ok=True)
+
+    session_id = uuid.uuid4().hex[:8]
+    log_queue: queue.Queue = queue.Queue(maxsize=500)
+    session_queues[session_id] = log_queue
+    session_outputs[session_id] = out
+
+    def run():
+        session_var.set(session_id)
+        try:
+            _execute_mode(mode, xlsx, out, Path(""), api_key, model, base_url)
+        except Exception as e:
+            logging.getLogger('ai_gen_reimbursement_docs').error(f"执行失败: {e}")
+        finally:
+            log_queue.put(json.dumps({"level": "DONE"}, ensure_ascii=False))
+            session_var.set(None)
+
+    asyncio.create_task(asyncio.to_thread(run))
+    return {"session_id": session_id, "output_dir": str(out)}
+
+
+@app.post("/api/run-upload")
+async def api_run_upload(
     file: UploadFile = File(...),
     mode: str = Form(...),
     api_key: str = Form(""),
@@ -385,6 +501,7 @@ async def api_run(
     # 5. 准备日志队列
     log_queue: queue.Queue = queue.Queue(maxsize=500)
     session_queues[session_id] = log_queue
+    session_dirs[session_id] = work_dir
 
     # 6. 在线程池中执行
     def run():
@@ -392,6 +509,10 @@ async def api_run(
         try:
             _execute_mode(mode, file_path, output_dir, custom_t_dir,
                          api_key, model, base_url)
+            # 打包产物为 ZIP
+            zip_path = work_dir / f"产物_{session_id}.zip"
+            shutil.make_archive(str(zip_path.with_suffix('')), 'zip', str(output_dir))
+            session_zips[session_id] = zip_path
         except Exception as e:
             logging.getLogger('ai_gen_reimbursement_docs').error(f"执行失败: {e}")
         finally:
@@ -400,7 +521,7 @@ async def api_run(
 
     asyncio.create_task(asyncio.to_thread(run))
 
-    return {"session_id": session_id}
+    return {"session_id": session_id, "has_download": True}
 
 @app.get("/api/log-stream")
 async def log_stream(session: str):
@@ -422,7 +543,7 @@ async def log_stream(session: str):
                 # 发送心跳保持连接
                 yield ": heartbeat\n\n"
 
-        # 清理
+        # 清理队列引用（目录和 zip 由 _cleanup_after_download 负责）
         session_queues.pop(session, None)
 
     return StreamingResponse(generate(), media_type="text/event-stream")
@@ -430,28 +551,59 @@ async def log_stream(session: str):
 @app.get("/api/download/{session_id}")
 async def download(session_id: str):
     """下载产物 ZIP"""
-    # 找到对应临时目录
-    import glob
-    matches = glob.glob(str(Path(tempfile.gettempdir()) / f"ard_web_{session_id}_*"))
-    if not matches:
-        raise HTTPException(404, "产物已过期或被清理")
-    
-    output_dir = Path(matches[0]) / 'output'
-    zip_path = output_dir.parent / f"产物_{session_id}.zip"
+    zip_path = session_zips.get(session_id)
+    if zip_path is None:
+        raise HTTPException(404, "产物不存在或会话已过期")
     if not zip_path.exists():
-        raise HTTPException(404, "产物尚未生成")
-    
+        raise HTTPException(404, "产物文件已被清理")
+
     return FileResponse(
         zip_path,
         filename=f"产物_{datetime.now():%Y%m%d_%H%M%S}.zip",
-        media_type="application/zip"
+        media_type="application/zip",
+        background=_cleanup_after_download(session_id),
     )
+
+@app.get("/api/open-folder")
+async def open_folder(session: str):
+    """本机模式：在资源管理器中打开产物目录。"""
+    out_dir = session_outputs.get(session)
+    if out_dir is None:
+        raise HTTPException(404, "未知会话")
+    if not out_dir.exists():
+        raise HTTPException(404, "产物目录不存在")
+    os.startfile(str(out_dir))
+    return {"ok": True}
+
+# ── 清理 ──────────────────────────────────────────────
+
+async def _cleanup_after_download(session_id: str):
+    """下载完成后延迟 5 分钟清理临时目录，避免清理正在被扫描的产物。"""
+    await asyncio.sleep(300)
+    work_dir = session_dirs.pop(session_id, None)
+    session_queues.pop(session_id, None)
+    session_zips.pop(session_id, None)
+    if work_dir and work_dir.exists():
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 # ── 执行分发 ──────────────────────────────────────────
 
+# mode → pipeline mode 映射
+_MODE_MAP: dict[str, str] = {
+    "from-excel-gen-all":      "gen-all",
+    "from-excel-gen-basedata": "gen-basedata",
+    "from-excel-gen-fpa":      "gen-fpa",
+    "from-excel-gen-cosmic":   "gen-cosmic",
+    "from-excel-gen-list":     "gen-list",
+    "from-excel-gen-spec":     "gen-spec",
+}
+
+
 def _execute_mode(mode: str, file_path: Path, output_dir: Path,
-                  custom_t_dir: Path, api_key: str, model: str, base_url: str):
-    """根据 mode 调用现有核心函数（仅支持 from-excel-* 模式）"""
+                  custom_t_dir: Path, api_key: str, model: str,
+                  base_url: str, project_name: str = ""):
+    """直接调用 pipeline.run_pipeline()，零重复代码。"""
+    from ai_gen_reimbursement_docs.pipeline import run_pipeline
     from ai_gen_reimbursement_docs.config_utils import (
         load_api_key, load_base_url, load_model_name
     )
@@ -468,277 +620,39 @@ def _execute_mode(mode: str, file_path: Path, output_dir: Path,
     logger = logging.getLogger('ai_gen_reimbursement_docs')
     logger.info(f"模式: {mode}, 文件: {file_path.name}")
 
-    _execute_excel_mode(mode, str(file_path), str(output_dir),
-                       api_key, model, base_url, str(custom_t_dir))
+    pipeline_mode = _MODE_MAP[mode]
 
+    # 构建 templates dict（自定义模板优先）
+    templates = _build_templates_dict(custom_t_dir)
 
-def _execute_excel_mode(mode: str, xlsx_path: str, output_dir: str,
-                        api_key: str, model: str, base_url: str,
-                        custom_t_dir: str):
-    """处理 from-excel 相关模式，调用链完全对照 main.py 中的实际实现。"""
-    import os, re, shutil
-
-    # ── 路径定义 ──
-    doc_dir = os.path.join(output_dir, 'cosmic文档')
-    os.makedirs(doc_dir, exist_ok=True)
-    md_dir = os.path.join(output_dir, 'md')
-    os.makedirs(md_dir, exist_ok=True)
-
-    tree_md       = os.path.join(md_dir, 'gen-basedata-功能清单-模块树.md')
-    meta_md_tpl   = os.path.join(md_dir, 'gen-basedata-录入文档元数据-模板.md')
-    meta_filled_md = os.path.join(md_dir, 'gen-basedata-AI填充-录入文档元数据.md')
-    fpa_sum_md    = os.path.join(md_dir, 'gen-fpa-FPA工作量-总和.md')
-
-    fpa_xlsx       = os.path.join(output_dir, 'FPA工作量评估.xlsx')
-    cosmic_xlsx    = os.path.join(doc_dir, '项目功能点拆分表.xlsx')
-    require_xlsx   = os.path.join(doc_dir, '项目需求清单.xlsx')
-    spec_docx      = os.path.join(doc_dir, '项目需求说明书.docx')
-
-    # ── imports ──
-    from ai_gen_reimbursement_docs.excel_source import generate_md_files, verify_module_tree_stats
-    from ai_gen_reimbursement_docs.main import (
-        _build_modules_from_tree_md, _ensure_basedata, _ai_fill_meta_md,
-        _write_cfp_sum, _read_md_value, _resolve_fpa_sum, _project_root,
+    run_pipeline(
+        mode=pipeline_mode,
+        file_path=str(file_path),
+        output_dir=str(output_dir),
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+        project_name=project_name,
+        templates=templates or None,
     )
-    from ai_gen_reimbursement_docs.gen_xlsx import (
-        generate_fpa_xlsx_from_md, generate_list_xlsx_from_md,
-        init_fpa_template_md, ai_fill_fpa_md,
-    )
-    from ai_gen_reimbursement_docs.gen_spec import (
-        generate_spec_docx_from_md, init_spec_template_md, ai_fill_spec_md,
-        _parse_meta_md,
-    )
-    from ai_gen_reimbursement_docs.md_handler import (
-        export_empty_md, fill_md_with_ai, parse_md_to_items,
-    )
-    from ai_gen_reimbursement_docs.excel_writer import (
-        generate_cosmic_xlsx_from_md, write_environment_sheet,
-    )
-    from ai_gen_reimbursement_docs.cosmic_llm import load_user_config_from_meta
-    from ai_gen_reimbursement_docs.config_utils import load_enable_ai_fill_meta
-
-    logger = logging.getLogger('ai_gen_reimbursement_docs')
-
-    # ── 公共辅助：确保基础数据 + 元数据 AI 填充 ──
-    def ensure_meta():
-        """确保树和元数据存在，必要时 AI 填充元数据。"""
-        _ensure_basedata(xlsx_path, md_dir, meta_md, tree_md, meta_md_tpl)
-        if api_key and not os.path.exists(meta_filled_md):
-            if load_enable_ai_fill_meta():
-                logger.info("AI 填充文档元数据...")
-                _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
-            else:
-                logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
-                shutil.copy2(meta_md_tpl, meta_filled_md)
-        return meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
-
-    # 当前使用的 meta_md（优先填充版）
-    meta_md = meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
-
-    # ═══════════════════════════════════════════════════════
-    #   gen-basedata
-    # ═══════════════════════════════════════════════════════
-    if mode == "from-excel-gen-basedata":
-        logger.info("第1步: 生成 功能清单-模块树.md 和 录入文档元数据-模板.md...")
-        generate_md_files(xlsx_path, md_dir)
-        verify_module_tree_stats(tree_md, meta_md_tpl)
-        if api_key and not os.path.exists(meta_filled_md):
-            if load_enable_ai_fill_meta():
-                logger.info("AI 填充文档元数据...")
-                _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
-            else:
-                shutil.copy2(meta_md_tpl, meta_filled_md)
-        return
-
-    # ═══════════════════════════════════════════════════════
-    #   gen-fpa
-    # ═══════════════════════════════════════════════════════
-    if mode == "from-excel-gen-fpa":
-        meta_md = ensure_meta()
-        fpa_md = os.path.join(md_dir, 'gen-fpa-FPA-模板.md')
-        fpa_filled_md = os.path.join(md_dir, 'gen-fpa-AI填充-FPA.md')
-        logger.info("第1步: 生成 FPA 模板 MD...")
-        init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
-        if api_key:
-            logger.info("第2步: AI 填充 FPA 数据...")
-            shutil.copy2(fpa_md, fpa_filled_md)
-            ai_fill_fpa_md(fpa_filled_md, meta_md, api_key=api_key, model=model, base_url=base_url)
-        else:
-            fpa_filled_md = fpa_md
-        logger.info("第3步: 生成 FPA 工作量评估 Excel...")
-        fpa_src_template = _get_template_path('FPA工作量评估-模板', custom_t_dir)
-        generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src_template, fpa_xlsx)
-        return
-
-    # ═══════════════════════════════════════════════════════
-    #   gen-cosmic
-    # ═══════════════════════════════════════════════════════
-    if mode == "from-excel-gen-cosmic":
-        ensure_meta()
-        meta_md = meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
-        _resolve_fpa_sum(fpa_sum_md)  # 提示用户输入核减后工作量
-        modules = _build_modules_from_tree_md(tree_md)
-        project = _read_project_name(meta_md) or (modules[0].name if modules else "项目")
-
-        init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
-        filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
-        export_empty_md(modules, project, init_md_path)
-
-        if api_key:
-            shutil.copy2(init_md_path, filled_md_path)
-            _user_cfg = load_user_config_from_meta(meta_md)
-            fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url, **_user_cfg)
-            items = parse_md_to_items(filled_md_path)
-            if items:
-                _meta = _parse_meta_md(meta_md)
-                cosmic_src = _get_template_path('项目功能点拆分表-模板', custom_t_dir)
-                generate_cosmic_xlsx_from_md(cosmic_src, cosmic_xlsx, items, meta=_meta)
-                total_cfp = sum(item.total_cfp() for item in items)
-                logger.info(f"CFP 总和: {total_cfp}")
-                _write_cfp_sum(md_dir, total_cfp)
-                _target = _meta.get("建设目标", "")
-                _necessity = _meta.get("建设必要性", "")
-                if _target or _necessity:
-                    write_environment_sheet(cosmic_xlsx, cosmic_xlsx, project, _target, _necessity)
-        return
-
-    # ═══════════════════════════════════════════════════════
-    #   gen-list
-    # ═══════════════════════════════════════════════════════
-    if mode == "from-excel-gen-list":
-        ensure_meta()
-        meta_md = meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
-        # 尝试从已有文件中读取 CFP 和工作量
-        cfp_val = _read_md_value(os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'), r'CFP 总和[：:]\s*([\d.]+)') or 0
-        fpa_val = _read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0
-        require_src = _get_template_path('项目需求清单-模板', custom_t_dir)
-        generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
-                                   cfp_total=cfp_val, fpa_reduced=fpa_val)
-        return
-
-    # ═══════════════════════════════════════════════════════
-    #   gen-spec
-    # ═══════════════════════════════════════════════════════
-    if mode == "from-excel-gen-spec":
-        meta_md = ensure_meta()
-        spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
-        spec_filled_md = os.path.join(md_dir, 'gen-spec-AI填充-spec-功能需求章节.md')
-        if not os.path.exists(spec_filled_md):
-            logger.info("生成 spec 模板 MD...")
-            init_spec_template_md(tree_md, meta_md, spec_md)
-            if api_key:
-                logger.info("AI 填充模块功能描述...")
-                ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
-            else:
-                shutil.copy2(spec_md, spec_filled_md)
-        filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
-        spec_src = _get_template_path('项目需求说明书-模板', custom_t_dir)
-        generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=filled)
-        return
-
-    # ═══════════════════════════════════════════════════════
-    #   gen-all（全流程，按依赖顺序）
-    # ═══════════════════════════════════════════════════════
-    if mode == "from-excel-gen-all":
-        # Step 0: 基础数据
-        _ensure_basedata(xlsx_path, md_dir, meta_md, tree_md, meta_md_tpl)
-        if api_key and not os.path.exists(meta_filled_md):
-            if load_enable_ai_fill_meta():
-                _ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
-            else:
-                shutil.copy2(meta_md_tpl, meta_filled_md)
-        if os.path.exists(meta_filled_md):
-            meta_md = meta_filled_md
-
-        fpa_src = _get_template_path('FPA工作量评估-模板', custom_t_dir)
-        cosmic_src = _get_template_path('项目功能点拆分表-模板', custom_t_dir)
-        require_src = _get_template_path('项目需求清单-模板', custom_t_dir)
-        spec_src = _get_template_path('项目需求说明书-模板', custom_t_dir)
-
-        # Step 1: FPA
-        fpa_md = os.path.join(md_dir, 'gen-fpa-FPA-模板.md')
-        fpa_filled_md = os.path.join(md_dir, 'gen-fpa-AI填充-FPA.md')
-        logger.info("第1步：生成 FPA 模板 MD...")
-        init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
-        if api_key:
-            shutil.copy2(fpa_md, fpa_filled_md)
-            logger.info("第1步：AI 填充 FPA...")
-            ai_fill_fpa_md(fpa_filled_md, meta_md, template_path=fpa_src, api_key=api_key, model=model, base_url=base_url)
-        fpa_src_md = fpa_filled_md if api_key else fpa_md
-        generate_fpa_xlsx_from_md(fpa_src_md, meta_md, fpa_src, fpa_xlsx)
-
-        fpa_reduced = _read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
-
-        # Step 2: 需求说明书
-        spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
-        spec_filled_md = os.path.join(md_dir, 'gen-spec-AI填充-spec-功能需求章节.md')
-        if not os.path.exists(spec_filled_md):
-            init_spec_template_md(tree_md, meta_md, spec_md)
-            if api_key:
-                ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
-            else:
-                shutil.copy2(spec_md, spec_filled_md)
-        filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
-        generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=filled)
-
-        # Step 3: COSMIC
-        modules = _build_modules_from_tree_md(tree_md)
-        project = modules[0].name if modules else "项目"
-        init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
-        filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
-        export_empty_md(modules, project, init_md_path)
-        if api_key:
-            shutil.copy2(init_md_path, filled_md_path)
-            _user_cfg = load_user_config_from_meta(meta_md)
-            fill_md_with_ai(filled_md_path, modules, project, api_key, model, base_url, **_user_cfg)
-            items = parse_md_to_items(filled_md_path)
-            if items:
-                _meta = _parse_meta_md(meta_md)
-                generate_cosmic_xlsx_from_md(cosmic_src, cosmic_xlsx, items, meta=_meta)
-                total_cfp = sum(item.total_cfp() for item in items)
-                _write_cfp_sum(md_dir, total_cfp)
-                _target = _meta.get("建设目标", "")
-                _necessity = _meta.get("建设必要性", "")
-                if _target or _necessity:
-                    write_environment_sheet(cosmic_xlsx, cosmic_xlsx, project, _target, _necessity)
-
-        cfp_total = _read_md_value(os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'), r'CFP 总和[：:]\s*([\d.]+)') or 0
-
-        # Step 4: 需求清单
-        generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
-                                   cfp_total=cfp_total, fpa_reduced=fpa_reduced)
-        return
 
 
-# ── 模板路径解析 ────────────────────────────────────────
-
-def _get_template_path(key: str, custom_t_dir: str) -> str:
-    """获取模板路径：优先自定义模板目录，回退 data/templates/"""
+def _build_templates_dict(custom_t_dir: Path) -> dict[str, str]:
+    """构建 templates dict：自定义模板目录中的文件优先。"""
     import glob as _glob
-    patterns = {
-        'FPA工作量评估-模板':     'FPA*评估*模板*.xlsx',
-        '项目功能点拆分表-模板':   '*功能点拆分表*模板*.xlsx',
-        '项目需求清单-模板':       '*需求清单*模板*.xlsx',
-        '项目需求说明书-模板':     '*需求说明书*模板*.docx',
-    }
-    pat = patterns.get(key, '')
-    if pat and custom_t_dir:
-        matches = _glob.glob(os.path.join(custom_t_dir, pat))
+    templates: dict[str, str] = {}
+    custom = str(custom_t_dir)
+    for key, glob_pat in [
+        ('fpa',    'FPA*评估*模板*.xlsx'),
+        ('cosmic', '*功能点拆分表*模板*.xlsx'),
+        ('list',   '*需求清单*模板*.xlsx'),
+        ('spec',   '*需求说明书*模板*.docx'),
+    ]:
+        matches = _glob.glob(os.path.join(custom, glob_pat))
         if matches:
-            return matches[0]
-    return os.path.join(str(BASE_DIR / 'data' / 'templates'), key + '.xlsx' if key != '项目需求说明书-模板' else key + '.docx')
+            templates[key] = matches[0]
+    return templates
 
-
-def _read_project_name(meta_md: str) -> str:
-    """从元数据 MD 读取项目名称"""
-    if not os.path.exists(meta_md):
-        return ""
-    with open(meta_md, encoding='utf-8') as f:
-        for line in f:
-            m = re.search(r'工单标题\s*\|\s*(.+?)(?:\s*\||$)', line)
-            if m:
-                return m.group(1).strip()
-    return ""
 
 ---
 

@@ -33,6 +33,150 @@ def _section(title: str):
     logger.debug("--- section start ---")
 
 
+def _add_to_user_path(exe_dir: str) -> bool:
+    """将 exe 目录加入当前用户 PATH（HKCU），已存在则跳过。"""
+    import winreg
+
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0,
+                             winreg.KEY_READ | winreg.KEY_WRITE)
+        try:
+            current, _ = winreg.QueryValueEx(key, "Path")
+        except FileNotFoundError:
+            current = ""
+        if exe_dir.lower() in (p.lower() for p in current.split(";") if p):
+            winreg.CloseKey(key)
+            return False
+        new_path = (current + ";" + exe_dir).strip(";")
+        winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, new_path)
+        winreg.CloseKey(key)
+        # 广播环境变量变更
+        import ctypes
+        HWND_BROADCAST = 0xFFFF
+        WM_SETTINGCHANGE = 0x001A
+        ctypes.windll.user32.SendMessageW(HWND_BROADCAST, WM_SETTINGCHANGE,
+                                          0, "Environment")
+        return True
+    except Exception:
+        return False
+
+
+def _auto_init_config(root: str) -> None:
+    """exe 首次运行自动初始化用户配置文件（不覆盖已有配置）。"""
+    import shutil
+
+    home_cfg = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs')
+    cfg_dir = os.path.join(root, 'config')
+    if not os.path.isdir(cfg_dir):
+        return
+    os.makedirs(home_cfg, exist_ok=True)
+    pairs = [
+        (os.path.join(cfg_dir, '.env.example'), os.path.join(home_cfg, '.env')),
+        (os.path.join(cfg_dir, 'system_config.yaml.example'), os.path.join(home_cfg, 'system_config.yaml')),
+        (os.path.join(cfg_dir, 'business_rules.yaml.example'), os.path.join(home_cfg, 'business_rules.yaml')),
+    ]
+    for src, dst in pairs:
+        if not os.path.exists(src):
+            continue
+        if os.path.exists(dst):
+            continue
+        shutil.copy2(src, dst)
+        print(f"已自动创建配置文件: {dst}")
+
+
+def _read_l3_descriptions_from_excel(excel_path: str) -> list[str]:
+    """从 Excel 功能清单中读取三级模块整体功能描述（去重，处理合并单元格继承）。"""
+    from ai_gen_reimbursement_docs.config_utils import load_sheet_names
+    import openpyxl
+
+    _s = load_sheet_names()
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb[_s["func_content"]]
+
+    descriptions: list[str] = []
+    seen: set[str] = set()
+    prev_desc = ""
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        desc = str(row[5]).strip() if len(row) > 5 and row[5] else ""
+        if not desc:
+            desc = prev_desc  # 合并单元格继承上一行
+        else:
+            prev_desc = desc
+        if desc and desc not in seen:
+            seen.add(desc)
+            descriptions.append(desc)
+    wb.close()
+    return descriptions
+
+
+def _read_meta_field_value(excel_path: str, field_key: str) -> tuple[str, str]:
+    """在所有元数据 sheet 中搜索指定字段的值，返回 (sheet名, 值)。"""
+    from ai_gen_reimbursement_docs.config_utils import load_sheet_names
+    import openpyxl
+
+    _s = load_sheet_names()
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "require_meta"]:
+        sheet_name = _s.get(sheet_key, "")
+        if not sheet_name or sheet_name not in wb.sheetnames:
+            continue
+        ws = wb[sheet_name]
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            key = str(row[0]).strip() if row[0] else ""
+            val = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+            if key == field_key:
+                wb.close()
+                return sheet_name, val
+    wb.close()
+    return "", ""
+
+
+def _read_meta_all_keys(excel_path: str) -> list[tuple[str, str]]:
+    """列出所有元数据 sheet 的字段 key，返回 [(sheet名, key), ...]。"""
+    from ai_gen_reimbursement_docs.config_utils import load_sheet_names
+    import openpyxl
+
+    _s = load_sheet_names()
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    keys: list[tuple[str, str]] = []
+    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "require_meta"]:
+        sheet_name = _s.get(sheet_key, "")
+        if not sheet_name or sheet_name not in wb.sheetnames:
+            continue
+        ws = wb[sheet_name]
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            key = str(row[0]).strip() if row[0] else ""
+            if key:
+                keys.append((sheet_name, key))
+    wb.close()
+    return keys
+
+
+def _read_l3_names_from_excel(excel_path: str) -> list[str]:
+    """从 Excel 功能清单中读取三级模块名称（去重，处理合并单元格继承）。"""
+    from ai_gen_reimbursement_docs.config_utils import load_sheet_names
+    import openpyxl
+
+    _s = load_sheet_names()
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb[_s["func_content"]]
+
+    names: list[str] = []
+    seen: set[str] = set()
+    prev_name = ""
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        name = str(row[3]).strip() if len(row) > 3 and row[3] else ""
+        if not name:
+            name = prev_name
+        else:
+            prev_name = name
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name)
+    wb.close()
+    return names
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """构建 CLI 参数解析器。"""
     parser = argparse.ArgumentParser(
@@ -87,6 +231,10 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='测试提示音')
     parser.add_argument('--max-tokens', type=str, default='',
                         help='覆盖 AI max_tokens')
+    parser.add_argument('--test-ai-gen-reliability-desc', action='store_true',
+                        help='测试"调整因子中的可靠性描述"AI生成（仅控制台+日志输出）')
+    parser.add_argument('--test-ai-gen-metadata', type=str, default='',
+                        help='测试元数据中指定字段的#AI生成#（仅控制台+日志输出）')
 
     return parser
 
@@ -118,6 +266,18 @@ def main():
     from ai_gen_reimbursement_docs.config_utils import config_dir, migrate_config
     logger.info(f"配置文件目录: {config_dir()}")
     migrate_config()
+
+    # ── exe 双击自动注册 PATH + 初始化配置 ──
+    _exe_path = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else ""
+    _no_args = len(sys.argv) <= 1
+    if _exe_path and _no_args:
+        _added = _add_to_user_path(_exe_path)
+        if _added:
+            print(f"已自动将 ard 加入用户 PATH: {_exe_path}")
+        _auto_init_config(root)
+        print("ard 已就绪，使用方式: ard --from-excel 功能清单.xlsx --gen-all")
+        print("ard --help 查看完整帮助")
+        return
 
     # ── 纯 CLI 功能 ──
     if args.test_sound:
@@ -190,6 +350,168 @@ def main():
     logger.info(f"配置: MAX_TOKENS={load_max_tokens()}, CFP公式={load_cfp_formula()}")
     biz_cfg = load_business_config()
     logger.info(f"配置: REGENERATE_MD={biz_cfg['regenerate_md']}, ENABLE_AI_GENERATE_COSMIC={biz_cfg['enable_ai_generate_cosmic']}")
+
+    # ── 测试：调整因子中的可靠性描述 AI 生成 ──
+    if args.test_ai_gen_reliability_desc:
+        excel_path = args.from_excel
+        if not excel_path:
+            import glob
+            for name in ["功能清单-录入模板.xlsx", "功能清单.xlsx"]:
+                matches = glob.glob(name)
+                if matches:
+                    excel_path = matches[0]
+                    break
+            if not excel_path:
+                logger.error("未指定 --from-excel，且当前目录未找到功能清单文件")
+                return
+        if not os.path.exists(excel_path):
+            logger.error(f"文件不存在: {excel_path}")
+            return
+
+        if not api_key:
+            logger.error("未配置 API Key")
+            return
+
+        descriptions = _read_l3_descriptions_from_excel(excel_path)
+        if not descriptions:
+            logger.warning("未找到三级模块整体功能描述")
+            return
+
+        logger.info(f"共读取到 {len(descriptions)} 条三级模块整体功能描述")
+
+        user_prompt = (
+            f"根据功能清单，提取其中涉及与可靠性方面的模块，生成一句关于可靠性业务描述。不少于50字。\n"
+            f"功能清单：\n" + '\n'.join(f'- {d}' for d in descriptions)
+        )
+
+        from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
+        system_prompt = load_ai_system_prompt("reliability_desc")
+        if not system_prompt:
+            logger.warning("未找到 reliability_desc 系统提示词，将使用默认提示词")
+
+        _section("测试：调整因子中的可靠性描述 AI 生成")
+        logger.info("用户提示词:\n%s", user_prompt)
+        logger.info("系统提示词:\n%s", system_prompt)
+
+        from ai_gen_reimbursement_docs.llm_client import call_llm
+        try:
+            result = call_llm(
+                prompt=user_prompt,
+                system=system_prompt,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                tag="test_reliability_desc",
+            )
+            _section("AI 生成结果")
+            print(result)
+            logger.info("可靠性描述生成结果:\n%s", result)
+        except Exception as e:
+            logger.error("AI 调用失败: %s", e)
+            print(f"AI 调用失败: {e}")
+        return
+
+    # ── 测试：元数据 #AI生成# 字段 ──
+    if args.test_ai_gen_metadata:
+        excel_path = args.from_excel
+        if not excel_path:
+            import glob
+            for name in ["功能清单-录入模板.xlsx", "功能清单.xlsx"]:
+                matches = glob.glob(name)
+                if matches:
+                    excel_path = matches[0]
+                    break
+            if not excel_path:
+                logger.error("未指定 --from-excel，且当前目录未找到功能清单文件")
+                return
+        if not os.path.exists(excel_path):
+            logger.error(f"文件不存在: {excel_path}")
+            return
+
+        if not api_key:
+            logger.error("未配置 API Key")
+            return
+
+        field_key = args.test_ai_gen_metadata
+        found_sheet, raw_value = _read_meta_field_value(excel_path, field_key)
+        if not raw_value:
+            all_keys = _read_meta_all_keys(excel_path)
+            logger.warning(f"未找到字段「{field_key}」，所有可用字段: {all_keys}")
+            print(f"未找到字段「{field_key}」")
+            print("所有元数据字段: ")
+            for sn, k in all_keys:
+                print(f"  [{sn}] {k}")
+            return
+
+        from ai_gen_reimbursement_docs.excel_source import strip_ai_marker
+        prompt_template, needs_ai = strip_ai_marker(raw_value)
+        if not needs_ai:
+            logger.warning(f"字段「{field_key}」不含 #AI生成# 标记，当前值: {raw_value}")
+            return
+
+        # 解析占位符
+        import openpyxl
+        from ai_gen_reimbursement_docs.config_utils import load_sheet_names
+        _s = load_sheet_names()
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
+        # Sheet 1: 工单需求-元数据录入
+        project_info: dict[str, str] = {}
+        for row in wb[_s["meta"]].iter_rows(min_row=2, values_only=True):
+            k = str(row[0]).strip() if row[0] else ""
+            v = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+            if k:
+                project_info[k] = v
+        # Sheet 3: FPA工作量评估-元数据录入
+        fpa_meta: dict[str, str] = {}
+        for row in wb[_s["fpa_meta"]].iter_rows(min_row=2, values_only=True):
+            k = str(row[0]).strip() if row[0] else ""
+            v = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+            if k:
+                fpa_meta[k] = v
+        wb.close()
+
+        user_prompt = prompt_template
+        user_prompt = user_prompt.replace('${工单编号}', project_info.get('工单编号', ''))
+        user_prompt = user_prompt.replace('${工单名称}', project_info.get('工单标题', ''))
+        user_prompt = user_prompt.replace('${工单标题}', project_info.get('工单标题', ''))
+        user_prompt = user_prompt.replace('${工单内容}', project_info.get('工单内容', ''))
+        user_prompt = user_prompt.replace('${子系统（模块）}', fpa_meta.get('子系统（模块）', ''))
+
+        if '${三级模块}' in user_prompt:
+            l3_names = _read_l3_names_from_excel(excel_path)
+            user_prompt = user_prompt.replace('${三级模块}', '、'.join(l3_names))
+        if '${三级模块整体功能描述}' in user_prompt:
+            l3_descs = _read_l3_descriptions_from_excel(excel_path)
+            user_prompt = user_prompt.replace('${三级模块整体功能描述}',
+                                              '\n'.join(f'- {d}' for d in l3_descs))
+
+        from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
+        system_prompt = load_ai_system_prompt("metadata_gen")
+        if not system_prompt:
+            logger.warning("未找到 metadata_gen 系统提示词")
+
+        _section(f"测试：元数据 #AI生成# — {field_key}")
+        logger.info("字段来源: [%s] %s", found_sheet, field_key)
+        logger.info("用户提示词:\n%s", user_prompt)
+        logger.info("系统提示词:\n%s", system_prompt)
+
+        from ai_gen_reimbursement_docs.llm_client import call_llm
+        try:
+            result = call_llm(
+                prompt=user_prompt,
+                system=system_prompt,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                tag=f"test_meta_{field_key}",
+            )
+            _section("AI 生成结果")
+            print(result)
+            logger.info("AI 生成结果 [%s]:\n%s", field_key, result)
+        except Exception as e:
+            logger.error("AI 调用失败: %s", e)
+            print(f"AI 调用失败: {e}")
+        return
 
     # ── from-excel 管道 ──
     if any([args.gen_basedata, args.gen_fpa, args.gen_cosmic, args.gen_list,
