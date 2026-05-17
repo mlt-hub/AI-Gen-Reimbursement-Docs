@@ -33,32 +33,21 @@ def _section(title: str):
     logger.debug("--- section start ---")
 
 
-def _add_to_user_path(exe_dir: str) -> bool:
-    """将 exe 目录加入当前用户 PATH（HKCU），已存在则跳过。"""
-    import winreg
-
+def _start_web_ui(root: str) -> None:
+    """启动 Web UI 服务器并打开浏览器。"""
     try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0,
-                             winreg.KEY_READ | winreg.KEY_WRITE)
-        try:
-            current, _ = winreg.QueryValueEx(key, "Path")
-        except FileNotFoundError:
-            current = ""
-        if exe_dir.lower() in (p.lower() for p in current.split(";") if p):
-            winreg.CloseKey(key)
-            return False
-        new_path = (current + ";" + exe_dir).strip(";")
-        winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, new_path)
-        winreg.CloseKey(key)
-        # 广播环境变量变更
-        import ctypes
-        HWND_BROADCAST = 0xFFFF
-        WM_SETTINGCHANGE = 0x001A
-        ctypes.windll.user32.SendMessageW(HWND_BROADCAST, WM_SETTINGCHANGE,
-                                          0, "Environment")
-        return True
-    except Exception:
-        return False
+        import uvicorn
+        import webbrowser
+    except ImportError:
+        print("Web UI 需要安装 uvicorn: pip install uvicorn[standard]")
+        return
+
+    host = "127.0.0.1"
+    port = 8000
+    webbrowser.open(f"http://{host}:{port}")
+    print(f"Web UI 已启动: http://{host}:{port}")
+    uvicorn.run("web_app.server:app", host=host, port=port,
+                app_dir=os.path.dirname(root), log_level="info")
 
 
 def _auto_init_config(root: str) -> None:
@@ -235,6 +224,8 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='测试"调整因子中的可靠性描述"AI生成（仅控制台+日志输出）')
     parser.add_argument('--test-ai-gen-metadata', type=str, default='',
                         help='测试元数据中指定字段的#AI生成#（仅控制台+日志输出）')
+    parser.add_argument('--web', action='store_true',
+                        help='启动 Web UI 界面')
 
     return parser
 
@@ -266,18 +257,6 @@ def main():
     from ai_gen_reimbursement_docs.config_utils import config_dir, migrate_config
     logger.info(f"配置文件目录: {config_dir()}")
     migrate_config()
-
-    # ── exe 双击自动注册 PATH + 初始化配置 ──
-    _exe_path = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else ""
-    _no_args = len(sys.argv) <= 1
-    if _exe_path and _no_args:
-        _added = _add_to_user_path(_exe_path)
-        if _added:
-            print(f"已自动将 ard 加入用户 PATH: {_exe_path}")
-        _auto_init_config(root)
-        print("ard 已就绪，使用方式: ard --from-excel 功能清单.xlsx --gen-all")
-        print("ard --help 查看完整帮助")
-        return
 
     # ── 纯 CLI 功能 ──
     if args.test_sound:
@@ -320,6 +299,11 @@ def main():
 
     if args.version:
         print(f"AI生成项目报账文档 v{_get_version()}")
+        return
+
+    if args.web:
+        _auto_init_config(root)
+        _start_web_ui(root)
         return
 
     if args.init_config:
