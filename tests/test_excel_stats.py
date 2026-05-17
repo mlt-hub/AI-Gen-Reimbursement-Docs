@@ -6,7 +6,7 @@ from ai_gen_reimbursement_docs.excel_source import _resolve_inherited_rows
 
 # 测试数据路径（多来源查找）
 _EXCEL_PATHS = [
-    "F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/6/功能清单-录入-模板.xlsx",
+    "F:/mlt/mlt-tests/AI-Gen-Reimbursement-Docs/excel-to-docx/6/功能清单-录入-模板.xlsx",
     "data/功能清单-录入-模板.xlsx",
 ]
 EXCEL_PATH = ""
@@ -16,8 +16,8 @@ for _p in _EXCEL_PATHS:
         break
 
 _MD_TREE_PATHS = [
-    "F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/6/4/md/功能清单模块树.md",
-    "F:/mlt/mlt-tests/AI-Cosmic/excel-to-docx/6/1/md/功能清单模块树.md",
+    "F:/mlt/mlt-tests/AI-Gen-Reimbursement-Docs/excel-to-docx/6/4/md/功能清单模块树.md",
+    "F:/mlt/mlt-tests/AI-Gen-Reimbursement-Docs/excel-to-docx/6/1/md/功能清单模块树.md",
     "AI-Outputs/md/功能清单模块树.md",
 ]
 MD_TREE_PATH = ""

@@ -32,7 +32,7 @@
 ## 2. 文件结构
 
 ```
-ai_cosmic/                          # 现有项目，不动
+ai_gen_reimbursement_docs/          # 现有项目，不动
 ├── ai_gen_reimbursement_docs/      # 现有核心代码（零修改）
 ├── data/templates/                 # 现有模板（只读共享）
 ├── config/                         # 现有配置
@@ -767,7 +767,7 @@ def _build_templates_dict(custom_t_dir: Path) -> dict[str, str]:
 pip install fastapi uvicorn python-multipart
 
 # 2. 启动服务
-cd f:/mlt/mlt-projects/ai_cosmic
+cd f:/mlt/mlt-projects/ai_gen_reimbursement_docs
 python -m uvicorn web_app.server:app --host 0.0.0.0 --port 8080
 
 # 3. 浏览器打开
