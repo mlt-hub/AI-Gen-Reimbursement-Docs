@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 报账文档生成器</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f0f2f5;
+  --panel-bg: #fff;
+  --border: #e0e0e0;
+  --text: #333;
+  --text-secondary: #666;
+  --log-bg: #1a1a2e;
+  --log-text: #d4d4d4;
+  --primary: #4a6cf7;
+  --primary-hover: #3651d5;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --radius: 8px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.header {
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 { font-size: 18px; font-weight: 600; }
+.header .version { font-size: 12px; color: var(--text-secondary); }
+
+.app {
+  display: flex;
+  height: calc(100vh - 49px);
+}
+
+/* 左侧配置面板 */
+.panel-left {
+  width: 380px;
+  min-width: 380px;
+  padding: 20px;
+  background: var(--panel-bg);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+/* 模式切换 */
+.mode-toggle {
+  display: flex;
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 3px;
+}
+.mode-toggle button {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  color: var(--text-secondary);
+}
+.mode-toggle button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.form-group input,
+.form-group select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(74,108,247,0.1);
+}
+.form-group input[type="file"] { padding: 6px 8px; }
+.form-group input[type="password"] { -webkit-text-security: disc; }
+
+.file-name {
+  font-size: 12px;
+  color: var(--primary);
+  margin-top: 2px;
+  word-break: break-all;
+}
+
+/* 高级选项折叠 */
+details { margin-top: 4px; }
+details summary {
+  font-size: 13px;
+  color: var(--primary);
+  cursor: pointer;
+  user-select: none;
+}
+details .adv-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.btn-start {
+  padding: 10px 16px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-start:hover { background: var(--primary-hover); }
+.btn-start:disabled {
+  background: #a5b4fc;
+  cursor: not-allowed;
+}
+
+.status {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+}
+.status-idle { color: var(--text-secondary); }
+.status-running { color: var(--primary); }
+.status-done { color: var(--success); }
+.status-error { color: var(--error); }
+
+/* 右侧面板 */
+.panel-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.log-panel {
+  flex: 1;
+  padding: 16px 20px;
+  overflow-y: auto;
+  background: var(--log-bg);
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.log-placeholder {
+  color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: -apple-system, sans-serif;
+  font-size: 14px;
+}
+.log-entry { display: flex; gap: 8px; padding: 1px 0; }
+.log-time { color: #6b7280; flex-shrink: 0; }
+.log-level { flex-shrink: 0; font-weight: 600; min-width: 48px; }
+.log-level.INFO { color: #60a5fa; }
+.log-level.DEBUG { color: #9ca3af; }
+.log-level.WARNING { color: var(--warning); }
+.log-level.ERROR { color: var(--error); }
+.log-level.DONE { color: var(--success); }
+.log-msg { color: var(--log-text); word-break: break-all; }
+
+.done-banner {
+  text-align: center;
+  padding: 8px;
+  color: var(--success);
+  font-weight: 600;
+  border-top: 1px solid rgba(34,197,94,0.3);
+  border-bottom: 1px solid rgba(34,197,94,0.3);
+  margin: 4px 0;
+}
+
+/* 操作栏 */
+.action-bar {
+  padding: 14px 20px;
+  background: var(--panel-bg);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.action-bar .info-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+.btn-action {
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-download {
+  background: var(--success);
+  color: #fff;
+}
+.btn-download:hover { background: #16a34a; }
+.btn-download:disabled {
+  background: #86efac;
+  cursor: not-allowed;
+}
+.btn-open {
+  background: var(--primary);
+  color: #fff;
+}
+.btn-open:hover { background: var(--primary-hover); }
+.btn-open:disabled {
+  background: #a5b4fc;
+  cursor: not-allowed;
+}
+.btn-reset {
+  background: var(--bg);
+  color: var(--text-secondary);
+}
+.btn-reset:hover { background: var(--border); }
+
+/* 响应式：小屏幕改为上下布局 */
+@media (max-width: 768px) {
+  .app { flex-direction: column; }
+  .panel-left { width: 100%; min-width: unset; max-height: 50vh; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI 报账文档生成器</h1>
+  <span class="version" id="version-info">v-</span>
+</div>
+
+<div class="app">
+  <!-- 左侧：配置区 -->
+  <div class="panel-left" id="panel-config">
+    <div class="section-title">使用方式</div>
+    <div class="mode-toggle">
+      <button id="btn-local" class="active" onclick="switchMode('local')">本机</button>
+      <button id="btn-remote" onclick="switchMode('remote')">远程</button>
+    </div>
+
+    <div class="form-group">
+      <label for="mode">操作模式</label>
+      <select id="mode"></select>
+    </div>
+
+    <!-- 本机模式：路径输入 -->
+    <div id="local-inputs">
+      <div class="form-group">
+        <label for="xlsx-path">功能清单 .xlsx 路径</label>
+        <input type="text" id="xlsx-path" placeholder="C:\...\功能清单.xlsx" />
+      </div>
+      <div class="form-group">
+        <label for="output-dir">输出目录（默认 xlsx 同级）</label>
+        <input type="text" id="output-dir" placeholder="留空使用默认" />
+      </div>
+    </div>
+
+    <!-- 远程模式：文件上传 -->
+    <div id="remote-inputs" style="display:none">
+      <div class="form-group">
+        <label for="file-upload">上传功能清单 .xlsx</label>
+        <input type="file" id="file-upload" accept=".xlsx" />
+        <span class="file-name" id="file-name"></span>
+      </div>
+    </div>
+
+    <details>
+      <summary>高级选项</summary>
+      <div class="adv-inner">
+        <div class="form-group">
+          <label for="api-key">API Key（留空使用系统配置）</label>
+          <input type="password" id="api-key" placeholder="sk-..." autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="model">模型</label>
+          <input type="text" id="model" placeholder="deepseek-v4-flash" />
+        </div>
+        <div class="form-group">
+          <label for="base-url">API 端点</label>
+          <input type="text" id="base-url" placeholder="留空使用默认" />
+        </div>
+      </div>
+    </details>
+
+    <button class="btn-start" id="btn-start" onclick="startTask()">开始生成</button>
+    <div class="status status-idle" id="status">就绪</div>
+  </div>
+
+  <!-- 右侧：日志 + 操作 -->
+  <div class="panel-right">
+    <div class="log-panel" id="log-panel">
+      <div class="log-placeholder" id="log-placeholder">
+        选择操作模式并开始生成，实时日志将显示在此处
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <span class="info-text" id="action-hint"></span>
+      <button class="btn-action btn-open" id="btn-open" disabled onclick="openFolder()">打开产物目录</button>
+      <button class="btn-action btn-download" id="btn-download" disabled onclick="download()">下载产物 .zip</button>
+      <button class="btn-action btn-reset" id="btn-reset" style="display:none" onclick="resetUI()">新任务</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 状态 ──────────────────────────────────────────────────
+let currentMode = 'local';   // 'local' | 'remote'
+let currentSession = null;
+let eventSource = null;
+let modeOptions = {};
+
+// ── 初始化 ────────────────────────────────────────────────
+async function init() {
+  try {
+    const resp = await fetch('/api/modes');
+    modeOptions = await resp.json();
+    const sel = document.getElementById('mode');
+    for (const [value, info] of Object.entries(modeOptions)) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = info.label;
+      sel.appendChild(opt);
+    }
+  } catch (e) {
+    console.error('加载模式列表失败', e);
+  }
+
+  // 版本号
+  try {
+    const resp = await fetch('/api/modes');
+    document.getElementById('version-info').textContent = 'v5.0.0';
+  } catch (e) {}
+}
+
+// ── 模式切换 ──────────────────────────────────────────────
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('btn-local').classList.toggle('active', mode === 'local');
+  document.getElementById('btn-remote').classList.toggle('active', mode === 'remote');
+  document.getElementById('local-inputs').style.display = mode === 'local' ? '' : 'none';
+  document.getElementById('remote-inputs').style.display = mode === 'remote' ? '' : 'none';
+
+  // 切换操作按钮可见性
+  document.getElementById('btn-open').style.display = mode === 'local' ? '' : 'none';
+  document.getElementById('btn-download').style.display = mode === 'remote' ? '' : 'none';
+
+  // 重置文件选择
+  if (mode === 'remote') {
+    document.getElementById('file-name').textContent = '';
+  }
+
+  resetForNewTask();
+}
+
+// ── 文件选择反馈 ──────────────────────────────────────────
+document.getElementById('file-upload').addEventListener('change', function() {
+  const name = this.files[0] ? this.files[0].name : '';
+  document.getElementById('file-name').textContent = name ? '已选: ' + name : '';
+});
+
+// ── 开始任务 ──────────────────────────────────────────────
+async function startTask() {
+  const mode = document.getElementById('mode').value;
+  const apiKey = document.getElementById('api-key').value.trim();
+  const model = document.getElementById('model').value.trim();
+  const baseUrl = document.getElementById('base-url').value.trim();
+
+  if (!mode) {
+    alert('请选择操作模式');
+    return;
+  }
+
+  // 构建请求
+  let url, body, isJson;
+  if (currentMode === 'local') {
+    const xlsxPath = document.getElementById('xlsx-path').value.trim();
+    if (!xlsxPath) { alert('请输入功能清单 .xlsx 路径'); return; }
+    const outputDir = document.getElementById('output-dir').value.trim();
+    url = '/api/run-local';
+    body = new FormData();
+    body.append('xlsx_path', xlsxPath);
+    body.append('output_dir', outputDir);
+    body.append('mode', mode);
+    if (apiKey) body.append('api_key', apiKey);
+    if (model) body.append('model', model);
+    if (baseUrl) body.append('base_url', baseUrl);
+    isJson = false;
+  } else {
+    const fileInput = document.getElementById('file-upload');
+    if (!fileInput.files[0]) { alert('请选择要上传的 .xlsx 文件'); return; }
+    url = '/api/run-upload';
+    body = new FormData();
+    body.append('file', fileInput.files[0]);
+    body.append('mode', mode);
+    if (apiKey) body.append('api_key', apiKey);
+    if (model) body.append('model', model);
+    if (baseUrl) body.append('base_url', baseUrl);
+    isJson = false;
+  }
+
+  // UI 进入运行状态
+  setRunning(true);
+
+  try {
+    const resp = await fetch(url, { method: 'POST', body });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || `请求失败 (${resp.status})`);
+    }
+    const data = await resp.json();
+    currentSession = data.session_id;
+    if (data.output_dir) {
+      document.getElementById('action-hint').textContent = '产物目录: ' + data.output_dir;
+    }
+    connectLogStream(currentSession);
+  } catch (e) {
+    appendLog('ERROR', e.message, now());
+    setRunning(false);
+  }
+}
+
+// ── SSE 日志流 ────────────────────────────────────────────
+function connectLogStream(sessionId) {
+  if (eventSource) { eventSource.close(); }
+  eventSource = new EventSource('/api/log-stream?session=' + sessionId);
+
+  eventSource.onmessage = function(e) {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.level === 'DONE') {
+        appendLog('DONE', '── 任务完成 ──', '');
+        onTaskDone();
+      } else {
+        appendLog(data.level, data.msg, data.time || '');
+      }
+    } catch (err) {
+      // 心跳或非 JSON，忽略
+    }
+  };
+
+  eventSource.onerror = function() {
+    // SSE 连接中断（可能是 DONE 后主动关闭），不额外处理
+  };
+}
+
+// ── 日志追加 ──────────────────────────────────────────────
+function appendLog(level, msg, time) {
+  const panel = document.getElementById('log-panel');
+  const placeholder = document.getElementById('log-placeholder');
+  if (placeholder) placeholder.remove();
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+
+  if (level === 'DONE') {
+    entry.className = 'done-banner';
+    entry.textContent = msg;
+  } else {
+    const spanTime = document.createElement('span');
+    spanTime.className = 'log-time';
+    spanTime.textContent = time;
+
+    const spanLevel = document.createElement('span');
+    spanLevel.className = 'log-level ' + level;
+    spanLevel.textContent = level;
+
+    const spanMsg = document.createElement('span');
+    spanMsg.className = 'log-msg';
+    spanMsg.textContent = msg;
+
+    entry.appendChild(spanTime);
+    entry.appendChild(spanLevel);
+    entry.appendChild(spanMsg);
+  }
+
+  panel.appendChild(entry);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+// ── 任务完成 ──────────────────────────────────────────────
+function onTaskDone() {
+  setRunning(false);
+  document.getElementById('status').className = 'status status-done';
+  document.getElementById('status').textContent = '完成';
+
+  if (currentMode === 'local') {
+    document.getElementById('btn-open').disabled = false;
+  } else {
+    document.getElementById('btn-download').disabled = false;
+  }
+  document.getElementById('btn-reset').style.display = '';
+}
+
+// ── 打开产物目录 ──────────────────────────────────────────
+async function openFolder() {
+  if (!currentSession) return;
+  try {
+    await fetch('/api/open-folder?session=' + currentSession);
+  } catch (e) {
+    console.error('打开目录失败', e);
+  }
+}
+
+// ── 下载产物 ──────────────────────────────────────────────
+function download() {
+  if (!currentSession) return;
+  const a = document.createElement('a');
+  a.href = '/api/download/' + currentSession;
+  a.click();
+}
+
+// ── UI 辅助 ───────────────────────────────────────────────
+function setRunning(running) {
+  const btn = document.getElementById('btn-start');
+  const status = document.getElementById('status');
+  btn.disabled = running;
+  if (running) {
+    status.className = 'status status-running';
+    status.textContent = '运行中...';
+    document.getElementById('btn-open').disabled = true;
+    document.getElementById('btn-download').disabled = true;
+    document.getElementById('btn-reset').style.display = 'none';
+    // 清空日志
+    const panel = document.getElementById('log-panel');
+    panel.innerHTML = '';
+  }
+}
+
+function resetUI() {
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  resetForNewTask();
+}
+
+function resetForNewTask() {
+  currentSession = null;
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('status').className = 'status status-idle';
+  document.getElementById('status').textContent = '就绪';
+  document.getElementById('btn-open').disabled = true;
+  document.getElementById('btn-download').disabled = true;
+  document.getElementById('btn-reset').style.display = 'none';
+  document.getElementById('action-hint').textContent = '';
+  const panel = document.getElementById('log-panel');
+  panel.innerHTML = '<div class="log-placeholder" id="log-placeholder">选择操作模式并开始生成，实时日志将显示在此处</div>';
+}
+
+function now() {
+  return new Date().toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+// ── 启动 ──────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

@@ -29,7 +29,17 @@
       "Bash(python3 -c \"from ai_gen_reimbursement_docs.config_utils import load_spec_remind_update_toc; print\\(f'remind_update_toc 默认值: {load_spec_remind_update_toc\\(\\)}'\\)\")",
       "Bash(python3 -c \"from ai_gen_reimbursement_docs.config_utils import _get_system_config_value; print\\(_get_system_config_value\\('spec_remind_update_toc', 'NOTFOUND'\\)\\)\")",
       "Read(//c/Users/Administrator/.cosmic-tool/**)",
-      "Bash(python3 -c \"from ai_gen_reimbursement_docs.main import main; from ai_gen_reimbursement_docs.gen_spec import generate_spec_docx_from_md; from ai_gen_reimbursement_docs.gen_fpa import generate_fpa_xlsx_from_md; from ai_gen_reimbursement_docs.excel_source import generate_md_files; print\\('语法检查通过'\\)\")"
+      "Bash(python3 -c \"from ai_gen_reimbursement_docs.main import main; from ai_gen_reimbursement_docs.gen_spec import generate_spec_docx_from_md; from ai_gen_reimbursement_docs.gen_fpa import generate_fpa_xlsx_from_md; from ai_gen_reimbursement_docs.excel_source import generate_md_files; print\\('语法检查通过'\\)\")",
+      "Bash(.venv/Scripts/pip install *)",
+      "Bash(.venv/Scripts/python -m uvicorn web_app.server:app --host 127.0.0.1 --port 8080)",
+      "Bash(curl -s http://127.0.0.1:8080/)",
+      "Bash(curl -s http://127.0.0.1:8080/api/modes)",
+      "Bash(kill %1)",
+      "Bash(.venv/Scripts/python -m pip install fastapi \"uvicorn[standard]\" python-multipart)",
+      "Bash(.venv/Scripts/python -c \"from web_app.server import app; print\\('server 导入 OK'\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8080/)",
+      "Bash(wait %1)",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('web_app/server.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")"
     ],
     "additionalDirectories": [
       "F:\\mlt\\mlt-tests\\AI-Gen-Reimbursement-Docs",
