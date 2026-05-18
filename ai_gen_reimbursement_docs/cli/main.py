@@ -50,6 +50,130 @@ def _start_web_ui(root: str) -> None:
                 app_dir=os.path.dirname(root), log_level="info")
 
 
+def _try_read_project_name(excel_path: str) -> str:
+    """从 Excel 功能清单读取工单标题，失败返回空字符串。"""
+    try:
+        _, name = _read_meta_field_value(excel_path, "工单标题")
+        return name.strip() if name else ""
+    except Exception:
+        return ""
+
+
+def _auto_detect_and_run(api_key: str, model: str, base_url: str) -> None:
+    """零参数模式：在当前目录搜索符合规范的功能清单 xlsx，找到唯一匹配则自动全流程执行。"""
+    import glob
+
+    from ai_gen_reimbursement_docs.excel_source import is_valid_input_xlsx
+
+    xlsx_files = glob.glob("*.xlsx")
+    if not xlsx_files:
+        print("当前目录未找到任何 .xlsx 文件")
+        print("使用方式: ard --from-excel <功能清单路径> --gen-all")
+        return
+
+    valid = [f for f in xlsx_files if is_valid_input_xlsx(f)]
+
+    if len(valid) == 0:
+        print(f"当前目录找到 {len(xlsx_files)} 个 .xlsx 文件，但都不符合功能清单录入文档规范")
+        print(f"文件列表: {', '.join(xlsx_files)}")
+        print("使用方式: ard --from-excel <功能清单路径> --gen-all")
+        return
+
+    if len(valid) > 1:
+        print(f"当前目录找到 {len(valid)} 个符合规范的功能清单文件，请指定其中一个:")
+        for f in valid:
+            print(f"  ard --from-excel \"{f}\" --gen-all")
+        return
+
+    # 唯一匹配，自动执行
+    excel_path = valid[0]
+    print(f"检测到功能清单: {excel_path}")
+
+    # 尝试读取工单标题用作输出文件夹名
+    project_name = _try_read_project_name(excel_path)
+    if project_name:
+        print(f"项目名称: {project_name}")
+
+    print("自动执行全流程...")
+    sys.argv = [sys.argv[0], "--from-excel", excel_path, "--gen-all"]
+    new_args = _build_parser().parse_args(["--from-excel", excel_path, "--gen-all"])
+    if api_key:
+        new_args.api_key = api_key
+    if model:
+        new_args.model = model
+    if base_url:
+        new_args.base_url = base_url
+    if project_name:
+        new_args.project_name = project_name
+    _run_pipeline_with_args(new_args)
+
+
+def _run_pipeline_with_args(args) -> None:
+    """从解析好的参数执行管道（零参数模式复用）。"""
+    import re
+
+    excel_path = args.from_excel
+    if not excel_path:
+        return
+
+    excel_dir = os.path.dirname(os.path.abspath(excel_path))
+    if args.output_dir:
+        out_dir = args.output_dir
+    elif args.project_name:
+        safe = re.sub(r'[\/:*?"<>|]', '_', args.project_name)
+        out_dir = os.path.join(excel_dir, safe)
+    else:
+        # 自动从 xlsx 读取工单标题作为输出文件夹名
+        project_name = _try_read_project_name(excel_path)
+        if project_name:
+            safe = re.sub(r'[\/:*?"<>|]', '_', project_name)
+            out_dir = os.path.join(excel_dir, safe)
+            args.project_name = project_name
+        else:
+            out_dir = excel_dir
+
+    log_dir = os.path.join(out_dir, '日志')
+    os.makedirs(log_dir, exist_ok=True)
+
+    from ai_gen_reimbursement_docs.cli.logging import setup_logging
+    setup_logging(log_dir, 'AI生成项目报账文档')
+    os.environ['AI_REIMBURSEMENT_LOG_DIR'] = log_dir
+
+    from ai_gen_reimbursement_docs.pipeline import run_pipeline
+
+    result = run_pipeline(
+        mode='gen-all',
+        file_path=excel_path,
+        output_dir=out_dir,
+        api_key=args.api_key or load_api_key(),
+        model=args.model or load_model_name(),
+        base_url=args.base_url or load_base_url(),
+        project_name=args.project_name,
+    )
+
+    # 输出摘要
+    _section("完成")
+    _summary_files = [
+        ("FPA 工作量评估", result.fpa_xlsx),
+        ("项目功能点拆分表", result.cosmic_xlsx),
+        ("项目需求清单", result.require_xlsx),
+        ("项目需求说明书", result.spec_docx),
+    ]
+    print()
+    for _label, _path in _summary_files:
+        if _path and os.path.exists(_path):
+            _size = os.path.getsize(_path)
+            print(f"  ✅ {_label}: {_path} ({_size/1024:.0f} KB)")
+        else:
+            print(f"  ⏭️  {_label}: 跳过（已存在或未生成）")
+    print()
+
+    from ai_gen_reimbursement_docs.cli.logging import write_combined_ai_log
+    from ai_gen_reimbursement_docs.cli.notify import play_notify_sound
+    write_combined_ai_log('gen-all')
+    play_notify_sound()
+
+
 def _auto_init_config(root: str) -> None:
     """exe 首次运行自动初始化用户配置文件（不覆盖已有配置）。"""
     import shutil
@@ -497,6 +621,12 @@ def main():
             print(f"AI 调用失败: {e}")
         return
 
+    # ── 零参数模式：自动搜索当前目录功能清单并全流程执行 ──
+    if not any([args.gen_basedata, args.gen_fpa, args.gen_cosmic, args.gen_list,
+                args.gen_spec, args.gen_all]):
+        _auto_detect_and_run(api_key, model, base_url)
+        # 自动检测失败（无可识别文件）时返回，继续往下走，由 gen-* 块报错
+
     # ── from-excel 管道 ──
     if any([args.gen_basedata, args.gen_fpa, args.gen_cosmic, args.gen_list,
              args.gen_spec, args.gen_all]):
@@ -523,7 +653,14 @@ def main():
             safe = re.sub(r'[\/:*?"<>|]', '_', args.project_name)
             out_dir = os.path.join(excel_dir, safe)
         else:
-            out_dir = excel_dir
+            # 自动从 xlsx 读取工单标题作为输出文件夹名
+            auto_name = _try_read_project_name(excel_path)
+            if auto_name:
+                safe = re.sub(r'[\/:*?"<>|]', '_', auto_name)
+                out_dir = os.path.join(excel_dir, safe)
+                args.project_name = auto_name
+            else:
+                out_dir = excel_dir
 
         if args.clean and args.project_name:
             safe = re.sub(r'[\/:*?"<>|]', '_', args.project_name)

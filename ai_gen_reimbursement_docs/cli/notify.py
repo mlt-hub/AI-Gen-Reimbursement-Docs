@@ -1,6 +1,14 @@
 """播放提示音。"""
 
 import os
+import sys
+
+
+def _app_root() -> str:
+    """返回应用根目录。exe 模式取 exe 所在目录，源码模式取项目根。"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 
 def play_notify_sound():
@@ -8,9 +16,9 @@ def play_notify_sound():
     try:
         import yaml as _y
         _notify = False
+        root = _app_root()
         for _p in [
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                         'config', 'system_config.yaml'),
+            os.path.join(root, 'config', 'system_config.yaml'),
             os.path.join(os.environ.get('USERPROFILE', os.environ.get('HOME', '')),
                          '.ai-gen-reimbursement-docs', 'system_config.yaml'),
         ]:
@@ -22,10 +30,7 @@ def play_notify_sound():
                     break
         if _notify:
             import winsound
-            _audio_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                'data', 'audio', 'ticktick_pop.wav'
-            )
+            _audio_path = os.path.join(root, 'data', 'audio', 'ticktick_pop.wav')
             if os.path.isfile(_audio_path):
                 winsound.PlaySound(_audio_path, winsound.SND_FILENAME | winsound.SND_SYNC)
     except Exception:

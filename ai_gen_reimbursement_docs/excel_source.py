@@ -581,3 +581,24 @@ def build_modules_from_tree_md(md_path: str) -> list:
                 f"{sum(len(v) for v in seen_l2.values())}个L2, "
                 f"{l3_count}个L3")
     return modules
+
+
+# 内置默认 Sheet 名（用户未配置时回退使用）
+_DEFAULT_FUNC_CONTENT_SHEET = "2、功能清单-内容录入"
+
+
+def is_valid_input_xlsx(xlsx_path: str) -> bool:
+    """检查 xlsx 是否为符合规范的功能清单录入文档（至少包含核心功能清单 Sheet）。"""
+    import openpyxl
+
+    sheets = load_sheet_names()
+    func_sheet = sheets.get("func_content", "") or _DEFAULT_FUNC_CONTENT_SHEET
+
+    try:
+        wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    except Exception:
+        return False
+
+    valid = func_sheet in wb.sheetnames
+    wb.close()
+    return valid

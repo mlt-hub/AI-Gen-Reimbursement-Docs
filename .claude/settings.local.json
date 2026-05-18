@@ -39,11 +39,27 @@
       "Bash(.venv/Scripts/python -c \"from web_app.server import app; print\\('server 导入 OK'\\)\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8080/)",
       "Bash(wait %1)",
-      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('web_app/server.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")"
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('web_app/server.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('ai_gen_reimbursement_docs/cli/main.py'\\).read\\(\\)\\); print\\('main.py 语法 OK'\\)\")",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('ai_gen_reimbursement_docs/excel_source.py'\\).read\\(\\)\\); print\\('excel_source.py 语法 OK'\\)\")",
+      "Bash(PYTHONPATH=f:/mlt/mlt-projects/ai_gen_reimbursement_docs f:/mlt/mlt-projects/ai_gen_reimbursement_docs/.venv/Scripts/python -c ' *)",
+      "Bash(rm -f /tmp/test_func.xlsx)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"f:\\\\mlt\\\\mlt-projects\\\\ai_gen_reimbursement_docs\\\\build_exe.ps1\")",
+      "Bash(mkdir -p /tmp/test_ard)",
+      "Bash(\"f:/mlt/mlt-projects/ai_gen_reimbursement_docs/dist/ard.exe\")",
+      "Bash(timeout 8 \"f:/mlt/mlt-projects/ai_gen_reimbursement_docs/dist/ard.exe\")",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('ai_gen_reimbursement_docs/cli/main.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")",
+      "Bash(taskkill //F //IM ard.exe)",
+      "Bash(rm -rf /tmp/test_ard)",
+      "Bash(cp \"f:/mlt/mlt-projects/ai_gen_reimbursement_docs/data/in_templates/功能清单-录入模板.xlsx\" /tmp/test_ard/)",
+      "Bash(timeout 15 \"f:/mlt/mlt-projects/ai_gen_reimbursement_docs/dist/ard.exe\")",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('ai_gen_reimbursement_docs/cli/main.py'\\).read\\(\\)\\); ast.parse\\(open\\('ai_gen_reimbursement_docs/pipeline.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('ai_gen_reimbursement_docs/cli/notify.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")"
     ],
     "additionalDirectories": [
       "F:\\mlt\\mlt-tests\\AI-Gen-Reimbursement-Docs",
-      "F:\\mlt\\mlt-projects\\ai_gen_reimbursement_docs"
+      "F:\\mlt\\mlt-projects\\ai_gen_reimbursement_docs",
+      "\\tmp"
     ]
   },
   "_comment": "本地私有配置，包含命令权限白名单，不提交到 git"
