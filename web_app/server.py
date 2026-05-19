@@ -107,10 +107,59 @@ async def index():
     return HTMLResponse(content)
 
 
+@app.get("/prompt-debug")
+async def prompt_debug():
+    html_path = Path(__file__).parent / "static" / "prompt-debug.html"
+    content = html_path.read_text(encoding="utf-8")
+    return HTMLResponse(content)
+
+
 @app.get("/api/modes")
 async def get_modes():
     """返回操作模式列表，供前端动态渲染下拉框。"""
     return MODE_INFO
+
+
+# ── 提示词调试 ────────────────────────────────────────────
+
+
+@app.post("/api/test-prompt")
+async def test_prompt(data: dict):
+    """提交系统提示词和用户提示词，返回 AI 生成结果。"""
+    system_prompt = data.get("system_prompt", "").strip()
+    user_prompt = data.get("user_prompt", "").strip()
+    if not user_prompt:
+        raise HTTPException(400, "用户提示词不能为空")
+
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_api_key, load_base_url, load_model_name,
+    )
+    from ai_gen_reimbursement_docs.llm_client import call_llm
+
+    api_key = data.get("api_key", "").strip() or load_api_key()
+    model = data.get("model", "").strip() or load_model_name()
+    base_url = data.get("base_url", "").strip() or load_base_url()
+
+    if not api_key:
+        raise HTTPException(400, "未配置 API Key")
+
+    if api_key:
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+    if base_url:
+        os.environ["ANTHROPIC_BASE_URL"] = base_url
+
+    try:
+        result = call_llm(
+            prompt=user_prompt,
+            system=system_prompt,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            tag="prompt_debug",
+        )
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(500, f"AI 调用失败: {e}")
 
 
 # ── 本机模式 ──────────────────────────────────────────────
@@ -293,6 +342,76 @@ async def open_folder(session: str):
         raise HTTPException(404, "产物目录不存在")
     os.startfile(str(out_dir))
     return {"ok": True}
+
+
+# ── AI 交互日志 ────────────────────────────────────────────
+
+
+def _find_log_dir(session_id: str) -> Path | None:
+    """根据 session 找到日志目录。"""
+    out_dir = session_outputs.get(session_id)
+    if out_dir is None:
+        work_dir = session_dirs.get(session_id)
+        if work_dir:
+            out_dir = work_dir / "output"
+    if out_dir is None or not out_dir.exists():
+        return None
+
+    # 搜索「日志」目录
+    for log_dir in out_dir.rglob("日志"):
+        if log_dir.is_dir():
+            return log_dir
+    return None
+
+
+@app.get("/api/ai-log/{session_id}")
+async def get_ai_log(session_id: str):
+    """返回 AI 对话日志内容。"""
+    log_dir = _find_log_dir(session_id)
+    if log_dir is None:
+        raise HTTPException(404, "未找到日志目录")
+
+    combined = log_dir / "ai_对话日志.md"
+    if not combined.exists():
+        raise HTTPException(404, "AI 对话日志尚未生成")
+
+    content = combined.read_text(encoding="utf-8")
+    return {"content": content, "filename": combined.name}
+
+
+@app.get("/api/ai-interactions/{session_id}")
+async def list_ai_interactions(session_id: str):
+    """列出 AI prompts 和 responses 文件清单及内容。"""
+    log_dir = _find_log_dir(session_id)
+    if log_dir is None:
+        raise HTTPException(404, "未找到日志目录")
+
+    prompts_dir = log_dir / "ai_prompts"
+    responses_dir = log_dir / "ai_responses"
+
+    files: list[dict] = []
+
+    if prompts_dir.is_dir():
+        for fname in sorted(os.listdir(prompts_dir)):
+            if fname.endswith(".txt"):
+                path = prompts_dir / fname
+                files.append({
+                    "name": fname,
+                    "type": "prompt",
+                    "content": path.read_text(encoding="utf-8"),
+                })
+
+    if responses_dir.is_dir():
+        for fname in sorted(os.listdir(responses_dir)):
+            if fname.endswith(".txt"):
+                path = responses_dir / fname
+                files.append({
+                    "name": fname,
+                    "type": "response",
+                    "content": path.read_text(encoding="utf-8"),
+                })
+
+    return {"interactions": files, "count": len(files)}
 
 
 # ── 清理 ──────────────────────────────────────────────────

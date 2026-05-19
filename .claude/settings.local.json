@@ -54,7 +54,9 @@
       "Bash(cp \"f:/mlt/mlt-projects/ai_gen_reimbursement_docs/data/in_templates/功能清单-录入模板.xlsx\" /tmp/test_ard/)",
       "Bash(timeout 15 \"f:/mlt/mlt-projects/ai_gen_reimbursement_docs/dist/ard.exe\")",
       "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('ai_gen_reimbursement_docs/cli/main.py'\\).read\\(\\)\\); ast.parse\\(open\\('ai_gen_reimbursement_docs/pipeline.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")",
-      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('ai_gen_reimbursement_docs/cli/notify.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")"
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('ai_gen_reimbursement_docs/cli/notify.py'\\).read\\(\\)\\); print\\('语法 OK'\\)\")",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('web_app/server.py'\\).read\\(\\)\\); print\\('server.py 语法 OK'\\)\")",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('web_app/server.py'\\).read\\(\\)\\); print\\('server.py OK'\\)\")"
     ],
     "additionalDirectories": [
       "F:\\mlt\\mlt-tests\\AI-Gen-Reimbursement-Docs",

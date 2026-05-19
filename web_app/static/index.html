@@ -257,6 +257,136 @@ details .adv-inner {
   color: var(--text-secondary);
 }
 .btn-reset:hover { background: var(--border); }
+.btn-ai {
+  background: #8b5cf6;
+  color: #fff;
+}
+.btn-ai:hover { background: #7c3aed; }
+.btn-ai:disabled {
+  background: #c4b5fd;
+  cursor: not-allowed;
+}
+
+/* AI 交互弹窗 */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: #fff;
+  border-radius: var(--radius);
+  width: 90vw;
+  max-width: 900px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.modal-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-header h3 { font-size: 16px; }
+.modal-header .btn-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.modal-header .btn-close:hover { background: var(--bg); }
+.modal-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+}
+.modal-tabs button {
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.modal-tabs button.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.modal-body pre {
+  background: #1a1a2e;
+  color: #d4d4d4;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 16px;
+}
+.interaction-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.interaction-header {
+  padding: 8px 14px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+.interaction-header:hover { background: #e5e7eb; }
+.interaction-header .tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.tag-prompt { background: #dbeafe; color: #1d4ed8; }
+.tag-response { background: #dcfce7; color: #16a34a; }
+.interaction-body {
+  display: none;
+  padding: 10px 14px;
+  background: #1a1a2e;
+  color: #d4d4d4;
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.interaction-body.open { display: block; }
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-secondary);
+}
 
 /* 响应式：小屏幕改为上下布局 */
 @media (max-width: 768px) {
@@ -270,6 +400,7 @@ details .adv-inner {
 <div class="header">
   <h1>AI 报账文档生成器</h1>
   <span class="version" id="version-info">v-</span>
+  <a href="/prompt-debug" style="font-size:13px;color:var(--primary);text-decoration:none">提示词调试</a>
 </div>
 
 <div class="app">
@@ -341,7 +472,25 @@ details .adv-inner {
       <span class="info-text" id="action-hint"></span>
       <button class="btn-action btn-open" id="btn-open" disabled onclick="openFolder()">打开产物目录</button>
       <button class="btn-action btn-download" id="btn-download" disabled onclick="download()">下载产物 .zip</button>
+      <button class="btn-action btn-ai" id="btn-ai" disabled onclick="showAIInteractions()">AI 交互</button>
       <button class="btn-action btn-reset" id="btn-reset" style="display:none" onclick="resetUI()">新任务</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI 交互弹窗 -->
+<div class="modal-overlay" id="ai-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>AI 交互记录</h3>
+      <button class="btn-close" onclick="closeAIModal()">&times;</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="active" onclick="switchAITab('list')">交互列表</button>
+      <button onclick="switchAITab('combined')">合并日志</button>
+    </div>
+    <div class="modal-body" id="ai-modal-body">
+      <div class="loading-spinner">加载中...</div>
     </div>
   </div>
 </div>
@@ -532,6 +681,7 @@ function onTaskDone() {
   } else {
     document.getElementById('btn-download').disabled = false;
   }
+  document.getElementById('btn-ai').disabled = false;
   document.getElementById('btn-reset').style.display = '';
 }
 
@@ -563,6 +713,7 @@ function setRunning(running) {
     status.textContent = '运行中...';
     document.getElementById('btn-open').disabled = true;
     document.getElementById('btn-download').disabled = true;
+    document.getElementById('btn-ai').disabled = true;
     document.getElementById('btn-reset').style.display = 'none';
     // 清空日志
     const panel = document.getElementById('log-panel');
@@ -582,6 +733,7 @@ function resetForNewTask() {
   document.getElementById('status').textContent = '就绪';
   document.getElementById('btn-open').disabled = true;
   document.getElementById('btn-download').disabled = true;
+  document.getElementById('btn-ai').disabled = true;
   document.getElementById('btn-reset').style.display = 'none';
   document.getElementById('action-hint').textContent = '';
   const panel = document.getElementById('log-panel');
@@ -590,6 +742,84 @@ function resetForNewTask() {
 
 function now() {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+// ── AI 交互弹窗 ──────────────────────────────────────────
+let aiTabMode = 'list';
+
+async function showAIInteractions() {
+  if (!currentSession) return;
+  document.getElementById('ai-modal').classList.add('active');
+  aiTabMode = 'list';
+  document.querySelectorAll('.modal-tabs button').forEach((b, i) => b.classList.toggle('active', i === 0));
+  await loadAIInteractions();
+}
+
+function closeAIModal() {
+  document.getElementById('ai-modal').classList.remove('active');
+}
+
+function switchAITab(tab) {
+  aiTabMode = tab;
+  document.querySelectorAll('.modal-tabs button').forEach((b, i) => {
+    b.classList.toggle('active', (i === 0 && tab === 'list') || (i === 1 && tab === 'combined'));
+  });
+  if (tab === 'list') loadAIInteractions();
+  else loadAICombinedLog();
+}
+
+async function loadAIInteractions() {
+  const body = document.getElementById('ai-modal-body');
+  body.innerHTML = '<div class="loading-spinner">加载中...</div>';
+  try {
+    const resp = await fetch('/api/ai-interactions/' + currentSession);
+    if (!resp.ok) throw new Error((await resp.json()).detail);
+    const data = await resp.json();
+    if (data.count === 0) {
+      body.innerHTML = '<div class="loading-spinner">暂无 AI 交互记录</div>';
+      return;
+    }
+    let html = '';
+    for (const item of data.interactions) {
+      const tagClass = item.type === 'prompt' ? 'tag-prompt' : 'tag-response';
+      const tagLabel = item.type === 'prompt' ? 'P' : 'R';
+      const idx = item.name.replace(/[^0-9]/g, '').slice(-3) || item.name;
+      html += '<div class="interaction-item">';
+      html += '<div class="interaction-header" onclick="toggleInteraction(this)">';
+      html += '<span><span class="tag ' + tagClass + '">' + tagLabel + '</span> ' + idx + ' — ' + escapeHtml(item.name) + '</span>';
+      html += '<span style="font-size:12px;color:var(--text-secondary)">点击展开</span>';
+      html += '</div>';
+      html += '<div class="interaction-body">' + escapeHtml(item.content) + '</div>';
+      html += '</div>';
+    }
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = '<div class="loading-spinner" style="color:#ef4444">加载失败: ' + e.message + '</div>';
+  }
+}
+
+async function loadAICombinedLog() {
+  const body = document.getElementById('ai-modal-body');
+  body.innerHTML = '<div class="loading-spinner">加载中...</div>';
+  try {
+    const resp = await fetch('/api/ai-log/' + currentSession);
+    if (!resp.ok) throw new Error((await resp.json()).detail);
+    const data = await resp.json();
+    body.innerHTML = '<pre>' + escapeHtml(data.content) + '</pre>';
+  } catch (e) {
+    body.innerHTML = '<div class="loading-spinner" style="color:#ef4444">加载失败: ' + e.message + '</div>';
+  }
+}
+
+function toggleInteraction(el) {
+  const body = el.nextElementSibling;
+  body.classList.toggle('open');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 // ── 启动 ──────────────────────────────────────────────────

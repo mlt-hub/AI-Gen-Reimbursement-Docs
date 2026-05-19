@@ -29,6 +29,10 @@ pyinstaller --onefile `
     --add-data "$root\ai_gen_reimbursement_docs;ai_gen_reimbursement_docs" `
     --add-data "$root\pyproject.toml;." `
     --hidden-import "openpyxl.cell._writer" `
+    --collect-all "fastapi" `
+    --collect-all "uvicorn" `
+    --collect-all "starlette" `
+    --collect-all "python_multipart" `
     --distpath dist `
     --workpath build `
     --specpath build `
@@ -56,6 +60,7 @@ Copy-Item "$root\data\audio" "$root\dist\data\audio" -Recurse -Force
 Copy-Item "$root\config\.env.example" "$root\dist\config\.env.example" -Force
 Copy-Item "$root\config\system_config.yaml.example" "$root\dist\config\system_config.yaml.example" -Force
 Copy-Item "$root\config\business_rules.yaml.example" "$root\dist\config\business_rules.yaml.example" -Force
+Copy-Item "$root\web_app" "$root\dist\web_app" -Recurse -Force
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green

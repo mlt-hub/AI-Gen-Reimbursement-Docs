@@ -54,7 +54,8 @@ jobs:
           Copy-Item config\.env.example dist\config\.env.example -Force
           Copy-Item config\system_config.yaml.example dist\config\system_config.yaml.example -Force
           Copy-Item config\business_rules.yaml.example dist\config\business_rules.yaml.example -Force
-          Compress-Archive -Path dist\* -DestinationPath "cosmic_v$env:version.zip"
+          Copy-Item web_app dist\web_app -Recurse -Force
+          Compress-Archive -Path dist\* -DestinationPath "ard_v$env:version.zip"
 
       - name: 创建 Release（本仓）
         uses: softprops/action-gh-release@v3

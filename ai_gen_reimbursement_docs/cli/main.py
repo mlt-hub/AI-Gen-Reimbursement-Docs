@@ -46,8 +46,13 @@ def _start_web_ui(root: str) -> None:
     port = 8000
     webbrowser.open(f"http://{host}:{port}")
     print(f"Web UI 已启动: http://{host}:{port}")
+    # exe 模式用 exe 所在目录（web_app/ 外挂在该目录），源码模式用项目根
+    if getattr(sys, 'frozen', False):
+        app_dir = os.path.dirname(sys.executable)
+    else:
+        app_dir = root
     uvicorn.run("web_app.server:app", host=host, port=port,
-                app_dir=os.path.dirname(root), log_level="info")
+                app_dir=app_dir, log_level="info")
 
 
 def _try_read_project_name(excel_path: str) -> str:
