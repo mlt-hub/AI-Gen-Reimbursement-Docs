@@ -32,7 +32,8 @@ def call_llm(
     tag: str = "",
     save_logs: bool = True,
     log_dir: Optional[str] = None,
-) -> str:
+    return_thinking: bool = False,
+) -> str | tuple[str, str]:
     """调用 LLM，自动处理重试和日志记录。
 
     Args:
@@ -88,12 +89,14 @@ def call_llm(
                 create_kwargs["temperature"] = temperature
             msg = client.messages.create(**create_kwargs)
             resp_text = _extract_text(msg.content)
+            thinking_text = _extract_thinking(msg.content)
 
             if save_logs:
-                reasoning = _extract_thinking(msg.content)
-                _save_response_log(resp_text, reasoning, model, tag, timestamp, log_dir)
+                _save_response_log(resp_text, thinking_text, model, tag, timestamp, log_dir)
 
             logger.info("LLM 调用完成 [%s] 长度: %d 字", tag, len(resp_text))
+            if return_thinking:
+                return resp_text, thinking_text
             return resp_text
 
         except Exception as e:

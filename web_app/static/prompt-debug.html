@@ -186,6 +186,41 @@ details summary { color: var(--primary); cursor: pointer; user-select: none; }
   justify-content: center;
   height: 100%;
 }
+.thinking-section {
+  margin-bottom: 12px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.thinking-header {
+  padding: 8px 14px;
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.thinking-header:hover { background: #334155; }
+.thinking-header .arrow { transition: transform 0.2s; font-size: 11px; }
+.thinking-header.collapsed .arrow { transform: rotate(-90deg); }
+.thinking-body {
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  max-height: 300px;
+  overflow-y: auto;
+  display: block;
+}
+.thinking-header.collapsed + .thinking-body { display: none; }
+.result-section h4 {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
 .char-count { font-size: 12px; color: #6b7280; margin-top: 6px; text-align: right; }
 
 /* 响应式 */
@@ -209,7 +244,7 @@ details summary { color: var(--primary); cursor: pointer; user-select: none; }
     <textarea id="system-prompt" placeholder="可选，系统级指令（角色设定、输出格式等）"></textarea>
 
     <label>用户提示词 <span class="hint" id="user-count">0 字</span></label>
-    <textarea id="user-prompt" placeholder="必填，具体的任务描述或问题"></textarea>
+    <textarea id="user-prompt" placeholder="可选，具体的任务描述或问题"></textarea>
 
     <div class="toolbar">
       <button class="btn-submit" id="btn-submit" onclick="submitPrompt()">发送给 AI</button>
@@ -252,10 +287,11 @@ userPrompt.addEventListener('input', () => userCount.textContent = userPrompt.va
 
 async function submitPrompt() {
   const user = userPrompt.value.trim();
-  if (!user) { alert('请输入用户提示词'); return; }
+  const system = systemPrompt.value.trim();
+  if (!user && !system) { alert('请至少输入系统提示词或用户提示词'); return; }
 
   const body = {
-    system_prompt: systemPrompt.value,
+    system_prompt: system,
     user_prompt: user,
     api_key: document.getElementById('api-key').value.trim(),
     model: document.getElementById('model').value.trim(),
@@ -275,8 +311,23 @@ async function submitPrompt() {
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || '请求失败');
-    output.textContent = data.result;
-    resultCount.textContent = data.result.length + ' 字';
+
+    let html = '';
+    if (data.thinking) {
+      html += '<div class="thinking-section">';
+      html += '<div class="thinking-header" onclick="this.classList.toggle(\'collapsed\')">';
+      html += '<span class="arrow">▼</span> 思考过程（' + data.thinking.length + ' 字）';
+      html += '</div>';
+      html += '<div class="thinking-body">' + escapeHtml(data.thinking) + '</div>';
+      html += '</div>';
+    }
+    html += '<div class="result-section">';
+    html += '<h4>AI 返回结果（' + data.result.length + ' 字）</h4>';
+    html += '<div>' + escapeHtml(data.result) + '</div>';
+    html += '</div>';
+
+    output.innerHTML = html;
+    resultCount.textContent = (data.thinking ? '思考 ' + data.thinking.length + ' 字 + ' : '') + '结果 ' + data.result.length + ' 字';
     status.className = 'status status-done';
     status.textContent = '完成';
   } catch (e) {
@@ -297,6 +348,12 @@ function clearAll() {
   resultCount.textContent = '';
   status.className = 'status status-idle';
   status.textContent = '就绪';
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 // Ctrl+Enter 快捷键提交

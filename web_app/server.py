@@ -128,8 +128,8 @@ async def test_prompt(data: dict):
     """提交系统提示词和用户提示词，返回 AI 生成结果。"""
     system_prompt = data.get("system_prompt", "").strip()
     user_prompt = data.get("user_prompt", "").strip()
-    if not user_prompt:
-        raise HTTPException(400, "用户提示词不能为空")
+    if not user_prompt and not system_prompt:
+        raise HTTPException(400, "系统提示词和用户提示词不能同时为空")
 
     from ai_gen_reimbursement_docs.config_utils import (
         load_api_key, load_base_url, load_model_name,
@@ -149,15 +149,16 @@ async def test_prompt(data: dict):
         os.environ["ANTHROPIC_BASE_URL"] = base_url
 
     try:
-        result = call_llm(
+        result, thinking = call_llm(
             prompt=user_prompt,
             system=system_prompt,
             api_key=api_key,
             model=model,
             base_url=base_url,
             tag="prompt_debug",
+            return_thinking=True,
         )
-        return {"result": result}
+        return {"result": result, "thinking": thinking}
     except Exception as e:
         raise HTTPException(500, f"AI 调用失败: {e}")
 
