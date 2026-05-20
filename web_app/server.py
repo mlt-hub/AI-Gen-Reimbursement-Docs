@@ -58,14 +58,21 @@ _parent.setLevel(logging.DEBUG)
 
 _handler = SessionHandler()
 _handler.setLevel(logging.DEBUG)
-# formatter 只用 %(message)s，时间/级别由 JSON 字段单独携带
 _handler.setFormatter(logging.Formatter("%(message)s"))
 _parent.addHandler(_handler)
+
+# 添加全局日志 handler（与 CLI 一致）
+from ai_gen_reimbursement_docs.cli.logging import init_global_logging
+init_global_logging()
 
 # ── 常量 ──────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = BASE_DIR / "data" / "out_templates"
+
+_log = logging.getLogger("ai_gen_reimbursement_docs")
+_log.info("[Web UI] AI生成项目报账文档 v%s（FastAPI 服务启动）",
+          __import__('tomllib').load(open(BASE_DIR / 'pyproject.toml', 'rb'))['project']['version'])
 
 MODE_INFO: dict[str, dict[str, str]] = {
     "from-excel-gen-all": {"label": "全流程 → 全套交付物", "desc": "生成所有文档"},
@@ -188,7 +195,10 @@ async def api_run_local(
     if not xlsx.exists():
         raise HTTPException(400, f"文件不存在: {xlsx_path}")
 
-    out = Path(output_dir) if output_dir else xlsx.parent
+    if output_dir:
+        out = Path(output_dir)
+    else:
+        out = xlsx.parent
     out.mkdir(parents=True, exist_ok=True)
 
     session_id = uuid.uuid4().hex[:8]
@@ -446,31 +456,16 @@ def _execute_mode(
     base_url: str,
     project_name: str = "",
 ):
-    """直接调用 pipeline.run_pipeline()。"""
-    from ai_gen_reimbursement_docs.config_utils import (
-        load_api_key,
-        load_base_url,
-        load_model_name,
-    )
-    from ai_gen_reimbursement_docs.pipeline import run_pipeline
-
-    api_key = api_key or load_api_key()
-    model = model or load_model_name()
-    base_url = base_url or load_base_url()
-
-    if api_key:
-        os.environ["ANTHROPIC_API_KEY"] = api_key
-    if base_url:
-        os.environ["ANTHROPIC_BASE_URL"] = base_url
+    """一站式管道入口，CLI / Web UI 共享。"""
+    from ai_gen_reimbursement_docs.pipeline import run_pipeline_simple
 
     logger = logging.getLogger("ai_gen_reimbursement_docs")
     logger.info(f"操作模式: {MODE_INFO.get(mode, {}).get('label', mode)}")
-    logger.info(f"输入文件: {Path(file_path).name}")
 
     pipeline_mode = _MODE_MAP[mode]
     templates = _build_templates_dict(custom_t_dir)
 
-    run_pipeline(
+    return run_pipeline_simple(
         mode=pipeline_mode,
         file_path=file_path,
         output_dir=output_dir,

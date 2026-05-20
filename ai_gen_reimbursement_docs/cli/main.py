@@ -55,20 +55,12 @@ def _start_web_ui(root: str) -> None:
                 app_dir=app_dir, log_level="info")
 
 
-def _try_read_project_name(excel_path: str) -> str:
-    """从 Excel 功能清单读取工单标题，失败返回空字符串。"""
-    try:
-        _, name = _read_meta_field_value(excel_path, "工单标题")
-        return name.strip() if name else ""
-    except Exception:
-        return ""
-
-
 def _auto_detect_and_run(api_key: str, model: str, base_url: str) -> None:
     """零参数模式：在当前目录搜索符合规范的功能清单 xlsx，找到唯一匹配则自动全流程执行。"""
     import glob
 
     from ai_gen_reimbursement_docs.excel_source import is_valid_input_xlsx
+    from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
 
     xlsx_files = glob.glob("*.xlsx")
     if not xlsx_files:
@@ -94,69 +86,34 @@ def _auto_detect_and_run(api_key: str, model: str, base_url: str) -> None:
     excel_path = valid[0]
     print(f"检测到功能清单: {excel_path}")
 
-    # 尝试读取工单标题用作输出文件夹名
     project_name = _try_read_project_name(excel_path)
     if project_name:
         print(f"项目名称: {project_name}")
 
     print("自动执行全流程...")
-    sys.argv = [sys.argv[0], "--from-excel", excel_path, "--gen-all"]
-    new_args = _build_parser().parse_args(["--from-excel", excel_path, "--gen-all"])
-    if api_key:
-        new_args.api_key = api_key
-    if model:
-        new_args.model = model
-    if base_url:
-        new_args.base_url = base_url
-    if project_name:
-        new_args.project_name = project_name
-    _run_pipeline_with_args(new_args)
+    _run_pipeline_with_args(excel_path, api_key, model, base_url, project_name)
 
 
-def _run_pipeline_with_args(args) -> None:
-    """从解析好的参数执行管道（零参数模式复用）。"""
-    import re
-
-    excel_path = args.from_excel
-    if not excel_path:
-        return
-
-    excel_dir = os.path.dirname(os.path.abspath(excel_path))
-    if args.output_dir:
-        out_dir = args.output_dir
-    elif args.project_name:
-        safe = re.sub(r'[\/:*?"<>|]', '_', args.project_name)
-        out_dir = os.path.join(excel_dir, safe)
-    else:
-        # 自动从 xlsx 读取工单标题作为输出文件夹名
-        project_name = _try_read_project_name(excel_path)
-        if project_name:
-            safe = re.sub(r'[\/:*?"<>|]', '_', project_name)
-            out_dir = os.path.join(excel_dir, safe)
-            args.project_name = project_name
-        else:
-            out_dir = excel_dir
-
-    log_dir = os.path.join(out_dir, '日志')
-    os.makedirs(log_dir, exist_ok=True)
-
+def _run_pipeline_with_args(
+    excel_path: str,
+    api_key: str = "",
+    model: str = "",
+    base_url: str = "",
+    project_name: str = "",
+) -> None:
+    """执行管道并输出摘要（零参数模式复用）。"""
     from ai_gen_reimbursement_docs.cli.logging import setup_logging
-    setup_logging(log_dir, 'AI生成项目报账文档')
-    os.environ['AI_REIMBURSEMENT_LOG_DIR'] = log_dir
+    from ai_gen_reimbursement_docs.pipeline import run_pipeline_simple
 
-    from ai_gen_reimbursement_docs.pipeline import run_pipeline
-
-    result = run_pipeline(
+    result = run_pipeline_simple(
         mode='gen-all',
         file_path=excel_path,
-        output_dir=out_dir,
-        api_key=args.api_key or load_api_key(),
-        model=args.model or load_model_name(),
-        base_url=args.base_url or load_base_url(),
-        project_name=args.project_name,
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+        project_name=project_name,
     )
 
-    # 输出摘要
     _section("完成")
     _summary_files = [
         ("FPA 工作量评估", result.fpa_xlsx),
@@ -381,7 +338,7 @@ def main():
     run_mode = "exe" if getattr(sys, 'frozen', False) else "源码"
     root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     run_path = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else root
-    logger.info(f"AI生成项目报账文档 v{ver} ({run_mode}: {run_path})")
+    logger.info(f"[CLI] AI生成项目报账文档 v{ver} ({run_mode}: {run_path})")
 
     from ai_gen_reimbursement_docs.config_utils import config_dir, migrate_config
     logger.info(f"配置文件目录: {config_dir()}")
@@ -658,7 +615,7 @@ def main():
             safe = re.sub(r'[\/:*?"<>|]', '_', args.project_name)
             out_dir = os.path.join(excel_dir, safe)
         else:
-            # 自动从 xlsx 读取工单标题作为输出文件夹名
+            from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
             auto_name = _try_read_project_name(excel_path)
             if auto_name:
                 safe = re.sub(r'[\/:*?"<>|]', '_', auto_name)
@@ -673,11 +630,6 @@ def main():
             if os.path.exists(target):
                 shutil.rmtree(target)
                 logger.info(f"已删除输出目录: {target}")
-
-        log_dir = os.path.join(out_dir, '日志')
-        os.makedirs(log_dir, exist_ok=True)
-        setup_logging(log_dir, 'AI生成项目报账文档')
-        os.environ['AI_REIMBURSEMENT_LOG_DIR'] = log_dir
 
         mode_map = {
             'gen_all': 'gen-all', 'gen_basedata': 'gen-basedata',

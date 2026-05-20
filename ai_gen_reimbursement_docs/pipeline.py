@@ -82,6 +82,16 @@ def run_pipeline(
     if mode not in VALID_MODES:
         raise ValueError(f"未知模式: {mode}，支持: {', '.join(sorted(VALID_MODES))}")
 
+    # 日志设置（per-run 文件 handler，CLI / Web UI 共享）
+    log_dir = os.path.join(output_dir, '日志')
+    os.makedirs(log_dir, exist_ok=True)
+    os.environ['AI_REIMBURSEMENT_LOG_DIR'] = log_dir
+    try:
+        from ai_gen_reimbursement_docs.cli.logging import setup_logging
+        setup_logging(log_dir, 'AI生成项目报账文档')
+    except Exception:
+        pass
+
     # 准备目录
     os.makedirs(output_dir, exist_ok=True)
     doc_dir = os.path.join(output_dir, 'cosmic文档')
@@ -553,4 +563,90 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     result.require_xlsx = require_xlsx
 
     logger.info("全流程完成")
+
+
+def _try_read_project_name(excel_path: str) -> str:
+    """从 Excel 功能清单的元数据 Sheet 读取工单标题。"""
+    import openpyxl
+
+    from ai_gen_reimbursement_docs.config_utils import load_sheet_names
+
+    sheets = load_sheet_names()
+    meta_sheet = sheets.get("meta", "1、工单需求-元数据录入")
+    try:
+        wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+        if meta_sheet not in wb.sheetnames:
+            wb.close()
+            return ""
+        ws = wb[meta_sheet]
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            key = str(row[0]).strip() if row[0] else ""
+            val = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+            if key == "工单标题":
+                wb.close()
+                return val
+        wb.close()
+    except Exception:
+        pass
+    return ""
+
+
+def run_pipeline_simple(
+    *,
+    mode: str,
+    file_path: str,
+    output_dir: str = "",
+    api_key: str = "",
+    model: str = "",
+    base_url: str = "",
+    project_name: str = "",
+    templates: dict | None = None,
+) -> PipelineResult:
+    """一站式管道入口，CLI / Web UI / 零参数 共享。
+
+    自动处理：配置回退、工单标题读取、输出目录创建、日志设置。
+    """
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_api_key, load_base_url, load_model_name,
+    )
+
+    api_key = api_key or load_api_key()
+    model = model or load_model_name()
+    base_url = base_url or load_base_url()
+
+    if api_key:
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+    if base_url:
+        os.environ["ANTHROPIC_BASE_URL"] = base_url
+
+    excel_dir = os.path.dirname(os.path.abspath(file_path))
+    if output_dir:
+        out_dir = output_dir
+    elif project_name:
+        safe = re.sub(r'[\/:*?"<>|]', '_', project_name)
+        out_dir = os.path.join(excel_dir, safe)
+    else:
+        auto_name = _try_read_project_name(file_path)
+        if auto_name:
+            safe = re.sub(r'[\/:*?"<>|]', '_', auto_name)
+            out_dir = os.path.join(excel_dir, safe)
+            project_name = auto_name
+        else:
+            out_dir = excel_dir
+
+    logger.info(f"输入文件: {os.path.basename(file_path)}")
+    if project_name:
+        logger.info(f"项目名称: {project_name}")
+    logger.info(f"输出目录: {out_dir}")
+
+    return run_pipeline(
+        mode=mode,
+        file_path=file_path,
+        output_dir=out_dir,
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+        project_name=project_name,
+        templates=templates,
+    )
     return result
