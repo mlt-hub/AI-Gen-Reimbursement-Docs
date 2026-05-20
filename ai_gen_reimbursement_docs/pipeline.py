@@ -353,8 +353,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
     if api_key:
         logger.info("AI 填充 FPA 数据...")
         shutil.copy2(fpa_md, fpa_filled_md)
-        ai_fill_fpa_md(fpa_filled_md, meta_md,
-                       template_path=fpa_src,
+        ai_fill_fpa_md(fpa_filled_md, template_path=fpa_src,
                        api_key=api_key, model=model, base_url=base_url)
     else:
         fpa_filled_md = fpa_md
@@ -500,7 +499,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
     if api_key:
         shutil.copy2(fpa_md, fpa_filled_md)
-        ai_fill_fpa_md(fpa_filled_md, meta_md, template_path=fpa_src,
+        ai_fill_fpa_md(fpa_filled_md, template_path=fpa_src,
                        api_key=api_key, model=model, base_url=base_url)
     fpa_src_md = fpa_filled_md if api_key else fpa_md
     generate_fpa_xlsx_from_md(fpa_src_md, meta_md, fpa_src, fpa_xlsx)

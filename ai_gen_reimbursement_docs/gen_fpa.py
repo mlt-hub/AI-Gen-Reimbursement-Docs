@@ -187,8 +187,8 @@ def _ai_fill_fpa(
 
         row_tag = f"fpa_{row['类型']}_{row['新增/修改功能点']}"
         prompt = (
-            f"功能过程描述：{row['计算依据说明']}\n\n"
-            f"判定原则列表（请返回最匹配的序号，序号从1开始）：\n{_numbered_rules}\n\n"
+            f"新增/修改功能点描述：{row['新增/修改功能点']}\n\n"
+            f"计算依据归类判定原则列表（请返回最匹配的序号，序号从1开始）：\n{_numbered_rules}\n\n"
             f"请直接输出JSON，不要输出其他内容：\n"
             f'{{"type":"EI/EO/EQ/ILF/EIF","classification_basis_index":1,"explanation":"<展开的说明，包含触发事件、事件流、业务规则、业务数据、涉及表/文件/接口>"}}'
         )
@@ -306,7 +306,6 @@ def init_fpa_template_md(
 
 def ai_fill_fpa_md(
     fpa_md_path: str,
-    meta_md_path: str,
     template_path: str = "",
     api_key: str = "",
     model: str = "",
@@ -316,7 +315,6 @@ def ai_fill_fpa_md(
     logger.info("AI 填充 FPA 数据...")
     logger.info(f"AI 模型: {model}  端点: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
 
-    meta = parse_meta_md(meta_md_path)
     judgement_rules: list[str] = []
     if template_path:
         try:
@@ -331,11 +329,6 @@ def ai_fill_fpa_md(
                 logger.info(f"从模板附录读取判定原则 {len(judgement_rules)} 条")
         except Exception as e:
             logger.warning(f"从模板附录读取判定原则失败: {e}")
-    if not judgement_rules:
-        meta_rules = meta.get("计算依据归类判定原则", "")
-        if meta_rules:
-            judgement_rules = [r.strip() for r in meta_rules.split('\n') if r.strip()]
-            logger.info(f"从元数据读取判定原则 {len(judgement_rules)} 条")
     if not judgement_rules:
         logger.warning("未配置「计算依据归类判定原则」，AI 输出的归类将原样保留")
 

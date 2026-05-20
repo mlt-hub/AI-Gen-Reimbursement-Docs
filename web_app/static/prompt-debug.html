@@ -313,13 +313,14 @@ async function submitPrompt() {
     if (!resp.ok) throw new Error(data.detail || '请求失败');
 
     let html = '';
+    if (data.system_prompt) {
+      html += _foldBlock('系统提示词', data.system_prompt, true);
+    }
+    if (data.user_prompt) {
+      html += _foldBlock('用户提示词', data.user_prompt, true);
+    }
     if (data.thinking) {
-      html += '<div class="thinking-section">';
-      html += '<div class="thinking-header" onclick="this.classList.toggle(\'collapsed\')">';
-      html += '<span class="arrow">▼</span> 思考过程（' + data.thinking.length + ' 字）';
-      html += '</div>';
-      html += '<div class="thinking-body">' + escapeHtml(data.thinking) + '</div>';
-      html += '</div>';
+      html += _foldBlock('思考过程', data.thinking, false);
     }
     html += '<div class="result-section">';
     html += '<h4>AI 返回结果（' + data.result.length + ' 字）</h4>';
@@ -327,7 +328,7 @@ async function submitPrompt() {
     html += '</div>';
 
     output.innerHTML = html;
-    resultCount.textContent = (data.thinking ? '思考 ' + data.thinking.length + ' 字 + ' : '') + '结果 ' + data.result.length + ' 字';
+    resultCount.textContent = '结果 ' + data.result.length + ' 字';
     status.className = 'status status-done';
     status.textContent = '完成';
   } catch (e) {
@@ -354,6 +355,16 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function _foldBlock(title, content, collapsed) {
+  const cls = collapsed ? ' collapsed' : '';
+  return '<div class="thinking-section">'
+    + '<div class="thinking-header' + cls + '" onclick="this.classList.toggle(\'collapsed\')">'
+    + '<span class="arrow">▼</span> ' + title + '（' + content.length + ' 字）'
+    + '</div>'
+    + '<div class="thinking-body">' + escapeHtml(content) + '</div>'
+    + '</div>';
 }
 
 // Ctrl+Enter 快捷键提交

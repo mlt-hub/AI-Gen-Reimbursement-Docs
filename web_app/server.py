@@ -158,7 +158,12 @@ async def test_prompt(data: dict):
             tag="prompt_debug",
             return_thinking=True,
         )
-        return {"result": result, "thinking": thinking}
+        return {
+            "result": result,
+            "thinking": thinking,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+        }
     except Exception as e:
         raise HTTPException(500, f"AI 调用失败: {e}")
 
