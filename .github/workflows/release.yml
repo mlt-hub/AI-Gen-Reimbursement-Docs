@@ -34,12 +34,16 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --onefile `
-            --name cosmic `
-            --add-data "$env:GITHUB_WORKSPACE\cosmic_tool;cosmic_tool" `
-            --add-data "$env:GITHUB_WORKSPACE\data\templates;data\templates" `
+            --name ard `
+            --add-data "$env:GITHUB_WORKSPACE\ai_gen_reimbursement_docs;ai_gen_reimbursement_docs" `
+            --add-data "$env:GITHUB_WORKSPACE\pyproject.toml;." `
             --hidden-import "openpyxl.cell._writer" `
+            --collect-all "fastapi" `
+            --collect-all "uvicorn" `
+            --collect-all "starlette" `
+            --collect-all "python_multipart" `
             --distpath dist --workpath build --specpath build --console `
-            "$env:GITHUB_WORKSPACE\cosmic_tool\main.py"
+            "$env:GITHUB_WORKSPACE\ai_gen_reimbursement_docs\main.py"
 
       - name: 打包附加文件
         shell: pwsh
@@ -47,10 +51,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist\data | Out-Null
           New-Item -ItemType Directory -Force -Path dist\config | Out-Null
           # 生成版本标记文件
-          "cosmic-tool v$env:version" | Out-File -Encoding utf8 "dist\cosmic_v$env:version"
+          "ai-gen-reimbursement-docs v$env:version" | Out-File -Encoding utf8 "dist\ard_v$env:version"
           Copy-Item README.md dist\README.md -Force
           Copy-Item CHANGELOG.md dist\CHANGELOG.md -Force
-          Copy-Item data\templates dist\data\templates -Recurse -Force
+          Copy-Item data\out_templates dist\data\out_templates -Recurse -Force
+          Copy-Item data\in_templates dist\data\in_templates -Recurse -Force
+          Copy-Item data\audio dist\data\audio -Recurse -Force
           Copy-Item config\.env.example dist\config\.env.example -Force
           Copy-Item config\system_config.yaml.example dist\config\system_config.yaml.example -Force
           Copy-Item config\business_rules.yaml.example dist\config\business_rules.yaml.example -Force
@@ -64,7 +70,7 @@ jobs:
           name: "v${{ env.version }}"
           body_path: CHANGELOG.md
           files: |
-            cosmic_v${{ env.version }}.zip
+            ard_v${{ env.version }}.zip
 
       - name: 手动触发时创建 Release（用 gh CLI）
         if: github.event_name == 'workflow_dispatch'
@@ -74,18 +80,19 @@ jobs:
         run: |
           $ver = "${{ env.version }}"
           $tag = "v$ver"
+          $zip = "ard_v$ver.zip"
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $tag 已存在，更新资产..."
-            gh release upload $tag "cosmic_v$ver.zip" --clobber
+            gh release upload $tag "$zip" --clobber
           } else {
-            gh release create $tag "cosmic_v$ver.zip" `
+            gh release create $tag "$zip" `
               --title "v$ver" --notes-file CHANGELOG.md `
               --target "${{ github.sha }}"
           }
-          Write-Host "已创建 Release: https://github.com/mlt-hub/cosmic-tool/releases/tag/$tag"
+          Write-Host "已创建 Release: https://github.com/mlt-hub/AI-Gen-Reimbursement-Docs/releases/tag/$tag"
 
-      - name: 推送到发布仓（mlt-hub/cosmic-tool-release）
+      - name: 推送到发布仓（mlt-hub/ai-gen-reimbursement-docs-release）
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -95,38 +102,22 @@ jobs:
             return
           }
           $ver = "${{ env.version }}"
-          $zip = "cosmic_v$ver.zip"
+          $zip = "ard_v$ver.zip"
           $tag = "v$ver"
+          $release_repo = "mlt-hub/ai-gen-reimbursement-docs-release"
           # 检查发布仓是否存在
-          gh repo view mlt-hub/cosmic-tool-release --json name 2>$null | Out-Null
+          gh repo view $release_repo --json name 2>$null | Out-Null
           if ($LASTEXITCODE -ne 0) {
-            # 创建发布仓（含 README 避免空仓）
-            gh repo create mlt-hub/cosmic-tool-release --public --description "COSMIC 功能点拆分工具发布包" --add-readme
-          }
-          # 检查是否空仓（无提交的仓库无法创建 release）
-          $empty = gh api "repos/mlt-hub/cosmic-tool-release/contents" 2>$null | Out-Null
-          if ($LASTEXITCODE -eq 0) {
-            # 空仓，初始化一次
-            gh repo clone mlt-hub/cosmic-tool-release temp_repo 2>$null | Out-Null
-            if (Test-Path temp_repo) {
-              cd temp_repo
-              "# COSMIC 功能点拆分工具发布包" | Out-File -Encoding utf8 README.md
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add -A; git commit -m "初始化"
-              git push
-              cd ..
-              Remove-Item -Recurse -Force temp_repo
-            }
+            gh repo create $release_repo --public --description "AI报账文档生成器发布包" --add-readme
           }
           # 创建或更新 Release
-          gh release view $tag --repo mlt-hub/cosmic-tool-release 2>$null | Out-Null
+          gh release view $tag --repo $release_repo 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $tag 已存在，更新资产..."
-            gh release upload $tag "$zip" --repo mlt-hub/cosmic-tool-release --clobber
+            gh release upload $tag "$zip" --repo $release_repo --clobber
           } else {
             Write-Host "创建 Release $tag..."
-            gh release create $tag "$zip" --repo mlt-hub/cosmic-tool-release `
+            gh release create $tag "$zip" --repo $release_repo `
               --title "v$ver" --notes-file CHANGELOG.md
           }
-          Write-Host "已推送至发布仓: https://github.com/mlt-hub/cosmic-tool-release/releases/tag/$tag"
+          Write-Host "已推送至发布仓: https://github.com/mlt-hub/ai-gen-reimbursement-docs-release/releases/tag/$tag"
