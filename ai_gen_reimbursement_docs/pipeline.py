@@ -493,7 +493,8 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     spec_src = _check_template(templates_dict, 'spec', '项目需求说明书')
 
     # Step 0: 基础数据 + 元数据填充
-    _ensure_basedata_impl(file_path, md_dir, tree_md, meta_md_tpl)
+    #gen-all 模式下，入口调一次确保基础数据存在，然后 _generate_all() 内部又重复调了一次。_generate_all() 里的是多余的
+    #_ensure_basedata_impl(file_path, md_dir, tree_md, meta_md_tpl)
     if api_key and not os.path.exists(meta_filled_md):
         if load_enable_ai_fill_meta():
             logger.info("第0步: AI 填充文档元数据...")
