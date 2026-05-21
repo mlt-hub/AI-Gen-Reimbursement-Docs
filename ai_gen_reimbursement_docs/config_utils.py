@@ -270,6 +270,11 @@ def load_spec_remind_update_toc() -> bool:
     return _get_system_config_value('spec_remind_update_toc', True)
 
 
+def load_spec_auto_update_toc() -> bool:
+    """读取 spec_auto_update_toc，true 时用 Word COM 自动更新目录。"""
+    return _get_system_config_value('spec_auto_update_toc', False)
+
+
 def load_gen_fpa_ai_limit() -> int:
     """读取 gen_fpa_ai_limit，限制 FPA AI 处理的功能过程数（0=不限制）。"""
     val = _get_system_config_value('gen_fpa_ai_limit', 0)

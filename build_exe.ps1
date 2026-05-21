@@ -29,6 +29,8 @@ pyinstaller --onefile `
     --add-data "$root\ai_gen_reimbursement_docs;ai_gen_reimbursement_docs" `
     --add-data "$root\pyproject.toml;." `
     --hidden-import "openpyxl.cell._writer" `
+    --hidden-import "win32com" `
+    --hidden-import "pythoncom" `
     --collect-all "fastapi" `
     --collect-all "uvicorn" `
     --collect-all "starlette" `

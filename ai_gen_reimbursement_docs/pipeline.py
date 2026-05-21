@@ -10,7 +10,8 @@ import shutil
 from dataclasses import dataclass, field
 
 from ai_gen_reimbursement_docs.config_utils import (
-    load_business_config, load_enable_ai_fill_meta, load_spec_remind_update_toc,
+    load_business_config, load_enable_ai_fill_meta,
+    load_spec_remind_update_toc, load_spec_auto_update_toc,
     load_out_templates,
 )
 from ai_gen_reimbursement_docs.excel_source import (
@@ -460,14 +461,22 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
 
     filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
 
-    # 需求说明书文件名提醒
-    from ai_gen_reimbursement_docs.excel_source import project_root
-    if load_spec_remind_update_toc():
+    generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=filled)
+
+    # 自动更新目录（Word COM）
+    _toc_updated = False
+    if load_spec_auto_update_toc():
+        from ai_gen_reimbursement_docs.gen_spec import auto_update_docx_toc
+        _toc_updated = auto_update_docx_toc(spec_docx)
+
+    # 未自动更新时，按配置添加提醒前缀
+    if not _toc_updated and load_spec_remind_update_toc():
         _doc_dir, _doc_name = os.path.split(spec_docx)
         if not _doc_name.startswith("【提醒】请手动更新整个目录"):
-            spec_docx = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
+            _new_path = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
+            os.rename(spec_docx, _new_path)
+            spec_docx = _new_path
 
-    generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=filled)
     result.spec_docx = spec_docx
     logger.info(f"项目需求说明书已生成: {spec_docx}")
     return result
@@ -530,13 +539,22 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
             shutil.copy2(spec_md, spec_filled_md)
     filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
 
-    # 需求说明书文件名提醒
-    if load_spec_remind_update_toc():
+    generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=filled)
+
+    # 自动更新目录（Word COM）
+    _toc_updated = False
+    if load_spec_auto_update_toc():
+        from ai_gen_reimbursement_docs.gen_spec import auto_update_docx_toc
+        _toc_updated = auto_update_docx_toc(spec_docx)
+
+    # 未自动更新时，按配置添加提醒前缀
+    if not _toc_updated and load_spec_remind_update_toc():
         _doc_dir, _doc_name = os.path.split(spec_docx)
         if not _doc_name.startswith("【提醒】请手动更新整个目录"):
-            spec_docx = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
+            _new_path = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
+            os.rename(spec_docx, _new_path)
+            spec_docx = _new_path
 
-    generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=filled)
     result.spec_docx = spec_docx
 
     # Step 3: COSMIC
@@ -564,6 +582,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     result.require_xlsx = require_xlsx
 
     logger.info("全流程完成")
+    return result
 
 
 def _try_read_project_name(excel_path: str) -> str:
@@ -650,4 +669,3 @@ def run_pipeline_simple(
         project_name=project_name,
         templates=templates,
     )
-    return result

@@ -37,6 +37,9 @@ cosmic_warn_marker: true
 # 项目需求说明书文件名是否添加「【提醒】请手动更新整个目录」前缀（默认 true）
 spec_remind_update_toc: true
 
+# 是否用 Word COM 自动更新项目需求说明书的目录（需安装 Microsoft Word，默认 false）
+spec_auto_update_toc: false
+
 # FPA AI 只处理前 N 个功能过程（0=不限制）
 gen_fpa_ai_limit: 0
 

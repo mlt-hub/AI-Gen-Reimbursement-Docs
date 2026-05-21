@@ -688,3 +688,32 @@ def generate_spec_docx_from_md(
     doc.save(output_path)
     logger.info(f"项目需求说明书已生成: {output_path}")
     return output_path
+
+
+def auto_update_docx_toc(docx_path: str) -> bool:
+    """用 Word COM 自动更新文档目录和域。成功返回 True，失败返回 False。"""
+    import sys
+
+    if sys.platform != "win32":
+        return False
+    try:
+        import pythoncom
+        import win32com.client
+
+        pythoncom.CoInitialize()
+        try:
+            word = win32com.client.Dispatch("Word.Application")
+            word.Visible = False
+            doc = word.Documents.Open(docx_path)
+            doc.Fields.Update()
+            doc.Close(SaveChanges=True)
+            word.Quit()
+            logger = logging.getLogger("ai_gen_reimbursement_docs.gen_spec")
+            logger.info("Word COM 自动更新目录成功")
+            return True
+        finally:
+            pythoncom.CoUninitialize()
+    except Exception as e:
+        logger = logging.getLogger("ai_gen_reimbursement_docs.gen_spec")
+        logger.warning("Word COM 自动更新目录失败: %s", e)
+        return False
