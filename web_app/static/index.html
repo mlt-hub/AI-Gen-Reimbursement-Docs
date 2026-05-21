@@ -400,6 +400,7 @@ details .adv-inner {
 <div class="header">
   <h1>AI 报账文档生成器</h1>
   <span class="version" id="version-info">v-</span>
+  <a href="/config" style="font-size:13px;color:var(--primary);text-decoration:none">配置</a>
   <a href="/prompt-debug" style="font-size:13px;color:var(--primary);text-decoration:none">提示词调试</a>
 </div>
 
@@ -440,18 +441,54 @@ details .adv-inner {
 
     <details>
       <summary>高级选项</summary>
-      <div class="adv-inner">
-        <div class="form-group">
+      <div class="adv-inner" style="flex-wrap:wrap">
+        <div class="form-group" style="min-width:140px;flex:1">
           <label for="api-key">API Key（留空使用系统配置）</label>
           <input type="password" id="api-key" placeholder="sk-..." autocomplete="off" />
         </div>
-        <div class="form-group">
+        <div class="form-group" style="min-width:140px;flex:1">
           <label for="model">模型</label>
           <input type="text" id="model" placeholder="deepseek-v4-flash" />
         </div>
-        <div class="form-group">
+        <div class="form-group" style="min-width:140px;flex:1">
           <label for="base-url">API 端点</label>
           <input type="text" id="base-url" placeholder="留空使用默认" />
+        </div>
+        <div class="form-group" style="min-width:100px;flex:1">
+          <label for="max-tokens">Max Tokens</label>
+          <input type="text" id="max-tokens" placeholder="留空使用默认" />
+        </div>
+        <div class="form-group" style="min-width:140px;flex:1">
+          <label for="project-name">项目名称（留空自动读取）</label>
+          <input type="text" id="project-name" placeholder="自动从 xlsx 读取" />
+        </div>
+        <div class="form-group" style="min-width:80px;flex:0 0 auto;justify-content:center;padding-top:18px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400">
+            <input type="checkbox" id="clean" /> 删除旧输出
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <!-- 自定义模板（折叠） -->
+    <details id="templates-section">
+      <summary>自定义模板</summary>
+      <div class="adv-inner" style="flex-wrap:wrap">
+        <div class="form-group" style="min-width:180px;flex:1">
+          <label for="fpa-template">FPA 工作量评估模板</label>
+          <input type="file" id="fpa-template" accept=".xlsx,.xlsm" />
+        </div>
+        <div class="form-group" style="min-width:180px;flex:1">
+          <label for="cosmic-template">COSMIC 拆分表模板</label>
+          <input type="file" id="cosmic-template" accept=".xlsx,.xlsm" />
+        </div>
+        <div class="form-group" style="min-width:180px;flex:1">
+          <label for="list-template">需求清单模板</label>
+          <input type="file" id="list-template" accept=".xlsx,.xlsm" />
+        </div>
+        <div class="form-group" style="min-width:180px;flex:1">
+          <label for="spec-template">需求说明书模板</label>
+          <input type="file" id="spec-template" accept=".docx" />
         </div>
       </div>
     </details>
@@ -563,6 +600,22 @@ async function startTask() {
     return;
   }
 
+  // 收集通用参数
+  function appendCommon(body) {
+    if (apiKey) body.append('api_key', apiKey);
+    if (model) body.append('model', model);
+    if (baseUrl) body.append('base_url', baseUrl);
+    const mt = document.getElementById('max-tokens').value.trim();
+    if (mt) body.append('max_tokens', mt);
+    const pn = document.getElementById('project-name').value.trim();
+    if (pn) body.append('project_name', pn);
+    if (document.getElementById('clean').checked) body.append('clean', '1');
+    for (const [key, fid] of [['fpa_template','fpa-template'], ['cosmic_template','cosmic-template'], ['list_template','list-template'], ['spec_template','spec-template']]) {
+      const f = document.getElementById(fid).files[0];
+      if (f) body.append(key, f);
+    }
+  }
+
   // 构建请求
   let url, body, isJson;
   if (currentMode === 'local') {
@@ -574,9 +627,7 @@ async function startTask() {
     body.append('xlsx_path', xlsxPath);
     body.append('output_dir', outputDir);
     body.append('mode', mode);
-    if (apiKey) body.append('api_key', apiKey);
-    if (model) body.append('model', model);
-    if (baseUrl) body.append('base_url', baseUrl);
+    appendCommon(body);
     isJson = false;
   } else {
     const fileInput = document.getElementById('file-upload');
@@ -585,9 +636,7 @@ async function startTask() {
     body = new FormData();
     body.append('file', fileInput.files[0]);
     body.append('mode', mode);
-    if (apiKey) body.append('api_key', apiKey);
-    if (model) body.append('model', model);
-    if (baseUrl) body.append('base_url', baseUrl);
+    appendCommon(body);
     isJson = false;
   }
 

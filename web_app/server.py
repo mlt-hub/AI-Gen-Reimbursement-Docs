@@ -114,6 +114,13 @@ async def index():
     return HTMLResponse(content)
 
 
+@app.get("/config")
+async def config_page():
+    html_path = Path(__file__).parent / "static" / "config.html"
+    content = html_path.read_text(encoding="utf-8")
+    return HTMLResponse(content)
+
+
 @app.get("/prompt-debug")
 async def prompt_debug():
     html_path = Path(__file__).parent / "static" / "prompt-debug.html"
@@ -125,6 +132,69 @@ async def prompt_debug():
 async def get_modes():
     """返回操作模式列表，供前端动态渲染下拉框。"""
     return MODE_INFO
+
+
+# ── 系统配置 ──────────────────────────────────────────────
+
+
+def _config_dir() -> Path:
+    return Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs"
+
+
+def _read_config() -> dict:
+    """读取所有配置文件，返回合并后的 dict。"""
+    cfg_dir = _config_dir()
+    result: dict = {"_env": {}, "_system": {}, "_biz": {}}
+
+    env_path = cfg_dir / ".env"
+    if env_path.exists():
+        env: dict[str, str] = {}
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+        result["_env"] = env
+
+    for key, filename in [
+        ("_system", "system_config.yaml"),
+        ("_biz", "business_rules.yaml"),
+    ]:
+        path = cfg_dir / filename
+        if path.exists():
+            try:
+                import yaml
+                result[key] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+
+    return result
+
+
+@app.get("/api/config")
+async def get_config():
+    return _read_config()
+
+
+@app.post("/api/config")
+async def save_config(data: dict):
+    """保存配置。data 含 _env / _system / _biz 三个 key。"""
+    cfg_dir = _config_dir()
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+
+    if "_env" in data and data["_env"]:
+        lines = []
+        for k, v in data["_env"].items():
+            lines.append(f"{k}={v}")
+        (cfg_dir / ".env").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    for key, filename in [("_system", "system_config.yaml"), ("_biz", "business_rules.yaml")]:
+        if key in data and data[key]:
+            import yaml
+            path = cfg_dir / filename
+            path.write_text(yaml.dump(data[key], allow_unicode=True, default_flow_style=False), encoding="utf-8")
+
+    return {"ok": True}
 
 
 # ── 提示词调试 ────────────────────────────────────────────
@@ -186,6 +256,13 @@ async def api_run_local(
     api_key: str = Form(""),
     model: str = Form(""),
     base_url: str = Form(""),
+    max_tokens: str = Form(""),
+    project_name: str = Form(""),
+    clean: str = Form(""),
+    fpa_template: UploadFile | None = File(None),
+    cosmic_template: UploadFile | None = File(None),
+    list_template: UploadFile | None = File(None),
+    spec_template: UploadFile | None = File(None),
 ):
     """本机模式：直接读本地文件，产物写本地目录。"""
     if mode not in MODE_INFO:
@@ -201,6 +278,10 @@ async def api_run_local(
         out = xlsx.parent
     out.mkdir(parents=True, exist_ok=True)
 
+    custom_t_dir = await _save_custom_templates(
+        out, fpa_template, cosmic_template, list_template, spec_template
+    )
+
     session_id = uuid.uuid4().hex[:8]
     log_queue: queue.Queue = queue.Queue(maxsize=2000)
     session_queues[session_id] = log_queue
@@ -209,7 +290,11 @@ async def api_run_local(
     def run():
         session_var.set(session_id)
         try:
-            _execute_mode(mode, str(xlsx), str(out), "", api_key, model, base_url)
+            _execute_mode(
+                mode, str(xlsx), str(out), custom_t_dir,
+                api_key, model, base_url, project_name,
+                max_tokens=max_tokens, clean=bool(clean),
+            )
         except Exception as e:
             logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
         finally:
@@ -230,6 +315,9 @@ async def api_run_upload(
     api_key: str = Form(""),
     model: str = Form(""),
     base_url: str = Form(""),
+    max_tokens: str = Form(""),
+    project_name: str = Form(""),
+    clean: str = Form(""),
     fpa_template: UploadFile | None = File(None),
     cosmic_template: UploadFile | None = File(None),
     list_template: UploadFile | None = File(None),
@@ -257,15 +345,9 @@ async def api_run_upload(
     file_path.write_bytes(content)
 
     # 保存自定义模板
-    for tpl_file, tpl_name in [
-        (fpa_template, "FPA工作量评估-模板.xlsx"),
-        (cosmic_template, "项目功能点拆分表-模板.xlsx"),
-        (list_template, "项目需求清单-模板.xlsx"),
-        (spec_template, "项目需求说明书-模板.docx"),
-    ]:
-        if tpl_file is not None and tpl_file.filename:
-            tpl_content = await tpl_file.read()
-            (custom_t_dir / tpl_name).write_bytes(tpl_content)
+    await _save_custom_templates_into(
+        custom_t_dir, fpa_template, cosmic_template, list_template, spec_template
+    )
 
     log_queue: queue.Queue = queue.Queue(maxsize=2000)
     session_queues[session_id] = log_queue
@@ -276,7 +358,8 @@ async def api_run_upload(
         try:
             _execute_mode(
                 mode, str(file_path), str(output_dir), str(custom_t_dir),
-                api_key, model, base_url,
+                api_key, model, base_url, project_name,
+                max_tokens=max_tokens, clean=bool(clean),
             )
             # 打包产物 ZIP
             zip_path = work_dir / f"产物_{session_id}.zip"
@@ -443,6 +526,41 @@ async def _cleanup_after_download(session_id: str):
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+async def _save_custom_templates_into(
+    target_dir: Path,
+    fpa_template: UploadFile | None,
+    cosmic_template: UploadFile | None,
+    list_template: UploadFile | None,
+    spec_template: UploadFile | None,
+):
+    """将自定义模板保存到指定目录。"""
+    for tpl_file, tpl_name in [
+        (fpa_template, "FPA工作量评估-模板.xlsx"),
+        (cosmic_template, "项目功能点拆分表-模板.xlsx"),
+        (list_template, "项目需求清单-模板.xlsx"),
+        (spec_template, "项目需求说明书-模板.docx"),
+    ]:
+        if tpl_file is not None and tpl_file.filename:
+            tpl_content = await tpl_file.read()
+            (target_dir / tpl_name).write_bytes(tpl_content)
+
+
+async def _save_custom_templates(
+    parent_dir: Path,
+    fpa_template: UploadFile | None,
+    cosmic_template: UploadFile | None,
+    list_template: UploadFile | None,
+    spec_template: UploadFile | None,
+) -> str:
+    """将自定义模板保存到临时目录，返回目录路径。"""
+    custom_t_dir = parent_dir / "custom_templates"
+    custom_t_dir.mkdir(parents=True, exist_ok=True)
+    await _save_custom_templates_into(
+        custom_t_dir, fpa_template, cosmic_template, list_template, spec_template
+    )
+    return str(custom_t_dir)
+
+
 # ── 执行分发 ──────────────────────────────────────────────
 
 
@@ -455,9 +573,22 @@ def _execute_mode(
     model: str,
     base_url: str,
     project_name: str = "",
+    max_tokens: str = "",
+    clean: bool = False,
 ):
     """一站式管道入口，CLI / Web UI 共享。"""
     from ai_gen_reimbursement_docs.pipeline import run_pipeline_simple
+
+    if max_tokens:
+        os.environ["AI_REIMBURSEMENT_MAX_TOKENS"] = max_tokens
+    if clean and os.path.isdir(output_dir):
+        for name in os.listdir(output_dir):
+            if name not in ("custom_templates",):
+                path = os.path.join(output_dir, name)
+                if os.path.isfile(path):
+                    os.remove(path)
+                else:
+                    shutil.rmtree(path, ignore_errors=True)
 
     logger = logging.getLogger("ai_gen_reimbursement_docs")
     logger.info(f"操作模式: {MODE_INFO.get(mode, {}).get('label', mode)}")
