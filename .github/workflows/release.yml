@@ -78,7 +78,7 @@ jobs:
       - name: 编译 Inno Setup 安装包
         shell: pwsh
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" ard.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="$env:version" ard.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败" }
 
       - name: 创建 Release（本仓）
