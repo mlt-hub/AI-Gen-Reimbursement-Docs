@@ -31,7 +31,7 @@ Uninstallable=yes
 DirExistsWarning=no
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "build\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
 [Files]
 Source: "dist\ard\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
