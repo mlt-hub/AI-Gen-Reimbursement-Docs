@@ -100,7 +100,7 @@ _MODE_MAP: dict[str, str] = {
 
 # ── FastAPI App ───────────────────────────────────────────
 
-app = FastAPI(title="AI 报账文档生成器")
+app = FastAPI(title="AI生成项目报账文档")
 
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(parents=True, exist_ok=True)

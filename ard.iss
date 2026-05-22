@@ -1,4 +1,4 @@
-; ── AI报账文档生成器 Inno Setup 安装脚本 ──
+; ── AI生成项目报账文档 Inno Setup 安装脚本 ──
 ; 用法（CI 自动编译）: iscc.exe /DMyAppVersion=5.0.2 ard.iss
 ; 本地编译需先跑 build_exe.ps1 生成 dist\ard\
 
@@ -6,7 +6,7 @@
 #define MyAppVersion "0.0.0"
 #endif
 
-#define MyAppName "AI报账文档生成器"
+#define MyAppName "AI生成项目报账文档"
 #define MyAppExeName "ard.exe"
 #define MyAppPublisher "mlt-hub"
 #define MyAppURL "https://github.com/mlt-hub/ai-gen-reimbursement-docs-release"
@@ -38,7 +38,7 @@ Source: "dist\ard\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs crea
 
 [Icons]
 ; 桌面快捷方式
-Name: "{autodesktop}\启动 Web 界面"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--web"; WorkingDir: "{app}"; Comment: "启动 AI 报账文档生成器 Web 界面"
+Name: "{autodesktop}\启动 Web 界面"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--web"; WorkingDir: "{app}"; Comment: "启动 AI生成项目报账文档 Web 界面"
 Name: "{autodesktop}\命令行方式"; Filename: "{cmd}"; Parameters: "/K ""{app}\{#MyAppExeName} --help"""; WorkingDir: "{app}"; Comment: "打开命令行查看使用说明"
 ; 开始菜单程序组
 Name: "{group}\启动 Web 界面"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--web"; WorkingDir: "{app}"

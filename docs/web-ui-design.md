@@ -277,7 +277,7 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  🤖 AI 报账文档生成器                    v5.0.0       │
+│  🤖 AI生成项目报账文档                    v5.0.0       │
 ├──────────────────────┬───────────────────────────────┤
 │  📋 配置              │  📄 实时日志                   │
 │                      │                               │
@@ -405,7 +405,7 @@ MODE_INFO = {
 
 # ── FastAPI App ────────────────────────────────────────
 
-app = FastAPI(title="AI 报账文档生成器")
+app = FastAPI(title="AI生成项目报账文档")
 
 static_dir = Path(__file__).parent / 'static'
 static_dir.mkdir(parents=True, exist_ok=True)
@@ -664,7 +664,7 @@ def _build_templates_dict(custom_t_dir: Path) -> dict[str, str]:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 报账文档生成器</title>
+    <title>AI生成项目报账文档</title>
     <style>
         /* 约 150 行 CSS：布局、颜色、日志面板样式 */
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -681,7 +681,7 @@ def _build_templates_dict(custom_t_dir: Path) -> dict[str, str]:
     <div class="app">
         <!-- 左侧配置区 -->
         <div class="panel-left">
-            <h2>AI 报账文档生成器</h2>
+            <h2>AI生成项目报账文档</h2>
             <div class="form-group">
                 <label>操作模式</label>
                 <select id="mode"></select>

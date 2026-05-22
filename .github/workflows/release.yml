@@ -130,7 +130,7 @@ jobs:
           $release_repo = "mlt-hub/ai-gen-reimbursement-docs-release"
           gh repo view $release_repo --json name 2>$null | Out-Null
           if ($LASTEXITCODE -ne 0) {
-            gh repo create $release_repo --public --description "AI报账文档生成器发布包" --add-readme
+            gh repo create $release_repo --public --description "AI生成项目报账文档发布包" --add-readme
           }
           gh release view $tag --repo $release_repo 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
