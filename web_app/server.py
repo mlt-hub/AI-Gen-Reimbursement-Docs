@@ -264,16 +264,41 @@ async def api_run_local(
     list_template: UploadFile | None = File(None),
     spec_template: UploadFile | None = File(None),
 ):
-    """本机模式：直接读本地文件，产物写本地目录。"""
+    """本机模式：接受文件路径或目录路径，目录则自动搜索功能清单 xlsx。"""
     if mode not in MODE_INFO:
         raise HTTPException(400, f"未知模式: {mode}")
 
-    xlsx = Path(xlsx_path)
-    if not xlsx.exists():
-        raise HTTPException(400, f"文件不存在: {xlsx_path}")
+    xlsx_input = Path(xlsx_path)
+    if not xlsx_input.exists():
+        raise HTTPException(400, f"路径不存在: {xlsx_path}")
+
+    from_dir = ""
+    if xlsx_input.is_dir():
+        from_dir = str(xlsx_input)
+        import glob
+        from ai_gen_reimbursement_docs.excel_source import is_valid_input_xlsx
+        xlsx_files = [f for f in glob.glob(os.path.join(from_dir, "*.xlsx"))
+                      if is_valid_input_xlsx(f)]
+        if not xlsx_files:
+            raise HTTPException(400, f"目录中未找到符合规范的功能清单 .xlsx: {xlsx_path}")
+        # 优先匹配常见命名
+        preferred = [f for f in xlsx_files
+                     if os.path.basename(f) in ("功能清单-录入模板.xlsx", "功能清单.xlsx")]
+        xlsx = Path(preferred[0] if preferred else xlsx_files[0])
+    else:
+        xlsx = xlsx_input
 
     if output_dir:
         out = Path(output_dir)
+    elif from_dir:
+        from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
+        auto_name = _try_read_project_name(str(xlsx))
+        if auto_name:
+            import re
+            safe = re.sub(r'[\/:*?"<>|]', '_', auto_name)
+            out = Path(from_dir) / safe
+        else:
+            out = Path(from_dir)
     else:
         out = xlsx.parent
     out.mkdir(parents=True, exist_ok=True)

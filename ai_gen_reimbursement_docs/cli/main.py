@@ -55,34 +55,36 @@ def _start_web_ui(root: str) -> None:
                 app_dir=app_dir, log_level="info")
 
 
-def _auto_detect_and_run(api_key: str, model: str, base_url: str) -> None:
-    """零参数模式：在当前目录搜索符合规范的功能清单 xlsx，找到唯一匹配则自动全流程执行。"""
+def _auto_detect_and_run(api_key: str, model: str, base_url: str,
+                         search_dir: str = "") -> None:
+    """零参数模式：在指定目录（或当前目录）搜索功能清单 xlsx，唯一匹配则自动全流程执行。"""
     import glob
 
     from ai_gen_reimbursement_docs.excel_source import is_valid_input_xlsx
     from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
 
-    xlsx_files = glob.glob("*.xlsx")
+    _base = search_dir if search_dir else "."
+    _label = _base if search_dir else "当前目录"
+    xlsx_files = glob.glob(os.path.join(_base, "*.xlsx"))
     if not xlsx_files:
-        print("当前目录未找到任何 .xlsx 文件")
+        print(f"{_label}未找到任何 .xlsx 文件")
         print("使用方式: ard --from-excel <功能清单路径> --gen-all")
         return
 
     valid = [f for f in xlsx_files if is_valid_input_xlsx(f)]
 
     if len(valid) == 0:
-        print(f"当前目录找到 {len(xlsx_files)} 个 .xlsx 文件，但都不符合功能清单录入文档规范")
+        print(f"{_label}找到 {len(xlsx_files)} 个 .xlsx 文件，但都不符合功能清单录入文档规范")
         print(f"文件列表: {', '.join(xlsx_files)}")
         print("使用方式: ard --from-excel <功能清单路径> --gen-all")
         return
 
     if len(valid) > 1:
-        print(f"当前目录找到 {len(valid)} 个符合规范的功能清单文件，请指定其中一个:")
+        print(f"{_label}找到 {len(valid)} 个符合规范的功能清单文件，请指定其中一个:")
         for f in valid:
             print(f"  ard --from-excel \"{f}\" --gen-all")
         return
 
-    # 唯一匹配，自动执行
     excel_path = valid[0]
     print(f"检测到功能清单: {excel_path}")
 
@@ -260,6 +262,7 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog="""  示例:
 
   ard --init-config                 初始化配置
+  ard --from-dir ./某项目/ --gen-all    指定目录全流程
   ard --from-excel 功能清单.xlsx --gen-all      全流程
   ard --from-excel 功能清单.xlsx --gen-fpa      仅 FPA""",
     )
@@ -270,6 +273,8 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='模型名称（默认 deepseek-v4-flash）')
     parser.add_argument('--from-excel', default='',
                         help='功能清单.xlsx 路径')
+    parser.add_argument('--from-dir', default='',
+                        help='项目目录（含功能清单.xlsx），自动搜索并以此为输出根目录')
     parser.add_argument('--gen-fpa', action='store_true',
                         help='生成 FPA工作量评估.xlsx')
     parser.add_argument('--gen-cosmic', action='store_true',
@@ -589,50 +594,58 @@ def main():
             print(f"AI 调用失败: {e}")
         return
 
-    # ── 零参数模式：自动搜索当前目录功能清单并全流程执行 ──
+    # ── 零参数模式：自动搜索功能清单并全流程执行 ──
     if not any([args.gen_basedata, args.gen_fpa, args.gen_cosmic, args.gen_list,
                 args.gen_spec, args.gen_all]):
-        _auto_detect_and_run(api_key, model, base_url)
+        _auto_detect_and_run(api_key, model, base_url,
+                             search_dir=args.from_dir)
         # 自动检测失败（无可识别文件）时返回，继续往下走，由 gen-* 块报错
 
-    # ── from-excel 管道 ──
+    # ── from-excel / from-dir 管道 ──
     if any([args.gen_basedata, args.gen_fpa, args.gen_cosmic, args.gen_list,
              args.gen_spec, args.gen_all]):
 
         excel_path = args.from_excel
         if not excel_path:
             import glob
+            _search = args.from_dir if args.from_dir else "."
             for name in ["功能清单-录入模板.xlsx", "功能清单.xlsx"]:
-                matches = glob.glob(name)
+                matches = glob.glob(os.path.join(_search, name))
                 if matches:
                     excel_path = matches[0]
                     break
             if not excel_path:
-                logger.error("未指定 --from-excel，且当前目录未找到 功能清单-录入模板.xlsx")
+                _where = args.from_dir if args.from_dir else "当前目录"
+                logger.error(f"未指定 --from-excel，且{_where}未找到 功能清单-录入模板.xlsx")
                 return
+        elif args.from_dir and not os.path.isabs(excel_path):
+            # --from-dir + 相对路径 --from-excel → 拼接
+            excel_path = os.path.join(os.path.abspath(args.from_dir), excel_path)
         if not os.path.exists(excel_path):
             logger.error(f"文件不存在: {excel_path}")
             return
 
         excel_dir = os.path.dirname(os.path.abspath(excel_path))
+        # --from-dir 决定输出根目录，--output-dir 可覆盖
+        output_root = os.path.abspath(args.from_dir) if args.from_dir else excel_dir
         if args.output_dir:
             out_dir = args.output_dir
         elif args.project_name:
             safe = re.sub(r'[\/:*?"<>|]', '_', args.project_name)
-            out_dir = os.path.join(excel_dir, safe)
+            out_dir = os.path.join(output_root, safe)
         else:
             from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
             auto_name = _try_read_project_name(excel_path)
             if auto_name:
                 safe = re.sub(r'[\/:*?"<>|]', '_', auto_name)
-                out_dir = os.path.join(excel_dir, safe)
+                out_dir = os.path.join(output_root, safe)
                 args.project_name = auto_name
             else:
-                out_dir = excel_dir
+                out_dir = output_root
 
         if args.clean and args.project_name:
             safe = re.sub(r'[\/:*?"<>|]', '_', args.project_name)
-            target = os.path.join(excel_dir, safe)
+            target = os.path.join(output_root, safe)
             if os.path.exists(target):
                 shutil.rmtree(target)
                 logger.info(f"已删除输出目录: {target}")
