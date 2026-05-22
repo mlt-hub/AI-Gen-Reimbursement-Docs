@@ -25,19 +25,23 @@ jobs:
           pip install -e .
 
       - name: 读取版本号
+        id: version
         shell: pwsh
         run: |
           $ver = Select-String -Path pyproject.toml -Pattern '^version = "(.+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
           echo "version=$ver" >> $env:GITHUB_ENV
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
 
-      - name: 构建 exe
+      - name: 构建 exe（onedir）
         shell: pwsh
         run: |
-          pyinstaller --onefile `
+          pyinstaller `
             --name ard `
             --add-data "$env:GITHUB_WORKSPACE\ai_gen_reimbursement_docs;ai_gen_reimbursement_docs" `
             --add-data "$env:GITHUB_WORKSPACE\pyproject.toml;." `
             --hidden-import "openpyxl.cell._writer" `
+            --hidden-import "win32com" `
+            --hidden-import "pythoncom" `
             --collect-all "fastapi" `
             --collect-all "uvicorn" `
             --collect-all "starlette" `
@@ -45,23 +49,37 @@ jobs:
             --distpath dist --workpath build --specpath build --console `
             "$env:GITHUB_WORKSPACE\ai_gen_reimbursement_docs\main.py"
 
-      - name: 打包附加文件
+      - name: 打包附加文件到 dist/ard/
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist\data | Out-Null
-          New-Item -ItemType Directory -Force -Path dist\config | Out-Null
-          # 生成版本标记文件
-          "ai-gen-reimbursement-docs v$env:version" | Out-File -Encoding utf8 "dist\ard_v$env:version"
-          Copy-Item README.md dist\README.md -Force
-          Copy-Item CHANGELOG.md dist\CHANGELOG.md -Force
-          Copy-Item data\out_templates dist\data\out_templates -Recurse -Force
-          Copy-Item data\in_templates dist\data\in_templates -Recurse -Force
-          Copy-Item data\audio dist\data\audio -Recurse -Force
-          Copy-Item config\.env.example dist\config\.env.example -Force
-          Copy-Item config\system_config.yaml.example dist\config\system_config.yaml.example -Force
-          Copy-Item config\business_rules.yaml.example dist\config\business_rules.yaml.example -Force
-          Copy-Item web_app dist\web_app -Recurse -Force
-          Compress-Archive -Path dist\* -DestinationPath "ard_v$env:version.zip"
+          $out = "dist\ard"
+          New-Item -ItemType Directory -Force -Path "$out\data" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$out\config" | Out-Null
+          # 版本标记文件
+          "ai-gen-reimbursement-docs v$env:version" | Out-File -Encoding utf8 "$out\ard_v$env:version"
+          Copy-Item README.md "$out\README.md" -Force
+          Copy-Item CHANGELOG.md "$out\CHANGELOG.md" -Force
+          Copy-Item data\out_templates "$out\data\out_templates" -Recurse -Force
+          Copy-Item data\in_templates "$out\data\in_templates" -Recurse -Force
+          Copy-Item data\audio "$out\data\audio" -Recurse -Force
+          Copy-Item config\.env.example "$out\config\.env.example" -Force
+          Copy-Item config\system_config.yaml.example "$out\config\system_config.yaml.example" -Force
+          Copy-Item config\business_rules.yaml.example "$out\config\business_rules.yaml.example" -Force
+          Copy-Item web_app "$out\web_app" -Recurse -Force
+
+      - name: 创建 zip 便携版
+        shell: pwsh
+        run: Compress-Archive -Path "dist\ard\*" -DestinationPath "ard_v$env:version.zip" -Force
+
+      - name: 安装 Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: 编译 Inno Setup 安装包
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" build\ard.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败" }
 
       - name: 创建 Release（本仓）
         uses: softprops/action-gh-release@v3
@@ -71,6 +89,7 @@ jobs:
           body_path: CHANGELOG.md
           files: |
             ard_v${{ env.version }}.zip
+            ard-setup_v${{ env.version }}.exe
 
       - name: 手动触发时创建 Release（用 gh CLI）
         if: github.event_name == 'workflow_dispatch'
@@ -81,18 +100,20 @@ jobs:
           $ver = "${{ env.version }}"
           $tag = "v$ver"
           $zip = "ard_v$ver.zip"
+          $setup = "ard-setup_v$ver.exe"
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $tag 已存在，更新资产..."
             gh release upload $tag "$zip" --clobber
+            gh release upload $tag "$setup" --clobber
           } else {
-            gh release create $tag "$zip" `
+            gh release create $tag "$zip","$setup" `
               --title "v$ver" --notes-file CHANGELOG.md `
               --target "${{ github.sha }}"
           }
           Write-Host "已创建 Release: https://github.com/mlt-hub/AI-Gen-Reimbursement-Docs/releases/tag/$tag"
 
-      - name: 推送到发布仓（mlt-hub/ai-gen-reimbursement-docs-release）
+      - name: 推送到发布仓
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -103,21 +124,20 @@ jobs:
           }
           $ver = "${{ env.version }}"
           $zip = "ard_v$ver.zip"
+          $setup = "ard-setup_v$ver.exe"
           $tag = "v$ver"
           $release_repo = "mlt-hub/ai-gen-reimbursement-docs-release"
-          # 检查发布仓是否存在
           gh repo view $release_repo --json name 2>$null | Out-Null
           if ($LASTEXITCODE -ne 0) {
             gh repo create $release_repo --public --description "AI报账文档生成器发布包" --add-readme
           }
-          # 创建或更新 Release
           gh release view $tag --repo $release_repo 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $tag 已存在，更新资产..."
-            gh release upload $tag "$zip" --repo $release_repo --clobber
+            gh release upload $tag "$zip","$setup" --repo $release_repo --clobber
           } else {
             Write-Host "创建 Release $tag..."
-            gh release create $tag "$zip" --repo $release_repo `
+            gh release create $tag "$zip","$setup" --repo $release_repo `
               --title "v$ver" --notes-file CHANGELOG.md
           }
           Write-Host "已推送至发布仓: https://github.com/mlt-hub/ai-gen-reimbursement-docs-release/releases/tag/$tag"

@@ -344,6 +344,12 @@ def main():
     logger.info(f"配置文件目录: {config_dir()}")
     migrate_config()
 
+    try:
+        from ai_gen_reimbursement_docs.version_check import check_version
+        check_version(ver)
+    except Exception:
+        pass  # 版本检查失败不影响主流程
+
     # ── 纯 CLI 功能 ──
     if args.test_sound:
         try:
