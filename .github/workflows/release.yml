@@ -57,6 +57,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$out\config" | Out-Null
           # 版本标记文件
           "ai-gen-reimbursement-docs v$env:version" | Out-File -Encoding utf8 "$out\ard_v$env:version"
+          Copy-Item pyproject.toml "$out\pyproject.toml" -Force
           Copy-Item README.md "$out\README.md" -Force
           Copy-Item CHANGELOG.md "$out\CHANGELOG.md" -Force
           Copy-Item data\out_templates "$out\data\out_templates" -Recurse -Force
