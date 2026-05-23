@@ -93,6 +93,8 @@ def call_llm(
 
             if save_logs:
                 _save_response_log(resp_text, thinking_text, model, tag, timestamp, log_dir)
+                if thinking_text:
+                    _save_thinking_log(thinking_text, model, tag, timestamp, log_dir)
 
             logger.info("LLM 调用完成 [%s] 长度: %d 字", tag, len(resp_text))
             if return_thinking:
@@ -204,3 +206,26 @@ def _save_response_log(
             f.write(text)
     except Exception as e:
         logger.debug("保存 response 日志失败: %s", e)
+
+
+def _save_thinking_log(
+    thinking: str,
+    model: str,
+    tag: str,
+    timestamp: str,
+    log_dir: Optional[str] = None,
+) -> None:
+    """保存 AI 思考过程到独立日志文件。"""
+    try:
+        dir_path = _resolve_log_dir("ai_thinking", log_dir)
+        os.makedirs(dir_path, exist_ok=True)
+        tag_str = f"_{tag}" if tag else ""
+        filename = f"{timestamp}{tag_str}_thinking.txt"
+        filepath = os.path.join(dir_path, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(f"# AI Thinking: {tag}\n")
+            f.write(f"# Model: {model}\n")
+            f.write(f"# Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(thinking)
+    except Exception as e:
+        logger.debug("保存 thinking 日志失败: %s", e)

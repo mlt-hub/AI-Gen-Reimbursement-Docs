@@ -134,11 +134,14 @@ def write_combined_ai_log(stage: str = ""):
     if not os.path.isdir(prompt_dir) and not os.path.isdir(resp_dir):
         return
 
+    think_dir = os.path.join(log_dir, 'ai_thinking')
+
     NL = chr(10)
     dirs = {
-        'ai_对话日志.md': (prompt_dir, resp_dir),
+        'ai_对话日志.md': (prompt_dir, resp_dir, think_dir),
         'ai_prompts_日志.md': (prompt_dir,),
         'ai_responses_日志.md': (resp_dir,),
+        'ai_thinking_日志.md': (think_dir,),
     }
 
     for out_name, sub_dirs in dirs.items():

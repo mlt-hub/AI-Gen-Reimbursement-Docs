@@ -118,18 +118,7 @@ def write_cosmic_xlsx(
         tmpl_format_row6[col_idx] = _get_ref_style(ws, 6, col_idx)
     _CFP_FILL_TMPL = copy.copy(ws.cell(row=6, column=COL_FP_CFP).fill)
 
-    # 保存第6行中带 ${...} 占位符的单元格值（模板的元数据行）
-    row6_placeholders: dict[int, str] = {}
-    row6_all_values: dict[int, object] = {}
-    for col_idx in range(1, FP_TOTAL_COLS):
-        val = ws.cell(row=6, column=col_idx).value
-        if val is not None:
-            row6_all_values[col_idx] = val
-        if val and isinstance(val, str) and '${' in val:
-            row6_placeholders[col_idx] = val
-
-    # 有占位符时，数据从第7行开始（第6行保留为元数据行）
-    _data_start_row = 7 if row6_placeholders else FP_DATA_START_ROW
+    _data_start_row = FP_DATA_START_ROW
 
     # --- Save existing footer notes (rows below header rows, before clearing) ---
     footer_saved = []  # list of (merge_range_string, {col: (value, style_dict)})
@@ -218,7 +207,10 @@ def write_cosmic_xlsx(
             if col_idx == COL_FP_CFP:
                 # CFP 列用公式（{row} 替换为实际行号），未配置则留空
                 if cfp_formula:
-                    cell.value = '=' + cfp_formula.replace('{row}', str(row_num))
+                    f = cfp_formula.replace('{row}', str(row_num))
+                    f = f.replace('\\\"', '\"')  # Excel 内双引号可能被转义
+                    cell.value = '=' + f
+                cell.number_format = '0.00'
             else:
                 cell.value = row_data.get(FP_COL_KEY_MAP[col_idx], '')
 
@@ -228,7 +220,7 @@ def write_cosmic_xlsx(
             # CFP 列：绿色底色 + 整数/分数格式（1→"1"，1/3→"1/3"）
             if col_idx == COL_FP_CFP:
                 cell.fill = _CFP_FILL
-                cell.number_format = '# ?/?'
+                cell.number_format = '0.00'
 
             # Long text columns: left-align
             if col_idx in FP_LEFT_ALIGN_COLS:
@@ -371,21 +363,6 @@ def write_cosmic_xlsx(
 
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)
-
-    # 恢复第6行（包含替换后的 ${...} 占位符）
-    if row6_all_values:
-        for col_idx, raw_val in row6_all_values.items():
-            val = raw_val
-            if isinstance(val, str) and '${' in val:
-                for ph, replacement in meta.items():
-                    val = val.replace('${' + ph + '}', replacement)
-            ws.cell(row=6, column=col_idx, value=val)
-        # 应用模板第6行的原始格式（CFP 列额外加绿色底色和分数格式）
-        for col_idx in row6_all_values:
-            _apply_style(ws.cell(row=6, column=col_idx), tmpl_format_row6.get(col_idx, {}), skip_fill=True)
-        if COL_FP_CFP in row6_all_values:
-            ws.cell(row=6, column=COL_FP_CFP).fill = _CFP_FILL
-            ws.cell(row=6, column=COL_FP_CFP).number_format = '# ?/?'
 
     try:
         wb.save(output_path)

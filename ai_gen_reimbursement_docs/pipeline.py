@@ -620,7 +620,7 @@ def _read_cfp_formula_from_meta_md(meta_md: str) -> str:
         if line.startswith('|') and ('CFP计算公式' in line or 'cfp_formula' in line):
             parts = [p.strip() for p in line.split('|')]
             if len(parts) >= 3:
-                return parts[2]
+                return parts[2].replace('\\\"', '\"')
     return ""
 
 
