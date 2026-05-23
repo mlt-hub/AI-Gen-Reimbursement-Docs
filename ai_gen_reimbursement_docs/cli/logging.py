@@ -1,9 +1,31 @@
-"""CLI 日志初始化 —— 文件 + 控制台 handler。"""
+"""CLI 日志初始化 —— 文件 + 控制台 handler，文件句柄即写即释。"""
 
 import logging
 import os
 import sys
 from datetime import datetime
+
+
+class ReleaseFileHandler(logging.Handler):
+    """每次写日志时打开文件 → 写入 → 关闭，不长期持有文件句柄。
+    mode='w' 仅首次写入时截断，后续追加。"""
+
+    def __init__(self, filename: str, encoding: str = "utf-8", mode: str = "a"):
+        super().__init__()
+        self.filename = filename
+        self.encoding = encoding
+        self._init_mode = mode  # 首次写入模式
+        self._first_write = True
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            m = self._init_mode if self._first_write else "a"
+            with open(self.filename, m, encoding=self.encoding) as f:
+                f.write(msg + "\n")
+            self._first_write = False
+        except Exception:
+            self.handleError(record)
 
 
 def init_global_logging():
@@ -28,12 +50,12 @@ def init_global_logging():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    fh = logging.FileHandler(main_log, encoding='utf-8', mode='a')
+    fh = ReleaseFileHandler(main_log, encoding='utf-8', mode='a')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(fmt)
     logger.addHandler(fh)
 
-    rh = logging.FileHandler(run_log, encoding='utf-8', mode='w')
+    rh = ReleaseFileHandler(run_log, encoding='utf-8', mode='w')
     rh.setLevel(logging.DEBUG)
     rh.setFormatter(fmt)
     logger.addHandler(rh)
@@ -75,7 +97,7 @@ def setup_logging(log_dir: str, docx_name: str = ""):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    rh = logging.FileHandler(run_log, encoding='utf-8', mode='w')
+    rh = ReleaseFileHandler(run_log, encoding='utf-8', mode='w')
     rh.setLevel(logging.DEBUG)
     rh.setFormatter(fmt)
     logger.addHandler(rh)
