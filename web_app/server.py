@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -141,6 +141,13 @@ async def config_page():
 @app.get("/prompt-debug")
 async def prompt_debug():
     return _spa_index()
+
+
+@app.get("/api/is-local")
+async def is_local(request: Request):
+    """判断请求是否来自本机。"""
+    host = request.client.host if request.client else ""
+    return {"local": host in ("127.0.0.1", "::1", "localhost")}
 
 
 @app.get("/api/modes")
