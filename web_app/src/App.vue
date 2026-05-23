@@ -1,0 +1,34 @@
+<template>
+  <div class="flex flex-col h-screen">
+    <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-4">
+        <h1 class="text-lg font-semibold text-gray-800">AI 生成项目报账文档</h1>
+        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">v{{ version }}</span>
+      </div>
+      <nav class="flex items-center gap-4 text-sm">
+        <router-link to="/" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">生成</router-link>
+        <router-link to="/config" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">配置</router-link>
+        <router-link to="/prompt-debug" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">提示词调试</router-link>
+      </nav>
+    </header>
+    <main class="flex-1 min-h-0">
+      <router-view />
+    </main>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+
+const version = ref('-')
+
+onMounted(async () => {
+  try {
+    const resp = await fetch('/api/version')
+    const data = await resp.json()
+    version.value = data.version
+  } catch {
+    version.value = '-'
+  }
+})
+</script>

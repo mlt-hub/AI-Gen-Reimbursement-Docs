@@ -8,15 +8,15 @@ python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx"
 
 # 步骤参数（四选一，或 --gen-all 全流程）：
 --gen-fpa        第1步：生成 FPA工作量评估.xlsx
---gen-cosmic     第2步：生成 项目功能点拆分表.xlsx（需第1步完成）
---gen-require    第3步：生成 项目需求清单.xlsx（需第2步完成）
---gen-docx       可选：生成 项目需求说明书.docx（无依赖，可随时执行）
+--gen-spec       第2步：生成 项目需求说明书.docx
+--gen-cosmic     第3步：生成 项目功能点拆分表.xlsx（需第1步完成）
+--gen-list    第4步：生成 项目需求清单.xlsx（需第3步完成）
 --gen-all        全流程：按依赖顺序自动执行
 
 # 示例
 python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-fpa
 python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-cosmic
-python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-require
+python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-list
 python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-all
 ```
 
@@ -40,7 +40,7 @@ python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-
 ```
 
 > 如需精确的核减后工作量，建议分步执行：
-> `--gen-fpa` → 在 FPA.xlsx 中逐行填写核减后工作量 → `--gen-cosmic` → `--gen-require`
+> `--gen-fpa` → 在 FPA.xlsx 中逐行填写核减后工作量 → `--gen-cosmic` → `--gen-list`
 
 ## 源文件
 
@@ -145,13 +145,13 @@ python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-
   │     ① 2、功能清单内容录入 → 功能清单模块树.md
   │     ② 其余 sheet → 文档元数据.md
   │
-  ├→ gen_docx.py                            （可与第1步并行）
+  ├→ gen_spec.py                            （可与第1步并行）
   │     输入: 功能清单模块树.md + 文档元数据.md
   │     处理: 替换占位符 → 对 #AI生成# 标记调 AI → 替换 docx 模板段落
   │     模板: 项目需求说明书.docx
   │     → 输出 项目需求说明书.docx
   │
-  ├→ [第1步] gen_xlsx.py — FPA
+  ├→ [第1步] gen_fpa.py
   │     输入: 功能清单模块树.md + 文档元数据.md
   │     处理: init_fpa_template_md → ai_fill_fpa_data_md → write_to_template
   │     模板: FPA工作量评估.xlsx
@@ -167,7 +167,7 @@ python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-
   │     → 输出 项目功能点拆分表.xlsx
   │     → 确定 CFP 总和
   │
-  └→ [第3步] gen_xlsx.py — 需求清单
+  └→ [第3步] gen_list.py
        输入: 功能清单模块树.md + 文档元数据.md + CFP 总和
        模板: 项目需求清单.xlsx
        → 输出 项目需求清单.xlsx

@@ -19,10 +19,22 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: 安装依赖
         run: |
           pip install pyinstaller
           pip install -e .
+
+      - name: 前端构建
+        run: |
+          cd web_app
+          npm install
+          npm run build
+          cd ..
 
       - name: 读取版本号
         id: version
@@ -56,7 +68,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$out\data" | Out-Null
           New-Item -ItemType Directory -Force -Path "$out\config" | Out-Null
           # 版本标记文件
-          "ai-gen-reimbursement-docs v$env:version" | Out-File -Encoding utf8 "$out\ard_v$env:version"
+          "ai-gen-reimbursement-docs v$env:version" | Out-File -Encoding utf8 "$out\ard-v$env:version"
           Copy-Item pyproject.toml "$out\pyproject.toml" -Force
           Copy-Item README.md "$out\README.md" -Force
           Copy-Item CHANGELOG.md "$out\CHANGELOG.md" -Force
@@ -65,12 +77,14 @@ jobs:
           Copy-Item data\audio "$out\data\audio" -Recurse -Force
           Copy-Item config\.env.example "$out\config\.env.example" -Force
           Copy-Item config\system_config.yaml.example "$out\config\system_config.yaml.example" -Force
-          Copy-Item config\business_rules.yaml.example "$out\config\business_rules.yaml.example" -Force
-          Copy-Item web_app "$out\web_app" -Recurse -Force
+          # 只拷贝 web_app 的必要文件（server.py + 前端构建产物）
+          New-Item -ItemType Directory -Force -Path "$out\web_app\static\dist" | Out-Null
+          Copy-Item web_app\server.py "$out\web_app\server.py" -Force
+          Copy-Item web_app\static\dist\* "$out\web_app\static\dist" -Recurse -Force
 
       - name: 创建 zip 便携版
         shell: pwsh
-        run: Compress-Archive -Path "dist\ard\*" -DestinationPath "ard_v$env:version.zip" -Force
+        run: Compress-Archive -Path "dist\ard\*" -DestinationPath "ard-v$env:version.zip" -Force
 
       - name: 安装 Inno Setup
         shell: pwsh
@@ -89,7 +103,7 @@ jobs:
           name: "v${{ env.version }}"
           body_path: CHANGELOG.md
           files: |
-            ard_v${{ env.version }}.zip
+            ard-v${{ env.version }}.zip
             ard-setup_v${{ env.version }}.exe
 
       - name: 手动触发时创建 Release（用 gh CLI）
@@ -100,7 +114,7 @@ jobs:
         run: |
           $ver = "${{ env.version }}"
           $tag = "v$ver"
-          $zip = "ard_v$ver.zip"
+          $zip = "ard-v$ver.zip"
           $setup = "ard-setup_v$ver.exe"
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
@@ -124,7 +138,7 @@ jobs:
             return
           }
           $ver = "${{ env.version }}"
-          $zip = "ard_v$ver.zip"
+          $zip = "ard-v$ver.zip"
           $setup = "ard-setup_v$ver.exe"
           $tag = "v$ver"
           $release_repo = "mlt-hub/ai-gen-reimbursement-docs-release"

@@ -90,10 +90,12 @@ def generate_cosmic_xlsx_from_md(
     *,
     md_dir: str = "",
     project_name: str = "",
+    cfp_formula: str = "",
 ) -> str:
     """从已填充的 COSMIC MD 生成 项目功能点拆分表.xlsx。
 
     同时写入 CFP 总和 MD 和更新环境图 sheet。
+    cfp_formula 优先从 Excel 元数据 sheet 读取，空则用默认公式。
 
     Returns:
         output_path
@@ -107,8 +109,11 @@ def generate_cosmic_xlsx_from_md(
 
     meta = parse_meta_md(meta_md_path) if meta_md_path else {}
 
+    kws = {"meta": meta}
+    if cfp_formula:
+        kws["cfp_formula"] = cfp_formula
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
-    write_cosmic_xlsx(template_path, output_path, items, meta=meta)
+    write_cosmic_xlsx(template_path, output_path, items, **kws)
 
     cfp_total = sum(item.total_cfp() for item in items)
     logger.info(f"CFP 总和: {cfp_total}")

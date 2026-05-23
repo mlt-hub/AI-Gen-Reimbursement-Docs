@@ -56,9 +56,12 @@ class SessionHandler(logging.Handler):
 _parent = logging.getLogger("ai_gen_reimbursement_docs")
 _parent.setLevel(logging.DEBUG)
 
+from ai_gen_reimbursement_docs.cli.logging import PathShortener
+
 _handler = SessionHandler()
 _handler.setLevel(logging.DEBUG)
 _handler.setFormatter(logging.Formatter("%(message)s"))
+_handler.addFilter(PathShortener())
 _parent.addHandler(_handler)
 
 # 添加全局日志 handler（与 CLI 一致）
@@ -75,18 +78,19 @@ _log.info("[Web UI] AI生成项目报账文档 v%s（FastAPI 服务启动）",
           __import__('tomllib').load(open(BASE_DIR / 'pyproject.toml', 'rb'))['project']['version'])
 
 MODE_INFO: dict[str, dict[str, str]] = {
-    "from-excel-gen-all": {"label": "全流程 → 全套交付物", "desc": "生成所有文档"},
+    "from-excel-gen-all": {"label": "gen-all → 全套交付物", "desc": "生成所有文档"},
     "from-excel-gen-basedata": {
-        "label": "基础数据 → 模块树+元数据",
-        "desc": "仅解析 Excel 生成中间 MD",
+        "label": "gen-basedata → 基础数据：模块树+元数据",
+        "desc": "仅解析 功能清单Excel 生成中间 MD",
     },
-    "from-excel-gen-fpa": {"label": "FPA → 工作量评估", "desc": "生成 FPA工作量评估.xlsx"},
+    "from-excel-gen-fpa": {"label": "gen-fpa → FPA工作量评估", "desc": "生成 FPA工作量评估.xlsx"},
+    "from-excel-gen-spec": {"label": "gen-spec → 项目需求说明书", "desc": "生成 项目需求说明书.docx"},
     "from-excel-gen-cosmic": {
-        "label": "COSMIC → 功能点拆分表",
+        "label": "gen-cosmic → 项目功能点拆分表",
         "desc": "生成 项目功能点拆分表.xlsx",
     },
-    "from-excel-gen-list": {"label": "需求清单", "desc": "生成 项目需求清单.xlsx"},
-    "from-excel-gen-spec": {"label": "需求说明书", "desc": "生成 项目需求说明书.docx"},
+    "from-excel-gen-list": {"label": "gen-list → 项目需求清单", "desc": "生成 项目需求清单.xlsx"},
+    
 }
 
 _MODE_MAP: dict[str, str] = {
@@ -98,40 +102,64 @@ _MODE_MAP: dict[str, str] = {
     "from-excel-gen-spec": "gen-spec",
 }
 
+def _spa_index():
+    """SPA index.html 回退：Vite 构建产物优先，开发时回退旧 static/。"""
+    dist_index = Path(__file__).parent / "static" / "dist" / "index.html"
+    if dist_index.exists():
+        return HTMLResponse(dist_index.read_text(encoding="utf-8"))
+    old_index = Path(__file__).parent / "static" / "index.html"
+    if old_index.exists():
+        return HTMLResponse(old_index.read_text(encoding="utf-8"))
+    return HTMLResponse("<html><body>前端未构建，请运行 npm run dev 或 npm run build</body></html>")
+
+
 # ── FastAPI App ───────────────────────────────────────────
 
 app = FastAPI(title="AI生成项目报账文档")
 
-static_dir = Path(__file__).parent / "static"
-static_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+# 静态文件：生产环境优先用 dist/（Vite 构建），开发环境回退 static/
+_dist_dir = Path(__file__).parent / "static" / "dist"
+if _dist_dir.exists():
+    app.mount("/static/dist", StaticFiles(directory=str(_dist_dir)), name="static_dist")
+# 保留旧 static/ 挂载以支持旧文件和资源
+_static_dir = Path(__file__).parent / "static"
+_static_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 
 @app.get("/")
 async def index():
-    html_path = Path(__file__).parent / "static" / "index.html"
-    content = html_path.read_text(encoding="utf-8")
-    return HTMLResponse(content)
+    """SPA 入口：生产环境返回 dist/index.html，开发环境回退 static/index.html。"""
+    return _spa_index()
 
 
 @app.get("/config")
 async def config_page():
-    html_path = Path(__file__).parent / "static" / "config.html"
-    content = html_path.read_text(encoding="utf-8")
-    return HTMLResponse(content)
+    return _spa_index()
 
 
 @app.get("/prompt-debug")
 async def prompt_debug():
-    html_path = Path(__file__).parent / "static" / "prompt-debug.html"
-    content = html_path.read_text(encoding="utf-8")
-    return HTMLResponse(content)
+    return _spa_index()
 
 
 @app.get("/api/modes")
 async def get_modes():
     """返回操作模式列表，供前端动态渲染下拉框。"""
     return MODE_INFO
+
+
+@app.get("/api/version")
+async def get_version():
+    """返回当前版本号（从 pyproject.toml 读取）。"""
+    try:
+        import tomllib
+        toml = BASE_DIR / "pyproject.toml"
+        if toml.exists():
+            return {"version": tomllib.load(toml.open("rb"))["project"]["version"]}
+    except Exception:
+        pass
+    return {"version": "unknown"}
 
 
 # ── 系统配置 ──────────────────────────────────────────────
@@ -288,19 +316,23 @@ async def api_run_local(
     else:
         xlsx = xlsx_input
 
+    import re
+    from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
+
     if output_dir:
         out = Path(output_dir)
-    elif from_dir:
-        from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
+    elif project_name:
+        root = Path(from_dir) if from_dir else xlsx.parent
+        safe = re.sub(r'[\/:*?"<>|]', '_', project_name)
+        out = root / safe
+    else:
+        root = Path(from_dir) if from_dir else xlsx.parent
         auto_name = _try_read_project_name(str(xlsx))
         if auto_name:
-            import re
             safe = re.sub(r'[\/:*?"<>|]', '_', auto_name)
-            out = Path(from_dir) / safe
+            out = root / safe
         else:
-            out = Path(from_dir)
-    else:
-        out = xlsx.parent
+            out = root
     out.mkdir(parents=True, exist_ok=True)
 
     custom_t_dir = await _save_custom_templates(
@@ -648,3 +680,158 @@ def _build_templates_dict(custom_t_dir: str) -> dict[str, str]:
         if matches:
             templates[key] = matches[0]
     return templates
+
+
+# ── 配置读取 API（Config 页面用） ──────────────────────────
+
+@app.get("/api/config-read")
+async def config_read():
+    """读取 ~/.ai-gen-reimbursement-docs/ 下的三个配置文件内容。"""
+    cfg_dir = Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs"
+    result: dict = {}
+    for key, fname in [("env", ".env"), ("system_config", "system_config.yaml"),
+                        ("business_rules", "business_rules.yaml")]:
+        fp = cfg_dir / fname
+        result[key] = fp.read_text(encoding="utf-8") if fp.exists() else ""
+    return result
+
+
+# ── 提示词调试 API（PromptDebug 页面用） ────────────────────
+
+@app.post("/api/test-ai-reliability-desc")
+async def test_reliability_desc(xlsx_path: str = Form("")):
+    """测试调整因子中的可靠性描述 AI 生成。"""
+    import glob
+    excel_path = xlsx_path.strip()
+    if not excel_path:
+        for name in ["功能清单-录入模板.xlsx", "功能清单.xlsx"]:
+            matches = glob.glob(name)
+            if matches:
+                excel_path = matches[0]
+                break
+    if not excel_path or not os.path.exists(excel_path):
+        raise HTTPException(400, "未找到功能清单 .xlsx 文件")
+
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt, load_sheet_names, load_api_key
+    import openpyxl
+
+    api_key = load_api_key()
+    if not api_key:
+        raise HTTPException(400, "未配置 API Key，请先在配置页设置")
+
+    _s = load_sheet_names()
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws = wb[_s["func_content"]]
+    descriptions: list[str] = []
+    seen: set[str] = set()
+    prev = ""
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        desc = str(row[5]).strip() if len(row) > 5 and row[5] else ""
+        desc = desc or prev
+        if desc:
+            prev = desc
+        if desc and desc not in seen:
+            seen.add(desc)
+            descriptions.append(desc)
+    wb.close()
+
+    user_prompt = (
+        "根据功能清单，提取其中涉及与可靠性方面的模块，生成一句关于可靠性业务描述。不少于50字。\n"
+        "功能清单：\n" + '\n'.join(f'- {d}' for d in descriptions)
+    )
+    system_prompt = load_ai_system_prompt("reliability_desc")
+
+    from ai_gen_reimbursement_docs.llm_client import call_llm
+    try:
+        result_text = call_llm(
+            prompt=user_prompt, system=system_prompt,
+            api_key=api_key, model="", base_url="", tag="web_reliability_desc",
+        )
+        return {"result": result_text}
+    except Exception as e:
+        raise HTTPException(500, f"AI 调用失败: {e}")
+
+
+@app.post("/api/test-ai-metadata")
+async def test_metadata(xlsx_path: str = Form(""), field_key: str = Form("")):
+    """测试元数据中指定字段的 #AI生成# 效果。"""
+    import glob, re
+    excel_path = xlsx_path.strip()
+    if not excel_path:
+        for name in ["功能清单-录入模板.xlsx", "功能清单.xlsx"]:
+            matches = glob.glob(name)
+            if matches:
+                excel_path = matches[0]
+                break
+    if not excel_path or not os.path.exists(excel_path):
+        raise HTTPException(400, "未找到功能清单 .xlsx 文件")
+    if not field_key.strip():
+        raise HTTPException(400, "请提供 field_key")
+
+    from ai_gen_reimbursement_docs.config_utils import load_api_key, load_sheet_names, load_ai_system_prompt
+    from ai_gen_reimbursement_docs.excel_source import strip_ai_marker
+    import openpyxl
+
+    api_key = load_api_key()
+    if not api_key:
+        raise HTTPException(400, "未配置 API Key")
+
+    _s = load_sheet_names()
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+
+    raw_value = ""
+    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "require_meta"]:
+        sn = _s.get(sheet_key, "")
+        if not sn or sn not in wb.sheetnames:
+            continue
+        ws = wb[sn]
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            k = str(row[0]).strip() if row[0] else ""
+            v = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+            if k == field_key:
+                raw_value = v
+                break
+        if raw_value:
+            break
+    wb.close()
+
+    if not raw_value:
+        raise HTTPException(400, f"未找到字段「{field_key}」")
+
+    prompt_template, needs_ai = strip_ai_marker(raw_value)
+    if not needs_ai:
+        return {"result": f"字段「{field_key}」不含 #AI生成# 标记，当前值: {raw_value}"}
+
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    project_info: dict[str, str] = {}
+    for row in wb[_s["meta"]].iter_rows(min_row=2, values_only=True):
+        k2 = str(row[0]).strip() if row[0] else ""
+        v2 = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+        if k2:
+            project_info[k2] = v2
+    fpa_meta: dict[str, str] = {}
+    for row in wb[_s["fpa_meta"]].iter_rows(min_row=2, values_only=True):
+        k2 = str(row[0]).strip() if row[0] else ""
+        v2 = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+        if k2:
+            fpa_meta[k2] = v2
+    wb.close()
+
+    user_prompt = prompt_template
+    user_prompt = user_prompt.replace('${工单编号}', project_info.get('工单编号', ''))
+    user_prompt = user_prompt.replace('${工单名称}', project_info.get('工单标题', ''))
+    user_prompt = user_prompt.replace('${工单标题}', project_info.get('工单标题', ''))
+    user_prompt = user_prompt.replace('${工单内容}', project_info.get('工单内容', ''))
+    user_prompt = user_prompt.replace('${子系统（模块）}', fpa_meta.get('子系统（模块）', ''))
+
+    system_prompt = load_ai_system_prompt("metadata_gen")
+
+    from ai_gen_reimbursement_docs.llm_client import call_llm
+    try:
+        result_text = call_llm(
+            prompt=user_prompt, system=system_prompt,
+            api_key=api_key, model="", base_url="", tag="web_metadata_test",
+        )
+        return {"result": result_text}
+    except Exception as e:
+        raise HTTPException(500, f"AI 调用失败: {e}")

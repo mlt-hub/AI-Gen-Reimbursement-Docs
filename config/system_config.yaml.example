@@ -9,22 +9,6 @@ max_tokens: 6000
 # 只对前 N 个 L3 模块调用 AI（保留兼容，优先使用 max_ai_items）
 max_ai_l3_modules: 0
 
-# 是否重新生成各阶段文件
-regenerate_md: false
-regenerate_filled: false
-regenerate_excel: false
-regenerate_all: false
-
-# 是否使用AI大模型解析docx模块层级（false=使用硬编码解析器）
-parse_docx_by_ai: false
-
-# 是否使用AI大模型生成COSMIC数据
-enable_ai_generate_cosmic: true
-
-# docx 解析方式（两都启用时优先用样式法）
-docx_parse_by_template_style: true      # 模板样式法：按 word_template.docx 的样式匹配层级
-docx_parse_by_marker: true     # 标记法：按 ###level:strategy### 标记解析层级
-
 # FPA 核减后的工作量是否直接用 FPA 工作量的值（false=由用户输入确认）
 fpa_reduced_use_workload: false
 

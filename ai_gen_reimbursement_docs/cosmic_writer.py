@@ -12,7 +12,6 @@ from ai_gen_reimbursement_docs.constants import (
     FP_COL_KEY_MAP, COL_FP_CFP, COL_FP_SUB_PROCESS, COL_FP_MOVE_TYPE,
 )
 from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
-from ai_gen_reimbursement_docs.config_utils import load_cfp_formula
 from ai_gen_reimbursement_docs.excel_source import safe_load_workbook
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_writer')
@@ -99,12 +98,14 @@ def write_cosmic_xlsx(
     items: list[CosmicItem],
     *,
     meta: dict[str, str] | None = None,
+    cfp_formula: str = "",
 ) -> None:
     """Write COSMIC items to Excel template.
 
     Preserves header rows (1-5) and formatting, fills data starting at row 6.
     Also preserves any existing footer rows from the template.
     若提供 meta，替换第6行中的 ${...} 占位符（如 ${工单标题}）。
+    cfp_formula 从 Excel 元数据 sheet 读取，{row} 会被替换为实际行号。
     """
     if meta is None:
         meta = {}
@@ -215,9 +216,9 @@ def write_cosmic_xlsx(
         for col_idx in range(1, FP_TOTAL_COLS):
             cell = ws.cell(row=row_num, column=col_idx)
             if col_idx == COL_FP_CFP:
-                # CFP 列用公式（从配置文件读取）
-                cfp_formula = load_cfp_formula()
-                cell.value = '=' + cfp_formula.replace('{row}', str(row_num))
+                # CFP 列用公式（{row} 替换为实际行号），未配置则留空
+                if cfp_formula:
+                    cell.value = '=' + cfp_formula.replace('{row}', str(row_num))
             else:
                 cell.value = row_data.get(FP_COL_KEY_MAP[col_idx], '')
 

@@ -2,8 +2,26 @@
 
 import logging
 import os
-import sys
 from datetime import datetime
+
+
+class PathShortener(logging.Filter):
+    """将日志中的绝对路径缩短为基于输出目录的相对路径。
+
+    环境变量 AI_REIMBURSEMENT_OUTPUT_DIR 指定输出根目录，
+    日志中该前缀 + 分隔符会被替换为空，使路径更可读。
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        base = os.environ.get("AI_REIMBURSEMENT_OUTPUT_DIR", "")
+        if base:
+            record.msg = _replace_path(str(record.msg), base + os.sep, "")
+            record.msg = _replace_path(str(record.msg), base, "")
+        return True
+
+
+def _replace_path(text: str, old: str, new: str) -> str:
+    return text.replace(old, new).replace(old.replace("\\", "/"), new)
 
 
 class ReleaseFileHandler(logging.Handler):
@@ -29,13 +47,8 @@ class ReleaseFileHandler(logging.Handler):
 
 
 def init_global_logging():
-    """初始化全局日志：项目根目录 log/（控制台 + 总日志 + 运行日志）。"""
-    if getattr(sys, 'frozen', False):
-        log_dir = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'log')
-    else:
-        log_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'log'
-        )
+    """初始化全局日志：~/.ai-gen-reimbursement-docs/log/（控制台 + 总日志 + 运行日志）。"""
+    log_dir = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'log')
     os.makedirs(log_dir, exist_ok=True)
 
     main_log = os.path.join(log_dir, 'global_ai_gen_reimbursement_docs.log')
@@ -45,6 +58,8 @@ def init_global_logging():
     logger = logging.getLogger('ai_gen_reimbursement_docs')
     logger.setLevel(logging.DEBUG)
 
+    _ps = PathShortener()
+
     fmt = logging.Formatter(
         '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
@@ -53,16 +68,19 @@ def init_global_logging():
     fh = ReleaseFileHandler(main_log, encoding='utf-8', mode='a')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(fmt)
+    fh.addFilter(_ps)
     logger.addHandler(fh)
 
     rh = ReleaseFileHandler(run_log, encoding='utf-8', mode='w')
     rh.setLevel(logging.DEBUG)
     rh.setFormatter(fmt)
+    rh.addFilter(_ps)
     logger.addHandler(rh)
 
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
     ch.setFormatter(logging.Formatter('%(message)s'))
+    ch.addFilter(_ps)
     logger.addHandler(ch)
 
     return logger, run_log
@@ -100,6 +118,7 @@ def setup_logging(log_dir: str, docx_name: str = ""):
     rh = ReleaseFileHandler(run_log, encoding='utf-8', mode='w')
     rh.setLevel(logging.DEBUG)
     rh.setFormatter(fmt)
+    rh.addFilter(PathShortener())
     logger.addHandler(rh)
 
     return logger, run_log

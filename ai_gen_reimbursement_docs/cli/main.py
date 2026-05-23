@@ -150,7 +150,6 @@ def _auto_init_config(root: str) -> None:
     pairs = [
         (os.path.join(cfg_dir, '.env.example'), os.path.join(home_cfg, '.env')),
         (os.path.join(cfg_dir, 'system_config.yaml.example'), os.path.join(home_cfg, 'system_config.yaml')),
-        (os.path.join(cfg_dir, 'business_rules.yaml.example'), os.path.join(home_cfg, 'business_rules.yaml')),
     ]
     for src, dst in pairs:
         if not os.path.exists(src):
@@ -369,9 +368,7 @@ def main():
             print(f"提示音播放失败: {e}")
         return
 
-    log_root = os.path.join(root, 'log')
-    if getattr(sys, 'frozen', False):
-        log_root = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'log')
+    log_root = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'log')
     if args.log:
         if args.log == 'open':
             os.startfile(log_root)
@@ -410,8 +407,7 @@ def main():
         pairs = [
             (os.path.join(cfg_dir, '.env.example'), os.path.join(home_cfg, '.env')),
             (os.path.join(cfg_dir, 'system_config.yaml.example'), os.path.join(home_cfg, 'system_config.yaml')),
-            (os.path.join(cfg_dir, 'business_rules.yaml.example'), os.path.join(home_cfg, 'business_rules.yaml')),
-        ]
+            ]
         for src, dst in pairs:
             if os.path.exists(dst):
                 logger.info(f"已存在，跳过: {dst}")
@@ -427,10 +423,8 @@ def main():
     model = args.model or load_model_name()
     logger.debug(f"API Key: {'已设置' if api_key else '未设置'}, 端点: {base_url or '默认'}, 模型: {model}")
 
-    from ai_gen_reimbursement_docs.config_utils import load_max_tokens, load_business_config, load_cfp_formula
-    logger.info(f"配置: MAX_TOKENS={load_max_tokens()}, CFP公式={load_cfp_formula()}")
-    biz_cfg = load_business_config()
-    logger.info(f"配置: REGENERATE_MD={biz_cfg['regenerate_md']}, ENABLE_AI_GENERATE_COSMIC={biz_cfg['enable_ai_generate_cosmic']}")
+    from ai_gen_reimbursement_docs.config_utils import load_max_tokens
+    logger.info(f"配置: MAX_TOKENS={load_max_tokens()}")
 
     # ── 测试：调整因子中的可靠性描述 AI 生成 ──
     if args.test_ai_gen_reliability_desc:

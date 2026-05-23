@@ -91,8 +91,7 @@ ard/
 │   └── audio/
 ├── config/
 │   ├── .env.example
-│   ├── system_config.yaml.example
-│   └── business_rules.yaml.example
+│   └── system_config.yaml.example
 ├── README.md
 └── CHANGELOG.md
 ```

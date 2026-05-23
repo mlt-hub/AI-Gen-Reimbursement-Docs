@@ -138,7 +138,7 @@ flowchart LR
 flowchart TB
     subgraph 输入
         MODULES["FunctionModule[]<br/>（L3 模块树）"]
-        CONFIG2["用户规则配置<br/>发起方/接收方规则"]
+        CONFIG2["Excel 元数据 Sheet 6<br/>CFP公式/功能用户"]
     end
 
     subgraph cosmic_ai
@@ -204,14 +204,12 @@ flowchart LR
     subgraph 用户配置目录
         ENV["~/.ai-gen-reimbursement-docs/.env<br/>API_KEY / BASE_URL / MODEL"]
         SYS["system_config.yaml<br/>sheet 映射 / 模板路径 / AI 限制"]
-        BIZ["business_rules.yaml<br/>CFP 公式"]
         AI_PROMPT["ai_system_prompts_config.yaml<br/>各场景系统提示词"]
     end
 
     subgraph 打包内置
         TMPL_ENV["config/.env.example"]
         TMPL_SYS["config/system_config.yaml.example"]
-        TMPL_BIZ["config/business_rules.yaml.example"]
     end
 
     subgraph config_utils
@@ -221,11 +219,8 @@ flowchart LR
 
     TMPL_ENV -->|"--init-config"| ENV
     TMPL_SYS -->|"--init-config"| SYS
-    TMPL_BIZ -->|"--init-config"| BIZ
-
     ENV --> LOAD
     SYS --> LOAD
-    BIZ --> LOAD
     AI_PROMPT --> LOAD
     SYS --> MIGRATE
 ```

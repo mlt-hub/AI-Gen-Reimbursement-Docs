@@ -183,7 +183,7 @@ set ANTHROPIC_API_KEY=sk-xxx
 
 ## 发布版（exe）
 
-从 [发布仓](https://github.com/mlt-hub/ai-gen-reimbursement-docs-release/releases) 下载 `ard_v*.zip`，解压后双击运行或命令行使用，无需安装 Python。
+从 [发布仓](https://github.com/mlt-hub/ai-gen-reimbursement-docs-release/releases) 下载 `ard-v*.zip`，解压后双击运行或命令行使用，无需安装 Python。
 
 ### 本地打包
 

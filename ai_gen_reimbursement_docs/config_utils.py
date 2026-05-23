@@ -144,26 +144,6 @@ def _get_system_config_value(key: str, default):
         return default
 
 
-def _load_business_rules() -> dict:
-    """Load config/business_rules.yaml and return as dict."""
-    yaml_path = config_dir() / "business_rules.yaml"
-    if not yaml_path.exists():
-        return {}
-    try:
-        import yaml
-        with open(yaml_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f) or {}
-    except Exception:
-        return {}
-
-
-def load_cfp_formula(default: str = 'IF(L{row}="新增",1,IF(L{row}="复用",1/3,0))') -> str:
-    """Load cfp_formula from business_rules.yaml."""
-    cfg = _load_business_rules()
-    formula = cfg.get('cfp_formula', '')
-    return formula if formula else default
-
-
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
     CLI --max-tokens 通过环境变量 AI_REIMBURSEMENT_MAX_TOKENS 覆盖。
@@ -399,7 +379,6 @@ def migrate_config() -> None:
     # 对比 .example 和用户配置，自动追加新增的顶层键（含嵌套块）
     yaml_pairs = [
         (home / "system_config.yaml", local / "system_config.yaml.example", "system_config"),
-        (home / "business_rules.yaml", local / "business_rules.yaml.example", "business_rules"),
     ]
     try:
         import yaml
@@ -470,43 +449,3 @@ def _extract_yaml_block(lines: list[str], key: str) -> str:
     return '\n'.join(block_lines).rstrip()
 
 
-def load_business_config() -> dict:
-    """Load business process flags from system_config.yaml.
-
-    Returns dict with keys: regenerate_md, regenerate_filled, regenerate_excel,
-    regenerate_all, enable_ai.
-    """
-    config = {
-        'regenerate_md': False,
-        'regenerate_filled': False,
-        'regenerate_excel': False,
-        'regenerate_all': False,
-        'enable_ai_generate_cosmic': True,
-        'parse_docx_by_ai': False,
-        'docx_parse_by_template_style': True,
-        'docx_parse_by_marker': True,
-    }
-    yaml_path = config_dir() / "system_config.yaml"
-    if not yaml_path.exists():
-        return config
-
-    try:
-        import yaml
-        with open(yaml_path, 'r', encoding='utf-8') as f:
-            cfg = yaml.safe_load(f) or {}
-
-        for key in ('regenerate_md', 'regenerate_filled', 'regenerate_excel',
-                    'regenerate_all', 'enable_ai_generate_cosmic',
-                    'parse_docx_by_ai', 'docx_parse_by_template_style',
-                    'docx_parse_by_marker'):
-            if key in cfg:
-                config[key] = bool(cfg[key])
-    except Exception:
-        pass
-
-    if config['regenerate_all']:
-        config['regenerate_md'] = True
-        config['regenerate_filled'] = True
-        config['regenerate_excel'] = True
-
-    return config
