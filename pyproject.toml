@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-gen-reimbursement-docs"
-version = "1.0.0-alpha"
+version = "1.0.1-alpha"
 description = "AI生成项目报账文档 — 从功能清单自动生成全套报账文档"
 readme = "README.md"
 license = { text = "MIT" }
