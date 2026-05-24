@@ -1,19 +1,19 @@
 <template>
   <div class="bg-white border-t border-gray-200 px-6 py-3 flex items-center gap-3">
     <span class="text-sm text-gray-500 flex-1">
-      <template v-if="session.outputDir">产物目录: {{ session.outputDir }}</template>
+      <template v-if="session.outputDir">交付物目录: {{ session.outputDir }}</template>
     </span>
     <button v-if="config.workMode === 'local'" @click="openFolder"
       :disabled="!session.sessionId"
       class="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 disabled:bg-primary-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
       <FolderOpenIcon class="w-4 h-4" />
-      打开产物目录
+      打开交付物目录
     </button>
     <button v-else @click="downloadZip"
       :disabled="!session.sessionId"
       class="px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 disabled:bg-green-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
       <ArrowDownTrayIcon class="w-4 h-4" />
-      下载产物 .zip
+      下载交付物 .zip
     </button>
     <button @click="showAI"
       :disabled="!session.sessionId"

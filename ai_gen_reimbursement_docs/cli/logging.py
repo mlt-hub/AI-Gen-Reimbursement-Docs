@@ -46,10 +46,19 @@ class ReleaseFileHandler(logging.Handler):
             self.handleError(record)
 
 
+_global_logging_done = False
+
+
 def init_global_logging(level: str = "INFO"):
     """初始化全局日志：~/.ai-gen-reimbursement-docs/log/（控制台 + 总日志 + 运行日志）。
     level: DEBUG / INFO / WARNING / ERROR，控制台输出级别。文件始终 DEBUG。
+    多次调用不会重复添加 handler。
     """
+    global _global_logging_done
+    if _global_logging_done:
+        return logging.getLogger('ai_gen_reimbursement_docs'), None
+    _global_logging_done = True
+
     log_dir = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'log')
     os.makedirs(log_dir, exist_ok=True)
 

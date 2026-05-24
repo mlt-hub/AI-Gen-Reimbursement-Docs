@@ -2,14 +2,14 @@
 
 ## 1. 概述
 
-为现有 CLI 工具 `ai-gen-reimbursement-docs` 添加 Web 界面，实时查看日志，下载生成产物。支持两种使用方式。
+为现有 CLI 工具 `ai-gen-reimbursement-docs` 添加 Web 界面，实时查看日志，下载生成交付物。支持两种使用方式。
 
 ### 两种模式
 
-| 模式 | 适用场景 | 文件输入 | 产物输出 |
+| 模式 | 适用场景 | 文件输入 | 交付物输出 |
 |---|---|---|---|
 | **本机模式** | 单人在本机使用 | 直接读本地路径 | 写到本地目录，点按钮打开 |
-| **服务模式** | 多人远程访问 | 浏览器上传文件 | 下载 ZIP |
+| **远程服务模式** | 多人远程访问 | 浏览器上传文件 | 下载 ZIP |
 
 同一套 server + 同一套前端，前端切换模式。
 
@@ -68,18 +68,18 @@ ai_gen_reimbursement_docs/          # 现有项目，不动
 │  │ (xlsx路径+输出目录+参数)                                    │              
 │  │ ───────────────────────→  直接读本地 xlsx                   │              
 │  │                           asyncio.to_thread(run_pipeline)  │              
-│  │                           产物写本地目录                     │              
+│  │                           交付物写本地目录                     │              
 │  │ ←─ {session_id} ───────                                   │              
 │  │ GET /api/open-folder?session=xxx                           │              
 │  │ ───────────────────────→  os.startfile(output_dir)         │              
 │  └──────────────────────────────────────────────────────────┘              
 │                                                                           
-│  ┌─ 服务模式 ──────────────────────────────────────────────┐               
+│  ┌─ 远程服务模式 ──────────────────────────────────────────────┐               
 │  │ POST /api/run-upload                                     │              
 │  │ (上传文件+参数)                                            │              
 │  │ ───────────────────────→  保存到 /tmp/ard_web_{session}/             
 │  │                           asyncio.to_thread(run_pipeline)  │              
-│  │                           打包产物 ZIP                     │              
+│  │                           打包交付物 ZIP                     │              
 │  │ ←─ {session_id} ───────                                   │              
 │  │ GET /api/download/{session_id}                             │              
 │  │ ←─ ZIP 下载 ──────────                                     │              
@@ -142,7 +142,7 @@ ai_gen_reimbursement_docs/          # 现有项目，不动
 - 成功：`{"session_id": "xxx", "output_dir": "/path/to/output"}`
 - 失败：`{"error": "..."}`
 
-### 4.4 POST `/api/run-upload`（服务模式）
+### 4.4 POST `/api/run-upload`（远程服务模式）
 
 上传文件，完成后下载 ZIP。
 
@@ -181,13 +181,13 @@ data: {"level": "DONE"}
 
 前端连接此端点后持续接收日志，收到 `DONE` 后断开。
 
-### 4.6 GET `/api/download/{session_id}`（服务模式）
+### 4.6 GET `/api/download/{session_id}`（远程服务模式）
 
-下载产物 ZIP，下载完成后 5 分钟自动清理临时目录。
+下载交付物 ZIP，下载完成后 5 分钟自动清理临时目录。
 
 ### 4.7 GET `/api/open-folder?session=xxx`（本机模式）
 
-调用 `os.startfile(output_dir)` 在资源管理器中打开产物目录。
+调用 `os.startfile(output_dir)` 在资源管理器中打开交付物目录。
 
 ---
 
@@ -247,15 +247,15 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
                                     SSE 端点取出 → 推给对应浏览器
 ```
 
-### 5.4 临时文件清理（仅服务模式）
+### 5.4 临时文件清理（仅远程服务模式）
 
-服务模式下每个请求在 `/tmp/ard_web_{session}/` 下创建独立工作目录。本机模式产物直接写用户指定目录，无需清理。
+远程服务模式下每个请求在 `/tmp/ard_web_{session}/` 下创建独立工作目录。本机模式交付物直接写用户指定目录，无需清理。
 
 ```
 ┌─ 请求到达 → 创建 /tmp/ard_web_{abc123}/
 │
-├─ 管道执行 → 产物写入 output/
-├─ 打包 ZIP  → /tmp/ard_web_{abc123}/产物_abc123.zip
+├─ 管道执行 → 交付物写入 output/
+├─ 打包 ZIP  → /tmp/ard_web_{abc123}/交付物_abc123.zip
 │
 ├─ 用户下载 → 返回 ZIP
 │
@@ -292,10 +292,10 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
 │  输出目录（默认同级）    │                               │
 │  [C:\...\output     ] │  状态: ● 运行中               │
 │                      │                               │
-│  [浏览...] [▶ 开始]   │  📂 [打开产物目录]            │
+│  [浏览...] [▶ 开始]   │  📂 [打开交付物目录]            │
 │                      │                               │
 │  ── 远程：上传文件 ── │  ┌─ 切换远程模式后显示 ────┐ │
-│  [选择文件         ] │  │ 📦 [⬇ 下载产物.zip]    │ │
+│  [选择文件         ] │  │ 📦 [⬇ 下载交付物.zip]    │ │
 │  已选: 功能清单.xlsx  │  └──────────────────────────┘ │
 │                      │                               │
 │  ── 高级选项 ─────── │                               │
@@ -316,15 +316,15 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
 2. 点击 [开始生成]
 3. 前端 POST /api/run-local → 拿到 session_id
 4. 前端 GET /api/log-stream → SSE 实时日志
-5. 收到 DONE → [打开产物目录] 按钮激活
+5. 收到 DONE → [打开交付物目录] 按钮激活
 6. 点击按钮 → GET /api/open-folder → 资源管理器打开目录
 
-服务模式：
+远程服务模式：
 1. 用户选择模式「远程」、操作模式、选择上传文件
 2. 点击 [开始生成]
 3. 前端 POST /api/run-upload → 拿到 session_id
 4. 前端 GET /api/log-stream → SSE 实时日志
-5. 收到 DONE → [下载产物.zip] 按钮激活
+5. 收到 DONE → [下载交付物.zip] 按钮激活
 6. 下载完成后 5 分钟服务端自动清理
 ```
 
@@ -332,7 +332,7 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
 
 - 纯 HTML + CSS + vanilla JS，无框架
 - 模式切换时动态显示/隐藏对应区域（`display:none` / `display:block`）
-- 本机模式发 JSON（`Content-Type: application/json`），服务模式发 FormData
+- 本机模式发 JSON（`Content-Type: application/json`），远程服务模式发 FormData
 - 使用 `EventSource` 接收 SSE
 - 使用 `fetch` + `FormData` 上传
 - 模式描述通过 JS 字典映射（操作模式 ↔ 说明文案 ↔ 接受的文件类型）
@@ -368,9 +368,9 @@ from fastapi.staticfiles import StaticFiles
 
 session_var: contextvars.ContextVar[str | None] = contextvars.ContextVar('session_id', default=None)
 session_queues: dict[str, queue.Queue] = {}
-session_outputs: dict[str, Path] = {}     # session_id → 产物目录（两种模式共用）
-session_zips: dict[str, Path] = {}        # session_id → zip 文件路径（服务模式）
-session_dirs: dict[str, Path] = {}        # session_id → 临时工作目录（服务模式）
+session_outputs: dict[str, Path] = {}     # session_id → 交付物目录（两种模式共用）
+session_zips: dict[str, Path] = {}        # session_id → zip 文件路径（远程服务模式）
+session_dirs: dict[str, Path] = {}        # session_id → 临时工作目录（远程服务模式）
 
 class SessionHandler(logging.Handler):
     def emit(self, record):
@@ -427,7 +427,7 @@ async def api_run_local(
     model: str = Form(""),
     base_url: str = Form(""),
 ):
-    """本机模式：直接读本地文件，产物写本地目录。"""
+    """本机模式：直接读本地文件，交付物写本地目录。"""
     if mode not in MODE_INFO:
         raise HTTPException(400, f"未知模式: {mode}")
 
@@ -509,8 +509,8 @@ async def api_run_upload(
         try:
             _execute_mode(mode, file_path, output_dir, custom_t_dir,
                          api_key, model, base_url)
-            # 打包产物为 ZIP
-            zip_path = work_dir / f"产物_{session_id}.zip"
+            # 打包交付物为 ZIP
+            zip_path = work_dir / f"交付物_{session_id}.zip"
             shutil.make_archive(str(zip_path.with_suffix('')), 'zip', str(output_dir))
             session_zips[session_id] = zip_path
         except Exception as e:
@@ -550,35 +550,35 @@ async def log_stream(session: str):
 
 @app.get("/api/download/{session_id}")
 async def download(session_id: str):
-    """下载产物 ZIP"""
+    """下载交付物 ZIP"""
     zip_path = session_zips.get(session_id)
     if zip_path is None:
-        raise HTTPException(404, "产物不存在或会话已过期")
+        raise HTTPException(404, "交付物不存在或会话已过期")
     if not zip_path.exists():
-        raise HTTPException(404, "产物文件已被清理")
+        raise HTTPException(404, "交付物文件已被清理")
 
     return FileResponse(
         zip_path,
-        filename=f"产物_{datetime.now():%Y%m%d_%H%M%S}.zip",
+        filename=f"交付物_{datetime.now():%Y%m%d_%H%M%S}.zip",
         media_type="application/zip",
         background=_cleanup_after_download(session_id),
     )
 
 @app.get("/api/open-folder")
 async def open_folder(session: str):
-    """本机模式：在资源管理器中打开产物目录。"""
+    """本机模式：在资源管理器中打开交付物目录。"""
     out_dir = session_outputs.get(session)
     if out_dir is None:
         raise HTTPException(404, "未知会话")
     if not out_dir.exists():
-        raise HTTPException(404, "产物目录不存在")
+        raise HTTPException(404, "交付物目录不存在")
     os.startfile(str(out_dir))
     return {"ok": True}
 
 # ── 清理 ──────────────────────────────────────────────
 
 async def _cleanup_after_download(session_id: str):
-    """下载完成后延迟 5 分钟清理临时目录，避免清理正在被扫描的产物。"""
+    """下载完成后延迟 5 分钟清理临时目录，避免清理正在被扫描的交付物。"""
     await asyncio.sleep(300)
     work_dir = session_dirs.pop(session_id, None)
     session_queues.pop(session_id, None)
@@ -715,7 +715,7 @@ def _build_templates_dict(custom_t_dir: Path) -> dict[str, str]:
                 <div class="log-placeholder">等待任务开始...</div>
             </div>
             <div class="download-panel">
-                <button id="btn-download" disabled onclick="download()">⬇ 下载产物</button>
+                <button id="btn-download" disabled onclick="download()">⬇ 下载交付物</button>
             </div>
         </div>
     </div>
@@ -800,7 +800,7 @@ gunicorn web_app.server:app -w 4 -k uvicorn.workers.UvicornWorker
 | 无用户认证 | 任何人可访问 | 部署在内网使用 |
 | 内存存储 | session 队列在内存中 | 服务重启后正在跑的任务丢失 |
 | 单 worker | 多 worker 时 SSE 跨进程不可达 | 限制并发上限 |
-| 无持久化 | 产物临时目录定时清理 | 历史记录不保存 |
+| 无持久化 | 交付物临时目录定时清理 | 历史记录不保存 |
 | 同步执行 | AI 调用阻塞线程 | 单个请求可能占一个线程 60s |
 
 ### 10.2 后续可扩展方向
@@ -808,7 +808,7 @@ gunicorn web_app.server:app -w 4 -k uvicorn.workers.UvicornWorker
 - **用户认证**：加 HTTP Basic Auth 或 JWT
 - **任务队列**：Celery + Redis 替代线程池，支持真正的异步和重试
 - **持久化**：SQLite 存历史任务记录
-- **产物管理**：下载链接保持 24 小时有效
+- **交付物管理**：下载链接保持 24 小时有效
 - **Docker 部署**：提供 Dockerfile 一键部署
 
 ---
@@ -821,6 +821,6 @@ gunicorn web_app.server:app -w 4 -k uvicorn.workers.UvicornWorker
 - [ ] `pyproject.toml` 添加 fastapi / uvicorn / python-multipart 依赖
 - [ ] 补全 `_execute_excel_mode` 中各模式的具体调用链
 - [ ] 测试：上传 xlsx → 全套 → 下载 zip
-- [ ] 测试：上传 xlsx → 单个模式（fpa/cosmic/list/spec）→ 下载产物
+- [ ] 测试：上传 xlsx → 单个模式（fpa/cosmic/list/spec）→ 下载交付物
 - [ ] 测试：两个浏览器同时访问，日志不串
 - [ ] 测试：CLI 和 Web 同时使用，互不影响

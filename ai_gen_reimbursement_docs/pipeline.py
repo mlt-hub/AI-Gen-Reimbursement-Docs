@@ -74,7 +74,7 @@ def run_pipeline(
     Args:
         mode: "gen-all" | "gen-basedata" | "gen-fpa" | "gen-cosmic" | "gen-list" | "gen-spec"
         file_path: 输入 Excel 路径（功能清单）
-        output_dir: 产物输出目录（自动创建）
+        output_dir: 交付物输出目录（自动创建）
         api_key: Anthropic API Key
         model: 模型名
         base_url: API 端点

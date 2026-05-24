@@ -507,8 +507,8 @@ details .adv-inner {
 
     <div class="action-bar">
       <span class="info-text" id="action-hint"></span>
-      <button class="btn-action btn-open" id="btn-open" disabled onclick="openFolder()">打开产物目录</button>
-      <button class="btn-action btn-download" id="btn-download" disabled onclick="download()">下载产物 .zip</button>
+      <button class="btn-action btn-open" id="btn-open" disabled onclick="openFolder()">打开交付物目录</button>
+      <button class="btn-action btn-download" id="btn-download" disabled onclick="download()">下载交付物 .zip</button>
       <button class="btn-action btn-ai" id="btn-ai" disabled onclick="showAIInteractions()">AI 交互</button>
       <button class="btn-action btn-reset" id="btn-reset" style="display:none" onclick="resetUI()">新任务</button>
     </div>
@@ -652,7 +652,7 @@ async function startTask() {
     const data = await resp.json();
     currentSession = data.session_id;
     if (data.output_dir) {
-      document.getElementById('action-hint').textContent = '产物目录: ' + data.output_dir;
+      document.getElementById('action-hint').textContent = '交付物目录: ' + data.output_dir;
     }
     connectLogStream(currentSession);
   } catch (e) {
@@ -734,7 +734,7 @@ function onTaskDone() {
   document.getElementById('btn-reset').style.display = '';
 }
 
-// ── 打开产物目录 ──────────────────────────────────────────
+// ── 打开交付物目录 ──────────────────────────────────────────
 async function openFolder() {
   if (!currentSession) return;
   try {
@@ -744,7 +744,7 @@ async function openFolder() {
   }
 }
 
-// ── 下载产物 ──────────────────────────────────────────────
+// ── 下载交付物 ──────────────────────────────────────────────
 function download() {
   if (!currentSession) return;
   const a = document.createElement('a');

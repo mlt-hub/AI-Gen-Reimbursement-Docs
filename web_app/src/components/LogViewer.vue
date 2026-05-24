@@ -9,7 +9,7 @@
       </select>
     </div>
     <!-- 日志列表 -->
-    <div ref="logEl" class="flex-1 overflow-y-auto p-5 font-mono text-sm leading-6">
+    <div ref="logEl" class="flex-1 overflow-y-auto bg-gray-900 p-5 font-mono text-sm leading-6">
       <div v-if="logStore.entries.length === 0" class="flex items-center justify-center h-full text-gray-500 text-sm">
         选择操作模式并开始生成，实时日志将显示在此处
       </div>

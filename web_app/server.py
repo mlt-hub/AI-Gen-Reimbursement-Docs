@@ -25,9 +25,9 @@ session_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "session_id", default=None
 )
 session_queues: dict[str, queue.Queue] = {}
-session_outputs: dict[str, Path] = {}  # session_id → 产物目录（本机模式）
-session_zips: dict[str, Path] = {}  # session_id → zip 文件路径（服务模式）
-session_dirs: dict[str, Path] = {}  # session_id → 临时工作目录（服务模式）
+session_outputs: dict[str, Path] = {}  # session_id →交付物目录（本机模式）
+session_zips: dict[str, Path] = {}  # session_id → zip 文件路径（远程服务模式）
+session_dirs: dict[str, Path] = {}  # session_id → 临时工作目录（远程服务模式）
 
 
 class SessionHandler(logging.Handler):
@@ -388,7 +388,7 @@ async def api_run_local(
     return {"session_id": session_id, "output_dir": str(out)}
 
 
-# ── 服务模式 ──────────────────────────────────────────────
+# ── 远程服务模式 ──────────────────────────────────────────────
 
 
 @app.post("/api/run-upload")
@@ -406,7 +406,7 @@ async def api_run_upload(
     list_template: UploadFile | None = File(None),
     spec_template: UploadFile | None = File(None),
 ):
-    """服务模式：上传文件，产物打包 ZIP 下载。"""
+    """远程服务模式：上传文件，交付物打包 ZIP 下载。"""
     if mode not in MODE_INFO:
         raise HTTPException(400, f"未知模式: {mode}")
 
@@ -444,8 +444,8 @@ async def api_run_upload(
                 api_key, model, base_url, project_name,
                 max_tokens=max_tokens, clean=bool(clean),
             )
-            # 打包产物 ZIP
-            zip_path = work_dir / f"产物_{session_id}.zip"
+            # 打包交付物 ZIP
+            zip_path = work_dir / f"交付物_{session_id}.zip"
             shutil.make_archive(
                 str(zip_path.with_suffix("")), "zip", str(output_dir)
             )
@@ -494,21 +494,21 @@ async def log_stream(session: str):
     )
 
 
-# ── 产物操作 ──────────────────────────────────────────────
+# ── 交付物操作 ──────────────────────────────────────────────
 
 
 @app.get("/api/download/{session_id}")
 async def download(session_id: str):
-    """服务模式：下载产物 ZIP。"""
+    """远程服务模式：下载交付物 ZIP。"""
     zip_path = session_zips.get(session_id)
     if zip_path is None:
-        raise HTTPException(404, "产物不存在或会话已过期")
+        raise HTTPException(404, "交付物不存在或会话已过期")
     if not zip_path.exists():
-        raise HTTPException(404, "产物文件已被清理")
+        raise HTTPException(404, "交付物文件已被清理")
 
     return FileResponse(
         zip_path,
-        filename=f"产物_{datetime.now():%Y%m%d_%H%M%S}.zip",
+        filename=f"交付物_{datetime.now():%Y%m%d_%H%M%S}.zip",
         media_type="application/zip",
         background=_cleanup_after_download(session_id),
     )
@@ -516,12 +516,12 @@ async def download(session_id: str):
 
 @app.get("/api/open-folder")
 async def open_folder(session: str):
-    """本机模式：在资源管理器中打开产物目录。"""
+    """本机模式：在资源管理器中打开交付物目录。"""
     out_dir = session_outputs.get(session)
     if out_dir is None:
         raise HTTPException(404, "未知会话")
     if not out_dir.exists():
-        raise HTTPException(404, "产物目录不存在")
+        raise HTTPException(404, "交付物目录不存在")
     os.startfile(str(out_dir))
     return {"ok": True}
 

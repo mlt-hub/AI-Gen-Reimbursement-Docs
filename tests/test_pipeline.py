@@ -1,4 +1,4 @@
-"""run_pipeline() 集成测试 —— 端到端验证各模式产物生成。"""
+"""run_pipeline() 集成测试 —— 端到端验证各模式交付物生成。"""
 
 import os
 from pathlib import Path
@@ -146,7 +146,7 @@ class TestGenAll:
         result = run_pipeline(mode="gen-all", file_path=test_excel,
                              output_dir=output_dir, templates=TEMPLATES,
                              api_key="")
-        # 基础产物都应存在（FPA/List/Spec 不依赖 AI）
+        # 基础交付物都应存在（FPA/List/Spec 不依赖 AI）
         assert os.path.exists(result.fpa_xlsx)
         assert os.path.exists(result.require_xlsx)
         assert os.path.exists(result.spec_docx)

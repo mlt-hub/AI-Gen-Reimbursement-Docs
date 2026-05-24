@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 
-# 运行时日志和生成产物
+# 运行时日志和生成交付物
 log/
 products/
 data/outputs/
