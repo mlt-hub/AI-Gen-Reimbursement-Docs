@@ -308,6 +308,8 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='显示版本号')
     parser.add_argument('--test-sound', action='store_true',
                         help='测试提示音')
+    parser.add_argument('--log-level', type=str, default='',
+                        help='控制台日志级别（DEBUG/INFO/WARNING/ERROR），默认读取配置')
     parser.add_argument('--max-tokens', type=str, default='',
                         help='覆盖 AI max_tokens')
     parser.add_argument('--test-ai-gen-reliability-desc', action='store_true',
@@ -330,10 +332,14 @@ def main():
     )
     from ai_gen_reimbursement_docs.excel_source import project_root
 
-    init_global_logging()
+    from ai_gen_reimbursement_docs.config_utils import load_log_level
 
     parser = _build_parser()
     args = parser.parse_args()
+
+    log_level = args.log_level or load_log_level()
+    init_global_logging(level=log_level)
+
     if args.max_tokens:
         os.environ['AI_REIMBURSEMENT_MAX_TOKENS'] = args.max_tokens
     logger.debug(f"CLI args: {args}")

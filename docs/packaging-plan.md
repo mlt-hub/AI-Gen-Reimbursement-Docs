@@ -21,6 +21,18 @@
 
 不含自解压 exe。
 
+### winget 安装
+
+| 配置项 | 值 |
+|---|---|
+| 包名 | `mlt-hub.ard` |
+| 安装范围 | `user`（`%LOCALAPPDATA%\Programs\ard\`） |
+| 清单仓库 | [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) |
+| CI 工具 | `vedantmgoyal9/winget-releaser` |
+| 安装命令 | `winget install mlt-hub.ard` |
+
+CI 发布时自动向 winget-pkgs 提 PR（更新版本号 + 下载 URL），微软审核通过后用户即可通过 winget 安装。
+
 ## 3. 安装包行为（Inno Setup）
 
 | 配置项 | 值 |
@@ -58,12 +70,14 @@
 - 触发器：推 tag `v*.*.*` 或手动 `workflow_dispatch`
 - Runner：`windows-latest`
 - 流程：
-  1. 安装 PyInstaller + 依赖
-  2. PyInstaller `--onedir` 构建
-  3. `Copy-Item` 拷贝 `web_app/`、`data/`、`config/`
-  4. 压缩 zip
-  5. Inno Setup 命令行（`iscc.exe`）编译安装包
-  6. 发布到代码仓 + 发布仓 GitHub Releases
+  1. 安装 Node.js + Python + 依赖
+  2. 前端 `npm run build`
+  3. PyInstaller `--onedir` 构建
+  4. `Copy-Item` 拷贝 `web_app/`、`data/`、`config/`
+  5. 压缩 zip
+  6. Inno Setup 命令行（`iscc.exe`）编译安装包
+  7. 发布到代码仓 + 发布仓 GitHub Releases
+  8. `winget-releaser` 自动向 winget-pkgs 提 PR
 
 ## 9. 发布产物
 

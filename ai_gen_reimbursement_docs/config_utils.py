@@ -144,6 +144,13 @@ def _get_system_config_value(key: str, default):
         return default
 
 
+def load_log_level(default: str = "INFO") -> str:
+    """读取 system_config.yaml 中的 log_level。
+    返回 Python logging 级别名：DEBUG / INFO / WARNING / ERROR。
+    """
+    return _get_system_config_value('log_level', default).upper()
+
+
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
     CLI --max-tokens 通过环境变量 AI_REIMBURSEMENT_MAX_TOKENS 覆盖。

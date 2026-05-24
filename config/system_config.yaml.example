@@ -1,4 +1,7 @@
-# COSMIC 功能点拆分工具 — 通用配置示例
+# AI生成项目报账文档 — 系统配置
+
+# 日志级别（DEBUG / INFO / WARNING / ERROR），默认 INFO
+log_level: INFO
 
 # AI 每次调用的最大输出 token 数（支持 K/M 单位，如 384K）
 max_tokens: 6000

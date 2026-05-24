@@ -1,0 +1,17 @@
+name: winget 自动提 PR
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  winget:
+    runs-on: windows-latest
+    if: github.repository == 'mlt-hub/ai-gen-reimbursement-docs-release'
+    steps:
+      - name: 向 winget-pkgs 提交清单
+        uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: mlt-hub.ard
+          token: ${{ secrets.WINGET_TOKEN }}
+          installers-regex: 'ard-setup_v.*\.exe$'

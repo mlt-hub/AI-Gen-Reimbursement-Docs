@@ -46,8 +46,10 @@ class ReleaseFileHandler(logging.Handler):
             self.handleError(record)
 
 
-def init_global_logging():
-    """初始化全局日志：~/.ai-gen-reimbursement-docs/log/（控制台 + 总日志 + 运行日志）。"""
+def init_global_logging(level: str = "INFO"):
+    """初始化全局日志：~/.ai-gen-reimbursement-docs/log/（控制台 + 总日志 + 运行日志）。
+    level: DEBUG / INFO / WARNING / ERROR，控制台输出级别。文件始终 DEBUG。
+    """
     log_dir = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs', 'log')
     os.makedirs(log_dir, exist_ok=True)
 
@@ -55,6 +57,7 @@ def init_global_logging():
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     run_log = os.path.join(log_dir, f'global_run_{run_stamp}.log')
 
+    _lv = getattr(logging, level.upper(), logging.INFO)
     logger = logging.getLogger('ai_gen_reimbursement_docs')
     logger.setLevel(logging.DEBUG)
 
@@ -78,7 +81,7 @@ def init_global_logging():
     logger.addHandler(rh)
 
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
+    ch.setLevel(_lv)
     ch.setFormatter(logging.Formatter('%(message)s'))
     ch.addFilter(_ps)
     logger.addHandler(ch)

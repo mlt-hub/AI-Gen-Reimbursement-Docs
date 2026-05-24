@@ -150,6 +150,25 @@ async def is_local(request: Request):
     return {"local": host in ("127.0.0.1", "::1", "localhost")}
 
 
+@app.get("/api/log-level")
+async def get_log_level():
+    """返回当前日志级别。"""
+    from ai_gen_reimbursement_docs.config_utils import load_log_level
+    return {"level": load_log_level()}
+
+
+@app.post("/api/log-level")
+async def set_log_level(data: dict):
+    """运行时设置日志级别。"""
+    level = data.get("level", "INFO").strip().upper()
+    if level not in ("DEBUG", "INFO", "WARNING", "ERROR"):
+        raise HTTPException(400, f"无效的日志级别: {level}")
+    lv = getattr(logging, level, logging.INFO)
+    # 仅更新 SSE SessionHandler 级别（文件日志始终 DEBUG）
+    _handler.setLevel(lv)
+    return {"ok": True, "level": level}
+
+
 @app.get("/api/modes")
 async def get_modes():
     """返回操作模式列表，供前端动态渲染下拉框。"""
