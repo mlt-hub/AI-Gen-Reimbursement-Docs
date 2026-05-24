@@ -32,7 +32,7 @@ Home.vue
 │   ├── AdvancedOptions (API Key、模型、端点、MaxTokens、项目名、clean)
 │   └── TemplateUpload  (FPA/COSMIC/需求清单/需求说明书 自定义模板)
 ├── LogViewer         (SSE 实时日志流)
-├── ActionBar         (打开产物目录 / 下载 zip / AI 交互 / 新任务)
+├── ActionBar         (打开交付物目录 / 下载 zip / AI 交互 / 新任务)
 └── Toast             (通知提示)
 
 Config.vue
@@ -48,7 +48,7 @@ PromptDebug.vue
 
 | Store | 职责 |
 |---|---|
-| `useSessionStore` | sessionId、运行状态（idle/running/done/error）、产物目录 |
+| `useSessionStore` | sessionId、运行状态（idle/running/done/error）、交付物目录 |
 | `useLogStore` | 日志数组、追加日志、清空日志、SSE 连接管理 |
 | `useConfigStore` | 表单参数（mode、xlsxPath、outputDir、apiKey 等） |
 | `useAIStore` | AI 交互记录、合并日志 |

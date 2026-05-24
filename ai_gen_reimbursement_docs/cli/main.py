@@ -287,7 +287,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--gen-all', action='store_true',
                         help='全流程自动执行')
     parser.add_argument('--output-dir', default='',
-                        help='输出目录')
+                        help='交付物输出目录')
     parser.add_argument('--project-name', default='',
                         help='输出文件夹名称')
     parser.add_argument('--fpa-out-template', default='',
@@ -648,7 +648,7 @@ def main():
             target = os.path.join(output_root, safe)
             if os.path.exists(target):
                 shutil.rmtree(target)
-                logger.info(f"已删除输出目录: {target}")
+                logger.info(f"已删除交付物输出目录: {target}")
 
         mode_map = {
             'gen_all': 'gen-all', 'gen_basedata': 'gen-basedata',

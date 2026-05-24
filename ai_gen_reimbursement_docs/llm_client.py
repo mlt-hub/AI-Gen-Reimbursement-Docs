@@ -87,6 +87,11 @@ def call_llm(
             }
             if temperature is not None:
                 create_kwargs["temperature"] = temperature
+            try:
+                from web_app.server import check_cancelled as _cc
+                _cc()
+            except ImportError:
+                pass
             msg = client.messages.create(**create_kwargs)
             resp_text = _extract_text(msg.content)
             thinking_text = _extract_thinking(msg.content)
@@ -102,6 +107,9 @@ def call_llm(
             return resp_text
 
         except Exception as e:
+            from ai_gen_reimbursement_docs.exceptions import CancelledError
+            if isinstance(e, CancelledError):
+                raise
             last_error = e
             logger.warning("LLM 调用失败 [%s]（第 %d/%d 次）: %s", tag, attempt, _MAX_RETRIES, e)
             if attempt < _MAX_RETRIES:

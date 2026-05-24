@@ -43,6 +43,11 @@ export const useLogStore = defineStore('log', () => {
           useStepsStore().finishAll()
           return
         }
+        if (data.level === 'CANCELLED') {
+          append({ level: 'WARNING', msg: '── 任务已被用户中断 ──', time: '' })
+          session.setError()
+          return
+        }
         // 检测步骤事件
         const msg = data.msg || ''
         if (typeof msg === 'string' && msg.startsWith(STEP_MARKER)) {

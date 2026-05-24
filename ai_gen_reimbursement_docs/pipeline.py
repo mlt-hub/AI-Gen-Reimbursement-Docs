@@ -34,6 +34,15 @@ logger = logging.getLogger('ai_gen_reimbursement_docs.pipeline')
 _STEP_MARKER = ">>>STEP:"
 
 
+def _check_cancelled():
+    """Web UI 模式下检查是否被中断，CLI 模式跳过。"""
+    try:
+        from web_app.server import check_cancelled as _cc
+        _cc()
+    except ImportError:
+        pass
+
+
 def _step(key: str):
     """向前端发送步骤进度事件。key: basedata | fpa | spec | cosmic | list"""
     logger.info(f"{_STEP_MARKER}{key}")
@@ -84,11 +93,11 @@ def run_pipeline(
         cfp_total: 送审功能点数，None 则从 MD 文件自动读取
 
     Returns:
-        PipelineResult：各产物路径和统计值
+        PipelineResult：各交付物路径和统计值
     """
     # 校验
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"输入文件不存在: {file_path}")
+        raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
     if mode not in VALID_MODES:
         raise ValueError(f"未知模式: {mode}，支持: {', '.join(sorted(VALID_MODES))}")
 
@@ -130,7 +139,7 @@ def run_pipeline(
 
     result = PipelineResult()
 
-    # 产物文件路径（初始默认值，后续由 _resolve_output_filename 覆盖）
+    # 交付物文件路径（初始默认值，后续由 _resolve_output_filename 覆盖）
     _default_fpa = os.path.join(output_dir, 'FPA工作量评估.xlsx')
     _default_cosmic = os.path.join(doc_dir, '项目功能点拆分表.xlsx')
     _default_require = os.path.join(doc_dir, '项目需求清单.xlsx')
@@ -367,6 +376,7 @@ def _check_template(templates_dict: dict, key: str, name: str):
 def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
              fpa_sum_md, fpa_xlsx, templates_dict, api_key, model, base_url, result):
     """第1步：FPA 工作量评估。"""
+    _check_cancelled()
     _step("fpa")
     logger.info("第1步: 生成FPA工作量评估...")
     fpa_src = _check_template(templates_dict, 'fpa', 'FPA工作量评估')
@@ -396,6 +406,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                 doc_dir, cosmic_xlsx, templates_dict, api_key, model, base_url,
                 project_name, result, fpa_reduced=None):
     """第2步：COSMIC 功能点拆分表。"""
+    _check_cancelled()
     _step("cosmic")
     logger.info("第3步 生成项目功能点拆分表...")
 
@@ -434,6 +445,7 @@ def _generate_list(md_dir, tree_md, meta_md, fpa_sum_md,
               doc_dir, require_xlsx, templates_dict, result,
               fpa_reduced=None, cfp_total=None):
     """第3步：需求清单。fpa_reduced/cfp_total 为 None 时从 MD 文件读取默认值。"""
+    _check_cancelled()
     _step("list")
     logger.info("第4步 生成项目需求清单...")
     require_src = _check_template(templates_dict, 'list', '项目需求清单')
@@ -457,6 +469,7 @@ def _generate_list(md_dir, tree_md, meta_md, fpa_sum_md,
 def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled_md,
               doc_dir, spec_docx, templates_dict, api_key, model, base_url, result):
     """需求说明书（无固定顺序依赖）。"""
+    _check_cancelled()
     _step("spec")
     logger.info("第2步 生成项目需求说明书...")
     spec_src = _check_template(templates_dict, 'spec', '项目需求说明书')
@@ -521,6 +534,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     meta_md = meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
 
     # Step 1: FPA
+    _check_cancelled()
     _step("fpa")
     fpa_md = os.path.join(md_dir, 'gen-fpa-FPA-模板.md')
     fpa_filled_md = os.path.join(md_dir, 'gen-fpa-AI填充-FPA.md')
@@ -537,6 +551,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
                           else read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0)
 
     # Step 2: 需求说明书
+    _check_cancelled()
     _step("spec")
     logger.info("第2步：生成 项目需求说明书...")
     spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
@@ -568,6 +583,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     result.spec_docx = spec_docx
 
     # Step 3: COSMIC
+    _check_cancelled()
     _step("cosmic")
     logger.info("第3步：生成 项目功能点拆分表...")
     project = read_project_name(meta_md) or project_name
@@ -587,6 +603,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     result.cosmic_xlsx = cosmic_xlsx
 
     # Step 4: 需求清单
+    _check_cancelled()
     _step("list")
     logger.info("第4步：生成 项目需求清单...")
     _cfp = cfp_total if cfp_total is not None else (
@@ -663,7 +680,7 @@ def run_pipeline_simple(
 ) -> PipelineResult:
     """一站式管道入口，CLI / Web UI / 零参数 共享。
 
-    自动处理：配置回退、工单标题读取、输出目录创建、日志设置。
+    自动处理：配置回退、工单标题读取、交付物输出目录创建、日志设置。
     """
     from ai_gen_reimbursement_docs.config_utils import (
         load_api_key, load_base_url, load_model_name,
@@ -693,10 +710,10 @@ def run_pipeline_simple(
         else:
             out_dir = excel_dir
 
-    logger.info(f"输入文件: {os.path.basename(file_path)}")
+    logger.info(f"功能清单输入文件: {os.path.basename(file_path)}")
     if project_name:
         logger.info(f"项目名称: {project_name}")
-    logger.info(f"输出目录: {out_dir}")
+    logger.info(f"交付物输出目录: {out_dir}")
 
     return run_pipeline(
         mode=mode,

@@ -23,7 +23,7 @@ def test_excel():
 
 @pytest.fixture
 def output_dir(tmp_path):
-    """临时输出目录，测试后自动清理。"""
+    """临时交付物输出目录，测试后自动清理。"""
     d = tmp_path / "output"
     d.mkdir()
     return str(d)

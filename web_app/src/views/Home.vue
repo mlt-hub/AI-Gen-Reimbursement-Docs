@@ -105,7 +105,6 @@ async function startTask() {
   log.clear()
   session.reset()
   useStepsStore().reset()
-  session.start('pending...', '')
 
   try {
     const resp = await fetch(url, { method: 'POST', body })
@@ -117,6 +116,7 @@ async function startTask() {
     session.start(data.session_id, data.output_dir || '')
     log.connect()
   } catch (e: any) {
+    log.append({ level: 'ERROR', msg: e.message, time: '' })
     toast.show('error', e.message)
     session.setError()
   }

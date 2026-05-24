@@ -48,7 +48,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
     Args:
         excel_path: 功能清单.xlsx 路径
-        output_dir: 输出目录（空则取 excel 所在目录）
+        output_dir: 交付物输出目录（空则取 excel 所在目录）
 
     Returns:
         {"module_tree_md": 路径, "doc_meta_md": 路径}

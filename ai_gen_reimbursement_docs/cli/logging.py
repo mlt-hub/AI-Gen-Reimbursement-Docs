@@ -6,7 +6,7 @@ from datetime import datetime
 
 
 class PathShortener(logging.Filter):
-    """将日志中的绝对路径缩短为基于输出目录的相对路径。
+    """将日志中的绝对路径缩短为基于交付物输出目录的相对路径。
 
     环境变量 AI_REIMBURSEMENT_OUTPUT_DIR 指定输出根目录，
     日志中该前缀 + 分隔符会被替换为空，使路径更可读。

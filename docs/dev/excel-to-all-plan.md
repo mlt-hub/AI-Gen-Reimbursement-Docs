@@ -20,7 +20,7 @@ python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-
 python -m ai_gen_reimbursement_docs.main --from-excel "功能清单.xlsx" --gen-all
 ```
 
-可选 `--output-dir` 指定输出目录，默认输入文件所在目录。
+可选 `--output-dir` 指定交付物输出目录，默认功能清单输入文件所在目录。
 
 ### --gen-all 自动处理流程
 

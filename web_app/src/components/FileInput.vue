@@ -7,7 +7,7 @@
         placeholder="C:\...\功能清单.xlsx  或  C:\...\项目目录\"
         class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow" />
       <div class="mt-3">
-        <label for="output-dir" class="block text-sm font-medium text-gray-600 mb-1">输出目录（默认 xlsx 同级，目录模式为 目录/项目名/）</label>
+        <label for="output-dir" class="block text-sm font-medium text-gray-600 mb-1">交付物输出目录（默认 xlsx 同级，目录模式为 目录/项目名/）</label>
         <input id="output-dir" type="text" v-model="config.outputDir"
           placeholder="留空使用默认"
           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow" />

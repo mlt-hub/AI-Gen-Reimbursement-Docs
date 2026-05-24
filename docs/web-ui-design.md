@@ -65,7 +65,7 @@ ai_gen_reimbursement_docs/          # 现有项目，不动
 │                                                                           
 │  ┌─ 本机模式 ──────────────────────────────────────────────┐               
 │  │ POST /api/run-local                                      │              
-│  │ (xlsx路径+输出目录+参数)                                    │              
+│  │ (xlsx路径+交付物输出目录+参数)                                    │              
 │  │ ───────────────────────→  直接读本地 xlsx                   │              
 │  │                           asyncio.to_thread(run_pipeline)  │              
 │  │                           交付物写本地目录                     │              
@@ -131,7 +131,7 @@ ai_gen_reimbursement_docs/          # 现有项目，不动
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `xlsx_path` | string | 是 | 本地 .xlsx 路径 |
-| `output_dir` | string | 否 | 输出目录，默认 xlsx 同级 |
+| `output_dir` | string | 否 | 交付物输出目录，默认 xlsx 同级 |
 | `mode` | string | 是 | 操作模式 |
 | `api_key` | string | 否 | 同上 |
 | `model` | string | 否 | 同上 |
@@ -289,7 +289,7 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
 │  ── 本机：文件路径 ── │  │ 14:30:22  ── 完成 ──     │ │
 │  xlsx 路径            │  │                           │ │
 │  [C:\...\功能清单.xlsx]│  └──────────────────────────┘ │
-│  输出目录（默认同级）    │                               │
+│  交付物输出目录（默认同级）    │                               │
 │  [C:\...\output     ] │  状态: ● 运行中               │
 │                      │                               │
 │  [浏览...] [▶ 开始]   │  📂 [打开交付物目录]            │
@@ -312,7 +312,7 @@ parent.addHandler(handler)  # 追加，不替换原有 handler
 
 ```
 本机模式：
-1. 用户选择模式「本机」、操作模式、填写 xlsx 路径和输出目录
+1. 用户选择模式「本机」、操作模式、填写 xlsx 路径和交付物输出目录
 2. 点击 [开始生成]
 3. 前端 POST /api/run-local → 拿到 session_id
 4. 前端 GET /api/log-stream → SSE 实时日志

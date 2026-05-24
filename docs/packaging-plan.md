@@ -46,7 +46,7 @@ CI 发布时自动向 winget-pkgs 提 PR（更新版本号 + 下载 URL），微
 ## 4. Python 运行时
 
 - PyInstaller `--onedir`：exe + 依赖放在同一目录，启动无需解压
-- 附加文件（`web_app/`、`data/`、`config/`）通过构建脚本 `Copy-Item` 拷贝到输出目录
+- 附加文件（`web_app/`、`data/`、`config/`）通过构建脚本 `Copy-Item` 拷贝到输出的目录
 
 ## 5. 配置文件处理
 

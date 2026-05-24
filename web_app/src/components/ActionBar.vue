@@ -3,6 +3,11 @@
     <span class="text-sm text-gray-500 flex-1">
       <template v-if="session.outputDir">交付物目录: {{ session.outputDir }}</template>
     </span>
+    <button v-if="session.isRunning" @click="cancelTask"
+      class="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2">
+      <XCircleIcon class="w-4 h-4" />
+      中断执行
+    </button>
     <button v-if="config.workMode === 'local'" @click="openFolder"
       :disabled="!session.sessionId"
       class="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 disabled:bg-primary-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
@@ -16,7 +21,7 @@
       下载交付物 .zip
     </button>
     <button @click="showAI"
-      :disabled="!session.sessionId"
+      :disabled="!session.isDone"
       class="px-4 py-2 bg-purple-500 text-white text-sm font-medium rounded-lg hover:bg-purple-600 disabled:bg-purple-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
       <ChatBubbleLeftEllipsisIcon class="w-4 h-4" />
       AI 交互
@@ -29,14 +34,18 @@
 </template>
 
 <script setup lang="ts">
-import { FolderOpenIcon, ArrowDownTrayIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons/vue/24/outline'
+import { FolderOpenIcon, ArrowDownTrayIcon, ChatBubbleLeftEllipsisIcon, XCircleIcon } from '@heroicons/vue/24/outline'
 import { useSessionStore } from '@/stores/session'
 import { useConfigStore } from '@/stores/config'
 import { useLogStore } from '@/stores/log'
+import { useToastStore } from '@/stores/toast'
+
+const emit = defineEmits<{ ai: [] }>()
 
 const session = useSessionStore()
 const config = useConfigStore()
 const log = useLogStore()
+const toast = useToastStore()
 
 function openFolder() {
   if (!session.sessionId) return
@@ -50,7 +59,13 @@ function downloadZip() {
   a.click()
 }
 
-function showAI() { /* 由父组件处理 */ }
+function showAI() { emit('ai') }
+
+function cancelTask() {
+  if (!session.sessionId) return
+  fetch('/api/cancel/' + session.sessionId, { method: 'POST' }).catch(() => {})
+  toast.show('info', '正在中断当前任务...')
+}
 
 function resetTask() {
   session.reset()

@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from ai_gen_reimbursement_docs.exceptions import CancelledError
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +29,7 @@ session_queues: dict[str, queue.Queue] = {}
 session_outputs: dict[str, Path] = {}  # session_id →交付物目录（本机模式）
 session_zips: dict[str, Path] = {}  # session_id → zip 文件路径（远程服务模式）
 session_dirs: dict[str, Path] = {}  # session_id → 临时工作目录（远程服务模式）
+session_cancelled: dict[str, bool] = {}  # session_id → 是否已取消
 
 
 class SessionHandler(logging.Handler):
@@ -173,6 +175,21 @@ async def set_log_level(data: dict):
 async def get_modes():
     """返回操作模式列表，供前端动态渲染下拉框。"""
     return MODE_INFO
+
+
+@app.post("/api/cancel/{session_id}")
+async def cancel_session(session_id: str):
+    """中断指定 session 的执行。"""
+    session_cancelled[session_id] = True
+    return {"ok": True}
+
+
+def check_cancelled():
+    """检查当前 session 是否已被取消，若是则抛出 CancelledError。"""
+    from ai_gen_reimbursement_docs.exceptions import CancelledError
+    sid = session_var.get()
+    if sid and session_cancelled.get(sid):
+        raise CancelledError("任务已被用户中断")
 
 
 @app.get("/api/version")
@@ -378,10 +395,15 @@ async def api_run_local(
                 api_key, model, base_url, project_name,
                 max_tokens=max_tokens, clean=bool(clean),
             )
+        except CancelledError as e:
+            logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已中断: {e}")
+            log_queue.put(json.dumps({"level": "CANCELLED"}, ensure_ascii=False))
         except Exception as e:
             logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
         finally:
-            log_queue.put(json.dumps({"level": "DONE"}, ensure_ascii=False))
+            if not session_cancelled.get(session_id):
+                log_queue.put(json.dumps({"level": "DONE"}, ensure_ascii=False))
+            session_cancelled.pop(session_id, None)
             session_var.set(None)
 
     asyncio.create_task(asyncio.to_thread(run))
@@ -450,10 +472,15 @@ async def api_run_upload(
                 str(zip_path.with_suffix("")), "zip", str(output_dir)
             )
             session_zips[session_id] = zip_path
+        except CancelledError as e:
+            logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已中断: {e}")
+            log_queue.put(json.dumps({"level": "CANCELLED"}, ensure_ascii=False))
         except Exception as e:
             logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
         finally:
-            log_queue.put(json.dumps({"level": "DONE"}, ensure_ascii=False))
+            if not session_cancelled.get(session_id):
+                log_queue.put(json.dumps({"level": "DONE"}, ensure_ascii=False))
+            session_cancelled.pop(session_id, None)
             session_var.set(None)
 
     asyncio.create_task(asyncio.to_thread(run))

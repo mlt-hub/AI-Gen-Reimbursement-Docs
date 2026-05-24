@@ -27,7 +27,7 @@ class TestValidation:
     """参数校验"""
 
     def test_rejects_nonexistent_file(self, output_dir):
-        with pytest.raises(FileNotFoundError, match="输入文件不存在"):
+        with pytest.raises(FileNotFoundError, match="功能清单输入文件不存在"):
             run_pipeline(mode="gen-basedata", file_path="/no/such.xlsx",
                          output_dir=output_dir)
 

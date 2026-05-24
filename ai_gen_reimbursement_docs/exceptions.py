@@ -51,3 +51,8 @@ class ValidationError(CosmicToolError):
         super().__init__(message)
         self.expected = expected
         self.actual = actual
+
+
+class CancelledError(BaseException):
+    """任务已被用户中断。继承 BaseException 确保不被 except Exception 捕获。"""
+    pass
