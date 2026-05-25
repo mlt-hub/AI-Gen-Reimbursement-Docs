@@ -3,6 +3,7 @@
     <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
       <div class="flex items-center gap-4">
         <h1 class="text-lg font-semibold text-gray-800">AI 生成项目报账文档</h1>
+        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{{ modeLabel }}</span>
         <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">v{{ version }}</span>
       </div>
       <nav class="flex items-center gap-4 text-sm">
@@ -18,15 +19,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useConfigStore } from '@/stores/config'
 
+const config = useConfigStore()
 const version = ref('-')
+
+const modeLabel = computed(() => config.workMode === 'local' ? '本机模式' : '远程服务模式')
 
 onMounted(async () => {
   try {
-    const resp = await fetch('/api/version')
-    const data = await resp.json()
-    version.value = data.version
+    const [verResp, localResp] = await Promise.all([
+      fetch('/api/version'),
+      fetch('/api/is-local')
+    ])
+    const verData = await verResp.json()
+    version.value = verData.version
+    const localData = await localResp.json()
+    config.workMode = localData.local ? 'local' : 'remote'
   } catch {
     version.value = '-'
   }

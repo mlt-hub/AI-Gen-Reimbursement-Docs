@@ -451,7 +451,7 @@ def _summarize_cosmic_results(
         _reasons = []
         if max_ai_l3 > 0 and skip_ai_limit > 0:
             _reasons.append(
-                f"max_ai_l3_modules={max_ai_l3}（跳过 {skip_ai_limit} 个模块）"
+                f"l3_modules_ai__limit={max_ai_l3}（跳过 {skip_ai_limit} 个模块）"
             )
         if cosmic_proc_limit > 0 and skip_proc_limit > 0:
             _reasons.append(

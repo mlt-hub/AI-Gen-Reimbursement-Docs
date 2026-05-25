@@ -156,7 +156,12 @@ async function loadAICombined() {
   aiLoading.value = true
   try {
     const resp = await fetch('/api/ai-log/' + session.sessionId)
-    if (!resp.ok) throw new Error((await resp.json()).detail)
+    if (!resp.ok) {
+      const err = await resp.json()
+      aiCombinedLog.value = resp.status === 404 ? err.detail : '加载失败: ' + err.detail
+      aiLoading.value = false
+      return
+    }
     const data = await resp.json()
     aiCombinedLog.value = data.content || ''
   } catch (e: any) {

@@ -34,6 +34,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { FolderOpenIcon, ArrowDownTrayIcon, ChatBubbleLeftEllipsisIcon, XCircleIcon } from '@heroicons/vue/24/outline'
 import { useSessionStore } from '@/stores/session'
 import { useConfigStore } from '@/stores/config'
@@ -71,4 +72,14 @@ function resetTask() {
   session.reset()
   log.clear()
 }
+
+// ── 本机模式完成提示音 ──
+const lastNotifiedSession = ref('')
+
+watch(() => session.isDone, (done) => {
+  if (done && config.workMode === 'local' && session.sessionId && session.sessionId !== lastNotifiedSession.value) {
+    lastNotifiedSession.value = session.sessionId
+    fetch('/api/play-notify', { method: 'POST' }).catch(() => {})
+  }
+})
 </script>

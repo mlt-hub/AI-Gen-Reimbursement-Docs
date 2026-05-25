@@ -22,7 +22,7 @@ ard --from-excel 功能清单-录入模板.xlsx --gen-all
 
 ## 使用方式
 
-### Excel 功能清单 → 全套交付物
+### Excel 功能清单 → 全套报账文档
 
 从功能清单 Excel 生成 4 个交付物。
 

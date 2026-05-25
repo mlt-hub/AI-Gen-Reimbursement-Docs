@@ -167,7 +167,7 @@ def _read_l3_descriptions_from_excel(excel_path: str) -> list[str]:
 
     _s = load_sheet_names()
     wb = openpyxl.load_workbook(excel_path, data_only=True)
-    ws = wb[_s["func_content"]]
+    ws = wb[_s["func_list"]]
 
     descriptions: list[str] = []
     seen: set[str] = set()
@@ -192,7 +192,7 @@ def _read_meta_field_value(excel_path: str, field_key: str) -> tuple[str, str]:
 
     _s = load_sheet_names()
     wb = openpyxl.load_workbook(excel_path, data_only=True)
-    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "require_meta"]:
+    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "list_meta"]:
         sheet_name = _s.get(sheet_key, "")
         if not sheet_name or sheet_name not in wb.sheetnames:
             continue
@@ -215,7 +215,7 @@ def _read_meta_all_keys(excel_path: str) -> list[tuple[str, str]]:
     _s = load_sheet_names()
     wb = openpyxl.load_workbook(excel_path, data_only=True)
     keys: list[tuple[str, str]] = []
-    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "require_meta"]:
+    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "list_meta"]:
         sheet_name = _s.get(sheet_key, "")
         if not sheet_name or sheet_name not in wb.sheetnames:
             continue
@@ -235,7 +235,7 @@ def _read_l3_names_from_excel(excel_path: str) -> list[str]:
 
     _s = load_sheet_names()
     wb = openpyxl.load_workbook(excel_path, data_only=True)
-    ws = wb[_s["func_content"]]
+    ws = wb[_s["func_list"]]
 
     names: list[str] = []
     seen: set[str] = set()
@@ -269,23 +269,23 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--api-key', '-k', default='',
                         help='API Key（默认从 .env 读取）')
     parser.add_argument('--model', '-m', default='',
-                        help='模型名称（默认 deepseek-v4-flash）')
+                        help='模型名称（默认 deepseek-v4-flash[1m]）')
     parser.add_argument('--from-excel', default='',
                         help='功能清单.xlsx 路径')
     parser.add_argument('--from-dir', default='',
                         help='项目目录（含功能清单.xlsx），自动搜索并以此为输出根目录')
     parser.add_argument('--gen-fpa', action='store_true',
                         help='生成 FPA工作量评估.xlsx')
+    parser.add_argument('--gen-spec', action='store_true',
+                        help='生成 项目需求说明书.docx')
     parser.add_argument('--gen-cosmic', action='store_true',
                         help='生成 项目功能点拆分表.xlsx')
     parser.add_argument('--gen-list', action='store_true',
                         help='生成 项目需求清单.xlsx')
-    parser.add_argument('--gen-spec', action='store_true',
-                        help='生成 项目需求说明书.docx')
     parser.add_argument('--gen-basedata', action='store_true',
-                        help='生成 模块树.md + 元数据.md')
+                        help='生成 基础数据：模块树.md + 元数据.md')
     parser.add_argument('--gen-all', action='store_true',
-                        help='全流程自动执行')
+                        help='全流程自动执行，全套报账文档')
     parser.add_argument('--output-dir', default='',
                         help='交付物输出目录')
     parser.add_argument('--project-name', default='',
@@ -537,7 +537,7 @@ def main():
         wb = openpyxl.load_workbook(excel_path, data_only=True)
         # Sheet 1: 工单需求-元数据录入
         project_info: dict[str, str] = {}
-        for row in wb[_s["meta"]].iter_rows(min_row=2, values_only=True):
+        for row in wb[_s["work_order_meta"]].iter_rows(min_row=2, values_only=True):
             k = str(row[0]).strip() if row[0] else ""
             v = str(row[1]).strip() if len(row) > 1 and row[1] else ""
             if k:

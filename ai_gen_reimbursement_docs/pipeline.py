@@ -162,47 +162,47 @@ def run_pipeline(
 
     # ── 模式分发 ──
     if mode == "gen-all":
-        return _generate_all(
+        result = _generate_all(
             file_path, output_dir, doc_dir, md_dir,
             tree_md, meta_md_tpl, meta_filled_md, fpa_sum_md,
             fpa_xlsx, cosmic_xlsx, require_xlsx, spec_docx,
             templates_dict, api_key, model, base_url, project_name, result,
             fpa_reduced, cfp_total,
         )
-
-    if mode == "gen-basedata":
+    elif mode == "gen-basedata":
         result.tree_md = tree_md
         result.meta_md = _current_meta
-        return result
-
-    # 其余模式：基础数据已就绪，直接用 _current_meta
-    meta_md = _current_meta
-
-    if mode == "gen-fpa":
-        return _generate_fpa(
+    elif mode == "gen-fpa":
+        meta_md = _current_meta
+        result = _generate_fpa(
             file_path, output_dir, md_dir, tree_md, meta_md, fpa_sum_md, fpa_xlsx,
             templates_dict, api_key, model, base_url, result
         )
-
-    if mode == "gen-cosmic":
-        return _generate_cosmic(
+    elif mode == "gen-cosmic":
+        meta_md = _current_meta
+        result = _generate_cosmic(
             file_path, md_dir, tree_md, meta_md, fpa_sum_md, doc_dir, cosmic_xlsx,
             templates_dict, api_key, model, base_url, project_name, result,
             fpa_reduced,
         )
-
-    if mode == "gen-list":
-        return _generate_list(
+    elif mode == "gen-list":
+        meta_md = _current_meta
+        result = _generate_list(
             md_dir, tree_md, meta_md, fpa_sum_md, doc_dir, require_xlsx,
             templates_dict, result, fpa_reduced, cfp_total,
         )
-
-    if mode == "gen-spec":
-        return _generate_spec(
+    elif mode == "gen-spec":
+        meta_md = _current_meta
+        result = _generate_spec(
             file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled_md,
             doc_dir, spec_docx, templates_dict, api_key, model, base_url, result
         )
 
+    try:
+        from ai_gen_reimbursement_docs.cli.logging import write_combined_ai_log
+        write_combined_ai_log(mode)
+    except Exception as e:
+        logger.warning("AI 对话日志生成失败: %s", e)
     return result
 
 
@@ -224,17 +224,17 @@ def _read_fpa_sum(fpa_sum_md_path: str) -> float:
 
 
 def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
-    """解析模板路径，优先级：CLI 参数 > 配置文件 > data/templates/ 默认。"""
+    """解析模板路径，优先级：CLI 参数/Web UI指定 > 配置文件"""
     from ai_gen_reimbursement_docs.excel_source import project_root
 
     cfg_templates = load_out_templates()
     templates = {}
 
     for key, config_name, default_filename in [
-        ('fpa',    'FPA工作量评估-模板',     'FPA工作量评估-输出模板.xlsx'),
-        ('cosmic', '项目功能点拆分表-模板',   '项目功能点拆分表-输出模板.xlsx'),
-        ('list',   '项目需求清单-模板',       '项目需求清单-输出模板.xlsx'),
-        ('spec',   '项目需求说明书-模板',     '项目需求说明书-输出模板.docx'),
+        ('fpa',    'fpa_out_template',     'FPA工作量评估-输出模板.xlsx'),
+        ('spec',   'spec_out_template',     '项目需求说明书-输出模板.docx'),
+        ('cosmic', 'cosmic_out_template',   '项目功能点拆分表-输出模板.xlsx'),
+        ('list',   'list_out_template',       '项目需求清单-输出模板.xlsx'),
     ]:
         # 1. CLI 参数（最高优先级）
         if cli_templates and key in cli_templates and cli_templates[key]:
@@ -251,12 +251,6 @@ def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
             if os.path.exists(cfg_path):
                 templates[key] = cfg_path
                 continue
-
-        # 3. 默认 data/out_templates/
-        default = os.path.join(project_root(), 'data', 'out_templates',
-                               default_filename)
-        if os.path.exists(default):
-            templates[key] = default
 
     # 检查缺失的模板，给出明确提示
     missing = [k for k in ['fpa', 'cosmic', 'list', 'spec'] if not templates.get(k)]
@@ -648,7 +642,7 @@ def _try_read_project_name(excel_path: str) -> str:
     from ai_gen_reimbursement_docs.config_utils import load_sheet_names
 
     sheets = load_sheet_names()
-    meta_sheet = sheets.get("meta", "1、工单需求-元数据录入")
+    meta_sheet = sheets.get("work_order_meta", "1、工单需求-元数据录入")
     try:
         wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
         if meta_sheet not in wb.sheetnames:

@@ -80,18 +80,18 @@ _log.info("[Web UI] AI生成项目报账文档 v%s（FastAPI 服务启动）",
           __import__('tomllib').load(open(BASE_DIR / 'pyproject.toml', 'rb'))['project']['version'])
 
 MODE_INFO: dict[str, dict[str, str]] = {
-    "from-excel-gen-all": {"label": "gen-all → 全套交付物", "desc": "生成所有文档"},
+    "from-excel-gen-all": {"label": "gen-all → 全套报账文档", "desc": "生成全套报账文档"},
     "from-excel-gen-basedata": {
         "label": "gen-basedata → 基础数据：模块树+元数据",
         "desc": "仅解析 功能清单Excel 生成中间 MD",
     },
-    "from-excel-gen-fpa": {"label": "gen-fpa → FPA工作量评估", "desc": "生成 FPA工作量评估.xlsx"},
-    "from-excel-gen-spec": {"label": "gen-spec → 项目需求说明书", "desc": "生成 项目需求说明书.docx"},
+    "from-excel-gen-fpa": {"label": "gen-fpa → FPA工作量评估", "desc": "生成FPA工作量评估.xlsx"},
+    "from-excel-gen-spec": {"label": "gen-spec → 项目需求说明书", "desc": "生成项目需求说明书.docx"},
     "from-excel-gen-cosmic": {
         "label": "gen-cosmic → 项目功能点拆分表",
-        "desc": "生成 项目功能点拆分表.xlsx",
+        "desc": "生成项目功能点拆分表.xlsx",
     },
-    "from-excel-gen-list": {"label": "gen-list → 项目需求清单", "desc": "生成 项目需求清单.xlsx"},
+    "from-excel-gen-list": {"label": "gen-list → 项目需求清单", "desc": "生成项目需求清单.xlsx"},
     
 }
 
@@ -105,13 +105,10 @@ _MODE_MAP: dict[str, str] = {
 }
 
 def _spa_index():
-    """SPA index.html 回退：Vite 构建产物优先，开发时回退旧 static/。"""
+    """SPA 入口：返回 Vite 构建产物。"""
     dist_index = Path(__file__).parent / "static" / "dist" / "index.html"
     if dist_index.exists():
         return HTMLResponse(dist_index.read_text(encoding="utf-8"))
-    old_index = Path(__file__).parent / "static" / "index.html"
-    if old_index.exists():
-        return HTMLResponse(old_index.read_text(encoding="utf-8"))
     return HTMLResponse("<html><body>前端未构建，请运行 npm run dev 或 npm run build</body></html>")
 
 
@@ -119,7 +116,7 @@ def _spa_index():
 
 app = FastAPI(title="AI生成项目报账文档")
 
-# 静态文件：生产环境优先用 dist/（Vite 构建），开发环境回退 static/
+# 静态文件：Vite 构建产物
 _dist_dir = Path(__file__).parent / "static" / "dist"
 if _dist_dir.exists():
     app.mount("/static/dist", StaticFiles(directory=str(_dist_dir)), name="static_dist")
@@ -317,6 +314,17 @@ async def test_prompt(data: dict):
 
 
 # ── 本机模式 ──────────────────────────────────────────────
+
+
+@app.post("/api/play-notify")
+async def play_notify(request: Request):
+    """播放完成提示音（仅本机模式生效）。"""
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(403, "仅本机模式支持提示音")
+    from ai_gen_reimbursement_docs.cli.notify import play_notify_sound
+    play_notify_sound()
+    return {"ok": True}
 
 
 @app.post("/api/run-local")
@@ -645,10 +653,10 @@ async def _save_custom_templates_into(
 ):
     """将自定义模板保存到指定目录。"""
     for tpl_file, tpl_name in [
-        (fpa_template, "FPA工作量评估-模板.xlsx"),
-        (cosmic_template, "项目功能点拆分表-模板.xlsx"),
-        (list_template, "项目需求清单-模板.xlsx"),
-        (spec_template, "项目需求说明书-模板.docx"),
+        (fpa_template, "FPA工作量评估-输出模板.xlsx"),
+        (cosmic_template, "项目功能点拆分表-输出模板.xlsx"),
+        (list_template, "项目需求清单-输出模板.xlsx"),
+        (spec_template, "项目需求说明书-输出模板.docx"),
     ]:
         if tpl_file is not None and tpl_file.filename:
             tpl_content = await tpl_file.read()
@@ -774,7 +782,7 @@ async def test_reliability_desc(xlsx_path: str = Form("")):
 
     _s = load_sheet_names()
     wb = openpyxl.load_workbook(excel_path, data_only=True)
-    ws = wb[_s["func_content"]]
+    ws = wb[_s["func_list"]]
     descriptions: list[str] = []
     seen: set[str] = set()
     prev = ""
@@ -833,7 +841,7 @@ async def test_metadata(xlsx_path: str = Form(""), field_key: str = Form("")):
     wb = openpyxl.load_workbook(excel_path, data_only=True)
 
     raw_value = ""
-    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "require_meta"]:
+    for sheet_key in ["meta", "fpa_meta", "spec_meta", "cosmic_meta", "list_meta"]:
         sn = _s.get(sheet_key, "")
         if not sn or sn not in wb.sheetnames:
             continue
@@ -857,7 +865,7 @@ async def test_metadata(xlsx_path: str = Form(""), field_key: str = Form("")):
 
     wb = openpyxl.load_workbook(excel_path, data_only=True)
     project_info: dict[str, str] = {}
-    for row in wb[_s["meta"]].iter_rows(min_row=2, values_only=True):
+    for row in wb[_s["work_order_meta"]].iter_rows(min_row=2, values_only=True):
         k2 = str(row[0]).strip() if row[0] else ""
         v2 = str(row[1]).strip() if len(row) > 1 and row[1] else ""
         if k2:

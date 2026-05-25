@@ -192,12 +192,12 @@ def load_max_tokens(default: int = 2000) -> int:
 
 
 def load_flow_max_ai(flow_name: str) -> int:
-    """读取流程对应的 AI 限制数。优先走专有参数，fallback 到 max_ai_l3_modules。
+    """读取流程对应的 AI 限制数。优先走专有参数，fallback 到 l3_modules_ai__limit。
 
     Args:
         flow_name: 'gen_fpa', 'gen_spec', 'gen_cosmic'
     """
-    key = f"{flow_name}_max_ai_l3_modules"
+    key = f"{flow_name}_l3_modules_ai__limit"
     yaml_path = config_dir() / "system_config.yaml"
     if yaml_path.exists():
         try:
@@ -208,7 +208,7 @@ def load_flow_max_ai(flow_name: str) -> int:
             val = cfg.get(key, 0)
             if val and int(val) > 0:
                 return int(val)
-            common = cfg.get('max_ai_l3_modules', 0)
+            common = cfg.get('l3_modules_ai__limit', 0)
             if common and int(common) > 0:
                 return int(common)
         except Exception:
@@ -230,7 +230,7 @@ def load_out_templates() -> dict[str, str]:
     """读取 system_config.yaml 中 out_templates 配置。
 
     Returns:
-        {'FPA工作量评估-模板': 'data/out_templates/...', ...}
+        {'fpa_out_template': 'data/out_templates/...', ...}
         未配置时返回空 dict。
     """
     yaml_path = config_dir() / "system_config.yaml"
@@ -247,9 +247,9 @@ def load_out_templates() -> dict[str, str]:
     return {}
 
 
-def load_max_ai_l3_modules(default: int = 0) -> int:
-    """读取 max_ai_l3_modules，0=不限制。"""
-    return _get_system_config_value('max_ai_l3_modules', default)
+def load_l3_modules_ai__limit(default: int = 0) -> int:
+    """读取 l3_modules_ai__limit，0=不限制。"""
+    return _get_system_config_value('l3_modules_ai__limit', default)
 
 
 def load_spec_remind_update_toc() -> bool:

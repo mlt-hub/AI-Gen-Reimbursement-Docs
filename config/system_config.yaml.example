@@ -1,58 +1,88 @@
 # AI生成项目报账文档 — 系统配置
 
-# 日志级别（DEBUG / INFO / WARNING / ERROR），默认 INFO
-log_level: INFO
+# 根据需要设置 开始
 
-# AI 每次调用的最大输出 token 数（支持 K/M 单位，如 384K）
-max_tokens: 6000
-
-# 是否重新生成各阶段文件（false=有文件则跳过，true=总是重新生成）
-# 只对前 N 个 L3 模块调用 AI，超过的不走 AI（0=不限制）
-# 限制 AI 批处理数量，超过的不走 AI（0=不限制，对各流程各自生效）
-# 只对前 N 个 L3 模块调用 AI（保留兼容，优先使用 max_ai_items）
-max_ai_l3_modules: 0
-
-# FPA 核减后的工作量是否直接用 FPA 工作量的值（false=由用户输入确认）
-fpa_reduced_use_workload: false
-
-# 完成后是否播放提示音（默认 false）
+# AI生成文档完成后，是否播放提示音（默认false）
+# 需要声音提示，可设置为true
+# 注：用Web UI的远程服务模式时，此参数失效
 notify_sound: false
 
-# COSMIC 拆分表是否标记数据异常警告（默认 true）
-cosmic_warn_marker: true
+# 项目功能点拆分表，是否在输出Excel中标记数据异常警告（默认false）
+cosmic_warn_marker: false
 
-# 项目需求说明书文件名是否添加「【提醒】请手动更新整个目录」前缀（默认 true）
+# 项目需求说明书的目录，是否用Word COM自动更新（需安装Microsoft Word，默认true）
+# 如没安装Microsoft Word，通常设置为false，因为设置为true，也不会自动更新目录
+spec_auto_update_toc: true
+
+# 项目需求说明书的目录，如果没有用Word COM自动更新或用Word COM自动更新失败，
+# 文件名前是否添加提醒前缀：“【提醒】请手动更新整个目录”，（默认true）
+# 如没安装Microsoft Word，通常设置为true，加提醒
 spec_remind_update_toc: true
 
-# 是否用 Word COM 自动更新项目需求说明书的目录（需安装 Microsoft Word，默认 false）
-spec_auto_update_toc: false
+# 日志级别（DEBUG/INFO/WARNING/ERROR），默认INFO
+log_level: INFO
 
-# FPA AI 只处理前 N 个功能过程（0=不限制）
+# AI每次调用的最大输出token数（支持K/M单位，如384K，默认6000）
+# 如果AI response数据被截断，增大max_tokens
+max_tokens: 6000
+
+# 根据需要设置 结束
+
+
+# debug设置 开始
+
+# 以下在debug的时候，常用
+
+# AI调用费时费token
+# 限制AI批处理数量，超过N的不调用AI（0=不限制）
+# 比如限制AI处理前3个，快速验证结果，节省token
+
+# 只对前N个三级模块调用AI（默认0）
+l3_modules_ai__limit: 0
+
+# 只对前N个功能过程调用FPA AI（默认0）
 gen_fpa_ai_limit: 0
 
-# COSMIC AI 只处理前 N 个功能过程（0=不限制）
+# 只对前N个功能过程调用COSMIC AI（默认0）
 gen_cosmic_ai_limit: 0
 
-# spec AI 只完善前 N 个功能过程描述（0=不限制）
+# 只对前N个功能过程调用SPEC AI（默认0）
 gen_spec_ai_limit: 0
 
-# 是否对文档元数据的 #AI生成# 标记走 AI 填充（false=保留原文 #AI生成# 标记）
+# 是否对文档元数据的“#AI生成#”标记调用AI填充
+# false=保留 #AI生成# 原文，不调用AI，（默认true）
+# 在debug时，可以设置为false，快速验证，节省token
 enable_ai_fill_meta: true
 
-# 功能清单-录入模板.xlsx 的 Sheet 名称
+# FPA核减后的工作量，是否直接用FPA工作量的值
+# false=由用户输入确认，默认false
+# true=直接用FPA工作量的值
+# 在debug时，可以设置为true，减小交互
+fpa_reduced_use_workload: false
+
+# debug设置 结束
+
+
+# 保持不变 开始
+
+# 以下基本不用改动
+
+# 功能清单-录入模板.xlsx的Sheet名称映射
 sheets:
-  meta: "1、工单需求-元数据录入"
-  func_content: "2、功能清单-内容录入"
+  work_order_meta: "1、工单需求-元数据录入"
+  func_list: "2、功能清单-内容录入"
   fpa_meta: "3、FPA工作量评估-元数据录入"
   spec_meta: "4、项目需求说明书-元数据录入"
-  cosmic_meta: "6、项目功能点拆分表-元数据录入"
-  require_meta: "7、项目需求清单-元数据录入"
-  template_config: "8、各文档-模板路径录入"
+  cosmic_meta: "5、项目功能点拆分表-元数据录入"
+  list_meta: "6、项目需求清单-元数据录入"
+  stats_meta: "7、测试-元数据自动统计"
 
-# 输出文档模板路径（优先级：CLI参数 > 此配置 > data/templates/ 默认目录）
+# 输出文档使用的模板路径（优先级：CLI参数/Web UI指定 > 此配置）
 # 相对路径基于项目根目录，也支持绝对路径
 out_templates:
-  FPA工作量评估-模板: data/out_templates/FPA工作量评估-输出模板.xlsx
-  项目需求说明书-模板: data/out_templates/项目需求说明书-输出模板.docx
-  项目功能点拆分表-模板: data/out_templates/项目功能点拆分表-输出模板.xlsx
-  项目需求清单-模板: data/out_templates/项目需求清单-输出模板.xlsx
+  fpa_out_template: data/out_templates/FPA工作量评估-输出模板.xlsx
+  spec_out_template: data/out_templates/项目需求说明书-输出模板.docx
+  cosmic_out_template: data/out_templates/项目功能点拆分表-输出模板.xlsx
+  list_out_template: data/out_templates/项目需求清单-输出模板.xlsx
+
+# 保持不变 结束

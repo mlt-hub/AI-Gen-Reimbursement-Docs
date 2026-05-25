@@ -71,11 +71,11 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
     # ========== 解析各个 sheet ==========
 
     # 1、工单需求-元数据录入
-    ws1 = wb[_s["meta"]]
+    ws1 = wb[_s["work_order_meta"]]
     project_info = _key_value_sheet(ws1)
 
     # 2、功能清单-内容录入 — 模块树 + 功能过程
-    ws2 = wb[_s["func_content"]]
+    ws2 = wb[_s["func_list"]]
     func_rows = _resolve_inherited_rows(ws2)
 
     # 3、FPA工作量评估-元数据录入
@@ -91,8 +91,8 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
     cosmic_meta = _key_value_sheet(ws6)
 
     # 7、项目需求清单-元数据录入
-    ws7 = wb[_s["require_meta"]]
-    require_meta = _key_value_sheet(ws7)
+    ws7 = wb[_s["list_meta"]]
+    list_meta = _key_value_sheet(ws7)
 
     wb.close()
 
@@ -104,16 +104,16 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
             f"无法以 data_only 模式读取功能清单，文件可能已损坏: {excel_path}\n"
             f"内部错误: {e}"
         ) from e
-    for row in wb_val[_s["require_meta"]].iter_rows(min_row=2, values_only=True):
+    for row in wb_val[_s["list_meta"]].iter_rows(min_row=2, values_only=True):
         k, v = row[0], row[1]
         if k and str(v).strip():
             wk = str(k).strip()
             wv = str(v).strip()
-            if wk in require_meta and require_meta[wk].startswith('='):
-                require_meta[wk] = wv
+            if wk in list_meta and list_meta[wk].startswith('='):
+                list_meta[wk] = wv
     wb_val.close()
 
-    # 9、测试元数据自动统计（从解析结果计算唯一值，替代 COUNTA 公式）
+    # 统计元数据自动统计（从解析结果计算唯一值，替代 COUNTA 公式）
     stats_meta = {
         "入口（个数）": str(len({r[0] for r in func_rows if r[0]})),
         "一级模块（个数）": str(len({r[1] for r in func_rows if r[1]})),
@@ -149,12 +149,12 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
         # 按 sheet 分组写入
         sections = [
-            (_s["meta"], project_info),
+            (_s["work_order_meta"], project_info),
             (_s["fpa_meta"], fpa_meta),
             (_s["spec_meta"], docx_meta),
             (_s["cosmic_meta"], cosmic_meta),
-            (_s["require_meta"], require_meta),
-            ("9、测试元数据自动统计", stats_meta),
+            (_s["list_meta"], list_meta),
+            (_s["stats_meta"], stats_meta),
         ]
 
         for sheet_name, kv in sections:
@@ -176,27 +176,6 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
     logger.info(f"文档元数据已生成: {md_meta_path}")
 
     return {"module_tree_md": md_tree_path, "doc_meta_md": md_meta_path}
-
-
-def read_template_config(excel_path: str) -> dict[str, str]:
-    """读取 功能清单-录入模板.xlsx → sheet 8，返回模板名→路径的映射。"""
-    _s = load_sheet_names()
-    result: dict[str, str] = {}
-    try:
-        wb = openpyxl.load_workbook(excel_path, data_only=True)
-        if _s["template_config"] in wb.sheetnames:
-            ws = wb[_s["template_config"]]
-            for row in ws.iter_rows(min_row=2, max_row=ws.max_row,
-                                    min_col=1, max_col=2, values_only=True):
-                name, path = row
-                if name:
-                    val = str(path).strip() if path else ""
-                    if val:
-                        result[str(name).strip()] = val.replace('/', os.sep).replace('\\', os.sep)
-        wb.close()
-    except Exception as e:
-        logger.warning(f"读取模板配置失败: {e}")
-    return result
 
 
 def read_fpa_xlsx_sum(fpa_xlsx_path: str) -> float:
@@ -224,12 +203,14 @@ def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
     """验证gen-basedata-功能清单-模块树.md 的统计信息与gen-basedata-录入文档元数据-模板.md 中的期望值一致。
 
     读取模块树 MD 表格，统计入口/L1/L2/L3/功能过程数，
-    与文档元数据中 ## 9、测试元数据自动统计 进行对比。
+    与文档元数据中 stats_meta 段进行对比。
 
     Returns:
         True 全部通过, False 有差异
     """
     from ai_gen_reimbursement_docs.md_table import parse_md_table_row
+    from ai_gen_reimbursement_docs.config_utils import load_sheet_names
+    _stats_section = load_sheet_names().get("stats_meta", "9、测试元数据自动统计")
 
     # 从模块树 MD 统计
     entries: set[str] = set()
@@ -274,7 +255,7 @@ def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
     with open(meta_md_path, encoding='utf-8') as f:
         for line in f:
             line = line.rstrip()
-            if line.startswith("## 9、测试元数据自动统计"):
+            if line.startswith(f"## {_stats_section}"):
                 in_stats = True
                 continue
             if in_stats:
@@ -290,6 +271,10 @@ def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
                             pass
 
     # 对比输出
+    if not expected:
+        logger.info("═══ 模块树统计验证: 跳过（元数据中未找到 %s 段） ═══", _stats_section)
+        return True
+
     all_ok = True
     logger.info("═══ 模块树统计验证 ═══")
     for key in ["入口（个数）", "一级模块（个数）", "二级模块（个数）",
@@ -583,16 +568,13 @@ def build_modules_from_tree_md(md_path: str) -> list:
     return modules
 
 
-# 内置默认 Sheet 名（用户未配置时回退使用）
-_DEFAULT_FUNC_CONTENT_SHEET = "2、功能清单-内容录入"
-
 
 def is_valid_input_xlsx(xlsx_path: str) -> bool:
     """检查 xlsx 是否为符合规范的功能清单录入文档（至少包含核心功能清单 Sheet）。"""
     import openpyxl
 
     sheets = load_sheet_names()
-    func_sheet = sheets.get("func_content", "") or _DEFAULT_FUNC_CONTENT_SHEET
+    func_sheet = sheets.get("func_list", "")
 
     try:
         wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)

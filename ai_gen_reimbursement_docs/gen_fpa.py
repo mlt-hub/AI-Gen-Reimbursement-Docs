@@ -238,7 +238,7 @@ def _ai_fill_fpa(
     if _filled_count == 0 and total > 0:
         _reasons = []
         if _max_ai > 0 and _skip_ai_limit > 0:
-            _reasons.append(f"max_ai_l3_modules={_max_ai}（跳过 {_skip_ai_limit} 行）")
+            _reasons.append(f"l3_modules_ai__limit={_max_ai}（跳过 {_skip_ai_limit} 行）")
         if _proc_limit > 0 and _skip_proc_limit > 0:
             _reasons.append(f"gen_fpa_ai_limit={_proc_limit}（跳过 {_skip_proc_limit} 行）")
         if _reasons:

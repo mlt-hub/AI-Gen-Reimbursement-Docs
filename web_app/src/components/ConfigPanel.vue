@@ -10,7 +10,6 @@
       <p class="text-xs text-gray-400 mt-1">{{ modes[config.pipelineMode]?.desc }}</p>
     </div>
 
-    <ModeSelector />
     <FileInput />
 
     <div class="space-y-3">
@@ -37,7 +36,6 @@
 import { computed } from 'vue'
 import { useConfigStore } from '@/stores/config'
 import { useSessionStore } from '@/stores/session'
-import ModeSelector from './ModeSelector.vue'
 import FileInput from './FileInput.vue'
 import AdvancedOptions from './AdvancedOptions.vue'
 import TemplateUpload from './TemplateUpload.vue'
