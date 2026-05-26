@@ -322,7 +322,6 @@ def ai_fill_fpa_md(
     base_url: str = "",
 ) -> str:
     """读取 FPA 模板 MD，AI 填充 F/G 列，写回 MD。"""
-    logger.info("第1.3步：AI 填充 FPA 数据...")
     logger.debug(f"MODEL: {model}  BASE URL: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
 
     judgement_rules: list[str] = []

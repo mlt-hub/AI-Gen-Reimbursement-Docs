@@ -59,11 +59,8 @@ def generate_list_xlsx_from_md(
     ws1.cell(3, 8, meta.get("项目信息概览-需求负责人", ""))
     ws1.cell(3, 9, meta.get("项目信息概览-需求负责人联系方式", ""))
 
-    if fpa_reduced > 0:
-        ws1.cell(3, 10, fpa_reduced)
-
-    if cfp_total > 0:
-        ws1.cell(3, 11, cfp_total)
+    ws1.cell(3, 10, fpa_reduced)
+    ws1.cell(3, 11, cfp_total)
 
     # ====== Sheet 2: 功能清单 ======
     ws2 = wb['功能清单']
@@ -107,10 +104,10 @@ def generate_list_xlsx_from_md(
             for col_idx, key in REQ_COL_KEY_MAP.items():
                 ws2.cell(row_idx, col_idx, _req_data.get(key, ""))
             ws2.cell(row_idx, REQ_COL_PROJECT).alignment = _center_wrap
-            if fpa_reduced > 0:
-                ws2.cell(row_idx, REQ_COL_WORKLOAD, fpa_reduced)
-            if cfp_total > 0:
-                ws2.cell(row_idx, REQ_COL_CFP, cfp_total)
+
+            ws2.cell(row_idx, REQ_COL_WORKLOAD, fpa_reduced)
+            ws2.cell(row_idx, REQ_COL_CFP, cfp_total)
+            
             data_rows_data.append({
                 "row": row_idx,
                 "project_name": project_name,

@@ -459,7 +459,6 @@ def _generate_list(md_dir, tree_md, meta_md, fpa_sum_md,
     generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
                                cfp_total=cfp_total, fpa_reduced=fpa_reduced)
     result.require_xlsx = require_xlsx
-    logger.info(f"项目需求清单已生成: {require_xlsx}")
     return result
 
 
