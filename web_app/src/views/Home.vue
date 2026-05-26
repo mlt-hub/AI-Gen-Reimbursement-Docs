@@ -12,6 +12,31 @@
       <ActionBar @ai="openAIModal" @reset="resetTask" />
     </div>
 
+    <!-- 送审工作量输入弹窗 -->
+    <Teleport to="body">
+      <div v-if="session.inputPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div class="bg-white rounded-xl shadow-2xl w-[420px] p-6">
+          <h3 class="text-lg font-semibold mb-2">送审工作量确认</h3>
+          <p class="text-sm text-gray-500 mb-4">FPA 工作量已生成，请输入送审工作量（人/天），或直接确认使用默认值。</p>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">送审工作量（人/天）</label>
+            <input
+              v-model="fpaInputValue"
+              type="number"
+              step="0.1"
+              min="0"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              @keyup.enter="submitFpaInput"
+            />
+          </div>
+          <div class="flex justify-end gap-3">
+            <button @click="cancelTask" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">取消任务</button>
+            <button @click="submitFpaInput" class="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">确认继续</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- AI 交互弹窗 -->
     <Teleport to="body">
       <div v-if="aiModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="closeAIModal">
@@ -71,6 +96,40 @@ const session = useSessionStore()
 const config = useConfigStore()
 const log = useLogStore()
 const toast = useToastStore()
+
+// ── 送审工作量输入 ──
+const fpaInputValue = ref(0)
+
+import { watch } from 'vue'
+watch(() => session.inputPrompt, (p) => {
+  if (p) {
+    fpaInputValue.value = p.default
+  }
+})
+
+async function submitFpaInput() {
+  if (!session.sessionId) return
+  const val = parseFloat(String(fpaInputValue.value)) || 0
+  try {
+    await fetch('/api/continue/' + session.sessionId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'fpa_reduced', fpa_reduced: val }),
+    })
+  } catch {
+    toast.show('error', '提交失败')
+    return
+  }
+  session.inputPrompt = null
+}
+
+async function cancelTask() {
+  if (!session.sessionId) return
+  try {
+    await fetch('/api/cancel/' + session.sessionId, { method: 'POST' })
+  } catch { /* ignore */ }
+  session.inputPrompt = null
+}
 
 // ── 任务启动 ──
 async function startTask() {
@@ -171,7 +230,6 @@ async function loadAICombined() {
 }
 
 // React to tab changes
-import { watch } from 'vue'
 watch(aiTab, (t) => {
   if (t === 'list') loadAIList()
   else loadAICombined()

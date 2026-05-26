@@ -3,10 +3,17 @@ import { defineStore } from 'pinia'
 
 export type RunState = 'idle' | 'running' | 'done' | 'error'
 
+export interface InputPrompt {
+  field: string
+  default: number
+  msg: string
+}
+
 export const useSessionStore = defineStore('session', () => {
   const sessionId = ref<string | null>(null)
   const runState = ref<RunState>('idle')
   const outputDir = ref<string>('')
+  const inputPrompt = ref<InputPrompt | null>(null)
 
   const isRunning = computed(() => runState.value === 'running')
   const isDone = computed(() => runState.value === 'done')
@@ -15,21 +22,29 @@ export const useSessionStore = defineStore('session', () => {
     sessionId.value = sid
     outputDir.value = out
     runState.value = 'running'
+    inputPrompt.value = null
   }
 
   function finish() {
     runState.value = 'done'
+    inputPrompt.value = null
   }
 
   function setError() {
     runState.value = 'error'
+    inputPrompt.value = null
   }
 
   function reset() {
     sessionId.value = null
     outputDir.value = ''
     runState.value = 'idle'
+    inputPrompt.value = null
   }
 
-  return { sessionId, runState, outputDir, isRunning, isDone, start, finish, setError, reset }
+  function showInputPrompt(prompt: InputPrompt) {
+    inputPrompt.value = prompt
+  }
+
+  return { sessionId, runState, outputDir, inputPrompt, isRunning, isDone, start, finish, setError, reset, showInputPrompt }
 })

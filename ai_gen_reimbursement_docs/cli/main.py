@@ -123,16 +123,23 @@ def _run_pipeline_with_args(
 ) -> None:
     """执行管道并输出摘要（零参数模式复用）。"""
     from ai_gen_reimbursement_docs.cli.logging import setup_logging
+    from ai_gen_reimbursement_docs.cli.notify import play_notify_sound
+    from ai_gen_reimbursement_docs.exceptions import CosmicToolError
     from ai_gen_reimbursement_docs.pipeline import run_pipeline_simple
 
-    result = run_pipeline_simple(
-        mode='gen-all',
-        file_path=excel_path,
-        api_key=api_key,
-        model=model,
-        base_url=base_url,
-        project_name=project_name,
-    )
+    try:
+        result = run_pipeline_simple(
+            mode='gen-all',
+            file_path=excel_path,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            project_name=project_name,
+        )
+    except CosmicToolError as e:
+        print(f"\n  错误: {e}", file=sys.stderr)
+        play_notify_sound()
+        sys.exit(1)
 
     _section("完成")
     _summary_files = [
@@ -348,7 +355,7 @@ def main():
     )
     from ai_gen_reimbursement_docs.cli.notify import play_notify_sound
     from ai_gen_reimbursement_docs.cli.interactive import (
-        resolve_fpa_sum, prompt_list_values,
+        prompt_list_values,
     )
     from ai_gen_reimbursement_docs.excel_source import project_root
 
@@ -688,31 +695,32 @@ def main():
             if val and os.path.exists(val):
                 templates[key] = val
 
-        # 交互式参数：在调 pipeline 之前提示用户
+        # 交互式参数：在调 pipeline 之前提示用户（gen-cosmic/gen-all 由 pipeline 内部处理）
         _fpa_reduced = None
         _cfp_total = None
-        if mode in ('gen-cosmic', 'gen-all'):
-            from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
-            if not load_fpa_reduced_use_workload():
-                _fpa_reduced = resolve_fpa_sum(
-                    os.path.join(out_dir, 'md', 'gen-fpa-FPA工作量-总和.md'))
         if mode in ('gen-list',):
             _cfp_total, _fpa_reduced = prompt_list_values(
-                os.path.join(out_dir, 'md', 'gen-fpa-FPA工作量-总和.md'))
+                os.path.join(out_dir, 'md'))
 
         from ai_gen_reimbursement_docs.pipeline import run_pipeline
-        result = run_pipeline(
-            mode=mode,
-            file_path=excel_path,
-            output_dir=out_dir,
-            api_key=api_key,
-            model=model,
-            base_url=base_url,
-            project_name=args.project_name,
-            templates=templates or None,
-            fpa_reduced=_fpa_reduced,
-            cfp_total=_cfp_total,
-        )
+        from ai_gen_reimbursement_docs.exceptions import CosmicToolError
+        try:
+            result = run_pipeline(
+                mode=mode,
+                file_path=excel_path,
+                output_dir=out_dir,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                project_name=args.project_name,
+                templates=templates or None,
+                fpa_reduced=_fpa_reduced,
+                cfp_total=_cfp_total,
+            )
+        except CosmicToolError as e:
+            print(f"\n  错误: {e}", file=sys.stderr)
+            play_notify_sound()
+            sys.exit(1)
 
         _section("完成")
         _summary_files = [
@@ -739,11 +747,18 @@ if __name__ == '__main__':
     _exit_code = 0
     try:
         main()
+    except KeyboardInterrupt:
+        print("\n  任务已取消", file=sys.stderr)
     except Exception as _e:
         _exit_code = 1
         print(f"\n  错误: {_e}", file=sys.stderr)
         try:
             logger.debug("未捕获异常", exc_info=True)
+        except Exception:
+            pass
+        try:
+            from ai_gen_reimbursement_docs.cli.notify import play_notify_sound
+            play_notify_sound()
         except Exception:
             pass
     if getattr(sys, 'frozen', False):

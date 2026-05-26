@@ -99,7 +99,7 @@ def write_cosmic_xlsx(
     *,
     meta: dict[str, str] | None = None,
     cfp_formula: str = "",
-) -> None:
+) -> str:
     """Write COSMIC items to Excel template.
 
     Preserves header rows (1-5) and formatting, fills data starting at row 6.
@@ -187,9 +187,14 @@ def write_cosmic_xlsx(
         try:
             wb.save(output_path)
         except PermissionError:
-            logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
-            raise
-        return
+            temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
+            wb.save(temp_path)
+            logger.warning(
+                "文件被占用，已保存到临时文件: %s\n"
+                "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
+            )
+            return temp_path
+        return output_path
 
     # Use template row 6 format for data cells
     _DATA_STYLE = None
@@ -367,11 +372,17 @@ def write_cosmic_xlsx(
     try:
         wb.save(output_path)
     except PermissionError:
-        logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
-        raise
+        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
+        wb.save(temp_path)
+        logger.warning(
+            "文件被占用，已保存到临时文件: %s\n"
+            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
+        )
+        return temp_path
     logger.info(f"写入 {total_rows} 行数据到 {output_path}")
     if footer_saved:
         logger.debug(f"从模板恢复了 {len(footer_saved)} 条页脚备注")
+    return output_path
 
 
 def _merge_column_groups(ws, start_row, total_rows, col, all_rows, key):
@@ -491,8 +502,12 @@ def write_environment_sheet(
     try:
         wb.save(output_path)
     except PermissionError:
-        logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
-        raise
+        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
+        wb.save(temp_path)
+        logger.warning(
+            "文件被占用，已保存到临时文件: %s\n"
+            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
+        )
 
 
 def _write_to_merged_below(ws, label_cell, text: str) -> None:
@@ -532,6 +547,11 @@ def copy_template_sheets(
     try:
         wb.save(output_path)
     except PermissionError:
-        logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
-        raise
+        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
+        wb.save(temp_path)
+        logger.warning(
+            "文件被占用，已保存到临时文件: %s\n"
+            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
+        )
+        return
     logger.info(f"Template copied to {output_path}")

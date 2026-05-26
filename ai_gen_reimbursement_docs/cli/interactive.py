@@ -1,4 +1,4 @@
-"""CLI 交互式输入 —— FPA 核减后工作量、送审功能点。"""
+"""CLI 交互式输入 —— FPA核减后工作量、送审功能点。"""
 
 import logging
 import os
@@ -43,9 +43,9 @@ def resolve_fpa_sum(fpa_sum_md_path: str) -> float:
                     break
 
     if md_val > 0:
-        print(f"\n请输入送审工作量（直接回车使用FPA工作量总和：{md_val}）: ", end="")
+        print(f"\n请输入FPA核减后的工作量（人/天）（直接回车使用FPA工作量总和：{md_val}）: ", end="")
     else:
-        print("\n请输入 FPA 核减后的工作量（人/天）: ", end="")
+        print("\n请输入FPA核减后的工作量（人/天）: ", end="")
 
     try:
         inp = input().strip()
@@ -66,17 +66,18 @@ def resolve_fpa_sum(fpa_sum_md_path: str) -> float:
     return 0
 
 
-def prompt_list_values(fpa_sum_md_path: str) -> tuple[float, float]:
+def prompt_list_values(md_dir: str) -> tuple[float, float]:
     """提示用户输入送审功能点和送审工作量（gen-list 使用）。
 
-    从 gen-cosmic-CFP-总和.md / gen-fpa-FPA工作量-总和.md 读取默认值。
+    从 gen-cosmic-CFP-总和.md / gen-cosmic-FPA核减后的工作量-总和.md（回退 gen-fpa-FPA工作量-总和.md）读取默认值。
     返回 (cfp_total, fpa_reduced)。
     """
     _cfp_raw = _read_md_value(
-        os.path.join(os.path.dirname(fpa_sum_md_path), 'gen-cosmic-CFP-总和.md'),
+        os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
         r'CFP 总和[：:]\s*([\d.]+)')
-    _fpa_raw = _read_md_value(fpa_sum_md_path,
-        r'FPA工作量（人/天）[：:]\s*([\d.]+)')
+    _fpa_raw = _read_md_value(
+        os.path.join(md_dir, 'gen-cosmic-FPA核减后的工作量-总和.md'),
+        r'FPA核减后的工作量（人/天）[：:]\s*([\d.]+)')
 
     # 送审功能点
     if _cfp_raw > 0:

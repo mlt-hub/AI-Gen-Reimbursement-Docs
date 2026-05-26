@@ -272,7 +272,7 @@ def init_fpa_template_md(
     Args:
         summary_md_path: 非空时同步写入 gen-fpa-FPA工作量-总和.md（调整值×要素数量 的求和）
     """
-    logger.debug("第1.1步：生成 FPA 模板 MD...")
+    logger.debug("\n第1.1步：生成 FPA 模板 MD...")
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)
     fpa_rows = _build_fpa_rule_rows(rows, meta)
@@ -302,14 +302,14 @@ def init_fpa_template_md(
             except (ValueError, TypeError):
                 pass
 
-    logger.info(f"第1.1步：FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
+    logger.info(f"\n第1.1步：FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
 
     if summary_md_path:
         os.makedirs(os.path.dirname(summary_md_path) or '.', exist_ok=True)
         with open(summary_md_path, 'w', encoding='utf-8') as f:
             f.write("# FPA 工作量\n\n")
             f.write(f"FPA工作量（人/天）: {total}\n")
-        logger.info(f"第1.2步：FPA工作量已写入: {summary_md_path} ({total})")
+        logger.info(f"\n第1.2步：FPA工作量已写入: {summary_md_path} ({total})")
 
     return output_md_path
 
@@ -322,6 +322,7 @@ def ai_fill_fpa_md(
     base_url: str = "",
 ) -> str:
     """读取 FPA 模板 MD，AI 填充 F/G 列，写回 MD。"""
+    logger.info("\n第1.3步：AI 填充 FPA 数据...")
     logger.debug(f"MODEL: {model}  BASE URL: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
 
     judgement_rules: list[str] = []
@@ -423,7 +424,7 @@ def generate_fpa_xlsx_from_md(
     output_path: str,
 ) -> str:
     """从已填充的 FPA MD 生成 FPA工作量评估.xlsx。"""
-    logger.info("第1.4步：从 FPA MD 生成 Excel...")
+    logger.info("\n第1.4步：从 FPA MD 生成 Excel...")
 
     meta = parse_meta_md(meta_md_path)
     base_formula = meta.get("基准值公式", "")
@@ -540,10 +541,13 @@ def generate_fpa_xlsx_from_md(
     try:
         wb.save(output_path)
     except PermissionError:
-        logger.error(
-            "无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path
+        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
+        wb.save(temp_path)
+        logger.warning(
+            "文件被占用，已保存到临时文件: %s\n"
+            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
         )
-        raise
+        return temp_path
     logger.info(f"FPA工作量评估已生成: {output_path} ({len(fpa_rows)} 行)")
 
     return output_path

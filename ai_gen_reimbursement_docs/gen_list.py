@@ -37,7 +37,7 @@ def generate_list_xlsx_from_md(
     cfp_total: 送审功能点 = gen-fpa-FPA工作量-总和.md 的原始值
     fpa_reduced: 送审工作量 = FPA 核减后的工作量
     """
-    logger.info("第4.1步：开始生成项目需求清单.xlsx...")
+    logger.info("\n第4.1步：开始生成项目需求清单.xlsx...")
 
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)
@@ -160,10 +160,13 @@ def generate_list_xlsx_from_md(
     try:
         wb.save(output_path)
     except PermissionError:
-        logger.error(
-            "无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path
+        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
+        wb.save(temp_path)
+        logger.warning(
+            "文件被占用，已保存到临时文件: %s\n"
+            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
         )
-        raise
+        return temp_path
     logger.info(f"项目需求清单已生成: {output_path} ({len(seen_modules)} 模块)")
 
     return output_path

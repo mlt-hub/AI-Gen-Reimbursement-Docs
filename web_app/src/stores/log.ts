@@ -3,8 +3,6 @@ import { defineStore } from 'pinia'
 import { useSessionStore } from './session'
 import { useStepsStore } from './steps'
 
-const STEP_MARKER = '>>>STEP:'
-
 export interface LogEntry {
   level: string
   msg: string
@@ -37,31 +35,37 @@ export const useLogStore = defineStore('log', () => {
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data)
-        if (data.level === 'DONE') {
-          append({ level: 'DONE', msg: '── 任务完成 ──', time: '' })
-          session.finish()
-          useStepsStore().finishAll()
-          return
+        switch (data.type) {
+          case 'done':
+            append({ level: 'DONE', msg: '── 任务完成 ──', time: '' })
+            session.finish()
+            useStepsStore().finishAll()
+            return
+          case 'error':
+            append({ level: 'ERROR', msg: `── 任务失败: ${data.msg || '未知错误'} ──`, time: '' })
+            session.setError()
+            return
+          case 'cancelled':
+            append({ level: 'WARNING', msg: '── 任务已被用户停止 ──', time: '' })
+            session.setError()
+            return
+          case 'prompt':
+            append({ level: 'INFO', msg: `⏸ ${data.msg || '等待用户输入...'}`, time: data.time || '' })
+            session.showInputPrompt({
+              field: data.field || '',
+              default: data.default || 0,
+              msg: data.msg || '',
+            })
+            return
+          case 'step':
+            useStepsStore().setActive(data.key)
+            return
+          case 'log':
+            append({ level: data.level, msg: data.msg, time: data.time || '' })
+            return
+          default:
+            append({ level: data.level || 'INFO', msg: data.msg || '', time: data.time || '' })
         }
-        if (data.level === 'ERROR') {
-          append({ level: 'ERROR', msg: `── 任务失败: ${data.msg || '未知错误'} ──`, time: '' })
-          session.setError()
-          return
-        }
-        if (data.level === 'CANCELLED') {
-          append({ level: 'WARNING', msg: '── 任务已被用户停止 ──', time: '' })
-          session.setError()
-          return
-        }
-        // 检测步骤事件
-        const msg = data.msg || ''
-        if (typeof msg === 'string' && msg.startsWith(STEP_MARKER)) {
-          const stepKey = msg.slice(STEP_MARKER.length)
-          useStepsStore().setActive(stepKey)
-          // 不追加到日志面板（纯控制事件）
-          return
-        }
-        append({ level: data.level, msg, time: data.time || '' })
       } catch {
         /* heartbeat */
       }

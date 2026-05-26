@@ -428,7 +428,7 @@ def init_spec_template_md(
                     f.write(f"> **AI 生成描述**：（待 AI 填充）\n\n")
                 f.write("\n")
 
-    logger.info(f"第2.1步：spec 功能需求章节-模板 MD 已生成: {output_md_path} ({len(l3_groups)} 个模块)")
+    logger.info(f"\n第2.1步：spec 功能需求章节-模板 MD 已生成: {output_md_path} ({len(l3_groups)} 个模块)")
     return output_md_path
 
 
@@ -447,7 +447,7 @@ def ai_fill_spec_md(
     from ai_gen_reimbursement_docs.llm_client import call_llm
     from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt, load_gen_spec_ai_limit
 
-    logger.info(f"第2.2步：AI 填充 spec 功能需求章节 MD")
+    logger.info(f"\n第2.2步：AI 填充 spec 功能需求章节 MD")
 
     proc_limit = load_gen_spec_ai_limit()
     if proc_limit > 0:
@@ -546,7 +546,7 @@ def generate_spec_docx_from_md(
     所有数据从 MD 文件读取，不内部调用 AI。
     #AI生成# 标记应在上游 _ai_fill_meta_md 中完成填充。
     """
-    logger.info("第2.3步：开始生成项目需求说明书.docx...")
+    logger.info("\n第2.3步：开始生成项目需求说明书.docx...")
 
     # 如果有 filled MD，提取模块描述和功能过程描述
     filled_sections: dict[str, str] = {}
@@ -693,7 +693,16 @@ def generate_spec_docx_from_md(
 
     # ====== 保存 ======
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
-    doc.save(output_path)
+    try:
+        doc.save(output_path)
+    except PermissionError:
+        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.docx'
+        doc.save(temp_path)
+        logger.warning(
+            "文件被占用，已保存到临时文件: %s\n"
+            "关闭 Word/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
+        )
+        return temp_path
     logger.info(f"项目需求说明书已生成: {output_path}")
     return output_path
 
@@ -702,7 +711,7 @@ def auto_update_docx_toc(docx_path: str) -> bool:
     """用 Word COM 自动更新文档目录和域。成功返回 True，失败返回 False。"""
     import sys
 
-    logger.info("第2.4步：自动更新项目需求说明书目录")
+    logger.info("\n第2.4步：自动更新项目需求说明书目录")
 
     if sys.platform != "win32":
         logger.warning("项目需求说明书目录：自动更新目录失败:当前系统非Windows系统")

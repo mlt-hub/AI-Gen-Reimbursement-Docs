@@ -53,6 +53,14 @@ class ValidationError(CosmicToolError):
         self.actual = actual
 
 
+class FileWriteError(CosmicToolError):
+    """文件写入错误：权限不足、文件被占用等。"""
+
+    def __init__(self, message: str, file_path: str = ""):
+        super().__init__(message)
+        self.file_path = file_path
+
+
 class CancelledError(BaseException):
     """任务已被用停止。继承 BaseException 确保不被 except Exception 捕获。"""
     pass
