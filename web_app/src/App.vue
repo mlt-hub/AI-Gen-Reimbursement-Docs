@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col h-screen">
-    <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+    <header class="bg-gray-50 border-b border-gray-100 px-6 py-3 flex items-center justify-between shrink-0">
       <div class="flex items-center gap-4">
         <h1 class="text-lg font-semibold text-gray-800">AI 生成项目报账文档</h1>
         <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{{ modeLabel }}</span>

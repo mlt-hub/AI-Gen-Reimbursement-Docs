@@ -9,14 +9,14 @@
       </label>
       <textarea v-model="systemPrompt"
         placeholder="可选，系统级指令（角色设定、输出格式等）"
-        class="flex-1 min-h-[120px] p-3 border border-gray-300 rounded-lg text-sm font-mono leading-relaxed resize-y bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent focus:bg-white transition" />
+        class="flex-1 min-h-[120px] p-3 border border-gray-300 rounded-lg text-sm font-mono leading-relaxed resize-y bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent focus:bg-white transition-colors" />
 
       <label class="text-sm font-medium text-gray-500 mt-4 mb-1">
         用户提示词 <span class="font-normal text-xs text-gray-400 ml-1">{{ userPrompt.length }} 字</span>
       </label>
       <textarea v-model="userPrompt"
         placeholder="可选，具体的任务描述或问题"
-        class="flex-1 min-h-[120px] p-3 border border-gray-300 rounded-lg text-sm font-mono leading-relaxed resize-y bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent focus:bg-white transition"
+        class="flex-1 min-h-[120px] p-3 border border-gray-300 rounded-lg text-sm font-mono leading-relaxed resize-y bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent focus:bg-white transition-colors"
         @keydown="onKeydown" />
 
       <div class="flex items-center gap-3 mt-4">

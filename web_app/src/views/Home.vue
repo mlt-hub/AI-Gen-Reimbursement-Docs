@@ -1,7 +1,7 @@
 <template>
   <div class="flex h-full">
     <!-- 左侧配置面板 -->
-    <aside class="w-[380px] shrink-0 bg-white border-r border-gray-200 p-5 overflow-y-auto">
+    <aside class="w-[380px] shrink-0 bg-gray-50 border-r border-gray-100 p-5 overflow-y-auto">
       <ConfigPanel @start="startTask" />
     </aside>
 

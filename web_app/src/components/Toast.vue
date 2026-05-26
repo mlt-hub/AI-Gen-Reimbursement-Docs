@@ -41,8 +41,8 @@ function bgClass(t: ToastType) { return bgMap[t] }
 </script>
 
 <style scoped>
-.toast-enter-active { transition: all 0.3s ease; }
-.toast-leave-active { transition: all 0.2s ease; }
+.toast-enter-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.toast-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .toast-enter-from { opacity: 0; transform: translateX(30px); }
 .toast-leave-to { opacity: 0; transform: translateX(30px); }
 </style>
