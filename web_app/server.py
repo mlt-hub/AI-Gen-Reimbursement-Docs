@@ -8,6 +8,7 @@ import contextvars
 import json
 import logging
 import os
+from collections.abc import Callable
 import queue
 import shutil
 import tempfile
@@ -67,6 +68,49 @@ def wait_for_fpa_input(default_fpa: float) -> float:
     session_input_events.pop(sid, None)
     result = session_input_results.pop(sid, {})
     return float(result.get("fpa_reduced", default_fpa))
+
+
+def _execute_in_session(
+    session_id: str,
+    file_path: str,
+    output_dir: str,
+    custom_t_dir: str,
+    api_key: str,
+    model: str,
+    base_url: str,
+    project_name: str,
+    max_tokens: str,
+    clean: bool,
+    mode: str,
+    *,
+    on_success: Callable[[str, str, object], None] | None = None,
+) -> None:
+    """在 session 上下文中执行 _execute_mode，统一处理事件、异常和清理。"""
+    session_var.set(session_id)
+    _result = None
+    try:
+        _result = _execute_mode(
+            mode, file_path, output_dir, custom_t_dir,
+            api_key, model, base_url, project_name,
+            max_tokens=max_tokens, clean=clean,
+        )
+        if on_success:
+            on_success(output_dir, session_id, _result)
+    except CancelledError as e:
+        logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已停止: {e}")
+        emit_session_event({"type": "cancelled"})
+    except Exception as e:
+        logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
+        emit_session_event({"type": "error", "msg": f"执行失败: {e}"})
+        session_cancelled[session_id] = True
+    finally:
+        if not session_cancelled.get(session_id):
+            emit_session_event({
+                "type": "done",
+                "files": _build_file_summary(_result) if _result else [],
+            })
+        session_cancelled.pop(session_id, None)
+        session_var.set(None)
 
 
 class SessionHandler(logging.Handler):
@@ -455,29 +499,11 @@ async def api_run_local(
     session_outputs[session_id] = out
 
     def run():
-        session_var.set(session_id)
-        _result = None
-        try:
-            _result = _execute_mode(
-                mode, str(xlsx), str(out), custom_t_dir,
-                api_key, model, base_url, project_name,
-                max_tokens=max_tokens, clean=bool(clean),
-            )
-        except CancelledError as e:
-            logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已停止: {e}")
-            emit_session_event({"type": "cancelled"})
-        except Exception as e:
-            logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
-            emit_session_event({"type": "error", "msg": f"执行失败: {e}"})
-            session_cancelled[session_id] = True
-        finally:
-            if not session_cancelled.get(session_id):
-                emit_session_event({
-                    "type": "done",
-                    "files": _build_file_summary(_result) if _result else [],
-                })
-            session_cancelled.pop(session_id, None)
-            session_var.set(None)
+        _execute_in_session(
+            session_id, str(xlsx), str(out), custom_t_dir,
+            api_key, model, base_url, project_name,
+            max_tokens, bool(clean), mode,
+        )
 
     asyncio.create_task(asyncio.to_thread(run))
     return {"session_id": session_id, "output_dir": str(out)}
@@ -532,35 +558,19 @@ async def api_run_upload(
     session_dirs[session_id] = work_dir
 
     def run():
-        session_var.set(session_id)
-        _result = None
-        try:
-            _result = _execute_mode(
-                mode, str(file_path), str(output_dir), str(custom_t_dir),
-                api_key, model, base_url, project_name,
-                max_tokens=max_tokens, clean=bool(clean),
-            )
-            # 打包交付物 ZIP
-            zip_path = work_dir / f"交付物_{session_id}.zip"
+        def _pack_zip(output_dir_path: str, sid: str, result: object) -> None:
+            zip_path = work_dir / f"交付物_{sid}.zip"
             shutil.make_archive(
-                str(zip_path.with_suffix("")), "zip", str(output_dir)
+                str(zip_path.with_suffix("")), "zip", str(output_dir_path)
             )
-            session_zips[session_id] = zip_path
-        except CancelledError as e:
-            logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已停止: {e}")
-            emit_session_event({"type": "cancelled"})
-        except Exception as e:
-            logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
-            emit_session_event({"type": "error", "msg": f"执行失败: {e}"})
-            session_cancelled[session_id] = True
-        finally:
-            if not session_cancelled.get(session_id):
-                emit_session_event({
-                    "type": "done",
-                    "files": _build_file_summary(_result) if _result else [],
-                })
-            session_cancelled.pop(session_id, None)
-            session_var.set(None)
+            session_zips[sid] = zip_path
+
+        _execute_in_session(
+            session_id, str(file_path), str(output_dir), str(custom_t_dir),
+            api_key, model, base_url, project_name,
+            max_tokens, bool(clean), mode,
+            on_success=_pack_zip,
+        )
 
     asyncio.create_task(asyncio.to_thread(run))
     return {"session_id": session_id, "has_download": True}
