@@ -24,6 +24,17 @@ def _replace_path(text: str, old: str, new: str) -> str:
     return text.replace(old, new).replace(old.replace("\\", "/"), new)
 
 
+class StepFormatter(logging.Formatter):
+    """控制台日志：步骤行（以"第N"开头）前自动插入空行分隔。"""
+
+    def format(self, record: logging.LogRecord) -> str:
+        msg = super().format(record)
+        raw = str(record.msg)
+        if raw.startswith("第") and len(raw) > 1 and raw[1].isdigit():
+            msg = "\n" + msg
+        return msg
+
+
 class ReleaseFileHandler(logging.Handler):
     """每次写日志时打开文件 → 写入 → 关闭，不长期持有文件句柄。
     mode='w' 仅首次写入时截断，后续追加。"""
@@ -91,7 +102,7 @@ def init_global_logging(level: str = "INFO"):
 
     ch = logging.StreamHandler()
     ch.setLevel(_lv)
-    ch.setFormatter(logging.Formatter('%(message)s'))
+    ch.setFormatter(StepFormatter('%(message)s'))
     ch.addFilter(_ps)
     logger.addHandler(ch)
 

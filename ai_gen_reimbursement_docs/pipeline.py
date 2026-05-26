@@ -316,7 +316,7 @@ def _ensure_basedata_impl(file_path: str, md_dir: str,
                           tree_md: str, meta_md_tpl: str) -> None:
     """生成 gen-basedata-*.md 数据源文件。"""
     _step("basedata")
-    logger.info("\n第0步: 生成基础数据")
+    logger.info("第0步: 生成基础数据")
     generate_md_files(file_path, md_dir)
     verify_module_tree_stats(tree_md, meta_md_tpl)
 
@@ -324,7 +324,7 @@ def _ensure_basedata_impl(file_path: str, md_dir: str,
 def _fill_meta_if_needed(meta_md_tpl: str, meta_filled_md: str, tree_md: str,
                          api_key: str, model: str, base_url: str) -> None:
     """AI 填充元数据。"""
-    logger.info("\n第0.4步：AI填充文档元数据...")
+    logger.info("第0.4步：AI填充文档元数据...")
     if not api_key:
         logger.info("未设置 API Key，跳过 AI 填充文档元数据")
         return
@@ -689,6 +689,7 @@ def run_pipeline_simple(
             out_dir = excel_dir
 
     logger.info(f"功能清单输入文件: {os.path.basename(file_path)}")
+    logger.info(f"运行模式: {'Web UI' if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web' else 'CLI'}")
     if project_name:
         logger.info(f"项目名称: {project_name}")
     logger.info(f"交付物输出目录: {out_dir}")

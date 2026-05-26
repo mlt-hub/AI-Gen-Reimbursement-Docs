@@ -7,6 +7,7 @@ export interface LogEntry {
   level: string
   msg: string
   time: string
+  isStep?: boolean
 }
 
 export const useLogStore = defineStore('log', () => {
@@ -15,6 +16,8 @@ export const useLogStore = defineStore('log', () => {
   const logPanelEl = ref<HTMLElement | null>(null)
 
   function append(entry: LogEntry) {
+    // 以"第N"开头的日志行为步骤行
+    entry.isStep = /^第\d/.test(entry.msg)
     entries.value.push(entry)
     nextTick(() => {
       if (logPanelEl.value) {

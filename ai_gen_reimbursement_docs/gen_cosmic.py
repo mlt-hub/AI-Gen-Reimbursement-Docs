@@ -37,7 +37,7 @@ def init_cosmic_template_md(
         project_name: 项目名称
         output_md_path: 输出 MD 路径
     """
-    logger.info("\n第3.1步：生成 COSMIC 模板 MD...")
+    logger.info("第3.1步：生成 COSMIC 模板 MD...")
     modules = build_modules_from_tree_md(tree_md_path)
     export_empty_md(modules, project_name, output_md_path)
     logger.info(f"COSMIC 模板 MD 已生成: {output_md_path}")
@@ -66,7 +66,7 @@ def ai_fill_cosmic_md(
         meta_md_path: 文档元数据.md 路径（用于读取用户判定配置）
         modules: 预构建的模块列表，为 None 时从 tree_md_path 解析
     """
-    logger.info("\n第3.2步：AI 填充 COSMIC 数据...")
+    logger.info("第3.2步：AI 填充 COSMIC 数据...")
     logger.debug(f"MODEL: {model}  BASE URL: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
 
     if modules is None:
@@ -103,7 +103,7 @@ def generate_cosmic_xlsx_from_md(
     Returns:
         output_path
     """
-    logger.info("\n第3.3步：从 COSMIC MD 生成 Excel...")
+    logger.info("第3.3步：从 COSMIC MD 生成 Excel...")
 
     items = parse_md_to_items(md_path)
     if not items:

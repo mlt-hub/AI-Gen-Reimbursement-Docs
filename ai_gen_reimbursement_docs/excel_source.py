@@ -137,7 +137,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
             line = " | ".join(vals)
             f.write(f"| {line} |\n")
 
-    logger.info(f"\n第0.1步：功能清单模块树已生成: {md_tree_path}")
+    logger.info(f"第0.1步：功能清单模块树已生成: {md_tree_path}")
 
     # ========== 生成 gen-basedata-录入文档元数据-模板.md ==========
 
@@ -173,7 +173,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
                 f.write(f"| {key} | {val_escaped} |\n")
             f.write("\n")
 
-    logger.info(f"\n第0.2步：录入文档元数据-模板已生成: {md_meta_path}")
+    logger.info(f"第0.2步：录入文档元数据-模板已生成: {md_meta_path}")
 
     return {"module_tree_md": md_tree_path, "doc_meta_md": md_meta_path}
 
@@ -274,11 +274,11 @@ def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
 
     # 对比输出
     if not expected:
-        logger.info("\n第0.3步：模块树统计验证: 跳过（元数据中未找到 %s 段）", _stats_section)
+        logger.info("第0.3步：模块树统计验证: 跳过（元数据中未找到 %s 段）", _stats_section)
         return True
 
     all_ok = True
-    logger.info("\n第0.3步：模块树统计验证")
+    logger.info("第0.3步：模块树统计验证")
     for key in ["入口（个数）", "一级模块（个数）", "二级模块（个数）",
                  "三级模块（个数）", "功能过程（个数）"]:
         exp = expected.get(key)
@@ -492,7 +492,7 @@ def write_cfp_sum(md_dir: str, total: float) -> None:
     with open(path, 'w', encoding='utf-8') as f:
         f.write("# CFP 总和\n\n")
         f.write(f"CFP 总和: {total}\n")
-    logger.info(f"\n第3.4步：CFP 总和已写入: {path}（{total}）")
+    logger.info(f"第3.4步：CFP 总和已写入: {path}（{total}）")
 
 
 def read_project_name(meta_md_path: str) -> str:

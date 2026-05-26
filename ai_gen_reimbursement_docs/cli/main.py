@@ -136,6 +136,9 @@ def _run_pipeline_with_args(
             base_url=base_url,
             project_name=project_name,
         )
+    except KeyboardInterrupt:
+        print("\n  任务已取消", file=sys.stderr)
+        sys.exit(1)
     except CosmicToolError as e:
         print(f"\n  错误: {e}", file=sys.stderr)
         play_notify_sound()
@@ -717,6 +720,9 @@ def main():
                 fpa_reduced=_fpa_reduced,
                 cfp_total=_cfp_total,
             )
+        except KeyboardInterrupt:
+            print("\n  任务已取消", file=sys.stderr)
+            sys.exit(1)
         except CosmicToolError as e:
             print(f"\n  错误: {e}", file=sys.stderr)
             play_notify_sound()
