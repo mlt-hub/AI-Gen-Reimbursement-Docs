@@ -32,11 +32,9 @@ logger = logging.getLogger('ai_gen_reimbursement_docs.pipeline')
 
 def _check_cancelled():
     """Web UI 模式下检查是否被停止，CLI 模式跳过。"""
-    try:
+    if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
         from web_app.server import check_cancelled as _cc
         _cc()
-    except ImportError:
-        pass
 
 
 def _prompt_fpa_reduced(default_value: float) -> float:
@@ -44,11 +42,9 @@ def _prompt_fpa_reduced(default_value: float) -> float:
     from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
     if load_fpa_reduced_use_workload():
         return default_value
-    try:
+    if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
         from web_app.server import wait_for_fpa_input
         return wait_for_fpa_input(default_value)
-    except ImportError:
-        pass
     # CLI fallback
     if default_value > 0:
         prompt = f"\n请输入FPA核减后的工作量（人/天）（直接回车使用默认值：{default_value}）: "
@@ -65,11 +61,9 @@ def _prompt_fpa_reduced(default_value: float) -> float:
 
 def _step(key: str):
     """向前端发送步骤进度事件。key: basedata | fpa | spec | cosmic | list"""
-    try:
+    if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
         from web_app.server import emit_session_event
         emit_session_event({"type": "step", "key": key})
-    except ImportError:
-        pass  # CLI 模式跳过
 
 
 VALID_MODES = {"gen-all", "gen-basedata", "gen-fpa", "gen-cosmic", "gen-list", "gen-spec"}
@@ -451,13 +445,14 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     """第2步：COSMIC 功能点拆分表。"""
     _check_cancelled()
     _step("cosmic")
-    logger.info("第3步 生成项目功能点拆分表...")
+    logger.info("第3步：生成项目功能点拆分表...")
 
     from ai_gen_reimbursement_docs.excel_source import read_project_name, read_md_value
 
     cosmic_src = _check_template(templates_dict, 'cosmic', '项目功能点拆分表')
     project = read_project_name(meta_md)
 
+    logger.info("第3.1步：生成FPA核减后的工作量 MD ...")
     if fpa_reduced is not None:
         result.fpa_reduced = fpa_reduced
     else:
@@ -562,101 +557,38 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
              fpa_xlsx, cosmic_xlsx, require_xlsx, spec_docx,
              templates_dict, api_key, model, base_url, project_name, result,
              fpa_reduced=None, cfp_total=None):
-    """全流程：basedata → fpa → spec → cosmic → list（按现有依赖顺序）。"""
+    """全流程：basedata → fpa → spec → cosmic → list（委托独立函数按依赖顺序编排）。"""
 
-    from ai_gen_reimbursement_docs.excel_source import read_project_name, read_md_value
-
-    # 入口检查所有模板
-    fpa_src = _check_template(templates_dict, 'fpa', 'FPA工作量评估')
-    cosmic_src = _check_template(templates_dict, 'cosmic', '项目功能点拆分表')
-    require_src = _check_template(templates_dict, 'list', '项目需求清单')
-    spec_src = _check_template(templates_dict, 'spec', '项目需求说明书')
+    # 入口检查所有模板（提前发现模板缺失）
+    _check_template(templates_dict, 'fpa', 'FPA工作量评估')
+    _check_template(templates_dict, 'cosmic', '项目功能点拆分表')
+    _check_template(templates_dict, 'list', '项目需求清单')
+    _check_template(templates_dict, 'spec', '项目需求说明书')
 
     # 元数据已在 run_pipeline 入口处由 _fill_meta_if_needed 处理
     meta_md = meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
 
     # Step 1: FPA
-    _check_cancelled()
-    _step("fpa")
-    fpa_md = os.path.join(md_dir, 'gen-fpa-FPA-模板.md')
-    fpa_filled_md = os.path.join(md_dir, 'gen-fpa-AI填充-FPA.md')
-    logger.info("\n第1步：生成FPA工作量评估...")
-    init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
-    if api_key:
-        shutil.copy2(fpa_md, fpa_filled_md)
-        ai_fill_fpa_md(fpa_filled_md, template_path=fpa_src,
-                       api_key=api_key, model=model, base_url=base_url)
-    fpa_src_md = fpa_filled_md if api_key else fpa_md
-    fpa_xlsx = generate_fpa_xlsx_from_md(fpa_src_md, meta_md, fpa_src, fpa_xlsx)
-    result.fpa_xlsx = fpa_xlsx
-    result.fpa_reduced = (fpa_reduced if fpa_reduced is not None
-                          else read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0)
+    result = _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
+                           fpa_sum_md, fpa_xlsx, templates_dict, api_key, model,
+                           base_url, result)
 
-    # Step 2: 需求说明书
-    _check_cancelled()
-    _step("spec")
-    logger.info("\n第2步：生成 项目需求说明书...")
-    spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
-    spec_filled_md = os.path.join(md_dir, 'gen-spec-AI填充-spec-功能需求章节.md')
-    init_spec_template_md(tree_md, meta_md, spec_md)
-    if api_key:
-        ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
-    else:
-        shutil.copy2(spec_md, spec_filled_md)
-
-    spec_docx = generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=spec_filled_md)
-
-    # 自动更新目录（Word COM）
-    _toc_updated = False
-    if load_spec_auto_update_toc():
-        from ai_gen_reimbursement_docs.gen_spec import auto_update_docx_toc
-        _toc_updated = auto_update_docx_toc(spec_docx)
-
-    # 未自动更新时，按配置添加提醒前缀
-    if not _toc_updated and load_spec_remind_update_toc():
-        _doc_dir, _doc_name = os.path.split(spec_docx)
-        if not _doc_name.startswith("【提醒】请手动更新整个目录"):
-            _new_path = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
-            os.rename(spec_docx, _new_path)
-            spec_docx = _new_path
-
-    result.spec_docx = spec_docx
+    # Step 2: SPEC
+    result = _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl,
+                            meta_filled_md, doc_dir, spec_docx, templates_dict,
+                            api_key, model, base_url, result)
 
     # Step 3: COSMIC
-    _check_cancelled()
-    _step("cosmic")
-    logger.info("\n第3步：生成 项目功能点拆分表...")
+    result = _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
+                              doc_dir, cosmic_xlsx, templates_dict, api_key, model,
+                              base_url, project_name, result,
+                              fpa_reduced=result.fpa_reduced)
 
-    # 若 fpa_reduced_use_workload=false，弹出输入框让用户确认
-    result.fpa_reduced = _prompt_fpa_reduced(result.fpa_reduced)
-    _save_fpa_reduced_md(md_dir, result.fpa_reduced)
-
-    project = read_project_name(meta_md) or project_name
-    init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
-    filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
-    _, _cosmic_modules = init_cosmic_template_md(tree_md, project, init_md_path)
-    if api_key:
-        shutil.copy2(init_md_path, filled_md_path)
-        ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md,
-                          modules=_cosmic_modules)
-        _cosmic_cfp = _read_cfp_formula_from_meta_md(meta_md)
-        cosmic_xlsx = generate_cosmic_xlsx_from_md(filled_md_path, cosmic_src, cosmic_xlsx, meta_md,
-                                                   md_dir=md_dir, project_name=project_name or project,
-                                                   cfp_formula=_cosmic_cfp)
-        result.cfp_total = read_md_value(
-            os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
-            r'CFP 总和[：:]\s*([\d.]+)') or 0
-    result.cosmic_xlsx = cosmic_xlsx
-
-    # Step 4: 需求清单
-    _check_cancelled()
-    _step("list")
-    logger.info("\n第4步：生成 项目需求清单...")
-    _cfp = cfp_total if cfp_total is not None else (
-        read_md_value(os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'), r'CFP 总和[：:]\s*([\d.]+)') or 0)
-    require_xlsx = generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
-                                              cfp_total=_cfp, fpa_reduced=result.fpa_reduced)
-    result.require_xlsx = require_xlsx
+    # Step 4: LIST
+    result = _generate_list(md_dir, tree_md, meta_md, doc_dir, require_xlsx,
+                            templates_dict, result,
+                            cfp_total=cfp_total,
+                            fpa_reduced=result.fpa_reduced)
 
     logger.info("全流程完成")
     return result

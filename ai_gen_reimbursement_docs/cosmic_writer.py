@@ -29,6 +29,21 @@ _CENTER_ALIGN = Alignment(horizontal='center', vertical='center', wrap_text=True
 _LEFT_ALIGN = Alignment(horizontal='left', vertical='center', wrap_text=True)
 
 
+def _safe_save_workbook(wb, output_path: str) -> str:
+    """保存工作簿，若文件被占用则写 _TEMP 副本。返回实际保存路径。"""
+    try:
+        wb.save(output_path)
+        return output_path
+    except PermissionError:
+        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
+        wb.save(temp_path)
+        logger.warning(
+            "文件被占用，已保存到临时文件: %s\n"
+            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
+        )
+        return temp_path
+
+
 def _get_ref_style(ws, row: int, col: int) -> dict:
     """Extract style from a reference cell."""
     cell = ws.cell(row=row, column=col)
@@ -184,17 +199,7 @@ def write_cosmic_xlsx(
 
     if not all_rows:
         logger.warning("没有数据行可写入")
-        try:
-            wb.save(output_path)
-        except PermissionError:
-            temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
-            wb.save(temp_path)
-            logger.warning(
-                "文件被占用，已保存到临时文件: %s\n"
-                "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
-            )
-            return temp_path
-        return output_path
+        return _safe_save_workbook(wb, output_path)
 
     # Use template row 6 format for data cells
     _DATA_STYLE = None
@@ -369,16 +374,7 @@ def write_cosmic_xlsx(
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)
 
-    try:
-        wb.save(output_path)
-    except PermissionError:
-        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
-        wb.save(temp_path)
-        logger.warning(
-            "文件被占用，已保存到临时文件: %s\n"
-            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
-        )
-        return temp_path
+    output_path = _safe_save_workbook(wb, output_path)
     logger.info(f"写入 {total_rows} 行数据到 {output_path}")
     if footer_saved:
         logger.debug(f"从模板恢复了 {len(footer_saved)} 条页脚备注")
@@ -499,15 +495,7 @@ def write_environment_sheet(
     """更新环境图 sheet（独立 load/save，可能丢失图片）。推荐使用 update_environment_sheet。"""
     wb = safe_load_workbook(template_path, '项目功能点拆分表(环境图)')
     update_environment_sheet(wb, target, necessity)
-    try:
-        wb.save(output_path)
-    except PermissionError:
-        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
-        wb.save(temp_path)
-        logger.warning(
-            "文件被占用，已保存到临时文件: %s\n"
-            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
-        )
+    _safe_save_workbook(wb, output_path)
 
 
 def _write_to_merged_below(ws, label_cell, text: str) -> None:
@@ -544,14 +532,5 @@ def copy_template_sheets(
 ) -> None:
     """完整复制模板文件。"""
     wb = safe_load_workbook(template_path, '项目功能点拆分表')
-    try:
-        wb.save(output_path)
-    except PermissionError:
-        temp_path = output_path.rsplit('.', 1)[0] + '_TEMP.xlsx'
-        wb.save(temp_path)
-        logger.warning(
-            "文件被占用，已保存到临时文件: %s\n"
-            "关闭 Excel/WPS 后，将 _TEMP 文件重命名替换原文件即可", temp_path
-        )
-        return
+    output_path = _safe_save_workbook(wb, output_path)
     logger.info(f"Template copied to {output_path}")

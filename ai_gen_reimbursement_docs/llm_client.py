@@ -87,11 +87,9 @@ def call_llm(
             }
             if temperature is not None:
                 create_kwargs["temperature"] = temperature
-            try:
+            if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
                 from web_app.server import check_cancelled as _cc
                 _cc()
-            except ImportError:
-                pass
             msg = client.messages.create(**create_kwargs)
             resp_text = _extract_text(msg.content)
             thinking_text = _extract_thinking(msg.content)

@@ -12,7 +12,7 @@
       <ActionBar @ai="openAIModal" @reset="resetTask" />
     </div>
 
-    <!-- 送审工作量输入弹窗 -->
+    <!-- FPA核减后的工作量输入弹窗 -->
     <Teleport to="body">
       <div v-if="session.inputPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
         <div class="bg-white rounded-xl shadow-2xl w-[420px] p-6">

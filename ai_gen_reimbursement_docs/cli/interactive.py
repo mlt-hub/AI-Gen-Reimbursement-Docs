@@ -19,53 +19,6 @@ def _read_md_value(path: str, pattern: str) -> float:
     return 0.0
 
 
-def resolve_fpa_sum(fpa_sum_md_path: str) -> float:
-    """从 FPA工作量.md 读取值作为默认，提示用户输入FPA核减后工作量。"""
-    from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
-    if load_fpa_reduced_use_workload():
-        if os.path.exists(fpa_sum_md_path):
-            with open(fpa_sum_md_path, encoding='utf-8') as f:
-                for line in f:
-                    m = re.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', line)
-                    if m:
-                        val = float(m.group(1))
-                        logger.info(f"FPA核减后工作量: {val}（直接用 FPA 工作量）")
-                        return val
-        return 0
-
-    md_val = 0.0
-    if os.path.exists(fpa_sum_md_path):
-        with open(fpa_sum_md_path, encoding='utf-8') as f:
-            for line in f:
-                m = re.search(r'FPA工作量（人/天）[：:]\s*([\d.]+)', line)
-                if m:
-                    md_val = float(m.group(1))
-                    break
-
-    if md_val > 0:
-        print(f"\n请输入FPA核减后的工作量（人/天）（直接回车使用FPA工作量总和：{md_val}）: ", end="")
-    else:
-        print("\n请输入FPA核减后的工作量（人/天）: ", end="")
-
-    try:
-        inp = input().strip()
-        if inp:
-            val = float(inp)
-            logger.info(f"FPA核减后工作量: {val}（用户输入）")
-            return val
-    except (EOFError, OSError, ValueError):
-        pass
-
-    if md_val > 0:
-        logger.info(f"FPA核减后工作量: {md_val}（来自 FPA工作量.md）")
-        return md_val
-
-    msg = "未输入 FPA 核减后的工作量，CFP 数量将不受限制"
-    logger.warning(msg)
-    print(f"\n{msg}")
-    return 0
-
-
 def prompt_list_values(md_dir: str) -> tuple[float, float]:
     """提示用户输入送审功能点和送审工作量（gen-list 使用）。
 

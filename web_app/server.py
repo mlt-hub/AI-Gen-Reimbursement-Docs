@@ -21,6 +21,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+os.environ['AI_REIMBURSEMENT_MODE'] = 'web'
+
 # ── 日志隔离 ──────────────────────────────────────────────
 
 session_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
