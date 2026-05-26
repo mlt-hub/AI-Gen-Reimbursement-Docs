@@ -302,7 +302,7 @@ def init_fpa_template_md(
             except (ValueError, TypeError):
                 pass
 
-    logger.info(f"FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
+    logger.info(f"第1.1步：FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
 
     if summary_md_path:
         os.makedirs(os.path.dirname(summary_md_path) or '.', exist_ok=True)
@@ -322,7 +322,7 @@ def ai_fill_fpa_md(
     base_url: str = "",
 ) -> str:
     """读取 FPA 模板 MD，AI 填充 F/G 列，写回 MD。"""
-    logger.info("AI 填充 FPA 数据...")
+    logger.info("第1.3步：AI 填充 FPA 数据...")
     logger.debug(f"MODEL: {model}  BASE URL: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
 
     judgement_rules: list[str] = []

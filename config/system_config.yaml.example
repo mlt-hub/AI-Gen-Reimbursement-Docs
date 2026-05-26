@@ -22,6 +22,9 @@ spec_auto_update_toc: true
 # 如没安装Microsoft Word，通常设置为true，加提醒
 spec_remind_update_toc: true
 
+# Web UI端口号，如遇端口冲突（启动报错或页面打不开），换个端口即可，如 9090、3000
+web_port: 8080
+
 # 日志级别（DEBUG/INFO/WARNING/ERROR），默认INFO
 log_level: INFO
 

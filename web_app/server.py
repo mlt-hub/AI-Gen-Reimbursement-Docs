@@ -116,6 +116,13 @@ def _spa_index():
 
 app = FastAPI(title="AI生成项目报账文档")
 
+
+@app.on_event("shutdown")
+async def _on_shutdown():
+    """服务关闭时标记所有 session 为已取消，避免后台 AI 调用继续重试。"""
+    for sid in list(session_queues.keys()):
+        session_cancelled[sid] = True
+
 # 静态文件：Vite 构建产物
 _dist_dir = Path(__file__).parent / "static" / "dist"
 if _dist_dir.exists():

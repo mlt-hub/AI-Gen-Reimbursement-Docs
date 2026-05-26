@@ -33,8 +33,8 @@ def _section(title: str):
     logger.debug("--- section start ---")
 
 
-def _start_web_ui(root: str) -> None:
-    """启动 Web UI 服务器并打开浏览器。"""
+def _start_web_ui(root: str, port: int = 0) -> None:
+    """启动 Web UI 服务器并打开浏览器。port 为 0 时从配置文件读取。"""
     try:
         import uvicorn
         import webbrowser
@@ -42,8 +42,25 @@ def _start_web_ui(root: str) -> None:
         print("Web UI 需要安装 uvicorn: pip install uvicorn[standard]")
         return
 
+    from ai_gen_reimbursement_docs.config_utils import load_web_port
     host = "127.0.0.1"
-    port = 8000
+    if port <= 0:
+        port = load_web_port()
+
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((host, port))
+        sock.close()
+    except OSError:
+        sock.close()
+        print(f"端口 {port} 被占用或无权访问，启动失败")
+        print("解决方法：")
+        print("  1. 换个端口：ard --web --port 9090")
+        print("  2. 修改配置：~/.ai-gen-reimbursement-docs/system_config.yaml → web_port")
+        print("  3. 关闭占用端口的进程后重试")
+        return
+
     webbrowser.open(f"http://{host}:{port}")
     print(f"Web UI 已启动: http://{host}:{port}")
     # exe 模式用 exe 所在目录（web_app/ 外挂在该目录），源码模式用项目根
@@ -52,7 +69,8 @@ def _start_web_ui(root: str) -> None:
     else:
         app_dir = root
     uvicorn.run("web_app.server:app", host=host, port=port,
-                app_dir=app_dir, log_level="info")
+                app_dir=app_dir, log_level="info",
+                timeout_graceful_shutdown=2)
 
 
 def _auto_detect_and_run(api_key: str, model: str, base_url: str,
@@ -316,6 +334,8 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='测试"调整因子中的可靠性描述"AI生成（仅控制台+日志输出）')
     parser.add_argument('--test-ai-gen-metadata', type=str, default='',
                         help='测试元数据中指定字段的#AI生成#（仅控制台+日志输出）')
+    parser.add_argument('--port', '-p', type=int, default=0,
+                        help='Web UI 端口号（默认读取配置文件 web_port 或 8088）')
     parser.add_argument('--web', action='store_true',
                         help='启动 Web UI 界面')
 
@@ -403,7 +423,7 @@ def main():
 
     if args.web:
         _auto_init_config(root)
-        _start_web_ui(root)
+        _start_web_ui(root, port=args.port)
         return
 
     if args.init_config:

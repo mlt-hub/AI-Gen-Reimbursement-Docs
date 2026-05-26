@@ -32,3 +32,8 @@ ard-v*
 # 前端构建
 web_app/node_modules/
 web_app/static/dist/
+
+.understand-anything/
+.agents/skills/hallmark/
+.claude/skills/hallmark/
+skills-lock.json

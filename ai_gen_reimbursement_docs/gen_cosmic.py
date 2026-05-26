@@ -122,7 +122,6 @@ def generate_cosmic_xlsx_from_md(
     necessity = meta.get("建设必要性", "")
     if target or necessity:
         write_environment_sheet(output_path, output_path, project_name, target, necessity)
-        logger.info("环境图 sheet 已更新")
 
     logger.info(f"项目功能点拆分表已生成: {output_path} ({len(items)} 个功能过程)")
 

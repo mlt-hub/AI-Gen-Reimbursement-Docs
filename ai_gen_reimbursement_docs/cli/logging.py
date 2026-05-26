@@ -198,5 +198,5 @@ def write_combined_ai_log(stage: str = ""):
                 out.write(f'{NL}{NL}---{NL}{NL}')
 
         if new_count > 0:
-            logging.getLogger('ai_gen_reimbursement_docs.cli.logging').info(
+            logging.getLogger('ai_gen_reimbursement_docs.cli.logging').debug(
                 f"{out_name} 追加 {new_count} 条新记录")

@@ -65,7 +65,7 @@ function showAI() { emit('ai') }
 function cancelTask() {
   if (!session.sessionId) return
   fetch('/api/cancel/' + session.sessionId, { method: 'POST' }).catch(() => {})
-  toast.show('info', '正在停止当前任务...')
+  toast.show('info', '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止', 6000)
 }
 
 function resetTask() {

@@ -144,6 +144,11 @@ def _get_system_config_value(key: str, default):
         return default
 
 
+def load_web_port(default: int = 3000) -> int:
+    """读取 system_config.yaml 中的 web_port，默认 3000。"""
+    return _get_system_config_value('web_port', default)
+
+
 def load_log_level(default: str = "INFO") -> str:
     """读取 system_config.yaml 中的 log_level。
     返回 Python logging 级别名：DEBUG / INFO / WARNING / ERROR。
