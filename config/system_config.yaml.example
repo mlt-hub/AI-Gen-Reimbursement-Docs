@@ -10,6 +10,9 @@ notify_sound: false
 # 项目功能点拆分表，是否在输出Excel中标记数据异常警告（默认false）
 cosmic_warn_marker: false
 
+# 项目功能点拆分表，是否在日志中输出数据异常警告（默认true）
+cosmic_warn_log: true
+
 # 项目需求说明书的目录，是否用Word COM自动更新（需安装Microsoft Word，默认true）
 # 如没安装Microsoft Word，通常设置为false，因为设置为true，也不会自动更新目录
 spec_auto_update_toc: true
@@ -25,6 +28,11 @@ log_level: INFO
 # AI每次调用的最大输出token数（支持K/M单位，如384K，默认6000）
 # 如果AI response数据被截断，增大max_tokens
 max_tokens: 6000
+
+# LLM API 单次调用超时时间（秒，默认120）
+# 点击"停止"后，系统需等当前API调用结束才能退出
+# 此值设得越大，停止后等待越久，不建议超过 300
+llm_api_timeout_seconds: 120
 
 # 根据需要设置 结束
 
@@ -76,6 +84,13 @@ sheets:
   cosmic_meta: "5、项目功能点拆分表-元数据录入"
   list_meta: "6、项目需求清单-元数据录入"
   stats_meta: "7、测试-元数据自动统计"
+
+# FPA工作量评估-输出模板.xlsx
+# “计算依据归类判定原则”所在的Sheet名称
+fpa_appendix_sheet: "附录1-FPA评估方法说明"
+
+# “FPA功能点估算”Sheet名称
+fpa_sheet: "FPA功能点估算"
 
 # 输出文档使用的模板路径（优先级：CLI参数/Web UI指定 > 此配置）
 # 相对路径基于项目根目录，也支持绝对路径

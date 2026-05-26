@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
-from ai_gen_reimbursement_docs.config_utils import load_max_tokens
+from ai_gen_reimbursement_docs.config_utils import load_max_tokens, load_llm_timeout
 from ai_gen_reimbursement_docs.exceptions import AIError
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ def call_llm(
         raise AIError("未配置模型名，请在 ~/.ai-gen-reimbursement-docs/.env 中设置 ANTHROPIC_MODEL")
     max_tokens = max_tokens or load_max_tokens()
 
-    client_kwargs: dict = {"api_key": api_key}
+    client_kwargs: dict = {"api_key": api_key, "timeout": load_llm_timeout()}
     if base_url:
         client_kwargs["base_url"] = base_url
 
@@ -101,7 +101,7 @@ def call_llm(
                 if thinking_text:
                     _save_thinking_log(thinking_text, model, tag, timestamp, log_dir)
 
-            logger.info("LLM 调用完成 [%s] 长度: %d 字", tag, len(resp_text))
+            logger.debug("LLM 调用完成 [%s] 长度: %d 字", tag, len(resp_text))
             if return_thinking:
                 return resp_text, thinking_text
             return resp_text

@@ -35,7 +35,7 @@ _STEP_MARKER = ">>>STEP:"
 
 
 def _check_cancelled():
-    """Web UI 模式下检查是否被中断，CLI 模式跳过。"""
+    """Web UI 模式下检查是否被停止，CLI 模式跳过。"""
     try:
         from web_app.server import check_cancelled as _cc
         _cc()
@@ -109,8 +109,8 @@ def run_pipeline(
     try:
         from ai_gen_reimbursement_docs.cli.logging import setup_logging
         setup_logging(log_dir, 'AI生成项目报账文档')
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("per-run 日志设置失败: %s", e)
 
     # 准备目录
     os.makedirs(output_dir, exist_ok=True)
@@ -134,6 +134,9 @@ def run_pipeline(
     if not project_name:
         project_name = "products"
 
+    from ai_gen_reimbursement_docs.config_utils import load_sheet_names
+    _s = load_sheet_names()
+
     # 模板解析（优先级：传入 > Sheet 8 > 默认 data/templates/）
     templates_dict = _resolve_templates(file_path, templates)
 
@@ -146,18 +149,20 @@ def run_pipeline(
     _default_spec = os.path.join(doc_dir, '项目需求说明书.docx')
 
     # 确保基础数据存在，以便读取元数据中的自定义文件名
+    if mode == "gen-all":
+        logger.info("gen-all全流程模式：按依赖顺序执行...")
     _ensure_basedata_impl(file_path, md_dir, tree_md, meta_md_tpl)
     _fill_meta_if_needed(meta_md_tpl, meta_filled_md, tree_md, api_key, model, base_url)
     _current_meta = meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
 
     # 从元数据解析输出文件名（Excel Sheet 中配置的「文件名」字段）
-    fpa_xlsx = _resolve_output_filename(_current_meta, '3、FPA工作量评估-元数据录入',
+    fpa_xlsx = _resolve_output_filename(_current_meta, _s['fpa_meta'],
                                          _default_fpa, output_dir)
-    cosmic_xlsx = _resolve_output_filename(_current_meta, '6、项目功能点拆分表-元数据录入',
+    cosmic_xlsx = _resolve_output_filename(_current_meta, _s['cosmic_meta'],
                                             _default_cosmic, doc_dir)
-    require_xlsx = _resolve_output_filename(_current_meta, '7、项目需求清单-元数据录入',
+    require_xlsx = _resolve_output_filename(_current_meta, _s['list_meta'],
                                              _default_require, doc_dir)
-    spec_docx = _resolve_output_filename(_current_meta, '4、项目需求说明书-元数据录入',
+    spec_docx = _resolve_output_filename(_current_meta, _s['spec_meta'],
                                           _default_spec, doc_dir)
 
     # ── 模式分发 ──
@@ -267,21 +272,18 @@ def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
 
 def _ensure_basedata_impl(file_path: str, md_dir: str,
                           tree_md: str, meta_md_tpl: str) -> None:
-    """确保 gen-basedata-*.md 数据源文件存在。"""
-    needs_md = not (os.path.exists(meta_md_tpl) and os.path.exists(tree_md))
+    """生成 gen-basedata-*.md 数据源文件。"""
     _step("basedata")
     logger.info("第0步: 生成基础数据")
-    if needs_md:
-        generate_md_files(file_path, md_dir)
-    else:
-        logger.info("基础数据已存在，跳过生成")
+    generate_md_files(file_path, md_dir)
     verify_module_tree_stats(tree_md, meta_md_tpl)
 
 
 def _fill_meta_if_needed(meta_md_tpl: str, meta_filled_md: str, tree_md: str,
                          api_key: str, model: str, base_url: str) -> None:
-    """AI 填充元数据（如果尚未填充）。"""
-    if not api_key or os.path.exists(meta_filled_md):
+    """AI 填充元数据。"""
+    if not api_key:
+        logger.info("未设置 API Key，跳过 AI 填充文档元数据")
         return
     from ai_gen_reimbursement_docs.excel_source import ai_fill_meta_md
     if load_enable_ai_fill_meta():
@@ -380,7 +382,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
     init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
 
     if api_key:
-        logger.info("AI 填充 FPA 数据...")
+        logger.info("第1.3步：AI 填充 FPA 数据...")
         shutil.copy2(fpa_md, fpa_filled_md)
         ai_fill_fpa_md(fpa_filled_md, template_path=fpa_src,
                        api_key=api_key, model=model, base_url=base_url)
@@ -416,11 +418,12 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
 
     init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
     filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
-    init_cosmic_template_md(tree_md, project, init_md_path)
+    _, _cosmic_modules = init_cosmic_template_md(tree_md, project, init_md_path)
 
     if api_key:
         shutil.copy2(init_md_path, filled_md_path)
-        ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md)
+        ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md,
+                          modules=_cosmic_modules)
         _cosmic_cfp = _read_cfp_formula_from_meta_md(meta_md)
         generate_cosmic_xlsx_from_md(filled_md_path, cosmic_src, cosmic_xlsx, meta_md,
                                      md_dir=md_dir, project_name=project_name,
@@ -478,16 +481,13 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
 
     spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
     spec_filled_md = os.path.join(md_dir, 'gen-spec-AI填充-spec-功能需求章节.md')
-    if not os.path.exists(spec_filled_md):
-        init_spec_template_md(tree_md, meta_md, spec_md)
-        if api_key:
-            ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
-        else:
-            shutil.copy2(spec_md, spec_filled_md)
+    init_spec_template_md(tree_md, meta_md, spec_md)
+    if api_key:
+        ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
+    else:
+        shutil.copy2(spec_md, spec_filled_md)
 
-    filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
-
-    generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=filled)
+    generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=spec_filled_md)
 
     # 自动更新目录（Word COM）
     _toc_updated = False
@@ -514,7 +514,6 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
              templates_dict, api_key, model, base_url, project_name, result,
              fpa_reduced=None, cfp_total=None):
     """全流程：basedata → fpa → spec → cosmic → list（按现有依赖顺序）。"""
-    logger.info("全流程模式：按依赖顺序执行...")
 
     from ai_gen_reimbursement_docs.excel_source import read_project_name, read_md_value
 
@@ -550,15 +549,13 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     logger.info("第2步：生成 项目需求说明书...")
     spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
     spec_filled_md = os.path.join(md_dir, 'gen-spec-AI填充-spec-功能需求章节.md')
-    if not os.path.exists(spec_filled_md):
-        init_spec_template_md(tree_md, meta_md, spec_md)
-        if api_key:
-            ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
-        else:
-            shutil.copy2(spec_md, spec_filled_md)
-    filled = spec_filled_md if os.path.exists(spec_filled_md) else ""
+    init_spec_template_md(tree_md, meta_md, spec_md)
+    if api_key:
+        ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
+    else:
+        shutil.copy2(spec_md, spec_filled_md)
 
-    generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=filled)
+    generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=spec_filled_md)
 
     # 自动更新目录（Word COM）
     _toc_updated = False
@@ -583,10 +580,11 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     project = read_project_name(meta_md) or project_name
     init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
     filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
-    init_cosmic_template_md(tree_md, project, init_md_path)
+    _, _cosmic_modules = init_cosmic_template_md(tree_md, project, init_md_path)
     if api_key:
         shutil.copy2(init_md_path, filled_md_path)
-        ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md)
+        ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md,
+                          modules=_cosmic_modules)
         _cosmic_cfp = _read_cfp_formula_from_meta_md(meta_md)
         generate_cosmic_xlsx_from_md(filled_md_path, cosmic_src, cosmic_xlsx, meta_md,
                                      md_dir=md_dir, project_name=project_name or project,

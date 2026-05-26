@@ -151,6 +151,11 @@ def load_log_level(default: str = "INFO") -> str:
     return _get_system_config_value('log_level', default).upper()
 
 
+def load_llm_timeout(default: int = 120) -> int:
+    """读取 LLM API 单次调用超时时间（秒）。"""
+    return _get_system_config_value('llm_api_timeout_seconds', default)
+
+
 def load_max_tokens(default: int = 2000) -> int:
     """Load max_tokens from system_config.yaml, supporting K/M units.
     CLI --max-tokens 通过环境变量 AI_REIMBURSEMENT_MAX_TOKENS 覆盖。
@@ -221,6 +226,11 @@ def load_cosmic_warn_marker() -> bool:
     return _get_system_config_value('cosmic_warn_marker', True)
 
 
+def load_cosmic_warn_log() -> bool:
+    """读取 cosmic_warn_log，true 时在日志中输出数据异常警告。"""
+    return _get_system_config_value('cosmic_warn_log', True)
+
+
 def load_fpa_reduced_use_workload() -> bool:
     """读取 fpa_reduced_use_workload，true 时直接用 FPA 工作量值。"""
     return _get_system_config_value('fpa_reduced_use_workload', False)
@@ -264,20 +274,17 @@ def load_spec_auto_update_toc() -> bool:
 
 def load_gen_fpa_ai_limit() -> int:
     """读取 gen_fpa_ai_limit，限制 FPA AI 处理的功能过程数（0=不限制）。"""
-    val = _get_system_config_value('gen_fpa_ai_limit', 0)
-    return max(val, 0)
+    return max(_get_system_config_value('gen_fpa_ai_limit', 0), 0)
 
 
 def load_gen_cosmic_ai_limit() -> int:
     """读取 gen_cosmic_ai_limit，限制 COSMIC AI 处理的功能过程数（0=不限制）。"""
-    val = _get_system_config_value('gen_cosmic_ai_limit', 0)
-    return max(val, 0)
+    return max(_get_system_config_value('gen_cosmic_ai_limit', 0), 0)
 
 
 def load_gen_spec_ai_limit() -> int:
     """读取 gen_spec_ai_limit，限制 spec AI 完善的功能过程描述数（0=不限制）。"""
-    val = _get_system_config_value('gen_spec_ai_limit', 0)
-    return max(val, 0)
+    return max(_get_system_config_value('gen_spec_ai_limit', 0), 0)
 
 
 @lru_cache(maxsize=1)

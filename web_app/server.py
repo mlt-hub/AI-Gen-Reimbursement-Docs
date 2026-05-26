@@ -176,7 +176,7 @@ async def get_modes():
 
 @app.post("/api/cancel/{session_id}")
 async def cancel_session(session_id: str):
-    """中断指定 session 的执行。"""
+    """停止指定 session 的执行。"""
     session_cancelled[session_id] = True
     return {"ok": True}
 
@@ -186,7 +186,7 @@ def check_cancelled():
     from ai_gen_reimbursement_docs.exceptions import CancelledError
     sid = session_var.get()
     if sid and session_cancelled.get(sid):
-        raise CancelledError("任务已被用户中断")
+        raise CancelledError("任务已被用户停止")
 
 
 @app.get("/api/version")
@@ -404,10 +404,14 @@ async def api_run_local(
                 max_tokens=max_tokens, clean=bool(clean),
             )
         except CancelledError as e:
-            logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已中断: {e}")
+            logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已停止: {e}")
             log_queue.put(json.dumps({"level": "CANCELLED"}, ensure_ascii=False))
         except Exception as e:
             logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
+            log_queue.put(json.dumps(
+                {"level": "ERROR", "msg": f"执行失败: {e}"}, ensure_ascii=False
+            ))
+            session_cancelled[session_id] = True
         finally:
             if not session_cancelled.get(session_id):
                 log_queue.put(json.dumps({"level": "DONE"}, ensure_ascii=False))
@@ -481,10 +485,14 @@ async def api_run_upload(
             )
             session_zips[session_id] = zip_path
         except CancelledError as e:
-            logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已中断: {e}")
+            logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已停止: {e}")
             log_queue.put(json.dumps({"level": "CANCELLED"}, ensure_ascii=False))
         except Exception as e:
             logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
+            log_queue.put(json.dumps(
+                {"level": "ERROR", "msg": f"执行失败: {e}"}, ensure_ascii=False
+            ))
+            session_cancelled[session_id] = True
         finally:
             if not session_cancelled.get(session_id):
                 log_queue.put(json.dumps({"level": "DONE"}, ensure_ascii=False))
@@ -512,7 +520,7 @@ async def log_stream(session: str):
                 )
                 data = json.loads(msg)
                 yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-                if data.get("level") == "DONE":
+                if data.get("level") in ("DONE", "CANCELLED"):
                     break
             except queue.Empty:
                 yield ": heartbeat\n\n"

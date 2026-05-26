@@ -72,8 +72,6 @@ def export_empty_md(
     with open(output_path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
 
-    logger.info(f"模板MD已生成: {output_path}")
-
 
 def export_filled_md(
     modules: list[FunctionModule],
@@ -141,7 +139,7 @@ def export_filled_md(
     with open(output_path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
 
-    logger.info(f"已填充MD生成: {output_path}")
+    logger.debug(f"已填充MD生成: {output_path}")
 
 
 def _extract_project_name_from_md_lines(text: str, lines: list[str]) -> str:
@@ -271,7 +269,7 @@ def parse_md_to_items(md_path: str) -> list[CosmicItem]:
     ctx.flush()
 
     if ctx.items:
-        logger.info(f"从MD解析到 {len(ctx.items)} 个已有功能过程（将被保留）")
+        logger.info(f"从模板解析到 {len(ctx.items)} 个功能过程骨架")
     return ctx.items
 
 
@@ -290,21 +288,13 @@ def fill_md_with_ai(
     """Read MD, call AI to fill empty tables, write back."""
     from ai_gen_reimbursement_docs.cosmic_ai import generate_cosmic_items
 
-    # Parse existing items from MD (if any were manually filled)
-    existing_items = parse_md_to_items(md_path)
-
-    # Build a set of already-filled processes to skip
-    filled_keys = set()
-    for item in existing_items:
-        filled_keys.add((item.module_l1, item.module_l2, item.module_l3, item.process))
-
     # Get L3 modules
     l3_modules = [m for m in modules if m.level == 3]
     total = len(l3_modules)
 
-    logger.info(f"正在AI填充 {total} 个模块的COSMIC数据...")
+    logger.debug(f"正在AI填充 {total} 个三级模块的COSMIC数据...")
 
-    # Generate all items (existing LLM logic, skips nothing — generates fresh)
+    # Generate all items fresh
     all_items = generate_cosmic_items(
         modules=modules,
         project_name=project_name,
@@ -317,20 +307,6 @@ def fill_md_with_ai(
         user_receiver_rules=user_receiver_rules,
     )
 
-    # Merge: AI items are the base; existing items with real content override
-    item_map = {}
-    for item in all_items:
-        key = (item.module_l1, item.module_l2, item.module_l3, item.process)
-        item_map[key] = item
-
-    for item in existing_items:
-        key = (item.module_l1, item.module_l2, item.module_l3, item.process)
-        if item.movements:
-            # Existing item has real content — override AI
-            item_map[key] = item
-
-    merged = list(item_map.values())
-
     # Write filled MD
-    export_filled_md(modules, merged, project_name, md_path)
-    logger.info(f"MD已更新: {md_path}")
+    export_filled_md(modules, all_items, project_name, md_path)
+    logger.debug(f"MD已更新: {md_path}")

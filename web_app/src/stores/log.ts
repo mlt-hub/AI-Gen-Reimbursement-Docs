@@ -43,8 +43,13 @@ export const useLogStore = defineStore('log', () => {
           useStepsStore().finishAll()
           return
         }
+        if (data.level === 'ERROR') {
+          append({ level: 'ERROR', msg: `── 任务失败: ${data.msg || '未知错误'} ──`, time: '' })
+          session.setError()
+          return
+        }
         if (data.level === 'CANCELLED') {
-          append({ level: 'WARNING', msg: '── 任务已被用户中断 ──', time: '' })
+          append({ level: 'WARNING', msg: '── 任务已被用户停止 ──', time: '' })
           session.setError()
           return
         }

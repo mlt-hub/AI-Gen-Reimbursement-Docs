@@ -54,5 +54,5 @@ class ValidationError(CosmicToolError):
 
 
 class CancelledError(BaseException):
-    """任务已被用户中断。继承 BaseException 确保不被 except Exception 捕获。"""
+    """任务已被用停止。继承 BaseException 确保不被 except Exception 捕获。"""
     pass

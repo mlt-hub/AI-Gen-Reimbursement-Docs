@@ -295,7 +295,7 @@ def _parse_llm_response(module_name: str, user: str, trigger: str,
 
 def _resolve_l1_l2(l3: FunctionModule,
                    modules: list[FunctionModule]) -> tuple[str, str]:
-    """从 L3 模块的 parent 解析出 L1/L2 名称。"""
+    """从 三级模块的 parent 解析出 L1/L2 名称。"""
     _parent_raw = l3.parent or ""
     if "/" in _parent_raw:
         _parts = _parent_raw.split("/", 1)
@@ -328,7 +328,7 @@ def _process_module_with_retry(
     user_default_initiator, user_default_receiver,
     interactive: bool,
 ) -> tuple[list[CosmicItem], int, bool]:
-    """对单个 L3 模块调用 AI 生成 COSMIC 分解，带交互式重试。
+    """对单个 三级模块调用 AI 生成 COSMIC 分解，带交互式重试。
 
     Returns:
         (items, ai_called_count, aborted)
@@ -371,13 +371,6 @@ def _process_module_with_retry(
             items = _parse_llm_response(l3.name, user, trigger, resp_text,
                                         project_name, l1_name, l2_name)
             warn_count = sum(1 for it in items if it.warnings)
-            if warn_count:
-                for it in items:
-                    if it.warnings:
-                        logger.warning(
-                            f"  [{idx}/{total}] ⚠ {it.process}: "
-                            f"{'; '.join(it.warnings)}"
-                        )
             sub_count = sum(len(it.movements) for it in items)
             logger.info(
                 f"  [{idx}/{total}] → {sub_count} 个子过程描述"
@@ -468,11 +461,24 @@ def _summarize_cosmic_results(
             )
 
     total_ok = len(all_items)
+    _total_skipped = skip_ai_limit + skip_proc_limit
+    if _total_skipped > 0 or ai_called > 0:
+        _parts = [f"AI 调用 {ai_called}/{total} 个模块"]
+        if skip_ai_limit > 0:
+            _parts.append(f"l3_modules_ai__limit={max_ai_l3} 跳过 {skip_ai_limit} 个模块")
+        if skip_proc_limit > 0:
+            _parts.append(f"gen_cosmic_ai_limit={cosmic_proc_limit} 跳过 {skip_proc_limit} 个模块")
+        _msg = "COSMIC AI 填充完成: %s，共 %d 个功能过程" % ("，".join(_parts), total_ok)
+        if _total_skipped > 0:
+            logger.warning(_msg)
+        else:
+            logger.info(_msg)
     warn_items = [it for it in all_items if it.warnings]
-    logger.info(f"Total COSMIC items generated: {total_ok}")
     has_issues = warn_items or error_modules
     if has_issues:
-        if warn_items:
+        from ai_gen_reimbursement_docs.config_utils import load_cosmic_warn_log
+        _show_warn = load_cosmic_warn_log()
+        if _show_warn and warn_items:
             module_warns: dict[str, list] = {}
             for it in warn_items:
                 mod_path = (f"{it.module_l1}>{it.module_l2}>{it.module_l3}")
@@ -495,6 +501,9 @@ def _summarize_cosmic_results(
             for l1, l2, l3, err in error_modules:
                 mod_path = f"{l1}>{l2}>{l3}" if l1 else l3
                 logger.warning(f"  • {mod_path}: {err}")
+        if not _show_warn and warn_items:
+            logger.info("cosmic_warn_log=false，数据异常警告已抑制（%d 个功能过程）",
+                        len(warn_items))
     else:
         logger.info("所有模块数据正常，无异常")
 
@@ -530,16 +539,15 @@ def generate_cosmic_items(
         load_max_tokens, load_flow_max_ai, load_gen_cosmic_ai_limit,
     )
     max_tokens = load_max_tokens()
-    logger.info(f"MAX_TOKENS = {max_tokens}")
+    logger.debug(f"MAX_TOKENS = {max_tokens}")
 
     max_ai_l3 = load_flow_max_ai("gen_cosmic")
     if max_ai_l3 > 0:
-        logger.info(f"仅对前 {max_ai_l3} 个 L3 模块调用 AI，超过的跳过")
+        logger.info(f"仅对前 {max_ai_l3} 个三级模块调用 AI，超过的跳过")
 
     all_items: list[CosmicItem] = []
     error_modules: list[tuple[str, str, str, str]] = []
     total = len(l3_modules)
-    logger.info(f"Generating COSMIC decompositions for {total} modules...")
 
     _cosmic_proc_limit = load_gen_cosmic_ai_limit()
     _cosmic_proc_count = 0
@@ -562,20 +570,12 @@ def generate_cosmic_items(
                     all_items.append(_make_empty_cosmic_item(
                         project_name, l1_name, l2_name, l3.name, _child,
                     ))
-                logger.info(
-                    f"    [{idx}/{total}] 跳过 {l3.name}"
-                    f"（超过功能过程限制 {_cosmic_proc_limit}）"
-                )
                 _skip_proc_limit += 1
                 continue
             _cosmic_proc_count += _module_procs
 
-        # 超过 L3 模块数量限制
+        # 超过 三级模块数量限制
         if max_ai_l3 > 0 and idx > max_ai_l3:
-            logger.info(
-                f"    [{idx}/{total}] 跳过 {l3.name}"
-                f"（超过 AI 限制 {max_ai_l3}）"
-            )
             _skip_ai_limit += 1
             for _child in (l3.children or [l3.name]):
                 all_items.append(_make_empty_cosmic_item(
@@ -662,7 +662,7 @@ def _save_ai_response(l3: str, l2: str, l1: str, text: str,
         f.write("## 生成结果\n\n")
         f.write(text)
 
-    logger.info(f"AI响应已保存: {filepath}")
+    logger.debug(f"AI响应已保存: {filepath}")
 
 
 def save_to_json(items: list[CosmicItem], output_path: str) -> None:

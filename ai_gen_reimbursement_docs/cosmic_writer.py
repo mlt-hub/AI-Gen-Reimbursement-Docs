@@ -183,7 +183,7 @@ def write_cosmic_xlsx(
     _save_source_data(all_rows)
 
     if not all_rows:
-        logger.warning("No data rows to write.")
+        logger.warning("没有数据行可写入")
         try:
             wb.save(output_path)
         except PermissionError:
@@ -369,9 +369,9 @@ def write_cosmic_xlsx(
     except PermissionError:
         logger.error("无法写入 %s —— 文件可能被 Excel/WPS 占用，请关闭后重试", output_path)
         raise
-    logger.info(f"Written {total_rows} rows to {output_path}")
+    logger.info(f"写入 {total_rows} 行数据到 {output_path}")
     if footer_saved:
-        logger.info(f"Restored {len(footer_saved)} footer note(s) from template")
+        logger.debug(f"从模板恢复了 {len(footer_saved)} 条页脚备注")
 
 
 def _merge_column_groups(ws, start_row, total_rows, col, all_rows, key):

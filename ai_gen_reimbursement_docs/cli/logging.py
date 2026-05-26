@@ -104,11 +104,12 @@ def setup_logging(log_dir: str, docx_name: str = ""):
 
     _seq = 1
     if docx_name:
-        import re as _re_seq
+        import re
         _max_seq = 0
+        _pattern = re.escape(docx_name) + r'_run_(\d+)_\d{8}_\d{6}\.log$'
         try:
             for _fn in os.listdir(log_dir):
-                _m = _re_seq.match(re.escape(docx_name) + r'_run_(\d+)_\d{8}_\d{6}\.log$', _fn)
+                _m = re.match(_pattern, _fn)
                 if _m:
                     _max_seq = max(_max_seq, int(_m.group(1)))
         except Exception:
@@ -121,6 +122,11 @@ def setup_logging(log_dir: str, docx_name: str = ""):
     run_log = os.path.join(log_dir, f'{prefix}run_{seq_str}{run_stamp}.log')
 
     logger = logging.getLogger('ai_gen_reimbursement_docs')
+
+    # 移除旧的 ReleaseFileHandler，避免多轮运行后 handler 累积
+    for _h in list(logger.handlers):
+        if isinstance(_h, ReleaseFileHandler):
+            logger.removeHandler(_h)
 
     fmt = logging.Formatter(
         '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',

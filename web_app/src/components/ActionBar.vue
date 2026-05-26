@@ -6,7 +6,7 @@
     <button v-if="session.isRunning" @click="cancelTask"
       class="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2">
       <XCircleIcon class="w-4 h-4" />
-      中断执行
+      停止
     </button>
     <button v-if="config.workMode === 'local'" @click="openFolder"
       :disabled="!session.sessionId"
@@ -65,7 +65,7 @@ function showAI() { emit('ai') }
 function cancelTask() {
   if (!session.sessionId) return
   fetch('/api/cancel/' + session.sessionId, { method: 'POST' }).catch(() => {})
-  toast.show('info', '正在中断当前任务...')
+  toast.show('info', '正在停止当前任务...')
 }
 
 function resetTask() {

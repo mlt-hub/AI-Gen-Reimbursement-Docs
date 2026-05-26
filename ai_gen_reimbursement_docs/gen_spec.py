@@ -387,7 +387,7 @@ def init_spec_template_md(
     meta_md_path: str,
     output_md_path: str,
 ) -> str:
-    """生成 gen-spec-spec-功能需求章节-模板.md：列出所有 L3 模块及其功能过程，留空待 AI 填充描述。"""
+    """生成 gen-spec-spec-功能需求章节-模板.md：列出所有 三级模块及其功能过程，留空待 AI 填充描述。"""
     rows = parse_module_tree_md(tree_md_path)
     meta = parse_meta_md(meta_md_path)
     project_name = meta.get("工单标题", "") or meta.get("1、工单需求-元数据录入.工单标题", "")
@@ -428,7 +428,7 @@ def init_spec_template_md(
                     f.write(f"> **AI 生成描述**：（待 AI 填充）\n\n")
                 f.write("\n")
 
-    logger.info(f"spec 模板 MD 已生成: {output_md_path} ({len(l3_groups)} 个模块)")
+    logger.info(f"第2.1步：spec 功能需求章节-模板 MD 已生成: {output_md_path} ({len(l3_groups)} 个模块)")
     return output_md_path
 
 
@@ -447,6 +447,8 @@ def ai_fill_spec_md(
     from ai_gen_reimbursement_docs.llm_client import call_llm
     from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt, load_gen_spec_ai_limit
 
+    logger.info(f"第2.2步：AI 填充 spec 功能需求章节 MD")
+
     proc_limit = load_gen_spec_ai_limit()
     if proc_limit > 0:
         logger.info(f"仅对前 {proc_limit} 个功能过程调用 AI，超过的保留原文")
@@ -464,6 +466,7 @@ def ai_fill_spec_md(
     new_lines = []
     i = 0
     filled = 0
+    skipped = 0
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
@@ -486,7 +489,7 @@ def ai_fill_spec_md(
                 if '（待 AI 填充）' in s:
                     filled += 1
                     if proc_limit > 0 and filled > proc_limit:
-                        logger.info(f"  跳过第 {filled} 个功能过程（超过限制 {proc_limit}）")
+                        skipped += 1
                         new_lines.append(f"> **AI 生成描述**：（超过 AI 限制，保留原文）\n")
                     else:
                         prompt = f"功能过程：{proc_name}\n原文描述：{raw_desc or '(无)'}\n\n请完善此功能过程的描述。"
@@ -512,7 +515,12 @@ def ai_fill_spec_md(
     with open(output_md_path, 'w', encoding='utf-8') as f:
         f.writelines(new_lines)
 
-    logger.info(f"AI 填充 spec MD 完成: {output_md_path}（{filled} 个功能过程，限制 {proc_limit or '无'}）")
+    _ai_filled = filled - skipped
+    _msg = f"AI 填充 spec 功能需求章节 MD: {output_md_path}（AI 填充 {_ai_filled} 个，跳过 {skipped} 个，限制 {proc_limit or '无'}）"
+    if skipped > 0:
+        logger.warning(_msg)
+    else:
+        logger.info(_msg)
     return output_md_path
 
 
@@ -538,7 +546,7 @@ def generate_spec_docx_from_md(
     所有数据从 MD 文件读取，不内部调用 AI。
     #AI生成# 标记应在上游 _ai_fill_meta_md 中完成填充。
     """
-    logger.info("开始生成项目需求说明书.docx...")
+    logger.info("第2.3步：开始生成项目需求说明书.docx...")
 
     # 如果有 filled MD，提取模块描述和功能过程描述
     filled_sections: dict[str, str] = {}
@@ -694,7 +702,10 @@ def auto_update_docx_toc(docx_path: str) -> bool:
     """用 Word COM 自动更新文档目录和域。成功返回 True，失败返回 False。"""
     import sys
 
+    logger.info("第2.4步：自动更新项目需求说明书目录")
+
     if sys.platform != "win32":
+        logger.warning("项目需求说明书目录：自动更新目录失败:当前系统非Windows系统")
         return False
     try:
         import pythoncom
@@ -708,12 +719,10 @@ def auto_update_docx_toc(docx_path: str) -> bool:
             doc.Fields.Update()
             doc.Close(SaveChanges=True)
             word.Quit()
-            logger = logging.getLogger("ai_gen_reimbursement_docs.gen_spec")
-            logger.info("Word COM 自动更新目录成功")
+            logger.info("项目需求说明书目录：自动更新目录成功")
             return True
         finally:
             pythoncom.CoUninitialize()
     except Exception as e:
-        logger = logging.getLogger("ai_gen_reimbursement_docs.gen_spec")
-        logger.warning("Word COM 自动更新目录失败: %s", e)
+        logger.warning("项目需求说明书目录：自动更新目录失败: %s", e)
         return False

@@ -172,11 +172,9 @@ def _ai_fill_fpa(
     for idx, row in enumerate(fpa_rows, 1):
         _base_name = row["新增/修改功能点"].rsplit('-', 1)[0]
         if _max_ai > 0 and idx > _max_ai:
-            logger.info(f"  [{idx}/{total}] 跳过（超过 AI 限制 {_max_ai}）")
             _skip_ai_limit += 1
             continue
         if _allowed_fpa_procs is not None and _base_name not in _allowed_fpa_procs:
-            logger.info(f"  [{idx}/{total}] 跳过（超过功能过程限制 {_proc_limit}）")
             _skip_proc_limit += 1
             continue
         if not row["计算依据说明"]:
@@ -235,11 +233,23 @@ def _ai_fill_fpa(
             except Exception:
                 pass
 
+    _total_skipped = _skip_ai_limit + _skip_proc_limit
+    if _total_skipped > 0 or _filled_count > 0:
+        _parts = [f"AI 填充 {_filled_count}/{total} 行"]
+        if _skip_ai_limit > 0:
+            _parts.append(f"l3_modules_ai__limit={_max_ai} 跳过 {_skip_ai_limit} 行")
+        if _skip_proc_limit > 0:
+            _parts.append(f"gen_fpa_ai_limit={_proc_limit} 跳过 {_skip_proc_limit} 行")
+        _msg = "FPA AI 填充完成: %s" % "，".join(_parts)
+        if _total_skipped > 0:
+            logger.warning(_msg)
+        else:
+            logger.info(_msg)
     if _filled_count == 0 and total > 0:
         _reasons = []
-        if _max_ai > 0 and _skip_ai_limit > 0:
+        if _skip_ai_limit > 0:
             _reasons.append(f"l3_modules_ai__limit={_max_ai}（跳过 {_skip_ai_limit} 行）")
-        if _proc_limit > 0 and _skip_proc_limit > 0:
+        if _skip_proc_limit > 0:
             _reasons.append(f"gen_fpa_ai_limit={_proc_limit}（跳过 {_skip_proc_limit} 行）")
         if _reasons:
             logger.warning(
@@ -262,7 +272,7 @@ def init_fpa_template_md(
     Args:
         summary_md_path: 非空时同步写入 gen-fpa-FPA工作量-总和.md（调整值×要素数量 的求和）
     """
-    logger.info("生成 FPA 模板 MD...")
+    logger.debug("第1.1步：生成 FPA 模板 MD...")
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)
     fpa_rows = _build_fpa_rule_rows(rows, meta)
@@ -299,7 +309,7 @@ def init_fpa_template_md(
         with open(summary_md_path, 'w', encoding='utf-8') as f:
             f.write("# FPA 工作量\n\n")
             f.write(f"FPA工作量（人/天）: {total}\n")
-        logger.info(f"FPA 工作量已写入: {summary_md_path} ({total})")
+        logger.info(f"第1.2步：FPA工作量已写入: {summary_md_path} ({total})")
 
     return output_md_path
 
@@ -313,20 +323,22 @@ def ai_fill_fpa_md(
 ) -> str:
     """读取 FPA 模板 MD，AI 填充 F/G 列，写回 MD。"""
     logger.info("AI 填充 FPA 数据...")
-    logger.info(f"AI 模型: {model}  端点: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
+    logger.debug(f"MODEL: {model}  BASE URL: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
 
     judgement_rules: list[str] = []
     if template_path:
         try:
             wb = openpyxl.load_workbook(template_path)
-            ws = wb['附录1-FPA评估方法说明']
+            from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
+            _appendix_sheet = _get_system_config_value('fpa_appendix_sheet', '附录1-FPA评估方法说明')
+            ws = wb[_appendix_sheet]
             for row_num in range(2, 15):
                 val = ws.cell(row_num, 3).value
                 if val and str(val).strip():
                     judgement_rules.append(str(val).strip())
             wb.close()
             if judgement_rules:
-                logger.info(f"从模板附录读取判定原则 {len(judgement_rules)} 条")
+                logger.debug(f"从模板附录读取判定原则 {len(judgement_rules)} 条")
         except Exception as e:
             logger.warning(f"从模板附录读取判定原则失败: {e}")
     if not judgement_rules:
@@ -412,7 +424,7 @@ def generate_fpa_xlsx_from_md(
     output_path: str,
 ) -> str:
     """从已填充的 FPA MD 生成 FPA工作量评估.xlsx。"""
-    logger.info("从 FPA MD 生成 Excel...")
+    logger.info("第1.4步：从 FPA MD 生成 Excel...")
 
     meta = parse_meta_md(meta_md_path)
     base_formula = meta.get("基准值公式", "")
@@ -445,7 +457,9 @@ def generate_fpa_xlsx_from_md(
                     })
 
     wb = safe_load_workbook(template_path, 'FPA工作量评估')
-    ws = wb['FPA功能点估算']
+    from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
+    _fpa_sheet = _get_system_config_value('fpa_sheet', 'FPA功能点估算')
+    ws = wb[_fpa_sheet]
 
     tmpl_format = {}
     for col_idx in range(1, FPA_TOTAL_COLS):

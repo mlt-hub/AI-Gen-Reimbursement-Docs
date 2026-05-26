@@ -37,7 +37,7 @@ def generate_list_xlsx_from_md(
     cfp_total: 送审功能点 = gen-fpa-FPA工作量-总和.md 的原始值
     fpa_reduced: 送审工作量 = FPA 核减后的工作量
     """
-    logger.info("开始生成项目需求清单.xlsx...")
+    logger.info("第4.1步：开始生成项目需求清单.xlsx...")
 
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)

@@ -113,12 +113,12 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
                 list_meta[wk] = wv
     wb_val.close()
 
-    # 统计元数据自动统计（从解析结果计算唯一值，替代 COUNTA 公式）
+    # 统计元数据自动统计（层级去重，与 Excel 展示一致）
     stats_meta = {
         "入口（个数）": str(len({r[0] for r in func_rows if r[0]})),
-        "一级模块（个数）": str(len({r[1] for r in func_rows if r[1]})),
-        "二级模块（个数）": str(len({r[2] for r in func_rows if r[2]})),
-        "三级模块（个数）": str(len({r[3] for r in func_rows if r[3]})),
+        "一级模块（个数）": str(len({(r[0], r[1]) for r in func_rows if r[1]})),
+        "二级模块（个数）": str(len({(r[0], r[1], r[2]) for r in func_rows if r[2]})),
+        "三级模块（个数）": str(len({(r[0], r[1], r[2], r[3]) for r in func_rows if r[3]})),
         "功能过程（个数）": str(len({r[6] for r in func_rows if r[6]})),
     }
 
@@ -137,7 +137,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
             line = " | ".join(vals)
             f.write(f"| {line} |\n")
 
-    logger.info(f"功能清单模块树已生成: {md_tree_path}")
+    logger.info(f"第0.1步 功能清单模块树已生成: {md_tree_path}")
 
     # ========== 生成 gen-basedata-录入文档元数据-模板.md ==========
 
@@ -173,7 +173,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
                 f.write(f"| {key} | {val_escaped} |\n")
             f.write("\n")
 
-    logger.info(f"文档元数据已生成: {md_meta_path}")
+    logger.info(f"第0.2步 录入文档元数据-模板已生成: {md_meta_path}")
 
     return {"module_tree_md": md_tree_path, "doc_meta_md": md_meta_path}
 
@@ -182,7 +182,9 @@ def read_fpa_xlsx_sum(fpa_xlsx_path: str) -> float:
     """读取 FPA工作量评估.xlsx 中 FPA工作量列（L列）的求和。"""
     try:
         wb = openpyxl.load_workbook(fpa_xlsx_path, data_only=True)
-        ws = wb['FPA功能点估算']
+        from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
+        _fpa_sheet = _get_system_config_value('fpa_sheet', 'FPA功能点估算')
+        ws = wb[_fpa_sheet]
         total = 0.0
         for row in ws.iter_rows(min_row=3, values_only=True):
             val = row[11]  # L列（FPA工作量），0-based index
@@ -212,11 +214,11 @@ def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
     from ai_gen_reimbursement_docs.config_utils import load_sheet_names
     _stats_section = load_sheet_names().get("stats_meta", "9、测试元数据自动统计")
 
-    # 从模块树 MD 统计
+    # 从模块树 MD 统计（层级去重，与 Excel 展示一致）
     entries: set[str] = set()
-    l1s: set[str] = set()
-    l2s: set[str] = set()
-    l3s: set[str] = set()
+    l1s: set[tuple[str, str]] = set()
+    l2s: set[tuple[str, str, str]] = set()
+    l3s: set[tuple[str, str, str, str]] = set()
     procs: set[str] = set()
 
     with open(tree_md_path, encoding='utf-8') as f:
@@ -233,11 +235,11 @@ def verify_module_tree_stats(tree_md_path: str, meta_md_path: str) -> bool:
                     if cells[0]:
                         entries.add(cells[0])
                     if cells[1]:
-                        l1s.add(cells[1])
+                        l1s.add((cells[0], cells[1]))
                     if cells[2]:
-                        l2s.add(cells[2])
+                        l2s.add((cells[0], cells[1], cells[2]))
                     if cells[3]:
-                        l3s.add(cells[3])
+                        l3s.add((cells[0], cells[1], cells[2], cells[3]))
                     if cells[6]:
                         procs.add(cells[6])
 
@@ -490,7 +492,7 @@ def write_cfp_sum(md_dir: str, total: float) -> None:
     with open(path, 'w', encoding='utf-8') as f:
         f.write("# CFP 总和\n\n")
         f.write(f"CFP 总和: {total}\n")
-    logger.info(f"CFP 总和已写入: {path}")
+    logger.info(f"第3.5步：CFP 总和已写入: {path}（{total}）")
 
 
 def read_project_name(meta_md_path: str) -> str:
@@ -562,9 +564,9 @@ def build_modules_from_tree_md(md_path: str) -> list:
             m.children = l3_procs.get(procs_key, [])
 
     l3_count = len([m for m in modules if m.level == 3])
-    logger.info(f"从表格解析到模块层级: {len(seen_l1)}个L1, "
-                f"{sum(len(v) for v in seen_l2.values())}个L2, "
-                f"{l3_count}个L3")
+    logger.debug(f"从表格解析到模块层级: {len(seen_l1)}个一级模块, "
+                f"{sum(len(v) for v in seen_l2.values())}个二级模块, "
+                f"{l3_count}个三级模块")
     return modules
 
 
