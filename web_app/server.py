@@ -454,8 +454,9 @@ async def api_run_local(
 
     def run():
         session_var.set(session_id)
+        _result = None
         try:
-            _execute_mode(
+            _result = _execute_mode(
                 mode, str(xlsx), str(out), custom_t_dir,
                 api_key, model, base_url, project_name,
                 max_tokens=max_tokens, clean=bool(clean),
@@ -469,7 +470,10 @@ async def api_run_local(
             session_cancelled[session_id] = True
         finally:
             if not session_cancelled.get(session_id):
-                emit_session_event({"type": "done"})
+                emit_session_event({
+                    "type": "done",
+                    "files": _build_file_summary(_result) if _result else [],
+                })
             session_cancelled.pop(session_id, None)
             session_var.set(None)
 
@@ -527,8 +531,9 @@ async def api_run_upload(
 
     def run():
         session_var.set(session_id)
+        _result = None
         try:
-            _execute_mode(
+            _result = _execute_mode(
                 mode, str(file_path), str(output_dir), str(custom_t_dir),
                 api_key, model, base_url, project_name,
                 max_tokens=max_tokens, clean=bool(clean),
@@ -548,7 +553,10 @@ async def api_run_upload(
             session_cancelled[session_id] = True
         finally:
             if not session_cancelled.get(session_id):
-                emit_session_event({"type": "done"})
+                emit_session_event({
+                    "type": "done",
+                    "files": _build_file_summary(_result) if _result else [],
+                })
             session_cancelled.pop(session_id, None)
             session_var.set(None)
 
@@ -741,6 +749,28 @@ async def _save_custom_templates(
 
 
 # ── 执行分发 ──────────────────────────────────────────────
+
+
+def _build_file_summary(result) -> list[dict]:
+    """从 PipelineResult 构建文件摘要。标注 _TEMP 文件。"""
+    files = []
+    labels = [
+        ("FPA 工作量评估", getattr(result, 'fpa_xlsx', '')),
+        ("项目功能点拆分表", getattr(result, 'cosmic_xlsx', '')),
+        ("项目需求清单", getattr(result, 'require_xlsx', '')),
+        ("项目需求说明书", getattr(result, 'spec_docx', '')),
+    ]
+    for label, path in labels:
+        if path and os.path.exists(path):
+            size = os.path.getsize(path)
+            is_temp = '_TEMP' in os.path.basename(path)
+            files.append({
+                "label": label,
+                "path": path,
+                "size_kb": round(size / 1024),
+                "is_temp": is_temp,
+            })
+    return files
 
 
 def _execute_mode(

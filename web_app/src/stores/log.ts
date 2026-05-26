@@ -38,7 +38,7 @@ export const useLogStore = defineStore('log', () => {
         switch (data.type) {
           case 'done':
             append({ level: 'DONE', msg: '── 任务完成 ──', time: '' })
-            session.finish()
+            session.finish(data.files || [])
             useStepsStore().finishAll()
             return
           case 'error':

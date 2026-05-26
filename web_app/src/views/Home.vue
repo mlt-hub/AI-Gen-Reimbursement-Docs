@@ -16,10 +16,10 @@
     <Teleport to="body">
       <div v-if="session.inputPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
         <div class="bg-white rounded-xl shadow-2xl w-[420px] p-6">
-          <h3 class="text-lg font-semibold mb-2">送审工作量确认</h3>
-          <p class="text-sm text-gray-500 mb-4">FPA 工作量已生成，请输入送审工作量（人/天），或直接确认使用默认值。</p>
+          <h3 class="text-lg font-semibold mb-2">FPA核减后的工作量确认</h3>
+          <p class="text-sm text-gray-500 mb-4">请输入FPA核减后的工作量（人/天），或直接确认使用默认值。</p>
           <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">送审工作量（人/天）</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">FPA核减后的工作量（人/天）</label>
             <input
               v-model="fpaInputValue"
               type="number"

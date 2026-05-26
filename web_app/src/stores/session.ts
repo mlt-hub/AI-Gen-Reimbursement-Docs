@@ -9,11 +9,19 @@ export interface InputPrompt {
   msg: string
 }
 
+export interface DoneFile {
+  label: string
+  path: string
+  size_kb: number
+  is_temp: boolean
+}
+
 export const useSessionStore = defineStore('session', () => {
   const sessionId = ref<string | null>(null)
   const runState = ref<RunState>('idle')
   const outputDir = ref<string>('')
   const inputPrompt = ref<InputPrompt | null>(null)
+  const doneFiles = ref<DoneFile[]>([])
 
   const isRunning = computed(() => runState.value === 'running')
   const isDone = computed(() => runState.value === 'done')
@@ -23,11 +31,13 @@ export const useSessionStore = defineStore('session', () => {
     outputDir.value = out
     runState.value = 'running'
     inputPrompt.value = null
+    doneFiles.value = []
   }
 
-  function finish() {
+  function finish(files?: DoneFile[]) {
     runState.value = 'done'
     inputPrompt.value = null
+    if (files) doneFiles.value = files
   }
 
   function setError() {
@@ -40,11 +50,12 @@ export const useSessionStore = defineStore('session', () => {
     outputDir.value = ''
     runState.value = 'idle'
     inputPrompt.value = null
+    doneFiles.value = []
   }
 
   function showInputPrompt(prompt: InputPrompt) {
     inputPrompt.value = prompt
   }
 
-  return { sessionId, runState, outputDir, inputPrompt, isRunning, isDone, start, finish, setError, reset, showInputPrompt }
+  return { sessionId, runState, outputDir, inputPrompt, doneFiles, isRunning, isDone, start, finish, setError, reset, showInputPrompt }
 })

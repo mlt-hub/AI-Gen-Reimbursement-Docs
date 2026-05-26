@@ -1,5 +1,27 @@
 <template>
-  <div class="bg-white border-t border-gray-200 px-6 py-3 flex items-center gap-3">
+  <div class="bg-white border-t border-gray-200">
+    <!-- 文件摘要（任务完成后显示） -->
+    <div v-if="session.isDone && session.doneFiles.length" class="px-6 py-3 border-b border-gray-100">
+      <div class="text-xs text-gray-500 mb-2 font-medium">交付物清单</div>
+      <div class="flex flex-wrap gap-2">
+        <a v-for="f in session.doneFiles" :key="f.path"
+          :href="'file:///' + f.path"
+          :class="['inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium',
+            f.is_temp ? 'bg-orange-50 text-orange-700 border border-orange-200' : 'bg-green-50 text-green-700 border border-green-200']"
+          :title="f.is_temp ? '文件被占用，已保存到临时文件 — 关闭占用程序后重命名替换原文件即可' : f.path">
+          <span v-if="f.is_temp">&#9888;</span>
+          <span v-else>&#10003;</span>
+          {{ f.label }}
+          <span class="opacity-60">{{ f.size_kb }} KB</span>
+        </a>
+      </div>
+      <div v-if="session.doneFiles.some(f => f.is_temp)" class="text-xs text-orange-600 mt-2">
+        &#9888; 有文件保存到了 <code class="bg-orange-100 px-1 rounded">_TEMP</code> 临时文件，关闭 Excel/WPS 后重命名替换原文件即可
+      </div>
+    </div>
+
+    <!-- 操作栏 -->
+    <div class="px-6 py-3 flex items-center gap-3">
     <span class="text-sm text-gray-500 flex-1">
       <template v-if="session.outputDir">交付物目录: {{ session.outputDir }}</template>
     </span>
@@ -30,6 +52,7 @@
       class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
       新任务
     </button>
+    </div>
   </div>
 </template>
 

@@ -18,10 +18,10 @@
           class="text-center py-2 px-4 text-green-400 font-semibold border-t border-b border-green-400/30 my-1">
           {{ entry.msg }}
         </div>
-        <div v-else class="flex gap-3 py-0.5">
+        <div v-else class="flex gap-3 py-0.5" :class="{ 'mt-3': entry.msg.startsWith('\n') }">
           <span class="text-gray-500 shrink-0 w-20">{{ entry.time }}</span>
           <span :class="['shrink-0 w-14 font-semibold', levelColor(entry.level)]">{{ entry.level }}</span>
-          <span class="text-gray-300 break-all">{{ entry.msg }}</span>
+          <span class="text-gray-300 break-all whitespace-pre-wrap">{{ entry.msg.trimStart() }}</span>
         </div>
       </template>
     </div>
