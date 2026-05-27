@@ -24,16 +24,49 @@ def _replace_path(text: str, old: str, new: str) -> str:
     return text.replace(old, new).replace(old.replace("\\", "/"), new)
 
 
+def _get_web_mode() -> str:
+    """返回 web 子模式（local/remote/auto），非 web 模式返回空字符串。
+
+    优先级：ContextVar（pipeline 线程内）→ system_config.yaml → CLI。
+    """
+    try:
+        from web_app.server import web_mode_var
+        wm = web_mode_var.get()
+        if wm:
+            return wm
+    except Exception:
+        pass
+    if os.environ.get("AI_REIMBURSEMENT_MODE") == "web":
+        from ai_gen_reimbursement_docs.config_utils import load_web_work_mode
+        return load_web_work_mode()
+    return ""
+
+
 def _mode_suffix() -> str:
     """返回当前运行模式简称，用于文件名。"""
-    return "web" if os.environ.get("AI_REIMBURSEMENT_MODE") == "web" else "cli"
+    wm = _get_web_mode()
+    if wm == 'local':
+        return "web-local"
+    elif wm == 'remote':
+        return "web-remote"
+    elif wm:
+        return "web"
+    return "cli"
 
 
 class ModeTagFilter(logging.Filter):
     """为每条日志添加运行模式标签，供 Formatter 使用。不修改 record.msg。"""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.mode_tag = "[WEB] " if os.environ.get("AI_REIMBURSEMENT_MODE") == "web" else "[CLI] "
+        wm = _get_web_mode()
+        if wm == 'local':
+            record.mode_tag = "[WEB-Local] "
+        elif wm == 'remote':
+            record.mode_tag = "[WEB-Remote] "
+        elif wm:
+            record.mode_tag = "[WEB] "
+        else:
+            record.mode_tag = "[CLI] "
         return True
 
 

@@ -34,6 +34,9 @@ os.environ['AI_REIMBURSEMENT_MODE'] = 'web'
 session_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "session_id", default=None
 )
+web_mode_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "web_mode", default=""
+)
 session_queues: dict[str, queue.Queue] = {}
 session_outputs: dict[str, Path] = {}  # session_id →交付物目录（本机模式）
 session_zips: dict[str, Path] = {}  # session_id → zip 文件路径（远程服务模式）
@@ -446,6 +449,11 @@ async def api_continue(session_id: str, data: dict):
     return {"ok": True}
 
 
+def is_web_mode() -> bool:
+    """判断当前线程是否在 Web UI pipeline 中运行。"""
+    return bool(web_mode_var.get())
+
+
 def check_cancelled():
     """检查当前 session 是否已被取消，若是则抛出 CancelledError。"""
     from ai_gen_reimbursement_docs.exceptions import CancelledError
@@ -667,6 +675,7 @@ async def api_run_local(
     session_outputs[session_id] = out
 
     def run():
+        web_mode_var.set('local')
         _execute_in_session(
             session_id, str(xlsx), str(out), custom_t_dir,
             api_key, model, base_url, project_name,
@@ -727,6 +736,8 @@ async def api_run_upload(
     session_dirs[session_id] = work_dir
 
     def run():
+        web_mode_var.set('remote')
+
         def _pack_zip(output_dir_path: str, sid: str, result: object) -> None:
             zip_path = work_dir / f"交付物_{sid}.zip"
             shutil.make_archive(

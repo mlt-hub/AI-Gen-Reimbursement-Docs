@@ -30,9 +30,19 @@ from ai_gen_reimbursement_docs.gen_cosmic import (
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.pipeline')
 
+
+def _is_web() -> bool:
+    """当前线程是否在 Web UI pipeline 中运行。"""
+    try:
+        from web_app.server import is_web_mode
+        return is_web_mode()
+    except Exception:
+        return False
+
+
 def _check_cancelled():
     """Web UI 模式下检查是否被停止，CLI 模式跳过。"""
-    if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
+    if _is_web():
         from web_app.server import check_cancelled as _cc
         _cc()
 
@@ -42,7 +52,7 @@ def _prompt_fpa_reduced(default_value: float) -> float:
     from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
     if load_fpa_reduced_use_workload():
         return default_value
-    if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
+    if _is_web():
         from web_app.server import wait_for_fpa_input
         return wait_for_fpa_input(default_value)
     # CLI fallback
@@ -64,7 +74,7 @@ def _prompt_list_values(md_dir: str, cfp_total: float, fpa_reduced: float) -> tu
     from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
     if load_fpa_reduced_use_workload():
         return cfp_total, fpa_reduced
-    if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
+    if _is_web():
         from web_app.server import wait_for_list_input
         return wait_for_list_input(cfp_total, fpa_reduced)
     # CLI fallback
@@ -74,7 +84,7 @@ def _prompt_list_values(md_dir: str, cfp_total: float, fpa_reduced: float) -> tu
 
 def _step(key: str):
     """向前端发送步骤进度事件。key: basedata | fpa | spec | cosmic | list"""
-    if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
+    if _is_web():
         from web_app.server import emit_session_event
         emit_session_event({"type": "step", "key": key})
 
@@ -705,7 +715,7 @@ def run_pipeline_simple(
             out_dir = excel_dir
 
     logger.info(f"功能清单输入文件: {os.path.basename(file_path)}")
-    logger.info(f"运行模式: {'Web UI' if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web' else 'CLI'}")
+    logger.info(f"运行模式: {'Web UI' if _is_web() else 'CLI'}")
     if project_name:
         logger.info(f"项目名称: {project_name}")
     logger.info(f"交付物输出目录: {out_dir}")
