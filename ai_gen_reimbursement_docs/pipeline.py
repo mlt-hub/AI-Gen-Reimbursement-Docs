@@ -490,7 +490,7 @@ def _generate_list(md_dir, tree_md, meta_md,
     """第3步：需求清单。fpa_reduced/cfp_total 为 None 时从 MD 文件读取默认值。"""
     _check_cancelled()
     _step("list")
-    logger.info("第4步 生成项目需求清单...")
+    logger.info("第4步：生成项目需求清单...")
     require_src = _check_template(templates_dict, 'list', '项目需求清单')
 
     from ai_gen_reimbursement_docs.excel_source import read_md_value
@@ -512,7 +512,7 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
     """需求说明书（无固定顺序依赖）。"""
     _check_cancelled()
     _step("spec")
-    logger.info("第2步 生成项目需求说明书...")
+    logger.info("第2步：生成项目需求说明书...")
     spec_src = _check_template(templates_dict, 'spec', '项目需求说明书')
 
     # 确保元数据已填充

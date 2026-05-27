@@ -24,6 +24,19 @@ def _replace_path(text: str, old: str, new: str) -> str:
     return text.replace(old, new).replace(old.replace("\\", "/"), new)
 
 
+def _mode_suffix() -> str:
+    """返回当前运行模式简称，用于文件名。"""
+    return "web" if os.environ.get("AI_REIMBURSEMENT_MODE") == "web" else "cli"
+
+
+class ModeTagFilter(logging.Filter):
+    """为每条日志添加运行模式标签，供 Formatter 使用。不修改 record.msg。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.mode_tag = "[WEB] " if os.environ.get("AI_REIMBURSEMENT_MODE") == "web" else "[CLI] "
+        return True
+
+
 class StepFormatter(logging.Formatter):
     """控制台日志：步骤行（以"第N"开头）前自动插入空行分隔。"""
 
@@ -75,28 +88,31 @@ def init_global_logging(level: str = "INFO"):
 
     main_log = os.path.join(log_dir, 'global_ai_gen_reimbursement_docs.log')
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_log = os.path.join(log_dir, f'global_run_{run_stamp}.log')
+    run_log = os.path.join(log_dir, f'global_run_{_mode_suffix()}_{run_stamp}.log')
 
     _lv = getattr(logging, level.upper(), logging.INFO)
     logger = logging.getLogger('ai_gen_reimbursement_docs')
     logger.setLevel(logging.DEBUG)
 
     _ps = PathShortener()
+    _mt = ModeTagFilter()
 
     fmt = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(mode_tag)s%(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
     fh = ReleaseFileHandler(main_log, encoding='utf-8', mode='a')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(fmt)
+    fh.addFilter(_mt)
     fh.addFilter(_ps)
     logger.addHandler(fh)
 
     rh = ReleaseFileHandler(run_log, encoding='utf-8', mode='w')
     rh.setLevel(logging.DEBUG)
     rh.setFormatter(fmt)
+    rh.addFilter(_mt)
     rh.addFilter(_ps)
     logger.addHandler(rh)
 
@@ -114,10 +130,11 @@ def setup_logging(log_dir: str, docx_name: str = ""):
     os.makedirs(log_dir, exist_ok=True)
 
     _seq = 1
+    _mode = _mode_suffix()
     if docx_name:
         import re
         _max_seq = 0
-        _pattern = re.escape(docx_name) + r'_run_(\d+)_\d{8}_\d{6}\.log$'
+        _pattern = re.escape(docx_name) + r'_run_(\d+)_(?:cli|web)_\d{8}_\d{6}\.log$'
         try:
             for _fn in os.listdir(log_dir):
                 _m = re.match(_pattern, _fn)
@@ -130,7 +147,7 @@ def setup_logging(log_dir: str, docx_name: str = ""):
     prefix = f"{docx_name}_" if docx_name else ""
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     seq_str = f"{_seq}_" if docx_name else ""
-    run_log = os.path.join(log_dir, f'{prefix}run_{seq_str}{run_stamp}.log')
+    run_log = os.path.join(log_dir, f'{prefix}run_{seq_str}{_mode}_{run_stamp}.log')
 
     logger = logging.getLogger('ai_gen_reimbursement_docs')
 
@@ -140,13 +157,14 @@ def setup_logging(log_dir: str, docx_name: str = ""):
             logger.removeHandler(_h)
 
     fmt = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(mode_tag)s%(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
     rh = ReleaseFileHandler(run_log, encoding='utf-8', mode='w')
     rh.setLevel(logging.DEBUG)
     rh.setFormatter(fmt)
+    rh.addFilter(ModeTagFilter())
     rh.addFilter(PathShortener())
     logger.addHandler(rh)
 

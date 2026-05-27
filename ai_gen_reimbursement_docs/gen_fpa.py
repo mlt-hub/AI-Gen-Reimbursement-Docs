@@ -272,7 +272,7 @@ def init_fpa_template_md(
     Args:
         summary_md_path: 非空时同步写入 gen-fpa-FPA工作量-总和.md（调整值×要素数量 的求和）
     """
-    logger.debug("第1.1步：生成 FPA 模板 MD...")
+    logger.info("第1.1步：生成 FPA 模板 MD...")
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)
     fpa_rows = _build_fpa_rule_rows(rows, meta)
@@ -302,7 +302,7 @@ def init_fpa_template_md(
             except (ValueError, TypeError):
                 pass
 
-    logger.info(f"第1.1步：FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
+    logger.info(f"FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
 
     if summary_md_path:
         os.makedirs(os.path.dirname(summary_md_path) or '.', exist_ok=True)

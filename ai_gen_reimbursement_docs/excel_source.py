@@ -488,11 +488,12 @@ def read_md_value(path: str, pattern: str) -> float:
 
 def write_cfp_sum(md_dir: str, total: float) -> None:
     """将 CFP 总和写入 gen-cosmic-CFP-总和.md。"""
+    logger.info(f"第3.5步：写入 CFP 总和")
     path = os.path.join(md_dir, 'gen-cosmic-CFP-总和.md')
     with open(path, 'w', encoding='utf-8') as f:
         f.write("# CFP 总和\n\n")
         f.write(f"CFP 总和: {total}\n")
-    logger.info(f"第3.4步：CFP 总和已写入: {path}（{total}）")
+    logger.info(f"CFP 总和已写入: {path}（{total}）")
 
 
 def read_project_name(meta_md_path: str) -> str:
