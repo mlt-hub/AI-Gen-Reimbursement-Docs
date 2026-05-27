@@ -60,6 +60,13 @@ export const useLogStore = defineStore('log', () => {
               msg: data.msg || '',
             })
             return
+          case 'prompt_list':
+            append({ level: 'INFO', msg: '⏸ 等待确认送审工作量和送审功能点...', time: data.time || '' })
+            session.showListPrompt({
+              cfpDefault: data.cfp_default || 0,
+              fpaDefault: data.fpa_default || 0,
+            })
+            return
           case 'step':
             useStepsStore().setActive(data.key)
             return

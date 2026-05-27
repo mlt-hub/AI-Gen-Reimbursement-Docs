@@ -59,6 +59,19 @@ def _prompt_fpa_reduced(default_value: float) -> float:
     return default_value
 
 
+def _prompt_list_values(md_dir: str, cfp_total: float, fpa_reduced: float) -> tuple[float, float]:
+    """gen-list 步骤：让用户确认送审工作量和送审功能点。Web UI / CLI 通用。"""
+    from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
+    if load_fpa_reduced_use_workload():
+        return cfp_total, fpa_reduced
+    if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
+        from web_app.server import wait_for_list_input
+        return wait_for_list_input(cfp_total, fpa_reduced)
+    # CLI fallback
+    from ai_gen_reimbursement_docs.cli.interactive import prompt_list_values
+    return prompt_list_values(md_dir)
+
+
 def _step(key: str):
     """向前端发送步骤进度事件。key: basedata | fpa | spec | cosmic | list"""
     if os.environ.get('AI_REIMBURSEMENT_MODE') == 'web':
@@ -487,7 +500,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
 def _generate_list(md_dir, tree_md, meta_md,
               doc_dir, require_xlsx, templates_dict, result,
               fpa_reduced=None, cfp_total=None):
-    """第3步：需求清单。fpa_reduced/cfp_total 为 None 时从 MD 文件读取默认值。"""
+    """第3步：需求清单。fpa_reduced/cfp_total 为 None 时从 MD 文件读取默认值并弹窗确认。"""
     _check_cancelled()
     _step("list")
     logger.info("第4步：生成项目需求清单...")
@@ -497,9 +510,12 @@ def _generate_list(md_dir, tree_md, meta_md,
     if cfp_total is None:
         cfp_total = read_md_value(
             os.path.join(md_dir, '3.5.gen-cosmic-CFP-总和.md'),
-            r'CFP 总和[：:]\s*([\d.]+)')
+            r'CFP 总和[：:]\s*([\d.]+)') or 0
     if fpa_reduced is None:
         fpa_reduced = _read_fpa_reduced_md(md_dir)
+
+    cfp_total, fpa_reduced = _prompt_list_values(
+        md_dir, float(cfp_total or 0), float(fpa_reduced or 0))
 
     require_xlsx = generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
                                               cfp_total=cfp_total, fpa_reduced=fpa_reduced)

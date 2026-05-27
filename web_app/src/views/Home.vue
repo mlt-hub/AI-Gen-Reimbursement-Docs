@@ -37,6 +37,42 @@
       </div>
     </Teleport>
 
+    <!-- 送审工作量和功能点确认弹窗 -->
+    <Teleport to="body">
+      <div v-if="session.listPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div class="bg-white rounded-xl shadow-2xl w-[420px] p-6">
+          <h3 class="text-lg font-semibold mb-2">送审确认</h3>
+          <p class="text-sm text-gray-500 mb-4">请确认送审工作量和送审功能点，或直接使用默认值。</p>
+          <div class="mb-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">送审工作量（人/天）</label>
+            <input
+              v-model.number="listFpaValue"
+              type="number"
+              step="0.1"
+              min="0"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              @keyup.enter="submitListInput"
+            />
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">送审功能点（个）</label>
+            <input
+              v-model.number="listCfpValue"
+              type="number"
+              step="0.1"
+              min="0"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              @keyup.enter="submitListInput"
+            />
+          </div>
+          <div class="flex justify-end gap-3">
+            <button @click="cancelTask" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">取消任务</button>
+            <button @click="submitListInput" class="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">确认继续</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- AI 交互弹窗 -->
     <Teleport to="body">
       <div v-if="aiModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="closeAIModal">
@@ -107,6 +143,17 @@ watch(() => session.inputPrompt, (p) => {
   }
 })
 
+// ── 送审确认（gen-list）──
+const listFpaValue = ref(0)
+const listCfpValue = ref(0)
+
+watch(() => session.listPrompt, (p) => {
+  if (p) {
+    listFpaValue.value = p.fpaDefault
+    listCfpValue.value = p.cfpDefault
+  }
+})
+
 async function submitFpaInput() {
   if (!session.sessionId) return
   const val = parseFloat(String(fpaInputValue.value)) || 0
@@ -123,12 +170,31 @@ async function submitFpaInput() {
   session.inputPrompt = null
 }
 
+async function submitListInput() {
+  if (!session.sessionId) return
+  try {
+    await fetch('/api/continue/' + session.sessionId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fpa_reduced: parseFloat(String(listFpaValue.value)) || 0,
+        cfp_total: parseFloat(String(listCfpValue.value)) || 0,
+      }),
+    })
+  } catch {
+    toast.show('error', '提交失败')
+    return
+  }
+  session.listPrompt = null
+}
+
 async function cancelTask() {
   if (!session.sessionId) return
   try {
     await fetch('/api/cancel/' + session.sessionId, { method: 'POST' })
   } catch { /* ignore */ }
   session.inputPrompt = null
+  session.listPrompt = null
 }
 
 // ── 任务启动 ──

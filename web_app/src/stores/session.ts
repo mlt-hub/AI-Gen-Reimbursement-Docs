@@ -9,6 +9,11 @@ export interface InputPrompt {
   msg: string
 }
 
+export interface ListPrompt {
+  cfpDefault: number
+  fpaDefault: number
+}
+
 export interface DoneFile {
   label: string
   path: string
@@ -21,6 +26,7 @@ export const useSessionStore = defineStore('session', () => {
   const runState = ref<RunState>('idle')
   const outputDir = ref<string>('')
   const inputPrompt = ref<InputPrompt | null>(null)
+  const listPrompt = ref<ListPrompt | null>(null)
   const doneFiles = ref<DoneFile[]>([])
 
   const isRunning = computed(() => runState.value === 'running')
@@ -31,18 +37,21 @@ export const useSessionStore = defineStore('session', () => {
     outputDir.value = out
     runState.value = 'running'
     inputPrompt.value = null
+    listPrompt.value = null
     doneFiles.value = []
   }
 
   function finish(files?: DoneFile[]) {
     runState.value = 'done'
     inputPrompt.value = null
+    listPrompt.value = null
     if (files) doneFiles.value = files
   }
 
   function setError() {
     runState.value = 'error'
     inputPrompt.value = null
+    listPrompt.value = null
   }
 
   function reset() {
@@ -50,6 +59,7 @@ export const useSessionStore = defineStore('session', () => {
     outputDir.value = ''
     runState.value = 'idle'
     inputPrompt.value = null
+    listPrompt.value = null
     doneFiles.value = []
   }
 
@@ -57,5 +67,9 @@ export const useSessionStore = defineStore('session', () => {
     inputPrompt.value = prompt
   }
 
-  return { sessionId, runState, outputDir, inputPrompt, doneFiles, isRunning, isDone, start, finish, setError, reset, showInputPrompt }
+  function showListPrompt(prompt: ListPrompt) {
+    listPrompt.value = prompt
+  }
+
+  return { sessionId, runState, outputDir, inputPrompt, listPrompt, doneFiles, isRunning, isDone, start, finish, setError, reset, showInputPrompt, showListPrompt }
 })

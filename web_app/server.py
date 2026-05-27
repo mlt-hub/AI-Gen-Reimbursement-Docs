@@ -75,6 +75,29 @@ def wait_for_fpa_input(default_fpa: float) -> float:
     return float(result.get("fpa_reduced", default_fpa))
 
 
+def wait_for_list_input(default_cfp: float, default_fpa: float) -> tuple[float, float]:
+    """在 pipeline 线程中调用（gen-list），通过 SSE 通知前端弹输入框，等待用户确认送审工作量和送审功能点。"""
+    sid = session_var.get()
+    if not sid:
+        return default_cfp, default_fpa
+
+    event = threading.Event()
+    session_input_events[sid] = event
+
+    emit_session_event({
+        "type": "prompt_list",
+        "cfp_default": default_cfp,
+        "fpa_default": default_fpa,
+    })
+
+    event.wait(timeout=1800)
+    session_input_events.pop(sid, None)
+    result = session_input_results.pop(sid, {})
+    cfp_total = float(result.get("cfp_total", default_cfp))
+    fpa_reduced = float(result.get("fpa_reduced", default_fpa))
+    return cfp_total, fpa_reduced
+
+
 def _execute_in_session(
     session_id: str,
     file_path: str,
@@ -268,9 +291,11 @@ def _mask_env_content(path: Path) -> str:
 
 @app.on_event("shutdown")
 async def _on_shutdown():
-    """服务关闭时标记所有 session 为已取消，避免后台 AI 调用继续重试。"""
+    """服务关闭时标记所有 session 为已取消，唤醒等待输入的线程。"""
     for sid in list(session_queues.keys()):
         session_cancelled[sid] = True
+    for ev in session_input_events.values():
+        ev.set()
 
 # 静态文件：Vite 构建产物
 _dist_dir = Path(__file__).parent / "static" / "dist"

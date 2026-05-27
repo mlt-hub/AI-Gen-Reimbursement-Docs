@@ -349,9 +349,6 @@ def main():
         init_global_logging, setup_logging, write_combined_ai_log,
     )
     from ai_gen_reimbursement_docs.cli.notify import play_notify_sound
-    from ai_gen_reimbursement_docs.cli.interactive import (
-        prompt_list_values,
-    )
     from ai_gen_reimbursement_docs.excel_source import project_root
 
     from ai_gen_reimbursement_docs.config_utils import load_log_level
@@ -686,13 +683,7 @@ def main():
             if val and os.path.exists(val):
                 templates[key] = val
 
-        # 交互式参数：在调 pipeline 之前提示用户（gen-cosmic/gen-all 由 pipeline 内部处理）
-        _fpa_reduced = None
-        _cfp_total = None
-        if mode in ('gen-list',):
-            _cfp_total, _fpa_reduced = prompt_list_values(
-                os.path.join(out_dir, 'md'))
-
+        # 交互式参数（gen-cosmic/gen-all/gen-list 均由 pipeline 内部处理）
         from ai_gen_reimbursement_docs.pipeline import run_pipeline
         from ai_gen_reimbursement_docs.exceptions import CosmicToolError
         try:
@@ -705,8 +696,6 @@ def main():
                 base_url=base_url,
                 project_name=args.project_name,
                 templates=templates or None,
-                fpa_reduced=_fpa_reduced,
-                cfp_total=_cfp_total,
             )
         except KeyboardInterrupt:
             print("\n  任务已取消", file=sys.stderr)
