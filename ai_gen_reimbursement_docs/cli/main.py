@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+from pathlib import Path as _Path
 import re
 import shutil
 import sys
@@ -145,7 +146,8 @@ def _run_pipeline_with_args(
     for _label, _path in _summary_files:
         if _path and os.path.exists(_path):
             _size = os.path.getsize(_path)
-            print(f"  ✅ {_label}: {_path} ({_size/1024:.0f} KB)")
+            _uri = _Path(_path).as_uri()
+            print(f"  ✅ {_label}: {_uri} ({_size/1024:.0f} KB)")
         else:
             print(f"  ⏭️  {_label}: 跳过（已存在或未生成）")
     print()
