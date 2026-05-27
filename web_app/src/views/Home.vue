@@ -164,7 +164,7 @@ async function submitFpaInput() {
       body: JSON.stringify({ field: 'fpa_reduced', fpa_reduced: val }),
     })
   } catch {
-    toast.show('error', '提交失败')
+    toast.show('error', '网络错误，请检查服务是否运行')
     return
   }
   session.inputPrompt = null
@@ -182,7 +182,7 @@ async function submitListInput() {
       }),
     })
   } catch {
-    toast.show('error', '提交失败')
+    toast.show('error', '网络错误，请检查服务是否运行')
     return
   }
   session.listPrompt = null
@@ -193,8 +193,6 @@ async function cancelTask() {
   try {
     await fetch('/api/cancel/' + session.sessionId, { method: 'POST' })
   } catch { /* ignore */ }
-  session.inputPrompt = null
-  session.listPrompt = null
 }
 
 // ── 任务启动 ──
@@ -241,8 +239,9 @@ async function startTask() {
     session.start(data.session_id, data.output_dir || '')
     log.connect()
   } catch (e: any) {
-    log.append({ level: 'ERROR', msg: e.message, time: '' })
-    toast.show('error', e.message)
+    const msg = e.message === 'Failed to fetch' ? '无法连接服务，请检查服务是否运行' : e.message
+    log.append({ level: 'ERROR', msg: msg, time: '' })
+    toast.show('error', msg)
     session.setError()
   }
 }

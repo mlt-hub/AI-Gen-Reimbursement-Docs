@@ -72,6 +72,8 @@ def wait_for_fpa_input(default_fpa: float) -> float:
     event.wait(timeout=1800)
     session_input_events.pop(sid, None)
     result = session_input_results.pop(sid, {})
+    if session_cancelled.get(sid):
+        raise CancelledError("任务已被用户停止")
     return float(result.get("fpa_reduced", default_fpa))
 
 
@@ -93,6 +95,8 @@ def wait_for_list_input(default_cfp: float, default_fpa: float) -> tuple[float, 
     event.wait(timeout=1800)
     session_input_events.pop(sid, None)
     result = session_input_results.pop(sid, {})
+    if session_cancelled.get(sid):
+        raise CancelledError("任务已被用户停止")
     cfp_total = float(result.get("cfp_total", default_cfp))
     fpa_reduced = float(result.get("fpa_reduced", default_fpa))
     return cfp_total, fpa_reduced

@@ -66,3 +66,5 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 1. 每次对话，都先回到问题，给出方案，不改代码
 2. 我明确发出修改代码的指令后，再修改代码
+3. 任何情况下，都不要修改代码，除非有这个明确的指令：修改代码
+4. 
