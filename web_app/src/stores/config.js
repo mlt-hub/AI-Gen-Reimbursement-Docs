@@ -30,7 +30,6 @@ function saveBool(key, val) {
     }
     catch { /* 忽略 */ }
 }
-const STORAGE_KEYS = ['apiKey', 'model', 'baseUrl', 'maxTokens', 'projectName', 'pipelineMode', 'clean'];
 export const useConfigStore = defineStore('config', () => {
     const workMode = ref('local');
     const pipelineMode = ref(loadStr('pipelineMode', 'from-excel-gen-all'));

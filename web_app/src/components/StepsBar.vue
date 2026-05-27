@@ -1,15 +1,15 @@
 <template>
-  <div v-if="stepsStore.steps.length" class="flex items-center gap-1 px-2 py-3">
+  <div v-if="stepsStore.steps.length" class="flex items-center gap-2 overflow-x-auto border-b border-[var(--color-rule)] bg-[var(--color-surface)] px-5 py-3">
     <template v-for="(step, i) in stepsStore.steps" :key="step.key">
-      <div class="flex items-center gap-1.5" :class="i > 0 ? 'ml-1' : ''">
-        <span v-if="step.state === 'done'" class="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">✓</span>
-        <span v-else-if="step.state === 'active'" class="w-5 h-5 rounded-full bg-primary-500 text-white flex items-center justify-center text-xs font-bold animate-pulse">{{ i }}</span>
-        <span v-else class="w-5 h-5 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-xs">{{ i }}</span>
-        <span :class="['text-xs whitespace-nowrap', step.state === 'active' ? 'text-primary-600 font-medium' : step.state === 'done' ? 'text-green-600' : 'text-gray-400']">
+      <div class="flex items-center gap-2" :class="i > 0 ? 'ml-1' : ''">
+        <span v-if="step.state === 'done'" class="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--color-success)] text-xs font-bold text-white">✓</span>
+        <span v-else-if="step.state === 'active'" class="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--color-accent)] text-xs font-bold text-white">{{ i + 1 }}</span>
+        <span v-else class="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--color-surface-muted)] text-xs text-[var(--color-ink-soft)]">{{ i + 1 }}</span>
+        <span :class="['whitespace-nowrap text-xs', step.state === 'active' ? 'font-semibold text-[var(--color-accent-strong)]' : step.state === 'done' ? 'text-[var(--color-success)]' : 'text-[var(--color-ink-soft)]']">
           {{ step.label }}
         </span>
       </div>
-      <span v-if="i < stepsStore.steps.length - 1" class="w-4 h-px bg-gray-200 mx-0.5 shrink-0" :class="step.state === 'done' ? 'bg-green-300' : ''" />
+      <span v-if="i < stepsStore.steps.length - 1" class="mx-1 h-px w-6 shrink-0 bg-[var(--color-rule-strong)]" :class="step.state === 'done' ? 'bg-[var(--color-success)]' : ''" />
     </template>
   </div>
 </template>

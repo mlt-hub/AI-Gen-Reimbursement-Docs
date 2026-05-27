@@ -1,12 +1,29 @@
 <template>
-  <div class="flex h-full">
+  <div class="flex h-full flex-col gap-4 overflow-hidden p-4 lg:flex-row lg:p-5">
     <!-- 左侧配置面板 -->
-    <aside class="w-[380px] shrink-0 bg-gray-50 border-r border-gray-100 p-5 overflow-y-auto">
+    <aside class="surface min-h-0 shrink-0 overflow-y-auto rounded-xl p-4 lg:w-[390px]">
+      <div class="mb-5 border-b border-[var(--color-rule)] pb-4">
+        <p class="text-xs font-semibold uppercase text-[var(--color-ink-soft)]">Run setup</p>
+        <h2 class="mt-1 text-xl font-bold text-[var(--color-ink)]">生成任务</h2>
+        <p class="mt-1 text-sm text-[var(--color-ink-muted)]">选择输入、模式和模板后启动文档生成。</p>
+      </div>
       <ConfigPanel @start="startTask" />
     </aside>
 
     <!-- 右侧日志区 -->
-    <div class="flex-1 flex flex-col min-w-0">
+    <div class="surface flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
+      <div class="border-b border-[var(--color-rule)] px-5 py-4">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase text-[var(--color-ink-soft)]">Execution monitor</p>
+            <h2 class="mt-1 truncate text-lg font-bold text-[var(--color-ink)]">{{ runTitle }}</h2>
+          </div>
+          <div :class="['inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
+            <span class="h-2 w-2 rounded-full" :class="runDotClass" />
+            {{ runStateText }}
+          </div>
+        </div>
+      </div>
       <StepsBar v-if="session.isRunning || session.isDone" />
       <LogViewer />
       <ActionBar @ai="openAIModal" @reset="resetTask" />
@@ -14,24 +31,24 @@
 
     <!-- FPA核减后的工作量输入弹窗 -->
     <Teleport to="body">
-      <div v-if="session.inputPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div class="bg-white rounded-xl shadow-2xl w-[420px] p-6">
+      <div v-if="session.inputPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div class="surface w-full max-w-[420px] rounded-xl p-6">
           <h3 class="text-lg font-semibold mb-2">FPA核减后的工作量确认</h3>
           <p class="text-sm text-gray-500 mb-4">请输入FPA核减后的工作量（人/天），或直接确认使用默认值。</p>
           <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">FPA核减后的工作量（人/天）</label>
+            <label class="field-label">FPA核减后的工作量（人/天）</label>
             <input
               v-model="fpaInputValue"
               type="number"
               step="0.1"
               min="0"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="field-control"
               @keyup.enter="submitFpaInput"
             />
           </div>
           <div class="flex justify-end gap-3">
-            <button @click="cancelTask" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">取消任务</button>
-            <button @click="submitFpaInput" class="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">确认继续</button>
+            <button @click="cancelTask" class="btn-quiet">取消任务</button>
+            <button @click="submitFpaInput" class="btn-primary">确认继续</button>
           </div>
         </div>
       </div>
@@ -39,35 +56,35 @@
 
     <!-- 送审工作量和功能点确认弹窗 -->
     <Teleport to="body">
-      <div v-if="session.listPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div class="bg-white rounded-xl shadow-2xl w-[420px] p-6">
+      <div v-if="session.listPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div class="surface w-full max-w-[420px] rounded-xl p-6">
           <h3 class="text-lg font-semibold mb-2">送审确认</h3>
           <p class="text-sm text-gray-500 mb-4">请确认送审工作量和送审功能点，或直接使用默认值。</p>
           <div class="mb-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">送审工作量（人/天）</label>
+            <label class="field-label">送审工作量（人/天）</label>
             <input
               v-model.number="listFpaValue"
               type="number"
               step="0.1"
               min="0"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="field-control"
               @keyup.enter="submitListInput"
             />
           </div>
           <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">送审功能点（个）</label>
+            <label class="field-label">送审功能点（个）</label>
             <input
               v-model.number="listCfpValue"
               type="number"
               step="0.1"
               min="0"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="field-control"
               @keyup.enter="submitListInput"
             />
           </div>
           <div class="flex justify-end gap-3">
-            <button @click="cancelTask" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">取消任务</button>
-            <button @click="submitListInput" class="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">确认继续</button>
+            <button @click="cancelTask" class="btn-quiet">取消任务</button>
+            <button @click="submitListInput" class="btn-primary">确认继续</button>
           </div>
         </div>
       </div>
@@ -75,40 +92,40 @@
 
     <!-- AI 交互弹窗 -->
     <Teleport to="body">
-      <div v-if="aiModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="closeAIModal">
-        <div class="bg-white rounded-xl shadow-2xl w-[90vw] max-w-4xl h-[85vh] flex flex-col">
-          <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+      <div v-if="aiModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="closeAIModal">
+        <div class="surface flex h-[85vh] w-[92vw] max-w-5xl flex-col overflow-hidden rounded-xl">
+          <div class="px-5 py-3 border-b border-[var(--color-rule)] flex items-center justify-between">
             <h3 class="text-lg font-semibold">AI 交互记录</h3>
-            <button @click="closeAIModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            <button @click="closeAIModal" class="btn-quiet min-h-0 px-2 py-1 text-xl leading-none">&times;</button>
           </div>
-          <div class="flex border-b border-gray-200 px-5">
+          <div class="flex border-b border-[var(--color-rule)] px-5">
             <button v-for="tab in ['list', 'combined']" :key="tab"
               @click="aiTab = tab"
               :class="['py-2 px-4 text-sm border-b-2 transition-colors',
-                aiTab === tab ? 'border-primary-500 text-primary-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700']">
+                aiTab === tab ? 'border-[var(--color-accent)] text-[var(--color-accent-strong)] font-medium' : 'border-transparent text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]']">
               {{ tab === 'list' ? '交互列表' : '合并日志' }}
             </button>
           </div>
-          <div class="flex-1 overflow-y-auto p-5">
-            <div v-if="aiLoading" class="flex items-center justify-center h-full text-gray-400">加载中...</div>
-            <div v-else-if="aiTab === 'list' && aiInteractions.length === 0" class="flex items-center justify-center h-full text-gray-400">暂无 AI 交互记录</div>
+          <div class="flex-1 overflow-y-auto bg-[var(--color-page)] p-5">
+            <div v-if="aiLoading" class="flex h-full items-center justify-center text-[var(--color-ink-soft)]">加载中...</div>
+            <div v-else-if="aiTab === 'list' && aiInteractions.length === 0" class="flex h-full items-center justify-center text-[var(--color-ink-soft)]">暂无 AI 交互记录</div>
             <template v-else-if="aiTab === 'list'">
               <div v-for="item in aiInteractions" :key="item.name"
-                class="border border-gray-200 rounded-lg mb-3 overflow-hidden">
+                class="mb-3 overflow-hidden rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
                 <div @click="item.expanded = !item.expanded"
-                  class="px-4 py-2 bg-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100 select-none">
+                  class="flex cursor-pointer select-none items-center justify-between bg-[var(--color-surface)] px-4 py-2 hover:bg-[var(--color-surface-muted)]">
                   <span class="flex items-center gap-2 text-sm">
-                    <span :class="['text-xs px-1.5 py-0.5 rounded font-bold', item.type === 'prompt' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700']">
+                    <span :class="['rounded px-1.5 py-0.5 text-xs font-bold', item.type === 'prompt' ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]' : 'bg-[var(--color-success-soft)] text-[var(--color-success)]']">
                       {{ item.type === 'prompt' ? 'P' : 'R' }}
                     </span>
                     {{ item.name }}
                   </span>
-                  <span class="text-xs text-gray-400">点击展开</span>
+                  <span class="text-xs text-[var(--color-ink-soft)]">点击展开</span>
                 </div>
-                <pre v-show="item.expanded" class="p-4 bg-gray-900 text-gray-300 text-xs leading-relaxed overflow-x-auto max-h-96 overflow-y-auto m-0 whitespace-pre-wrap">{{ item.content }}</pre>
+                <pre v-show="item.expanded" class="m-0 max-h-96 overflow-y-auto overflow-x-auto bg-[var(--color-console)] p-4 text-xs leading-relaxed text-slate-300 whitespace-pre-wrap">{{ item.content }}</pre>
               </div>
             </template>
-            <pre v-else class="bg-gray-900 text-gray-300 text-xs p-4 rounded-lg leading-relaxed whitespace-pre-wrap overflow-x-auto">{{ aiCombinedLog }}</pre>
+            <pre v-else class="overflow-x-auto rounded-lg bg-[var(--color-console)] p-4 text-xs leading-relaxed text-slate-300 whitespace-pre-wrap">{{ aiCombinedLog }}</pre>
           </div>
         </div>
       </div>
@@ -117,7 +134,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { useConfigStore } from '@/stores/config'
 import { useLogStore } from '@/stores/log'
@@ -133,10 +150,32 @@ const config = useConfigStore()
 const log = useLogStore()
 const toast = useToastStore()
 
+const runTitle = computed(() => session.outputDir || '等待任务启动')
+const runStateText = computed(() => {
+  const map = { idle: '就绪', running: '运行中', done: '已完成', error: '异常' }
+  return map[session.runState]
+})
+const runStateClass = computed(() => {
+  const map = {
+    idle: 'border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]',
+    running: 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]',
+    done: 'border-[var(--color-success)] bg-[var(--color-success-soft)] text-[var(--color-success)]',
+    error: 'border-[var(--color-danger)] bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
+  }
+  return map[session.runState]
+})
+const runDotClass = computed(() => {
+  const map = {
+    idle: 'bg-[var(--color-ink-soft)]',
+    running: 'bg-[var(--color-accent)]',
+    done: 'bg-[var(--color-success)]',
+    error: 'bg-[var(--color-danger)]',
+  }
+  return map[session.runState]
+})
+
 // ── 送审工作量输入 ──
 const fpaInputValue = ref(0)
-
-import { watch } from 'vue'
 watch(() => session.inputPrompt, (p) => {
   if (p) {
     fpaInputValue.value = p.default

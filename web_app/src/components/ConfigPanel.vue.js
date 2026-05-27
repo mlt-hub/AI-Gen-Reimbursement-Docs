@@ -23,6 +23,15 @@ const statusText = computed(() => {
     const map = { idle: '就绪', running: '运行中...', done: '完成', error: '出错' };
     return map[session.runState];
 });
+const statusClass = computed(() => {
+    const map = {
+        idle: 'text-[var(--color-ink-soft)]',
+        running: 'text-[var(--color-accent-strong)]',
+        done: 'text-[var(--color-success)]',
+        error: 'text-[var(--color-danger)]',
+    };
+    return map[session.runState];
+});
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
@@ -32,11 +41,11 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-    ...{ class: "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2" },
+    ...{ class: "field-label" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
     value: (__VLS_ctx.config.pipelineMode),
-    ...{ class: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white" },
+    ...{ class: "field-control" },
 });
 for (const [info, value] of __VLS_getVForSourceType((__VLS_ctx.modes))) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
@@ -46,7 +55,7 @@ for (const [info, value] of __VLS_getVForSourceType((__VLS_ctx.modes))) {
     (info.label);
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-    ...{ class: "text-xs text-gray-400 mt-1" },
+    ...{ class: "mt-2 text-xs leading-5 text-[var(--color-ink-soft)]" },
 });
 (__VLS_ctx.modes[__VLS_ctx.config.pipelineMode]?.desc);
 /** @type {[typeof FileInput, ]} */ ;
@@ -54,7 +63,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)(
 const __VLS_0 = __VLS_asFunctionalComponent(FileInput, new FileInput({}));
 const __VLS_1 = __VLS_0({}, ...__VLS_functionalComponentArgsRest(__VLS_0));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "space-y-3" },
+    ...{ class: "space-y-3 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3" },
 });
 /** @type {[typeof AdvancedOptions, ]} */ ;
 // @ts-ignore
@@ -73,55 +82,52 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElement
             __VLS_ctx.$emit('start');
         } },
     disabled: (!__VLS_ctx.config.isValid || __VLS_ctx.session.isRunning),
-    ...{ class: "w-full py-3 bg-primary-500 text-white font-semibold rounded-lg hover:bg-primary-600 disabled:bg-primary-300 disabled:cursor-not-allowed transition-colors text-base" },
+    ...{ class: "btn-primary w-full text-base" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-    ...{ class: (['text-center text-sm font-medium',
-            __VLS_ctx.session.runState === 'idle' ? 'text-gray-400' :
-                __VLS_ctx.session.runState === 'running' ? 'text-primary-500' :
-                    __VLS_ctx.session.runState === 'done' ? 'text-green-500' : 'text-red-500']) },
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2 text-sm" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center justify-between gap-3" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+    ...{ class: "text-[var(--color-ink-muted)]" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+    ...{ class: (['font-semibold', __VLS_ctx.statusClass]) },
 });
 (__VLS_ctx.statusText);
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex-col']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-5']} */ ;
-/** @type {__VLS_StyleScopedClasses['block']} */ ;
+/** @type {__VLS_StyleScopedClasses['field-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['field-control']} */ ;
+/** @type {__VLS_StyleScopedClasses['mt-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wide']} */ ;
-/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['leading-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-[var(--color-ink-soft)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-[var(--color-rule)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-[var(--color-surface-muted)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['btn-primary']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-base']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-[var(--color-rule)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-[var(--color-surface)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['border']} */ ;
-/** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:ring-primary-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:border-transparent']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
-/** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
-/** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-primary-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-white']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-[var(--color-ink-muted)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-/** @type {__VLS_StyleScopedClasses['hover:bg-primary-600']} */ ;
-/** @type {__VLS_StyleScopedClasses['disabled:bg-primary-300']} */ ;
-/** @type {__VLS_StyleScopedClasses['disabled:cursor-not-allowed']} */ ;
-/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-base']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
@@ -134,6 +140,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             session: session,
             modes: modes,
             statusText: statusText,
+            statusClass: statusClass,
         };
     },
     __typeEmits: {},

@@ -27,17 +27,17 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.details, __VLS_intrinsicElemen
     ...{ class: "group" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.summary, __VLS_intrinsicElements.summary)({
-    ...{ class: "text-sm text-primary-600 cursor-pointer select-none hover:text-primary-700 font-medium" },
+    ...{ class: "subtle-link cursor-pointer select-none text-sm" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "flex flex-col gap-2 mt-3 pt-3 border-t border-gray-100" },
+    ...{ class: "mt-3 flex flex-col gap-2 border-t border-[var(--color-rule)] pt-3" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-    ...{ class: "text-xs text-gray-400" },
+    ...{ class: "text-xs font-semibold text-[var(--color-ink-soft)]" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.a, __VLS_intrinsicElements.a)({
     href: "/api/templates/input",
-    ...{ class: "text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1" },
+    ...{ class: "flex items-center gap-1 text-xs text-[var(--color-ink-muted)] hover:text-[var(--color-accent-strong)]" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
     ...{ class: "w-3.5 h-3.5" },
@@ -52,11 +52,11 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
     d: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4",
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-    ...{ class: "text-xs text-gray-400 mt-2" },
+    ...{ class: "mt-2 text-xs font-semibold text-[var(--color-ink-soft)]" },
 });
 if (__VLS_ctx.loading) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "text-xs text-gray-400" },
+        ...{ class: "text-xs text-[var(--color-ink-soft)]" },
     });
 }
 else {
@@ -64,7 +64,7 @@ else {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.a, __VLS_intrinsicElements.a)({
             key: (t),
             href: ('/api/templates/output/' + t),
-            ...{ class: "text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1" },
+            ...{ class: "flex items-center gap-1 text-xs text-[var(--color-ink-muted)] hover:text-[var(--color-accent-strong)]" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
             ...{ class: "w-3.5 h-3.5" },
@@ -82,40 +82,40 @@ else {
     }
 }
 /** @type {__VLS_StyleScopedClasses['group']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-primary-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['subtle-link']} */ ;
 /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
 /** @type {__VLS_StyleScopedClasses['select-none']} */ ;
-/** @type {__VLS_StyleScopedClasses['hover:text-primary-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['mt-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex-col']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['mt-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['pt-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['border-t']} */ ;
-/** @type {__VLS_StyleScopedClasses['border-gray-100']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-[var(--color-rule)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['pt-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['hover:text-primary-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-[var(--color-ink-soft)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-[var(--color-ink-muted)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:text-[var(--color-accent-strong)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-3.5']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-3.5']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
 /** @type {__VLS_StyleScopedClasses['mt-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-[var(--color-ink-soft)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['hover:text-primary-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-[var(--color-ink-soft)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-[var(--color-ink-muted)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:text-[var(--color-accent-strong)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-3.5']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-3.5']} */ ;
 var __VLS_dollars;

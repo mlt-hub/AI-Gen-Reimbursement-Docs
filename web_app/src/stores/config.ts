@@ -39,8 +39,6 @@ export interface UserSettings {
   clean: boolean
 }
 
-const STORAGE_KEYS = ['apiKey', 'model', 'baseUrl', 'maxTokens', 'projectName', 'pipelineMode', 'clean'] as const
-
 export const useConfigStore = defineStore('config', () => {
   const workMode = ref<WorkMode>('local')
   const pipelineMode = ref<PipelineMode>(loadStr('pipelineMode', 'from-excel-gen-all') as PipelineMode)

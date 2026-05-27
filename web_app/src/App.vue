@@ -1,21 +1,31 @@
 <template>
-  <div class="flex flex-col h-screen">
-    <header class="bg-gray-50 border-b border-gray-100 px-6 py-3 flex items-center justify-between shrink-0">
-      <div class="flex items-center gap-4">
-        <h1 class="text-lg font-semibold text-gray-800">AI 生成项目报账文档</h1>
-        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{{ modeLabel }}</span>
-        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">v{{ version }}</span>
+  <div class="app-chrome flex h-screen flex-col">
+    <header class="topbar shrink-0 px-4 py-3 md:px-6">
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-raised)] text-sm font-black text-[var(--color-accent-strong)]">
+            ARD
+          </div>
+          <div class="min-w-0">
+            <h1 class="truncate text-base font-bold text-[var(--color-ink)] md:text-lg">AI 生成项目报账文档</h1>
+            <div class="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-ink-soft)]">
+              <span>{{ modeLabel }}</span>
+              <span class="h-1 w-1 rounded-full bg-[var(--color-rule-strong)]" />
+              <span>v{{ version }}</span>
+            </div>
+          </div>
       </div>
-      <nav class="flex items-center gap-4 text-sm">
-        <router-link to="/" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">生成</router-link>
-        <router-link to="/config" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">配置</router-link>
-        <router-link to="/prompt-debug" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">提示词调试</router-link>
-        <template v-if="auth.isRemote && auth.isLoggedIn">
-          <span class="text-gray-300">|</span>
-          <span class="text-xs text-gray-500">{{ auth.username }}</span>
-          <button @click="doLogout" class="text-xs text-gray-400 hover:text-red-500 transition-colors">退出</button>
+        <nav class="flex flex-wrap items-center gap-1 text-sm">
+          <router-link to="/" class="nav-link" active-class="nav-link-active">生成</router-link>
+          <router-link to="/config" class="nav-link" active-class="nav-link-active">配置</router-link>
+          <router-link to="/prompt-debug" class="nav-link" active-class="nav-link-active">提示词调试</router-link>
+          <template v-if="auth.isRemote && auth.isLoggedIn">
+            <span class="mx-2 hidden h-5 w-px bg-[var(--color-rule)] md:inline-block" />
+            <span class="rounded-md bg-[var(--color-surface-muted)] px-2 py-1 text-xs text-[var(--color-ink-muted)]">{{ auth.username }}</span>
+            <button @click="doLogout" class="btn-quiet min-h-0 px-2 py-1 text-xs">退出</button>
         </template>
       </nav>
+      </div>
     </header>
     <main class="flex-1 min-h-0">
       <router-view />

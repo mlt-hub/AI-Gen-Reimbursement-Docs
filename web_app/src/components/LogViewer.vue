@@ -1,27 +1,30 @@
 <template>
   <div class="flex-1 flex flex-col min-h-0">
     <!-- 日志级别过滤 -->
-    <div class="flex items-center gap-2 px-4 py-1.5 bg-gray-800 border-b border-gray-700">
-      <span class="text-xs text-gray-500">显示级别</span>
+    <div class="flex items-center justify-between gap-3 border-b border-[var(--color-console-line)] bg-[var(--color-console)] px-5 py-2">
+      <span class="text-xs font-semibold text-slate-400">运行日志</span>
+      <div class="flex items-center gap-2">
+      <span class="text-xs text-slate-500">显示级别</span>
       <select v-model="filterLevel" @change="saveLevel"
-        class="bg-gray-700 border border-gray-600 rounded text-xs text-gray-300 px-2 py-0.5 focus:outline-none focus:border-primary-500">
+        class="rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-[var(--color-focus)] focus:outline-none">
         <option v-for="lv in levels" :key="lv" :value="lv">{{ lv }}</option>
       </select>
+      </div>
     </div>
     <!-- 日志列表 -->
-    <div ref="logEl" class="flex-1 overflow-y-auto bg-gray-900 p-5 font-mono text-sm leading-6">
-      <div v-if="logStore.entries.length === 0" class="flex items-center justify-center h-full text-gray-500 text-sm">
-        选择操作模式并开始生成，实时日志将显示在此处
+    <div ref="logEl" class="flex-1 overflow-y-auto bg-[var(--color-console)] p-5 font-mono text-sm leading-6">
+      <div v-if="logStore.entries.length === 0" class="flex h-full items-center justify-center text-sm text-slate-500">
+        等待任务启动，实时日志将在此处显示
       </div>
       <template v-for="(entry, i) in filteredEntries" :key="i">
         <div v-if="entry.level === 'DONE'"
-          class="text-center py-2 px-4 text-green-400 font-semibold border-t border-b border-green-400/30 my-1">
+          class="my-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-center font-semibold text-emerald-300">
           {{ entry.msg }}
         </div>
         <div v-else class="flex gap-3 py-0.5" :class="{ 'mt-3': entry.isStep }">
-          <span class="text-gray-500 shrink-0 w-20">{{ entry.time }}</span>
+          <span class="w-20 shrink-0 text-slate-500">{{ entry.time }}</span>
           <span :class="['shrink-0 w-14 font-semibold', levelColor(entry.level)]">{{ entry.level }}</span>
-          <span :class="['text-gray-300 break-all whitespace-pre-wrap', { 'text-amber-300 font-semibold': entry.isStep }]">{{ entry.msg }}</span>
+          <span :class="['break-all whitespace-pre-wrap text-slate-300', { 'font-semibold text-amber-300': entry.isStep }]">{{ entry.msg }}</span>
         </div>
       </template>
     </div>

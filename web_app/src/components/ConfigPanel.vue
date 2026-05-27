@@ -2,17 +2,17 @@
   <div class="flex flex-col gap-5">
     <!-- 操作模式选择 -->
     <div>
-      <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">操作模式</label>
+      <label class="field-label">操作模式</label>
       <select v-model="config.pipelineMode"
-        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white">
+        class="field-control">
         <option v-for="(info, value) in modes" :key="value" :value="value">{{ info.label }}</option>
       </select>
-      <p class="text-xs text-gray-400 mt-1">{{ modes[config.pipelineMode]?.desc }}</p>
+      <p class="mt-2 text-xs leading-5 text-[var(--color-ink-soft)]">{{ modes[config.pipelineMode]?.desc }}</p>
     </div>
 
     <FileInput />
 
-    <div class="space-y-3">
+    <div class="space-y-3 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3">
       <AdvancedOptions />
       <TemplateUpload />
       <TemplateDownload />
@@ -20,16 +20,16 @@
 
     <button @click="$emit('start')"
       :disabled="!config.isValid || session.isRunning"
-      class="w-full py-3 bg-primary-500 text-white font-semibold rounded-lg hover:bg-primary-600 disabled:bg-primary-300 disabled:cursor-not-allowed transition-colors text-base">
+      class="btn-primary w-full text-base">
       开始生成
     </button>
 
-    <p :class="['text-center text-sm font-medium',
-      session.runState === 'idle' ? 'text-gray-400' :
-      session.runState === 'running' ? 'text-primary-500' :
-      session.runState === 'done' ? 'text-green-500' : 'text-red-500']">
-      {{ statusText }}
-    </p>
+    <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2 text-sm">
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-[var(--color-ink-muted)]">任务状态</span>
+        <span :class="['font-semibold', statusClass]">{{ statusText }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -62,6 +62,16 @@ onMounted(async () => {
 
 const statusText = computed(() => {
   const map = { idle: '就绪', running: '运行中...', done: '完成', error: '出错' }
+  return map[session.runState]
+})
+
+const statusClass = computed(() => {
+  const map = {
+    idle: 'text-[var(--color-ink-soft)]',
+    running: 'text-[var(--color-accent-strong)]',
+    done: 'text-[var(--color-success)]',
+    error: 'text-[var(--color-danger)]',
+  }
   return map[session.runState]
 })
 </script>

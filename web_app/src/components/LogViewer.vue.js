@@ -49,15 +49,21 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
     ...{ class: "flex-1 flex flex-col min-h-0" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "flex items-center gap-2 px-4 py-1.5 bg-gray-800 border-b border-gray-700" },
+    ...{ class: "flex items-center justify-between gap-3 border-b border-[var(--color-console-line)] bg-[var(--color-console)] px-5 py-2" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-    ...{ class: "text-xs text-gray-500" },
+    ...{ class: "text-xs font-semibold text-slate-400" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center gap-2" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+    ...{ class: "text-xs text-slate-500" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
     ...{ onChange: (__VLS_ctx.saveLevel) },
     value: (__VLS_ctx.filterLevel),
-    ...{ class: "bg-gray-700 border border-gray-600 rounded text-xs text-gray-300 px-2 py-0.5 focus:outline-none focus:border-primary-500" },
+    ...{ class: "rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" },
 });
 for (const [lv] of __VLS_getVForSourceType((__VLS_ctx.levels))) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
@@ -68,19 +74,19 @@ for (const [lv] of __VLS_getVForSourceType((__VLS_ctx.levels))) {
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ref: "logEl",
-    ...{ class: "flex-1 overflow-y-auto bg-gray-900 p-5 font-mono text-sm leading-6" },
+    ...{ class: "flex-1 overflow-y-auto bg-[var(--color-console)] p-5 font-mono text-sm leading-6" },
 });
 /** @type {typeof __VLS_ctx.logEl} */ ;
 if (__VLS_ctx.logStore.entries.length === 0) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center justify-center h-full text-gray-500 text-sm" },
+        ...{ class: "flex h-full items-center justify-center text-sm text-slate-500" },
     });
 }
 for (const [entry, i] of __VLS_getVForSourceType((__VLS_ctx.filteredEntries))) {
     (i);
     if (entry.level === 'DONE') {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-center py-2 px-4 text-green-400 font-semibold border-t border-b border-green-400/30 my-1" },
+            ...{ class: "my-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-center font-semibold text-emerald-300" },
         });
         (entry.msg);
     }
@@ -90,7 +96,7 @@ for (const [entry, i] of __VLS_getVForSourceType((__VLS_ctx.filteredEntries))) {
             ...{ class: ({ 'mt-3': entry.isStep }) },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "text-gray-500 shrink-0 w-20" },
+            ...{ class: "w-20 shrink-0 text-slate-500" },
         });
         (entry.time);
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
@@ -98,7 +104,7 @@ for (const [entry, i] of __VLS_getVForSourceType((__VLS_ctx.filteredEntries))) {
         });
         (entry.level);
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: (['text-gray-300 break-all whitespace-pre-wrap', { 'text-amber-300 font-semibold': entry.isStep }]) },
+            ...{ class: (['break-all whitespace-pre-wrap text-slate-300', { 'font-semibold text-amber-300': entry.isStep }]) },
         });
         (entry.msg);
     }
@@ -109,61 +115,69 @@ for (const [entry, i] of __VLS_getVForSourceType((__VLS_ctx.filteredEntries))) {
 /** @type {__VLS_StyleScopedClasses['min-h-0']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-gray-800']} */ ;
+/** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['border-b']} */ ;
-/** @type {__VLS_StyleScopedClasses['border-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-[var(--color-console-line)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-[var(--color-console)]']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-slate-400']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-slate-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
 /** @type {__VLS_StyleScopedClasses['border']} */ ;
-/** @type {__VLS_StyleScopedClasses['border-gray-600']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-slate-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-slate-800']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-0.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-slate-200']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:border-[var(--color-focus)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:border-primary-500']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['overflow-y-auto']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-gray-900']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-[var(--color-console)]']} */ ;
 /** @type {__VLS_StyleScopedClasses['p-5']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['leading-6']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['h-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-slate-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['my-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-emerald-400/30']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-emerald-400/10']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-green-400']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-/** @type {__VLS_StyleScopedClasses['border-t']} */ ;
-/** @type {__VLS_StyleScopedClasses['border-b']} */ ;
-/** @type {__VLS_StyleScopedClasses['border-green-400/30']} */ ;
-/** @type {__VLS_StyleScopedClasses['my-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-emerald-300']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-0.5']} */ ;
 /** @type {__VLS_StyleScopedClasses['mt-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['shrink-0']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-20']} */ ;
+/** @type {__VLS_StyleScopedClasses['shrink-0']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-slate-500']} */ ;
 /** @type {__VLS_StyleScopedClasses['shrink-0']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-14']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-300']} */ ;
 /** @type {__VLS_StyleScopedClasses['break-all']} */ ;
 /** @type {__VLS_StyleScopedClasses['whitespace-pre-wrap']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-amber-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-slate-300']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-amber-300']} */ ;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
