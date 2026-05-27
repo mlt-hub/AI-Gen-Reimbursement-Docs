@@ -24,15 +24,6 @@ def _get_version() -> str:
         return "unknown"
 
 
-def _section(title: str):
-    """Print a section header to both console and log."""
-    sep = "=" * 60
-    logger.info(sep)
-    logger.info(title)
-    logger.info(sep)
-    logger.debug("--- section start ---")
-
-
 def _start_web_ui(root: str, port: int = 0) -> None:
     """启动 Web UI 服务器并打开浏览器。port 为 0 时从配置文件读取。"""
     try:
@@ -144,7 +135,6 @@ def _run_pipeline_with_args(
         play_notify_sound()
         sys.exit(1)
 
-    _section("完成")
     _summary_files = [
         ("FPA 工作量评估", result.fpa_xlsx),
         ("项目功能点拆分表", result.cosmic_xlsx),
@@ -500,7 +490,6 @@ def main():
         if not system_prompt:
             logger.warning("未找到 reliability_desc 系统提示词，将使用默认提示词")
 
-        _section("测试：调整因子中的可靠性描述 AI 生成")
         logger.info("用户提示词:\n%s", user_prompt)
         logger.info("系统提示词:\n%s", system_prompt)
 
@@ -514,7 +503,6 @@ def main():
                 base_url=base_url,
                 tag="test_reliability_desc",
             )
-            _section("AI 生成结果")
             print(result)
             logger.info("可靠性描述生成结果:\n%s", result)
         except Exception as e:
@@ -601,7 +589,6 @@ def main():
         if not system_prompt:
             logger.warning("未找到 metadata_gen 系统提示词")
 
-        _section(f"测试：元数据 #AI生成# — {field_key}")
         logger.info("字段来源: [%s] %s", found_sheet, field_key)
         logger.info("用户提示词:\n%s", user_prompt)
         logger.info("系统提示词:\n%s", system_prompt)
@@ -616,7 +603,6 @@ def main():
                 base_url=base_url,
                 tag=f"test_meta_{field_key}",
             )
-            _section("AI 生成结果")
             print(result)
             logger.info("AI 生成结果 [%s]:\n%s", field_key, result)
         except Exception as e:
@@ -728,7 +714,6 @@ def main():
             play_notify_sound()
             sys.exit(1)
 
-        _section("完成")
         _summary_files = [
             ("FPA 工作量评估", result.fpa_xlsx),
             ("项目功能点拆分表", result.cosmic_xlsx),
