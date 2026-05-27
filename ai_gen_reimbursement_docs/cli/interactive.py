@@ -26,10 +26,10 @@ def prompt_list_values(md_dir: str) -> tuple[float, float]:
     返回 (cfp_total, fpa_reduced)。
     """
     _cfp_raw = _read_md_value(
-        os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
+        os.path.join(md_dir, '3.5.gen-cosmic-CFP-总和.md'),
         r'CFP 总和[：:]\s*([\d.]+)')
     _fpa_raw = _read_md_value(
-        os.path.join(md_dir, 'gen-cosmic-FPA核减后的工作量-总和.md'),
+        os.path.join(md_dir, '3.1.gen-cosmic-FPA核减后的工作量-总和.md'),
         r'FPA核减后的工作量（人/天）[：:]\s*([\d.]+)')
 
     # 送审功能点

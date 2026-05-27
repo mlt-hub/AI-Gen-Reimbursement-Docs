@@ -124,7 +124,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
     # ========== 生成 gen-basedata-功能清单-模块树.md ==========
 
-    md_tree_path = os.path.join(output_dir, 'gen-basedata-功能清单-模块树.md')
+    md_tree_path = os.path.join(output_dir, '0.1.gen-basedata-功能清单-模块树.md')
     with open(md_tree_path, 'w', encoding='utf-8') as f:
         f.write("# 功能清单模块树\n\n")
         f.write(f"**来源文件**：{os.path.basename(excel_path)}\n")
@@ -141,7 +141,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
     # ========== 生成 gen-basedata-录入文档元数据-模板.md ==========
 
-    md_meta_path = os.path.join(output_dir, 'gen-basedata-录入文档元数据-模板.md')
+    md_meta_path = os.path.join(output_dir, '0.2.gen-basedata-录入文档元数据-模板.md')
     with open(md_meta_path, 'w', encoding='utf-8') as f:
         f.write("# 文档元数据\n\n")
         f.write(f"**来源文件**：{os.path.basename(excel_path)}\n")
@@ -489,7 +489,7 @@ def read_md_value(path: str, pattern: str) -> float:
 def write_cfp_sum(md_dir: str, total: float) -> None:
     """将 CFP 总和写入 gen-cosmic-CFP-总和.md。"""
     logger.info(f"第3.5步：写入 CFP 总和")
-    path = os.path.join(md_dir, 'gen-cosmic-CFP-总和.md')
+    path = os.path.join(md_dir, '3.5.gen-cosmic-CFP-总和.md')
     with open(path, 'w', encoding='utf-8') as f:
         f.write("# CFP 总和\n\n")
         f.write(f"CFP 总和: {total}\n")

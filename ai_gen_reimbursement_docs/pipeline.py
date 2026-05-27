@@ -138,10 +138,10 @@ def run_pipeline(
     os.makedirs(md_dir, exist_ok=True)
 
     # 路径常量（中间文件）
-    tree_md = os.path.join(md_dir, 'gen-basedata-功能清单-模块树.md')
-    meta_md_tpl = os.path.join(md_dir, 'gen-basedata-录入文档元数据-模板.md')
-    meta_filled_md = os.path.join(md_dir, 'gen-basedata-AI填充-录入文档元数据.md')
-    fpa_sum_md = os.path.join(md_dir, 'gen-fpa-FPA工作量-总和.md')
+    tree_md = os.path.join(md_dir, '0.1.gen-basedata-功能清单-模块树.md')
+    meta_md_tpl = os.path.join(md_dir, '0.2.gen-basedata-录入文档元数据-模板.md')
+    meta_filled_md = os.path.join(md_dir, '0.4.gen-basedata-AI填充-录入文档元数据.md')
+    fpa_sum_md = os.path.join(md_dir, '1.2.gen-fpa-FPA工作量-总和.md')
 
     # 项目名称
     if not project_name:
@@ -248,7 +248,7 @@ def _read_fpa_sum(fpa_sum_md_path: str) -> float:
 
 def _save_fpa_reduced_md(md_dir: str, fpa_reduced: float) -> str:
     """保存 FPA 核减后的工作量到 MD 文件。"""
-    path = os.path.join(md_dir, 'gen-cosmic-FPA核减后的工作量-总和.md')
+    path = os.path.join(md_dir, '3.1.gen-cosmic-FPA核减后的工作量-总和.md')
     os.makedirs(md_dir, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(f"# FPA 核减后的工作量\n\n")
@@ -260,7 +260,7 @@ def _save_fpa_reduced_md(md_dir: str, fpa_reduced: float) -> str:
 def _read_fpa_reduced_md(md_dir: str) -> float:
     """读取 FPA 核减后工作量，读不到返回 0。"""
     import re
-    reduced_md = os.path.join(md_dir, 'gen-cosmic-FPA核减后的工作量-总和.md')
+    reduced_md = os.path.join(md_dir, '3.1.gen-cosmic-FPA核减后的工作量-总和.md')
     if os.path.exists(reduced_md):
         with open(reduced_md, encoding='utf-8') as f:
             for line in f:
@@ -419,8 +419,8 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
     logger.info("第1步: 生成FPA工作量评估...")
     fpa_src = _check_template(templates_dict, 'fpa', 'FPA工作量评估')
 
-    fpa_md = os.path.join(md_dir, 'gen-fpa-FPA-模板.md')
-    fpa_filled_md = os.path.join(md_dir, 'gen-fpa-AI填充-FPA.md')
+    fpa_md = os.path.join(md_dir, '1.1.gen-fpa-FPA-模板.md')
+    fpa_filled_md = os.path.join(md_dir, '1.3.gen-fpa-AI填充-FPA.md')
     init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
 
     if api_key:        
@@ -462,8 +462,8 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     # 保存 FPA 核减后的工作量
     _save_fpa_reduced_md(md_dir, result.fpa_reduced)
 
-    init_md_path = os.path.join(md_dir, 'gen-cosmic-cosmic模板.md')
-    filled_md_path = os.path.join(md_dir, 'gen-cosmic-AI填充cosmic.md')
+    init_md_path = os.path.join(md_dir, '3.2.gen-cosmic-cosmic模板.md')
+    filled_md_path = os.path.join(md_dir, '3.3.gen-cosmic-AI填充cosmic.md')
     _, _cosmic_modules = init_cosmic_template_md(tree_md, project, init_md_path)
 
     if api_key:
@@ -475,7 +475,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                                                    md_dir=md_dir, project_name=project_name,
                                                    cfp_formula=_cosmic_cfp)
         result.cfp_total = read_md_value(
-            os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
+            os.path.join(md_dir, '3.5.gen-cosmic-CFP-总和.md'),
             r'CFP 总和[：:]\s*([\d.]+)') or 0
     else:
         logger.warning("未设置 API Key，无法生成 COSMIC 拆分数据")
@@ -496,7 +496,7 @@ def _generate_list(md_dir, tree_md, meta_md,
     from ai_gen_reimbursement_docs.excel_source import read_md_value
     if cfp_total is None:
         cfp_total = read_md_value(
-            os.path.join(md_dir, 'gen-cosmic-CFP-总和.md'),
+            os.path.join(md_dir, '3.5.gen-cosmic-CFP-总和.md'),
             r'CFP 总和[：:]\s*([\d.]+)')
     if fpa_reduced is None:
         fpa_reduced = _read_fpa_reduced_md(md_dir)
@@ -523,8 +523,8 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
     if os.path.exists(meta_filled_md):
         meta_md = meta_filled_md
 
-    spec_md = os.path.join(md_dir, 'gen-spec-spec-功能需求章节-模板.md')
-    spec_filled_md = os.path.join(md_dir, 'gen-spec-AI填充-spec-功能需求章节.md')
+    spec_md = os.path.join(md_dir, '2.1.gen-spec-spec-功能需求章节-模板.md')
+    spec_filled_md = os.path.join(md_dir, '2.2.gen-spec-AI填充-spec-功能需求章节.md')
     init_spec_template_md(tree_md, meta_md, spec_md)
     if api_key:
         ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
