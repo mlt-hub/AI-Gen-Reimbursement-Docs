@@ -4,8 +4,7 @@
     <div v-if="session.isDone && session.doneFiles.length" class="px-6 py-3 border-b border-gray-100">
       <div class="text-xs text-gray-500 mb-2 font-medium">交付物清单</div>
       <div class="flex flex-wrap gap-2">
-        <a v-for="f in session.doneFiles" :key="f.path"
-          :href="'file:///' + f.path"
+        <span v-for="f in session.doneFiles" :key="f.path"
           :class="['inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium',
             f.is_temp ? 'bg-orange-50 text-orange-700 border border-orange-200' : 'bg-green-50 text-green-700 border border-green-200']"
           :title="f.is_temp ? '文件被占用，已保存到临时文件 — 关闭占用程序后重命名替换原文件即可' : f.path">
@@ -13,7 +12,7 @@
           <span v-else>&#10003;</span>
           {{ f.label }}
           <span class="opacity-60">{{ f.size_kb }} KB</span>
-        </a>
+        </span>
       </div>
       <div v-if="session.doneFiles.some(f => f.is_temp)" class="text-xs text-orange-600 mt-2">
         &#9888; 有文件保存到了 <code class="bg-orange-100 px-1 rounded">_TEMP</code> 临时文件，关闭 Excel/WPS 后重命名替换原文件即可
@@ -96,13 +95,17 @@ function resetTask() {
   log.clear()
 }
 
-// ── 本机模式完成提示音 ──
+// ── 完成提示音 ──
 const lastNotifiedSession = ref('')
+const _audio = new Audio('/static/audio/ticktick_pop.wav')
 
 watch(() => session.isDone, (done) => {
-  if (done && config.workMode === 'local' && session.sessionId && session.sessionId !== lastNotifiedSession.value) {
-    lastNotifiedSession.value = session.sessionId
+  if (!done || !session.sessionId || session.sessionId === lastNotifiedSession.value) return
+  lastNotifiedSession.value = session.sessionId
+  if (config.workMode === 'local') {
     fetch('/api/play-notify', { method: 'POST' }).catch(() => {})
+  } else {
+    _audio.play().catch(() => {})
   }
 })
 </script>
