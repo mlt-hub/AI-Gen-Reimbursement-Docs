@@ -15,6 +15,7 @@
     <div class="space-y-3">
       <AdvancedOptions />
       <TemplateUpload />
+      <TemplateDownload />
     </div>
 
     <button @click="$emit('start')"
@@ -39,6 +40,7 @@ import { useSessionStore } from '@/stores/session'
 import FileInput from './FileInput.vue'
 import AdvancedOptions from './AdvancedOptions.vue'
 import TemplateUpload from './TemplateUpload.vue'
+import TemplateDownload from './TemplateDownload.vue'
 
 import { ref, onMounted } from 'vue'
 
