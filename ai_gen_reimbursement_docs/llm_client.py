@@ -205,7 +205,7 @@ def _save_response_log(
         dir_path = _resolve_log_dir("ai_responses", log_dir)
         os.makedirs(dir_path, exist_ok=True)
         tag_str = f"_{tag}" if tag else ""
-        filename = f"{timestamp}{tag_str}_response.txt"
+        filename = f"{timestamp}{tag_str}_response.md"
         filepath = os.path.join(dir_path, filename)
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(f"# AI Response: {tag}\n")

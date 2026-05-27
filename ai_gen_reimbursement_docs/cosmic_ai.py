@@ -626,7 +626,7 @@ def _save_ai_prompt(l3: str, l2: str, l1: str, text: str,
     safe_name = '_'.join(parts).replace('/', '_').replace('\\', '_').strip()
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     tag_str = f'_{tag}' if tag else ''
-    filename = f"{timestamp}_{safe_name}{tag_str}_prompt.txt"
+    filename = f"{timestamp}_{safe_name}{tag_str}_prompt.md"
     filepath = os.path.join(log_dir, filename)
 
     with open(filepath, 'w', encoding='utf-8') as f:

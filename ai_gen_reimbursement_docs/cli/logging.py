@@ -230,14 +230,14 @@ def write_combined_ai_log(stage: str = ""):
         for d in sub_dirs:
             if os.path.isdir(d):
                 for fname in os.listdir(d):
-                    if fname.endswith('.txt'):
+                    if fname.endswith('.md'):
                         all_files[fname] = os.path.join(d, fname)
 
         logged_files: set[str] = set()
         if os.path.exists(out_path):
             with open(out_path, 'r', encoding='utf-8') as f:
                 for line in f:
-                    if line.startswith('## ') and '.txt' in line:
+                    if line.startswith('## ') and '.md' in line:
                         logged_files.add(line.split(':', 1)[1].strip())
 
         new_count = 0
