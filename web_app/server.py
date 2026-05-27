@@ -17,9 +17,14 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from ai_gen_reimbursement_docs.auth import (
+    create_token, remove_token, get_username_by_token,
+    register_user, verify_user, allow_register,
+    user_config_dir, init_user_dir, is_local_host,
+)
 from ai_gen_reimbursement_docs.exceptions import CancelledError
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 os.environ['AI_REIMBURSEMENT_MODE'] = 'web'
@@ -200,6 +205,67 @@ def _spa_index():
 app = FastAPI(title="AI生成项目报账文档")
 
 
+# ── 认证依赖 ──────────────────────────────────────────────
+
+
+def _get_auth_user(request: Request) -> str | None:
+    """从 cookie 获取当前登录用户名。"""
+    token = request.cookies.get("ard_token", "")
+    return get_username_by_token(token)
+
+
+def _is_local_ip(request: Request) -> bool:
+    """纯 IP 判断（不受 web_work_mode 影响）。"""
+    host = request.client.host if request.client else ""
+    return is_local_host(host)
+
+
+def _is_local_mode(request: Request) -> bool:
+    """判断当前是否为本地模式。
+    web_work_mode 优先：local→本地, remote→远程, auto→IP 判断。
+    """
+    from ai_gen_reimbursement_docs.config_utils import load_web_work_mode
+    wm = load_web_work_mode()
+    if wm == "local":
+        return True
+    if wm == "remote":
+        return False
+    return _is_local_ip(request)
+
+
+def require_local(request: Request):
+    """依赖：仅本机 IP 可访问（不受 web_work_mode 影响）。"""
+    if not _is_local_ip(request):
+        raise HTTPException(403, "此接口仅限本机访问")
+
+
+def require_auth(request: Request) -> str:
+    """依赖：本地模式放行，远程模式需登录。返回用户名或空字符串。"""
+    if _is_local_mode(request):
+        return ""
+    username = _get_auth_user(request)
+    if not username:
+        raise HTTPException(401, "请先登录")
+    return username
+
+
+def _mask_env_content(path: Path) -> str:
+    """读取 .env 文件内容，遮住敏感值（远程用户查看全局默认时使用）。"""
+    import re
+    text = path.read_text(encoding="utf-8")
+    sensitive_keys = re.compile(r'^(.*_(?:KEY|SECRET|TOKEN|PASSWORD)\s*=)(.+)$', re.IGNORECASE)
+    lines = []
+    for line in text.splitlines():
+        m = sensitive_keys.match(line.strip())
+        if m:
+            val = m.group(2).strip().strip('"').strip("'")
+            masked = val[:4] + "***" + val[-4:] if len(val) > 8 else "***"
+            lines.append(f"{m.group(1)} {masked}")
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
 @app.on_event("shutdown")
 async def _on_shutdown():
     """服务关闭时标记所有 session 为已取消，避免后台 AI 调用继续重试。"""
@@ -246,6 +312,65 @@ async def get_default_work_mode():
     return {"work_mode": load_web_work_mode()}
 
 
+# ── 认证 ──────────────────────────────────────────────────
+
+
+@app.post("/api/auth/register")
+async def auth_register(data: dict):
+    """注册新用户。"""
+    if not allow_register():
+        raise HTTPException(403, "管理员已关闭注册")
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    if not username or len(password) < 4:
+        raise HTTPException(400, "用户名不能为空，密码至少4位")
+    if not register_user(username, password):
+        raise HTTPException(409, "用户名已存在")
+    init_user_dir(username)
+    return {"ok": True}
+
+
+@app.post("/api/auth/login")
+async def auth_login(data: dict, request: Request):
+    """登录，返回 token 并设置 cookie。"""
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    if not verify_user(username, password):
+        raise HTTPException(401, "用户名或密码错误")
+
+    token = create_token(username)
+    resp = JSONResponse({"ok": True, "username": username})
+    resp.set_cookie(
+        "ard_token", token,
+        httponly=True, samesite="lax",
+        max_age=86400 * 30,  # 30 天
+    )
+    return resp
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    """退出登录。"""
+    token = request.cookies.get("ard_token", "")
+    if token:
+        remove_token(token)
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("ard_token")
+    return resp
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    """返回当前登录用户。"""
+    username = _get_auth_user(request)
+    is_local = _is_local_mode(request)
+    return {
+        "username": username,
+        "is_local": is_local,
+        "allow_register": allow_register(),
+    }
+
+
 @app.get("/api/log-level")
 async def get_log_level():
     """返回当前日志级别。"""
@@ -254,8 +379,8 @@ async def get_log_level():
 
 
 @app.post("/api/log-level")
-async def set_log_level(data: dict):
-    """运行时设置日志级别。"""
+async def set_log_level(data: dict, _local: None = Depends(require_local)):
+    """运行时设置日志级别（仅本机）。"""
     level = data.get("level", "INFO").strip().upper()
     if level not in ("DEBUG", "INFO", "WARNING", "ERROR"):
         raise HTTPException(400, f"无效的日志级别: {level}")
@@ -356,24 +481,28 @@ async def get_config():
 
 
 @app.post("/api/config")
-async def save_config(data: dict):
-    """保存配置。data 含 _env / _system / _biz 三个 key。"""
+async def save_config(data: dict, _local: None = Depends(require_local)):
+    """保存系统配置（仅本机）。data 含 _env / _system / _biz 三个 key。"""
     cfg_dir = _config_dir()
     cfg_dir.mkdir(parents=True, exist_ok=True)
+    await _save_config_to_dir(data, cfg_dir)
+    return {"ok": True}
+
+
+async def _save_config_to_dir(data: dict, target_dir: Path):
+    """保存配置到指定目录。"""
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     if "_env" in data and data["_env"]:
         lines = []
         for k, v in data["_env"].items():
             lines.append(f"{k}={v}")
-        (cfg_dir / ".env").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (target_dir / ".env").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    for key, filename in [("_system", "system_config.yaml"), ("_biz", "business_rules.yaml")]:
-        if key in data and data[key]:
-            import yaml
-            path = cfg_dir / filename
-            path.write_text(yaml.dump(data[key], allow_unicode=True, default_flow_style=False), encoding="utf-8")
-
-    return {"ok": True}
+    if "_system" in data and data["_system"]:
+        import yaml
+        path = target_dir / "system_config.yaml"
+        path.write_text(yaml.dump(data["_system"], allow_unicode=True, default_flow_style=False), encoding="utf-8")
 
 
 # ── 提示词调试 ────────────────────────────────────────────
@@ -440,6 +569,7 @@ async def play_notify(request: Request):
 
 @app.post("/api/run-local")
 async def api_run_local(
+    request: Request,
     xlsx_path: str = Form(...),
     output_dir: str = Form(""),
     mode: str = Form(...),
@@ -453,6 +583,7 @@ async def api_run_local(
     cosmic_template: UploadFile | None = File(None),
     list_template: UploadFile | None = File(None),
     spec_template: UploadFile | None = File(None),
+    _local: None = Depends(require_local),
 ):
     """本机模式：接受文件路径或目录路径，目录则自动搜索功能清单 xlsx。"""
     if mode not in MODE_INFO:
@@ -534,6 +665,7 @@ async def api_run_upload(
     cosmic_template: UploadFile | None = File(None),
     list_template: UploadFile | None = File(None),
     spec_template: UploadFile | None = File(None),
+    user: str = Depends(require_auth),
 ):
     """远程服务模式：上传文件，交付物打包 ZIP 下载。"""
     if mode not in MODE_INFO:
@@ -639,7 +771,7 @@ async def download(session_id: str):
 
 
 @app.get("/api/open-folder")
-async def open_folder(session: str):
+async def open_folder(session: str, _local: None = Depends(require_local)):
     """本机模式：在资源管理器中打开交付物目录。"""
     out_dir = session_outputs.get(session)
     if out_dir is None:
@@ -888,15 +1020,80 @@ def _build_templates_dict(custom_t_dir: str) -> dict[str, str]:
 # ── 配置读取 API（Config 页面用） ──────────────────────────
 
 @app.get("/api/config-read")
-async def config_read():
-    """读取 ~/.ai-gen-reimbursement-docs/ 下的三个配置文件内容。"""
+async def config_read(request: Request):
+    """读取配置文件内容。远程登录用户返回个人配置+全局默认，本机返回本机配置。"""
+    username = _get_auth_user(request)
+    if username and not _is_local_mode(request):
+        # 远程登录用户：返回个人配置 + 全局默认（只读）
+        user_dir = user_config_dir(username)
+        result: dict = {}
+        for key, fname in [("env", ".env"), ("system_config", "system_config.yaml")]:
+            fp = user_dir / fname
+            result[key] = fp.read_text(encoding="utf-8") if fp.exists() else ""
+        # 全局 business_rules 只读
+        biz_path = Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs" / "business_rules.yaml"
+        result["business_rules"] = biz_path.read_text(encoding="utf-8") if biz_path.exists() else ""
+        # 全局默认配置（只读参考）
+        global_dir = Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs"
+        fp_sys = global_dir / "system_config.yaml"
+        result["global_system"] = fp_sys.read_text(encoding="utf-8") if fp_sys.exists() else ""
+        fp_env = global_dir / ".env"
+        result["global_env"] = _mask_env_content(fp_env) if fp_env.exists() else ""
+        result["username"] = username
+        return result
+
+    # 本机模式：返回本机配置
     cfg_dir = Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs"
-    result: dict = {}
+    result = {}
     for key, fname in [("env", ".env"), ("system_config", "system_config.yaml"),
                         ("business_rules", "business_rules.yaml")]:
         fp = cfg_dir / fname
         result[key] = fp.read_text(encoding="utf-8") if fp.exists() else ""
     return result
+
+
+@app.get("/api/user/config")
+async def get_user_config(user: str = Depends(require_auth)):
+    """返回当前用户的个人配置（可编辑的 key-value）。"""
+    if not user:
+        # 本机模式：返回本机配置
+        return _read_config()
+
+    user_dir = user_config_dir(user)
+    result: dict = {"_env": {}, "_system": {}}
+
+    env_path = user_dir / ".env"
+    if env_path.exists():
+        env: dict[str, str] = {}
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+        result["_env"] = env
+
+    sys_path = user_dir / "system_config.yaml"
+    if sys_path.exists():
+        try:
+            import yaml
+            result["_system"] = yaml.safe_load(sys_path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            pass
+
+    return result
+
+
+@app.post("/api/user/config")
+async def save_user_config(data: dict, user: str = Depends(require_auth)):
+    """保存当前用户的个人配置。"""
+    if not user:
+        # 本机模式：保存本机配置
+        await _save_config_to_dir(data, _config_dir())
+        return {"ok": True}
+
+    user_dir = user_config_dir(user)
+    await _save_config_to_dir(data, user_dir)
+    return {"ok": True}
 
 
 # ── 提示词调试 API（PromptDebug 页面用） ────────────────────

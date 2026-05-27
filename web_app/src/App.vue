@@ -10,6 +10,11 @@
         <router-link to="/" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">生成</router-link>
         <router-link to="/config" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">配置</router-link>
         <router-link to="/prompt-debug" class="text-gray-500 hover:text-primary-600 transition-colors" active-class="text-primary-600 font-medium">提示词调试</router-link>
+        <template v-if="auth.isRemote && auth.isLoggedIn">
+          <span class="text-gray-300">|</span>
+          <span class="text-xs text-gray-500">{{ auth.username }}</span>
+          <button @click="doLogout" class="text-xs text-gray-400 hover:text-red-500 transition-colors">退出</button>
+        </template>
       </nav>
     </header>
     <main class="flex-1 min-h-0">
@@ -19,15 +24,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
+import { useAuthStore } from '@/stores/auth'
 
+const router = useRouter()
+const route = useRoute()
 const config = useConfigStore()
+const auth = useAuthStore()
 const version = ref('-')
 
 const modeLabel = computed(() => config.workMode === 'local' ? '本机模式' : '远程服务模式')
 
 onMounted(async () => {
+  await auth.init()
+
   try {
     const [verResp, modeResp, localResp] = await Promise.all([
       fetch('/api/version'),
@@ -46,5 +58,22 @@ onMounted(async () => {
   } catch {
     version.value = '-'
   }
+
+  // 路由守卫：远程模式未登录 → 跳转登录页
+  if (auth.isRemote && !auth.isLoggedIn && route.path !== '/login') {
+    router.replace('/login')
+  }
 })
+
+// 监听路由变化，保护需要登录的页面
+watch(() => route.path, (path) => {
+  if (path !== '/login' && auth.isRemote && !auth.isLoggedIn) {
+    router.replace('/login')
+  }
+})
+
+async function doLogout() {
+  await auth.logout()
+  router.replace('/login')
+}
 </script>
