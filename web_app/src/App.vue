@@ -29,14 +29,20 @@ const modeLabel = computed(() => config.workMode === 'local' ? '本机模式' : 
 
 onMounted(async () => {
   try {
-    const [verResp, localResp] = await Promise.all([
+    const [verResp, modeResp, localResp] = await Promise.all([
       fetch('/api/version'),
+      fetch('/api/default-work-mode'),
       fetch('/api/is-local')
     ])
     const verData = await verResp.json()
     version.value = verData.version
-    const localData = await localResp.json()
-    config.workMode = localData.local ? 'local' : 'remote'
+    const modeData = await modeResp.json()
+    if (modeData.work_mode === 'local' || modeData.work_mode === 'remote') {
+      config.workMode = modeData.work_mode
+    } else {
+      const localData = await localResp.json()
+      config.workMode = localData.local ? 'local' : 'remote'
+    }
   } catch {
     version.value = '-'
   }

@@ -149,6 +149,14 @@ def load_web_port(default: int = 3000) -> int:
     return _get_system_config_value('web_port', default)
 
 
+def load_web_work_mode(default: str = "auto") -> str:
+    """读取 system_config.yaml 中的 web_work_mode。
+    auto=IP 自动判断, local=强制本机模式, remote=强制远程服务模式。
+    """
+    val = _get_system_config_value('web_work_mode', default).lower()
+    return val if val in ('auto', 'local', 'remote') else default
+
+
 def load_log_level(default: str = "INFO") -> str:
     """读取 system_config.yaml 中的 log_level。
     返回 Python logging 级别名：DEBUG / INFO / WARNING / ERROR。

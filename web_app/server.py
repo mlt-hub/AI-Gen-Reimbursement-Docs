@@ -239,6 +239,13 @@ async def is_local(request: Request):
     return {"local": host in ("127.0.0.1", "::1", "localhost")}
 
 
+@app.get("/api/default-work-mode")
+async def get_default_work_mode():
+    """返回配置文件中预设的工作模式（auto/local/remote）。"""
+    from ai_gen_reimbursement_docs.config_utils import load_web_work_mode
+    return {"work_mode": load_web_work_mode()}
+
+
 @app.get("/api/log-level")
 async def get_log_level():
     """返回当前日志级别。"""

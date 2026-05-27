@@ -22,6 +22,9 @@ spec_auto_update_toc: true
 # 如没安装Microsoft Word，通常设置为true，加提醒
 spec_remind_update_toc: true
 
+# Web UI工作模式（auto=IP自动判断, local=强制本机模式, remote=强制远程服务模式，默认auto）
+web_work_mode: auto
+
 # Web UI端口号，如遇端口冲突（启动报错或页面打不开），换个端口即可，如 9090、3000
 web_port: 8080
 
