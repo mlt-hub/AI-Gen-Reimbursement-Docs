@@ -462,8 +462,8 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     # 保存 FPA 核减后的工作量
     _save_fpa_reduced_md(md_dir, result.fpa_reduced)
 
-    init_md_path = os.path.join(md_dir, '3.2.gen-cosmic-cosmic模板.md')
-    filled_md_path = os.path.join(md_dir, '3.3.gen-cosmic-AI填充cosmic.md')
+    init_md_path = os.path.join(md_dir, '3.2.gen-cosmic-COSMIC-模板.md')
+    filled_md_path = os.path.join(md_dir, '3.3.gen-cosmic-AI填充-COSMIC.md')
     _, _cosmic_modules = init_cosmic_template_md(tree_md, project, init_md_path)
 
     if api_key:
@@ -523,8 +523,8 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
     if os.path.exists(meta_filled_md):
         meta_md = meta_filled_md
 
-    spec_md = os.path.join(md_dir, '2.1.gen-spec-spec-功能需求章节-模板.md')
-    spec_filled_md = os.path.join(md_dir, '2.2.gen-spec-AI填充-spec-功能需求章节.md')
+    spec_md = os.path.join(md_dir, '2.1.gen-spec-SPEC-功能需求章节-模板.md')
+    spec_filled_md = os.path.join(md_dir, '2.2.gen-spec-AI填充-SPEC-功能需求章节.md')
     init_spec_template_md(tree_md, meta_md, spec_md)
     if api_key:
         ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
