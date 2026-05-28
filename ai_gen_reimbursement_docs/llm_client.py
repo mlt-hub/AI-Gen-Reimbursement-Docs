@@ -11,9 +11,11 @@ from typing import Optional
 
 from ai_gen_reimbursement_docs.config_utils import load_max_tokens, load_llm_timeout
 from ai_gen_reimbursement_docs.exceptions import AIError
+from ai_gen_reimbursement_docs.runtime_context import current_callbacks
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MODEL = "deepseek-v4-flash"
 # 最大重试次数
 _MAX_RETRIES = 3
 # 重试延迟基数（秒），按 attempt 倍数递增
@@ -61,9 +63,7 @@ def call_llm(
         raise AIError("未配置 API Key，请设置 ANTHROPIC_API_KEY 环境变量或传入 --api-key")
 
     base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "")
-    model = model or os.environ.get("ANTHROPIC_MODEL", "")
-    if not model:
-        raise AIError("未配置模型名，请在 ~/.ai-gen-reimbursement-docs/.env 中设置 ANTHROPIC_MODEL")
+    model = model or os.environ.get("ANTHROPIC_MODEL", "") or DEFAULT_MODEL
     max_tokens = max_tokens or load_max_tokens()
 
     client_kwargs: dict = {"api_key": api_key, "timeout": load_llm_timeout()}
@@ -87,13 +87,9 @@ def call_llm(
             }
             if temperature is not None:
                 create_kwargs["temperature"] = temperature
-            try:
-                from web_app.server import is_web_mode
-                if is_web_mode():
-                    from web_app.server import check_cancelled as _cc
-                    _cc()
-            except Exception:
-                pass
+            callbacks = current_callbacks()
+            if callbacks.is_web_mode():
+                callbacks.check_cancelled()
             msg = client.messages.create(**create_kwargs)
             resp_text = _extract_text(msg.content)
             thinking_text = _extract_thinking(msg.content)

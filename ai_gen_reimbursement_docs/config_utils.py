@@ -6,6 +6,11 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+DEFAULT_CFP_FORMULA = (
+    'IF(OR(L{row}="新增",L{row}="修改"),1,'
+    'IF(L{row}="复用",1/3,0))'
+)
+
 
 def config_dir() -> Path:
     """Path to user config directory: ~/.ai-gen-reimbursement-docs/."""
@@ -247,6 +252,20 @@ def load_cosmic_warn_log() -> bool:
 def load_fpa_reduced_use_workload() -> bool:
     """读取 fpa_reduced_use_workload，true 时直接用 FPA 工作量值。"""
     return _get_system_config_value('fpa_reduced_use_workload', False)
+
+
+def load_cfp_formula(default: str = DEFAULT_CFP_FORMULA) -> str:
+    """读取 CFP 计算公式，优先从 business_rules.yaml 获取。"""
+    rules_path = config_dir() / "business_rules.yaml"
+    if not rules_path.exists():
+        return default
+    try:
+        import yaml
+        with open(rules_path, 'r', encoding='utf-8') as f:
+            rules = yaml.safe_load(f) or {}
+        return str(rules.get('cfp_formula') or default)
+    except Exception:
+        return default
 
 
 def load_out_templates() -> dict[str, str]:

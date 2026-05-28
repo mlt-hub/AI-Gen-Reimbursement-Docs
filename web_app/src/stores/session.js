@@ -17,6 +17,14 @@ export const useSessionStore = defineStore('session', () => {
         listPrompt.value = null;
         doneFiles.value = [];
     }
+    function restore(snapshot) {
+        sessionId.value = snapshot.session_id;
+        outputDir.value = snapshot.output_dir || '';
+        runState.value = snapshot.run_state;
+        inputPrompt.value = null;
+        listPrompt.value = null;
+        doneFiles.value = snapshot.done_files || [];
+    }
     function finish(files) {
         runState.value = 'done';
         inputPrompt.value = null;
@@ -43,5 +51,5 @@ export const useSessionStore = defineStore('session', () => {
     function showListPrompt(prompt) {
         listPrompt.value = prompt;
     }
-    return { sessionId, runState, outputDir, inputPrompt, listPrompt, doneFiles, isRunning, isDone, start, finish, setError, reset, showInputPrompt, showListPrompt };
+    return { sessionId, runState, outputDir, inputPrompt, listPrompt, doneFiles, isRunning, isDone, start, restore, finish, setError, reset, showInputPrompt, showListPrompt };
 });

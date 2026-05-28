@@ -1,5 +1,16 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { apiFetch } from '@/lib/api'
+
+interface AuthMeResponse {
+  username?: string
+  is_local: boolean
+  allow_register: boolean
+}
+
+interface LoginResponse {
+  username: string
+}
 
 export const useAuthStore = defineStore('auth', () => {
   const username = ref('')
@@ -12,46 +23,34 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function init() {
     try {
-      const resp = await fetch('/api/auth/me')
-      if (resp.ok) {
-        const data = await resp.json()
-        username.value = data.username || ''
-        isLocal.value = data.is_local
-        allowRegister.value = data.allow_register
-      }
+      const data = await apiFetch<AuthMeResponse>('/api/auth/me')
+      username.value = data.username || ''
+      isLocal.value = data.is_local
+      allowRegister.value = data.allow_register
     } catch { /* 忽略 */ }
     loading.value = false
   }
 
   async function login(user: string, password: string) {
-    const resp = await fetch('/api/auth/login', {
+    const data = await apiFetch<LoginResponse>('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: user, password }),
     })
-    if (!resp.ok) {
-      const err = await resp.json()
-      throw new Error(err.detail || '登录失败')
-    }
-    const data = await resp.json()
     username.value = data.username
     return data
   }
 
   async function register(user: string, password: string) {
-    const resp = await fetch('/api/auth/register', {
+    await apiFetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: user, password }),
     })
-    if (!resp.ok) {
-      const err = await resp.json()
-      throw new Error(err.detail || '注册失败')
-    }
   }
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
+    await apiFetch('/api/auth/logout', { method: 'POST' })
     username.value = ''
   }
 

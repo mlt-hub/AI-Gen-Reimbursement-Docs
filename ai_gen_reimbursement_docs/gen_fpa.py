@@ -465,16 +465,16 @@ def generate_fpa_xlsx_from_md(
     for col_idx in range(1, FPA_TOTAL_COLS):
         c = ws.cell(3, col_idx)
         tmpl_format[col_idx] = {
-            'font': c.font.copy() if c.font else None,
-            'fill': c.fill.copy() if c.fill else None,
-            'border': c.border.copy() if c.border else None,
+            'font': copy(c.font) if c.font else None,
+            'fill': copy(c.fill) if c.fill else None,
+            'border': copy(c.border) if c.border else None,
             'number_format': c.number_format,
-            'alignment': c.alignment.copy() if c.alignment else None,
+            'alignment': copy(c.alignment) if c.alignment else None,
         }
     for col_idx in (FPA_COL_FORMULA_BASE, FPA_COL_FORMULA_WORKLOAD):
         c = ws.cell(2, col_idx)
         if c.fill:
-            tmpl_format[col_idx]['fill'] = c.fill.copy()
+            tmpl_format[col_idx]['fill'] = copy(c.fill)
 
     if ws.max_row >= 3:
         ws.delete_rows(3, ws.max_row - 2)

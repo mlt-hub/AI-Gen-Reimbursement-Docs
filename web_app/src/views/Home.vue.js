@@ -1,9 +1,10 @@
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { useConfigStore } from '@/stores/config';
 import { useLogStore } from '@/stores/log';
 import { useStepsStore } from '@/stores/steps';
 import { useToastStore } from '@/stores/toast';
+import { apiFetch, normalizeApiError } from '@/lib/api';
 import ConfigPanel from '@/components/ConfigPanel.vue';
 import StepsBar from '@/components/StepsBar.vue';
 import LogViewer from '@/components/LogViewer.vue';
@@ -12,10 +13,18 @@ const session = useSessionStore();
 const config = useConfigStore();
 const log = useLogStore();
 const toast = useToastStore();
-const runTitle = computed(() => session.outputDir || '等待任务启动');
+const LAST_SESSION_KEY = 'ard:lastSessionId';
+const runStateLabels = { idle: '就绪', running: '运行中', done: '已完成', error: '出错' };
+const runTitle = computed(() => {
+    if (session.outputDir)
+        return session.outputDir;
+    if (!session.sessionId)
+        return '等待任务启动';
+    const taskLabel = config.workMode === 'local' ? '本机任务' : '远程任务';
+    return `${taskLabel} ${session.sessionId}`;
+});
 const runStateText = computed(() => {
-    const map = { idle: '就绪', running: '运行中', done: '已完成', error: '异常' };
-    return map[session.runState];
+    return runStateLabels[session.runState];
 });
 const runStateClass = computed(() => {
     const map = {
@@ -56,14 +65,14 @@ async function submitFpaInput() {
         return;
     const val = parseFloat(String(fpaInputValue.value)) || 0;
     try {
-        await fetch('/api/continue/' + session.sessionId, {
+        await apiFetch('/api/continue/' + session.sessionId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ field: 'fpa_reduced', fpa_reduced: val }),
         });
     }
-    catch {
-        toast.show('error', '网络错误，请检查服务是否运行');
+    catch (e) {
+        toast.show('error', normalizeApiError(e));
         return;
     }
     session.inputPrompt = null;
@@ -72,7 +81,7 @@ async function submitListInput() {
     if (!session.sessionId)
         return;
     try {
-        await fetch('/api/continue/' + session.sessionId, {
+        await apiFetch('/api/continue/' + session.sessionId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -81,8 +90,8 @@ async function submitListInput() {
             }),
         });
     }
-    catch {
-        toast.show('error', '网络错误，请检查服务是否运行');
+    catch (e) {
+        toast.show('error', normalizeApiError(e));
         return;
     }
     session.listPrompt = null;
@@ -91,7 +100,7 @@ async function cancelTask() {
     if (!session.sessionId)
         return;
     try {
-        await fetch('/api/cancel/' + session.sessionId, { method: 'POST' });
+        await apiFetch('/api/cancel/' + session.sessionId, { method: 'POST' });
     }
     catch { /* ignore */ }
 }
@@ -134,20 +143,48 @@ async function startTask() {
     session.reset();
     useStepsStore().reset();
     try {
-        const resp = await fetch(url, { method: 'POST', body });
-        if (!resp.ok) {
-            const err = await resp.json();
-            throw new Error(err.detail || `请求失败 (${resp.status})`);
-        }
-        const data = await resp.json();
+        const data = await apiFetch(url, { method: 'POST', body });
         session.start(data.session_id, data.output_dir || '');
+        localStorage.setItem(LAST_SESSION_KEY, data.session_id);
         log.connect();
     }
     catch (e) {
-        const msg = e.message === 'Failed to fetch' ? '无法连接服务，请检查服务是否运行' : e.message;
+        const msg = normalizeApiError(e);
         log.append({ level: 'ERROR', msg: msg, time: '' });
         toast.show('error', msg);
         session.setError();
+    }
+}
+async function restoreLastSession() {
+    if (session.sessionId)
+        return;
+    const sid = localStorage.getItem(LAST_SESSION_KEY);
+    if (!sid)
+        return;
+    try {
+        const data = await apiFetch('/api/sessions/' + sid);
+        config.workMode = data.mode;
+        session.restore({
+            session_id: data.session_id,
+            run_state: data.run_state,
+            output_dir: data.output_dir || '',
+            done_files: data.done_files || [],
+        });
+        log.clear();
+        if (data.run_state === 'running') {
+            log.append({ level: 'INFO', msg: '已恢复正在运行的任务，继续接收后续日志', time: '' });
+            log.connect();
+        }
+        else if (data.run_state === 'done') {
+            log.append({ level: 'DONE', msg: '已恢复已完成的任务，可下载交付物', time: '' });
+            useStepsStore().finishAll();
+        }
+        else {
+            log.append({ level: 'ERROR', msg: '已恢复出错的任务', time: '' });
+        }
+    }
+    catch {
+        localStorage.removeItem(LAST_SESSION_KEY);
     }
 }
 // ── AI 交互弹窗 ──
@@ -168,36 +205,30 @@ async function loadAIList() {
         return;
     aiLoading.value = true;
     try {
-        const resp = await fetch('/api/ai-interactions/' + session.sessionId);
-        if (!resp.ok)
-            throw new Error((await resp.json()).detail);
-        const data = await resp.json();
+        const data = await apiFetch('/api/ai-interactions/' + session.sessionId);
         aiInteractions.value = (data.interactions || []).map((i) => ({ ...i, expanded: false }));
     }
-    catch (e) {
+    catch {
         aiInteractions.value = [];
     }
-    aiLoading.value = false;
+    finally {
+        aiLoading.value = false;
+    }
 }
 async function loadAICombined() {
     if (!session.sessionId)
         return;
     aiLoading.value = true;
     try {
-        const resp = await fetch('/api/ai-log/' + session.sessionId);
-        if (!resp.ok) {
-            const err = await resp.json();
-            aiCombinedLog.value = resp.status === 404 ? err.detail : '加载失败: ' + err.detail;
-            aiLoading.value = false;
-            return;
-        }
-        const data = await resp.json();
+        const data = await apiFetch('/api/ai-log/' + session.sessionId);
         aiCombinedLog.value = data.content || '';
     }
     catch (e) {
-        aiCombinedLog.value = '加载失败: ' + e.message;
+        aiCombinedLog.value = '加载失败: ' + normalizeApiError(e);
     }
-    aiLoading.value = false;
+    finally {
+        aiLoading.value = false;
+    }
 }
 // React to tab changes
 watch(aiTab, (t) => {
@@ -209,7 +240,11 @@ watch(aiTab, (t) => {
 function resetTask() {
     session.reset();
     log.clear();
+    localStorage.removeItem(LAST_SESSION_KEY);
 }
+onMounted(() => {
+    restoreLastSession();
+});
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;

@@ -14,6 +14,8 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_spec_remind_update_toc, load_spec_auto_update_toc,
     load_out_templates,
 )
+from ai_gen_reimbursement_docs.pipeline_callbacks import PipelineCallbacks
+from ai_gen_reimbursement_docs.runtime_context import callbacks_var, current_callbacks
 from ai_gen_reimbursement_docs.excel_source import (
     generate_md_files, verify_module_tree_stats
 )
@@ -33,18 +35,13 @@ logger = logging.getLogger('ai_gen_reimbursement_docs.pipeline')
 
 def _is_web() -> bool:
     """当前线程是否在 Web UI pipeline 中运行。"""
-    try:
-        from web_app.server import is_web_mode
-        return is_web_mode()
-    except Exception:
-        return False
+    return current_callbacks().is_web_mode()
 
 
 def _check_cancelled():
     """Web UI 模式下检查是否被停止，CLI 模式跳过。"""
     if _is_web():
-        from web_app.server import check_cancelled as _cc
-        _cc()
+        current_callbacks().check_cancelled()
 
 
 def _prompt_fpa_reduced(default_value: float) -> float:
@@ -53,8 +50,7 @@ def _prompt_fpa_reduced(default_value: float) -> float:
     if load_fpa_reduced_use_workload():
         return default_value
     if _is_web():
-        from web_app.server import wait_for_fpa_input
-        return wait_for_fpa_input(default_value)
+        return current_callbacks().wait_for_fpa_input(default_value)
     # CLI fallback
     if default_value > 0:
         prompt = f"\n请输入FPA核减后的工作量（人/天）（直接回车使用默认值：{default_value}）: "
@@ -75,8 +71,7 @@ def _prompt_list_values(md_dir: str, cfp_total: float, fpa_reduced: float) -> tu
     if load_fpa_reduced_use_workload():
         return cfp_total, fpa_reduced
     if _is_web():
-        from web_app.server import wait_for_list_input
-        return wait_for_list_input(cfp_total, fpa_reduced)
+        return current_callbacks().wait_for_list_input(cfp_total, fpa_reduced)
     # CLI fallback
     from ai_gen_reimbursement_docs.cli.interactive import prompt_list_values
     return prompt_list_values(md_dir)
@@ -85,8 +80,7 @@ def _prompt_list_values(md_dir: str, cfp_total: float, fpa_reduced: float) -> tu
 def _step(key: str):
     """向前端发送步骤进度事件。key: basedata | fpa | spec | cosmic | list"""
     if _is_web():
-        from web_app.server import emit_session_event
-        emit_session_event({"type": "step", "key": key})
+        current_callbacks().emit_event({"type": "step", "key": key})
 
 
 VALID_MODES = {"gen-all", "gen-basedata", "gen-fpa", "gen-cosmic", "gen-list", "gen-spec"}
@@ -118,6 +112,7 @@ def run_pipeline(
     templates: dict[str, str] | None = None,
     fpa_reduced: float | None = None,
     cfp_total: float | None = None,
+    callbacks: PipelineCallbacks | None = None,
 ) -> PipelineResult:
     """from-excel 管道总入口。
 
@@ -136,6 +131,24 @@ def run_pipeline(
     Returns:
         PipelineResult：各交付物路径和统计值
     """
+    if callbacks is not None and callbacks_var.get() is not callbacks:
+        token = callbacks_var.set(callbacks)
+        try:
+            return run_pipeline(
+                mode=mode,
+                file_path=file_path,
+                output_dir=output_dir,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                project_name=project_name,
+                templates=templates,
+                fpa_reduced=fpa_reduced,
+                cfp_total=cfp_total,
+            )
+        finally:
+            callbacks_var.reset(token)
+
     # 校验
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
@@ -681,6 +694,7 @@ def run_pipeline_simple(
     base_url: str = "",
     project_name: str = "",
     templates: dict | None = None,
+    callbacks: PipelineCallbacks | None = None,
 ) -> PipelineResult:
     """一站式管道入口，CLI / Web UI / 零参数 共享。
 
@@ -729,4 +743,5 @@ def run_pipeline_simple(
         base_url=base_url,
         project_name=project_name,
         templates=templates,
+        callbacks=callbacks,
     )

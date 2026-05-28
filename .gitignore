@@ -28,6 +28,8 @@ ard-v*
 # 临时文件
 *.tmp
 *.bak
+.pytest_cache/
+.pytest_*/
 
 # 前端构建
 web_app/node_modules/

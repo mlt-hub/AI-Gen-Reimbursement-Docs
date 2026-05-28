@@ -4,6 +4,8 @@ import logging
 import os
 from datetime import datetime
 
+from ai_gen_reimbursement_docs.runtime_context import web_mode_var
+
 
 class PathShortener(logging.Filter):
     """将日志中的绝对路径缩短为基于交付物输出目录的相对路径。
@@ -29,13 +31,9 @@ def _get_web_mode() -> str:
 
     优先级：ContextVar（pipeline 线程内）→ system_config.yaml → CLI。
     """
-    try:
-        from web_app.server import web_mode_var
-        wm = web_mode_var.get()
-        if wm:
-            return wm
-    except Exception:
-        pass
+    wm = web_mode_var.get()
+    if wm:
+        return wm
     if os.environ.get("AI_REIMBURSEMENT_MODE") == "web":
         from ai_gen_reimbursement_docs.config_utils import load_web_work_mode
         return load_web_work_mode()

@@ -36,10 +36,10 @@
       打开交付物目录
     </button>
     <button v-else @click="downloadZip"
-      :disabled="!session.sessionId"
+      :disabled="!session.sessionId || !session.isDone"
       class="btn-secondary">
       <ArrowDownTrayIcon class="w-4 h-4" />
-      下载交付物 .zip
+      {{ session.isDone ? '下载交付物 .zip' : '任务完成后可下载' }}
     </button>
     <button @click="showAI"
       :disabled="!session.isDone"
@@ -62,6 +62,7 @@ import { useSessionStore } from '@/stores/session'
 import { useConfigStore } from '@/stores/config'
 import { useLogStore } from '@/stores/log'
 import { useToastStore } from '@/stores/toast'
+import { apiFetch, normalizeApiError } from '@/lib/api'
 
 const emit = defineEmits<{ ai: [] }>()
 
@@ -72,7 +73,9 @@ const toast = useToastStore()
 
 function openFolder() {
   if (!session.sessionId) return
-  fetch('/api/open-folder?session=' + session.sessionId).catch(() => {})
+  apiFetch('/api/open-folder?session=' + session.sessionId).catch((e) => {
+    toast.show('error', normalizeApiError(e))
+  })
 }
 
 function downloadZip() {
@@ -86,7 +89,9 @@ function showAI() { emit('ai') }
 
 function cancelTask() {
   if (!session.sessionId) return
-  fetch('/api/cancel/' + session.sessionId, { method: 'POST' }).catch(() => {})
+  apiFetch('/api/cancel/' + session.sessionId, { method: 'POST' }).catch((e) => {
+    toast.show('error', normalizeApiError(e))
+  })
   toast.show('info', '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止', 6000)
 }
 

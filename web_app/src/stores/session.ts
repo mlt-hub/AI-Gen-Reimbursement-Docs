@@ -21,6 +21,13 @@ export interface DoneFile {
   is_temp: boolean
 }
 
+export interface SessionSnapshot {
+  session_id: string
+  run_state: RunState
+  output_dir?: string
+  done_files?: DoneFile[]
+}
+
 export const useSessionStore = defineStore('session', () => {
   const sessionId = ref<string | null>(null)
   const runState = ref<RunState>('idle')
@@ -39,6 +46,15 @@ export const useSessionStore = defineStore('session', () => {
     inputPrompt.value = null
     listPrompt.value = null
     doneFiles.value = []
+  }
+
+  function restore(snapshot: SessionSnapshot) {
+    sessionId.value = snapshot.session_id
+    outputDir.value = snapshot.output_dir || ''
+    runState.value = snapshot.run_state
+    inputPrompt.value = null
+    listPrompt.value = null
+    doneFiles.value = snapshot.done_files || []
   }
 
   function finish(files?: DoneFile[]) {
@@ -71,5 +87,5 @@ export const useSessionStore = defineStore('session', () => {
     listPrompt.value = prompt
   }
 
-  return { sessionId, runState, outputDir, inputPrompt, listPrompt, doneFiles, isRunning, isDone, start, finish, setError, reset, showInputPrompt, showListPrompt }
+  return { sessionId, runState, outputDir, inputPrompt, listPrompt, doneFiles, isRunning, isDone, start, restore, finish, setError, reset, showInputPrompt, showListPrompt }
 })

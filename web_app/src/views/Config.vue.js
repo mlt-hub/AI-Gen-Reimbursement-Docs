@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, reactive } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useConfigStore } from '@/stores/config';
+import { apiFetch, normalizeApiError } from '@/lib/api';
 // ── stores ────────────────────────────────────────────────
 const auth = useAuthStore();
 const configStore = useConfigStore();
@@ -30,28 +31,26 @@ onMounted(async () => {
 });
 async function loadLocalConfig() {
     try {
-        const resp = await fetch('/api/config-read');
-        if (resp.ok) {
-            const data = await resp.json();
-            envContent.value = data.env || '';
-            systemConfig.value = data.system_config || '';
-            businessRules.value = data.business_rules || '';
-        }
+        const data = await apiFetch('/api/config-read');
+        envContent.value = data.env || '';
+        systemConfig.value = data.system_config || '';
+        businessRules.value = data.business_rules || '';
     }
-    catch {
+    catch (e) {
+        const msg = normalizeApiError(e);
         envContent.value = '读取失败';
-        systemConfig.value = '读取失败';
-        businessRules.value = '读取失败';
+        systemConfig.value = msg;
+        businessRules.value = msg;
     }
 }
 async function loadUserConfig() {
     // 加载原始文本（用于 nested textarea 和 全局参考）
-    const [readResp, cfgResp] = await Promise.all([
-        fetch('/api/config-read'),
-        fetch('/api/user/config'),
+    const [readResult, cfgResult] = await Promise.allSettled([
+        apiFetch('/api/config-read'),
+        apiFetch('/api/user/config'),
     ]);
-    if (readResp.ok) {
-        const d = await readResp.json();
+    if (readResult.status === 'fulfilled') {
+        const d = readResult.value;
         globalEnvContent.value = d.global_env || '';
         globalSystemConfig.value = d.global_system || '';
         businessRules.value = d.business_rules || '';
@@ -72,8 +71,8 @@ async function loadUserConfig() {
             }
         }
     }
-    if (cfgResp.ok) {
-        const data = await cfgResp.json();
+    if (cfgResult.status === 'fulfilled') {
+        const data = cfgResult.value;
         const sys = data._system || {};
         buildFormFields(sys);
     }
@@ -196,24 +195,17 @@ async function saveUserConfig() {
         }
     }
     try {
-        const resp = await fetch('/api/user/config', {
+        await apiFetch('/api/user/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ _env: env, _system: system }),
         });
-        if (resp.ok) {
-            saveOk.value = true;
-            saveMsg.value = '保存成功';
-        }
-        else {
-            const err = await resp.json();
-            saveOk.value = false;
-            saveMsg.value = err.detail || '保存失败';
-        }
+        saveOk.value = true;
+        saveMsg.value = '保存成功';
     }
-    catch {
+    catch (e) {
         saveOk.value = false;
-        saveMsg.value = '网络错误';
+        saveMsg.value = normalizeApiError(e);
     }
     saving.value = false;
 }

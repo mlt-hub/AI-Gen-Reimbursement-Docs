@@ -1,13 +1,11 @@
 import { ref } from 'vue';
+import { apiFetch } from '@/lib/api';
 const templates = ref([]);
 const loading = ref(true);
 async function load() {
     try {
-        const resp = await fetch('/api/templates/output');
-        if (resp.ok) {
-            const data = await resp.json();
-            templates.value = data.templates || [];
-        }
+        const data = await apiFetch('/api/templates/output');
+        templates.value = data.templates || [];
     }
     catch { /* 忽略 */ }
     loading.value = false;

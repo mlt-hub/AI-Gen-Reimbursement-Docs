@@ -1,4 +1,5 @@
 import { ref, reactive } from 'vue';
+import { apiFetch, normalizeApiError } from '@/lib/api';
 // ── 通用提示词调试 ──
 const systemPrompt = ref('');
 const userPrompt = ref('');
@@ -24,7 +25,7 @@ async function submitPrompt() {
     resultUserPrompt.value = '';
     resultThinking.value = '';
     try {
-        const resp = await fetch('/api/test-prompt', {
+        const data = await apiFetch('/api/test-prompt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -35,9 +36,6 @@ async function submitPrompt() {
                 base_url: baseUrl.value.trim(),
             }),
         });
-        const data = await resp.json();
-        if (!resp.ok)
-            throw new Error(data.detail || '请求失败');
         resultSysPrompt.value = data.system_prompt || '';
         resultUserPrompt.value = data.user_prompt || '';
         resultThinking.value = data.thinking || '';
@@ -45,7 +43,7 @@ async function submitPrompt() {
         runState.value = 'done';
     }
     catch (e) {
-        resultText.value = '错误: ' + e.message;
+        resultText.value = '错误: ' + normalizeApiError(e);
         runState.value = 'error';
     }
     finally {
@@ -81,12 +79,11 @@ async function runQuickTest(type) {
         if (type === 'metadata')
             body.append('field_key', quickField.value);
         const url = type === 'reliability' ? '/api/test-ai-reliability-desc' : '/api/test-ai-metadata';
-        const resp = await fetch(url, { method: 'POST', body });
-        const data = await resp.json();
+        const data = await apiFetch(url, { method: 'POST', body });
         quickResult.value = data.result || data.detail || '（无结果）';
     }
     catch (e) {
-        quickResult.value = '请求失败: ' + e.message;
+        quickResult.value = '请求失败: ' + normalizeApiError(e);
     }
     quickRunning.value = false;
 }

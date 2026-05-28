@@ -4,6 +4,7 @@ import { useSessionStore } from '@/stores/session';
 import { useConfigStore } from '@/stores/config';
 import { useLogStore } from '@/stores/log';
 import { useToastStore } from '@/stores/toast';
+import { apiFetch, normalizeApiError } from '@/lib/api';
 const emit = defineEmits();
 const session = useSessionStore();
 const config = useConfigStore();
@@ -12,7 +13,9 @@ const toast = useToastStore();
 function openFolder() {
     if (!session.sessionId)
         return;
-    fetch('/api/open-folder?session=' + session.sessionId).catch(() => { });
+    apiFetch('/api/open-folder?session=' + session.sessionId).catch((e) => {
+        toast.show('error', normalizeApiError(e));
+    });
 }
 function downloadZip() {
     if (!session.sessionId)
@@ -25,7 +28,9 @@ function showAI() { emit('ai'); }
 function cancelTask() {
     if (!session.sessionId)
         return;
-    fetch('/api/cancel/' + session.sessionId, { method: 'POST' }).catch(() => { });
+    apiFetch('/api/cancel/' + session.sessionId, { method: 'POST' }).catch((e) => {
+        toast.show('error', normalizeApiError(e));
+    });
     toast.show('info', '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止', 6000);
 }
 function resetTask() {
@@ -134,7 +139,7 @@ if (__VLS_ctx.config.workMode === 'local') {
 else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
         ...{ onClick: (__VLS_ctx.downloadZip) },
-        disabled: (!__VLS_ctx.session.sessionId),
+        disabled: (!__VLS_ctx.session.sessionId || !__VLS_ctx.session.isDone),
         ...{ class: "btn-secondary" },
     });
     const __VLS_8 = {}.ArrowDownTrayIcon;
@@ -146,6 +151,7 @@ else {
     const __VLS_10 = __VLS_9({
         ...{ class: "w-4 h-4" },
     }, ...__VLS_functionalComponentArgsRest(__VLS_9));
+    (__VLS_ctx.session.isDone ? '下载交付物 .zip' : '任务完成后可下载');
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
     ...{ onClick: (__VLS_ctx.showAI) },

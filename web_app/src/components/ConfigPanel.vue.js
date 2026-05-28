@@ -5,6 +5,7 @@ import FileInput from './FileInput.vue';
 import AdvancedOptions from './AdvancedOptions.vue';
 import TemplateUpload from './TemplateUpload.vue';
 import TemplateDownload from './TemplateDownload.vue';
+import { apiFetch } from '@/lib/api';
 import { ref, onMounted } from 'vue';
 const __VLS_emit = defineEmits();
 const config = useConfigStore();
@@ -12,8 +13,7 @@ const session = useSessionStore();
 const modes = ref({});
 onMounted(async () => {
     try {
-        const resp = await fetch('/api/modes');
-        modes.value = await resp.json();
+        modes.value = await apiFetch('/api/modes');
     }
     catch {
         modes.value = {};

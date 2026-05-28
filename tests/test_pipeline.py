@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 from ai_gen_reimbursement_docs.pipeline import run_pipeline, PipelineResult
 
+pytestmark = pytest.mark.slow
+
 FIXTURES = Path(__file__).parent / "fixtures"
 TEMPLATES = {
     "fpa": str(FIXTURES / "output_templates" / "FPA工作量评估-输出模板.xlsx"),

@@ -1,0 +1,305 @@
+import asyncio
+import json
+import os
+import queue
+import shutil
+import tempfile
+import uuid
+from pathlib import Path
+from typing import Literal
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
+
+from web_app.dependencies import require_auth, require_local
+from web_app.services.config_service import remote_session_ttl_seconds
+from web_app.services import pipeline_runtime
+from web_app.services.session_access import require_session_access
+from web_app.services.session_manager import SessionManager
+from web_app.services.task_runner import (
+    cleanup_expired_sessions,
+    execute_in_session,
+    start_background_task,
+)
+from web_app.services.template_service import save_custom_templates, save_custom_templates_into
+
+
+def _session_run_state(state) -> Literal["running", "done", "error"]:
+    if state.last_error:
+        return "error"
+    if state.task_done_at is not None:
+        return "done"
+    return "running"
+
+
+def _session_status_payload(session_id: str, state) -> dict:
+    output_dir = state.output_dir if state.mode == "local" else None
+    zip_path = state.zip_path
+    return {
+        "session_id": session_id,
+        "mode": state.mode,
+        "run_state": _session_run_state(state),
+        "output_dir": str(output_dir) if output_dir else "",
+        "has_zip": bool(zip_path and zip_path.exists()),
+        "done_files": state.done_files,
+        "last_error": state.last_error,
+        "created_at": state.created_at.isoformat(),
+        "updated_at": state.updated_at.isoformat(),
+        "task_created_at": state.task_created_at.isoformat() if state.task_created_at else None,
+        "task_done_at": state.task_done_at.isoformat() if state.task_done_at else None,
+    }
+
+
+def create_router(
+    *,
+    session_manager: SessionManager,
+    mode_info: dict[str, dict[str, str]],
+    mode_map: dict[str, str],
+) -> APIRouter:
+    router = APIRouter()
+
+    @router.get("/api/sessions/{session_id}")
+    async def get_session_status(
+        session_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        """查询 session 状态，用于页面刷新或离开后恢复任务。"""
+        require_session_access(session_manager, session_id, request, user)
+        state = session_manager.get(session_id)
+        if state is None:
+            raise HTTPException(404, "未知会话")
+        return _session_status_payload(session_id, state)
+
+    @router.post("/api/cancel/{session_id}")
+    async def cancel_session(
+        session_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        """停止指定 session 的执行。"""
+        require_session_access(session_manager, session_id, request, user)
+        session_manager.cancel(session_id)
+        return {"ok": True}
+
+    @router.post("/api/continue/{session_id}")
+    async def api_continue(
+        session_id: str,
+        data: dict,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        """接收前端交互输入（送审工作量），唤醒等待中的 pipeline。"""
+        require_session_access(session_manager, session_id, request, user)
+        if not session_manager.submit_input(session_id, data):
+            raise HTTPException(404, "会话不存在或无需输入")
+        return {"ok": True}
+
+    @router.get("/api/log-stream")
+    async def log_stream(
+        session: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        require_session_access(session_manager, session, request, user)
+        q = session_manager.get_queue(session)
+        if q is None:
+            raise HTTPException(404, "未知会话")
+
+        async def generate():
+            while True:
+                try:
+                    msg = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: q.get(timeout=0.1)
+                    )
+                    data = json.loads(msg)
+                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    if data.get("type") in ("done", "cancelled", "error"):
+                        break
+                except queue.Empty:
+                    yield ": heartbeat\n\n"
+
+            session_manager.remove_queue(session)
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @router.post("/api/run-local")
+    async def api_run_local(
+        request: Request,
+        xlsx_path: str = Form(...),
+        output_dir: str = Form(""),
+        mode: str = Form(...),
+        api_key: str = Form(""),
+        model: str = Form(""),
+        base_url: str = Form(""),
+        max_tokens: str = Form(""),
+        project_name: str = Form(""),
+        clean: str = Form(""),
+        fpa_template: UploadFile | None = File(None),
+        cosmic_template: UploadFile | None = File(None),
+        list_template: UploadFile | None = File(None),
+        spec_template: UploadFile | None = File(None),
+        _local: None = Depends(require_local),
+    ):
+        """本机模式：接受文件路径或目录路径，目录则自动搜索功能清单 xlsx。"""
+        if mode not in mode_info:
+            raise HTTPException(400, f"未知模式: {mode}")
+
+        xlsx_input = Path(xlsx_path)
+        if not xlsx_input.exists():
+            raise HTTPException(400, f"路径不存在: {xlsx_path}")
+
+        from_dir = ""
+        if xlsx_input.is_dir():
+            from_dir = str(xlsx_input)
+            import glob
+            from ai_gen_reimbursement_docs.excel_source import is_valid_input_xlsx
+
+            xlsx_files = [
+                f for f in glob.glob(os.path.join(from_dir, "*.xlsx"))
+                if is_valid_input_xlsx(f)
+            ]
+            if not xlsx_files:
+                raise HTTPException(400, f"目录中未找到符合规范的功能清单 .xlsx: {xlsx_path}")
+            preferred = [
+                f for f in xlsx_files
+                if os.path.basename(f) in ("功能清单-录入模板.xlsx", "功能清单.xlsx")
+            ]
+            xlsx = Path(preferred[0] if preferred else xlsx_files[0])
+        else:
+            xlsx = xlsx_input
+
+        import re
+        from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
+
+        if output_dir:
+            out = Path(output_dir)
+        elif project_name:
+            root = Path(from_dir) if from_dir else xlsx.parent
+            safe = re.sub(r'[\/:*?"<>|]', "_", project_name)
+            out = root / safe
+        else:
+            root = Path(from_dir) if from_dir else xlsx.parent
+            auto_name = _try_read_project_name(str(xlsx))
+            if auto_name:
+                safe = re.sub(r'[\/:*?"<>|]', "_", auto_name)
+                out = root / safe
+            else:
+                out = root
+        out.mkdir(parents=True, exist_ok=True)
+
+        custom_t_dir = await save_custom_templates(
+            out, fpa_template, cosmic_template, list_template, spec_template
+        )
+
+        session_id = uuid.uuid4().hex[:8]
+        session_manager.create(session_id, mode="local", output_dir=out)
+
+        def run():
+            pipeline_runtime.web_mode_var.set("local")
+            execute_in_session(
+                session_manager,
+                session_id,
+                str(xlsx),
+                str(out),
+                custom_t_dir,
+                api_key,
+                model,
+                base_url,
+                project_name,
+                max_tokens,
+                bool(clean),
+                mode,
+                mode_info=mode_info,
+                mode_map=mode_map,
+            )
+
+        start_background_task(session_manager, session_id, run)
+        return {"session_id": session_id, "output_dir": str(out)}
+
+    @router.post("/api/run-upload")
+    async def api_run_upload(
+        file: UploadFile = File(...),
+        mode: str = Form(...),
+        api_key: str = Form(""),
+        model: str = Form(""),
+        base_url: str = Form(""),
+        max_tokens: str = Form(""),
+        project_name: str = Form(""),
+        clean: str = Form(""),
+        fpa_template: UploadFile | None = File(None),
+        cosmic_template: UploadFile | None = File(None),
+        list_template: UploadFile | None = File(None),
+        spec_template: UploadFile | None = File(None),
+        user: str = Depends(require_auth),
+    ):
+        """远程服务模式：上传文件，交付物打包 ZIP 下载。"""
+        if mode not in mode_info:
+            raise HTTPException(400, f"未知模式: {mode}")
+
+        if not file.filename:
+            raise HTTPException(400, "未选择文件")
+
+        cleanup_expired_sessions(
+            session_manager,
+            max_age_seconds=remote_session_ttl_seconds(),
+        )
+
+        session_id = uuid.uuid4().hex[:8]
+        work_dir = Path(tempfile.mkdtemp(prefix=f"ard_web_{session_id}_"))
+        input_dir = work_dir / "input"
+        output_dir = work_dir / "output"
+        custom_t_dir = work_dir / "custom_templates"
+        for d in [input_dir, output_dir, custom_t_dir]:
+            d.mkdir(parents=True)
+
+        safe_name = Path(file.filename).name
+        file_path = input_dir / safe_name
+        content = await file.read()
+        file_path.write_bytes(content)
+
+        await save_custom_templates_into(
+            custom_t_dir, fpa_template, cosmic_template, list_template, spec_template
+        )
+
+        session_manager.create(session_id, mode="remote", owner=user, work_dir=work_dir)
+
+        def run():
+            pipeline_runtime.web_mode_var.set("remote")
+
+            def _pack_zip(output_dir_path: str, sid: str, result: object) -> None:
+                zip_path = work_dir / f"交付物_{sid}.zip"
+                shutil.make_archive(
+                    str(zip_path.with_suffix("")), "zip", str(output_dir_path)
+                )
+                session_manager.set_zip(sid, zip_path)
+
+            execute_in_session(
+                session_manager,
+                session_id,
+                str(file_path),
+                str(output_dir),
+                str(custom_t_dir),
+                api_key,
+                model,
+                base_url,
+                project_name,
+                max_tokens,
+                bool(clean),
+                mode,
+                mode_info=mode_info,
+                mode_map=mode_map,
+                on_success=_pack_zip,
+            )
+
+        start_background_task(session_manager, session_id, run)
+        return {"session_id": session_id, "has_download": True}
+
+    return router

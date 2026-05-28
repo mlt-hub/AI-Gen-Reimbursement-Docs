@@ -20,6 +20,11 @@ dependencies = [
     "pywin32>=300",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
 [project.scripts]
 ard = "ai_gen_reimbursement_docs.cli.main:main"
 
@@ -28,3 +33,8 @@ include = ["ai_gen_reimbursement_docs*"]
 
 [tool.setuptools.package-data]
 ai_gen_reimbursement_docs = ["py.typed"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks slow integration tests",
+]

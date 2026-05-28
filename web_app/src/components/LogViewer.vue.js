@@ -1,6 +1,9 @@
 import { ref, computed, watchEffect, onMounted } from 'vue';
 import { useLogStore } from '@/stores/log';
+import { useToastStore } from '@/stores/toast';
+import { apiFetch, normalizeApiError } from '@/lib/api';
 const logStore = useLogStore();
+const toast = useToastStore();
 const logEl = ref(null);
 const filterLevel = ref('INFO');
 const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
@@ -17,19 +20,23 @@ watchEffect(() => {
 });
 onMounted(async () => {
     try {
-        const resp = await fetch('/api/log-level');
-        const data = await resp.json();
-        if (levels.includes(data.level))
+        const data = await apiFetch('/api/log-level');
+        if (data.level && levels.includes(data.level))
             filterLevel.value = data.level;
     }
     catch { }
 });
 async function saveLevel() {
-    await fetch('/api/log-level', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level: filterLevel.value }),
-    }).catch(() => { });
+    try {
+        await apiFetch('/api/log-level', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ level: filterLevel.value }),
+        });
+    }
+    catch (e) {
+        toast.show('error', normalizeApiError(e));
+    }
 }
 function levelColor(level) {
     const map = {

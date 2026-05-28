@@ -2,6 +2,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useConfigStore } from '@/stores/config';
 import { useAuthStore } from '@/stores/auth';
+import { apiFetch } from '@/lib/api';
 const router = useRouter();
 const route = useRoute();
 const config = useConfigStore();
@@ -10,25 +11,28 @@ const version = ref('-');
 const modeLabel = computed(() => config.workMode === 'local' ? '本机模式' : '远程服务模式');
 onMounted(async () => {
     await auth.init();
-    try {
-        const [verResp, modeResp, localResp] = await Promise.all([
-            fetch('/api/version'),
-            fetch('/api/default-work-mode'),
-            fetch('/api/is-local')
-        ]);
-        const verData = await verResp.json();
-        version.value = verData.version;
-        const modeData = await modeResp.json();
+    const [versionResult, modeResult, localResult] = await Promise.allSettled([
+        apiFetch('/api/version'),
+        apiFetch('/api/default-work-mode'),
+        apiFetch('/api/is-local'),
+    ]);
+    if (versionResult.status === 'fulfilled') {
+        version.value = versionResult.value.version || '-';
+    }
+    else {
+        version.value = '-';
+    }
+    if (modeResult.status === 'fulfilled') {
+        const modeData = modeResult.value;
         if (modeData.work_mode === 'local' || modeData.work_mode === 'remote') {
             config.workMode = modeData.work_mode;
         }
-        else {
-            const localData = await localResp.json();
-            config.workMode = localData.local ? 'local' : 'remote';
+        else if (localResult.status === 'fulfilled') {
+            config.workMode = localResult.value.local ? 'local' : 'remote';
         }
     }
-    catch {
-        version.value = '-';
+    else if (localResult.status === 'fulfilled') {
+        config.workMode = localResult.value.local ? 'local' : 'remote';
     }
     // 路由守卫：远程模式未登录 → 跳转登录页
     if (auth.isRemote && !auth.isLoggedIn && route.path !== '/login') {

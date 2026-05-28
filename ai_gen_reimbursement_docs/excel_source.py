@@ -13,9 +13,36 @@ from ai_gen_reimbursement_docs.config_utils import load_sheet_names
 logger = logging.getLogger('ai_gen_reimbursement_docs.excel_source')
 
 
+_SHEET_ALIASES: dict[str, tuple[str, ...]] = {
+    "cosmic_meta": (
+        "5、项目功能点拆分表-元数据录入",
+        "6、项目功能点拆分表-元数据录入",
+    ),
+    "list_meta": (
+        "6、项目需求清单-元数据录入",
+        "7、项目需求清单-元数据录入",
+    ),
+    "stats_meta": (
+        "7、测试-元数据自动统计",
+        "9、测试元数据自动统计",
+    ),
+}
+
+
 def _cell_val(cell: object) -> str:
     """读取单元格值，None 转空字符串。"""
     return str(cell).strip() if cell is not None else ""
+
+
+def _resolve_sheet_name(wb: "openpyxl.Workbook", sheets: dict[str, str], key: str) -> str:
+    """Resolve configured sheet name, accepting legacy template aliases."""
+    configured = sheets.get(key, "")
+    candidates = [configured] if configured else []
+    candidates.extend(name for name in _SHEET_ALIASES.get(key, ()) if name not in candidates)
+    for name in candidates:
+        if name in wb.sheetnames:
+            return name
+    raise KeyError(f"Worksheet for {key} does not exist. Tried: {', '.join(candidates)}")
 
 
 def _resolve_inherited_rows(ws: "openpyxl.worksheet.worksheet.Worksheet") -> list[list[str]]:
@@ -70,28 +97,32 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
 
     # ========== 解析各个 sheet ==========
 
+    actual_sheets = {key: _resolve_sheet_name(wb, _s, key) for key in [
+        "work_order_meta", "func_list", "fpa_meta", "spec_meta", "cosmic_meta", "list_meta"
+    ]}
+
     # 1、工单需求-元数据录入
-    ws1 = wb[_s["work_order_meta"]]
+    ws1 = wb[actual_sheets["work_order_meta"]]
     project_info = _key_value_sheet(ws1)
 
     # 2、功能清单-内容录入 — 模块树 + 功能过程
-    ws2 = wb[_s["func_list"]]
+    ws2 = wb[actual_sheets["func_list"]]
     func_rows = _resolve_inherited_rows(ws2)
 
     # 3、FPA工作量评估-元数据录入
-    ws3 = wb[_s["fpa_meta"]]
+    ws3 = wb[actual_sheets["fpa_meta"]]
     fpa_meta = _key_value_sheet(ws3)
 
     # 4、项目需求说明书-元数据录入
-    ws4 = wb[_s["spec_meta"]]
+    ws4 = wb[actual_sheets["spec_meta"]]
     docx_meta = _key_value_sheet(ws4)
 
     # 6、项目功能点拆分表-元数据录入
-    ws6 = wb[_s["cosmic_meta"]]
+    ws6 = wb[actual_sheets["cosmic_meta"]]
     cosmic_meta = _key_value_sheet(ws6)
 
     # 7、项目需求清单-元数据录入
-    ws7 = wb[_s["list_meta"]]
+    ws7 = wb[actual_sheets["list_meta"]]
     list_meta = _key_value_sheet(ws7)
 
     wb.close()
@@ -104,7 +135,7 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
             f"无法以 data_only 模式读取功能清单，文件可能已损坏: {excel_path}\n"
             f"内部错误: {e}"
         ) from e
-    for row in wb_val[_s["list_meta"]].iter_rows(min_row=2, values_only=True):
+    for row in wb_val[actual_sheets["list_meta"]].iter_rows(min_row=2, values_only=True):
         k, v = row[0], row[1]
         if k and str(v).strip():
             wk = str(k).strip()

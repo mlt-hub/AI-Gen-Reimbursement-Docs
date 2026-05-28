@@ -709,9 +709,14 @@ def generate_spec_docx_from_md(
 
 def auto_update_docx_toc(docx_path: str) -> bool:
     """用 Word COM 自动更新文档目录和域。成功返回 True，失败返回 False。"""
+    import os
     import sys
 
     logger.info("第2.4步：自动更新项目需求说明书目录")
+
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("CI"):
+        logger.info("测试/CI环境跳过 Word COM 自动更新目录")
+        return False
 
     if sys.platform != "win32":
         logger.warning("项目需求说明书目录：自动更新目录失败:当前系统非Windows系统")

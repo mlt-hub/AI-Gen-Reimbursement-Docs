@@ -27,17 +27,19 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { apiFetch } from '@/lib/api'
+
+interface TemplatesResponse {
+  templates?: string[]
+}
 
 const templates = ref<string[]>([])
 const loading = ref(true)
 
 async function load() {
   try {
-    const resp = await fetch('/api/templates/output')
-    if (resp.ok) {
-      const data = await resp.json()
-      templates.value = data.templates || []
-    }
+    const data = await apiFetch<TemplatesResponse>('/api/templates/output')
+    templates.value = data.templates || []
   } catch { /* 忽略 */ }
   loading.value = false
 }
