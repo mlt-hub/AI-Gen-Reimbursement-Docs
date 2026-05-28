@@ -4,101 +4,101 @@
     <template v-if="showUserConfig">
       <section>
         <h2 class="text-lg font-semibold mb-1">个人配置</h2>
-        <p class="text-xs text-gray-400 mb-4">~/.ai-gen-reimbursement-docs/users/{{ auth.username }}/</p>
+        <p class="mb-4 text-xs text-[var(--color-ink-soft)]">~/.ai-gen-reimbursement-docs/users/{{ auth.username }}/</p>
 
         <!-- .env -->
-        <div class="bg-white border border-gray-200 rounded-lg p-5 mb-4 space-y-3">
-          <h3 class="text-sm font-medium text-gray-500">.env</h3>
+        <div class="surface mb-4 space-y-3 rounded-lg p-5">
+          <h3 class="text-sm font-medium text-[var(--color-ink-muted)]">.env</h3>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">ANTHROPIC_API_KEY</label>
+            <label class="field-label text-xs">ANTHROPIC_API_KEY</label>
             <input v-model="envFields.apiKey" type="password"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              class="field-control" />
           </div>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">ANTHROPIC_BASE_URL</label>
+            <label class="field-label text-xs">ANTHROPIC_BASE_URL</label>
             <input v-model="envFields.baseUrl" type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              class="field-control" />
           </div>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">ANTHROPIC_MODEL</label>
+            <label class="field-label text-xs">ANTHROPIC_MODEL</label>
             <input v-model="envFields.model" type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              class="field-control" />
           </div>
         </div>
 
         <!-- system_config.yaml -->
-        <div class="bg-white border border-gray-200 rounded-lg p-5 mb-4 space-y-4">
-          <h3 class="text-sm font-medium text-gray-500">system_config.yaml</h3>
+        <div class="surface mb-4 space-y-4 rounded-lg p-5">
+          <h3 class="text-sm font-medium text-[var(--color-ink-muted)]">system_config.yaml</h3>
 
           <!-- 布尔字段：4 列 grid -->
           <div class="grid grid-cols-4 gap-x-4 gap-y-2">
             <label v-for="f in boolFields" :key="f.key"
-              class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-              <input type="checkbox" v-model="f.value" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+              class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)]">
+              <input type="checkbox" v-model="f.value" class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]" />
               {{ f.key }}
             </label>
           </div>
 
-          <hr class="border-gray-100" />
+          <hr class="border-[var(--color-rule)]" />
 
           <!-- 枚举/数字/文本：2 列 grid -->
           <div class="grid grid-cols-2 gap-4">
             <div v-for="f in scalarFields" :key="f.key">
-              <label class="block text-xs text-gray-500 mb-1">{{ f.key }}</label>
+              <label class="field-label text-xs">{{ f.key }}</label>
               <select v-if="f.type === 'select'" v-model="f.value"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+                class="field-control">
                 <option v-for="opt in f.options" :key="opt" :value="opt">{{ opt }}</option>
               </select>
               <input v-else-if="f.type === 'number'" v-model.number="f.value" type="number"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                class="field-control" />
               <input v-else v-model="f.value" type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                class="field-control" />
             </div>
           </div>
 
           <!-- 嵌套对象：textarea -->
           <template v-if="nestedFields.length">
-            <hr class="border-gray-100" />
+            <hr class="border-[var(--color-rule)]" />
             <div v-for="f in nestedFields" :key="f.key">
-              <label class="block text-xs text-gray-500 mb-1">{{ f.key }}</label>
+              <label class="field-label text-xs">{{ f.key }}</label>
               <textarea v-model="f.yamlText" rows="6"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"></textarea>
+                class="field-control font-mono"></textarea>
             </div>
           </template>
         </div>
 
         <div class="flex gap-3">
           <button @click="saveUserConfig" :disabled="saving"
-            class="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 disabled:bg-primary-300 transition-colors">
+            class="btn-primary">
             {{ saving ? '保存中...' : '保存' }}
           </button>
           <button @click="exportSettings"
-            class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            class="btn-secondary">
             导出
           </button>
           <button @click="importSettings"
-            class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            class="btn-secondary">
             导入
           </button>
         </div>
-        <p v-if="saveMsg" :class="['text-sm mt-2', saveOk ? 'text-green-500' : 'text-red-500']">{{ saveMsg }}</p>
+        <p v-if="saveMsg" :class="['mt-2 text-sm', saveOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ saveMsg }}</p>
       </section>
 
       <!-- 服务端全局默认（只读参考） -->
       <section v-if="globalSystemConfig">
         <h2 class="text-lg font-semibold mb-4">服务端全局默认 (system_config.yaml)</h2>
-        <p class="text-sm text-gray-500 mb-3">只读参考，文件位置: ~/.ai-gen-reimbursement-docs/system_config.yaml</p>
-        <pre class="bg-gray-900 text-gray-300 text-sm p-5 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono">{{ globalSystemConfig || '（空）' }}</pre>
+        <p class="mb-3 text-sm text-[var(--color-ink-muted)]">只读参考，文件位置: ~/.ai-gen-reimbursement-docs/system_config.yaml</p>
+        <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ globalSystemConfig || '（空）' }}</pre>
       </section>
       <section v-if="globalEnvContent">
         <h2 class="text-lg font-semibold mb-4">服务端全局默认 (.env)</h2>
-        <p class="text-sm text-gray-500 mb-3">只读参考，敏感值已遮罩</p>
-        <pre class="bg-gray-900 text-gray-300 text-sm p-5 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono">{{ globalEnvContent || '（空）' }}</pre>
+        <p class="mb-3 text-sm text-[var(--color-ink-muted)]">只读参考，敏感值已遮罩</p>
+        <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ globalEnvContent || '（空）' }}</pre>
       </section>
       <section v-if="businessRules !== null">
         <h2 class="text-lg font-semibold mb-4">业务规则 (business_rules.yaml)</h2>
-        <p class="text-sm text-gray-500 mb-3">只读</p>
-        <pre class="bg-gray-900 text-gray-300 text-sm p-5 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono">{{ businessRules || '（空）' }}</pre>
+        <p class="mb-3 text-sm text-[var(--color-ink-muted)]">只读</p>
+        <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ businessRules || '（空）' }}</pre>
       </section>
     </template>
 
@@ -106,21 +106,21 @@
     <template v-else>
       <section>
         <h2 class="text-lg font-semibold mb-4">环境变量 (.env)</h2>
-        <p class="text-sm text-gray-500 mb-3">~/.ai-gen-reimbursement-docs/.env</p>
-        <pre v-if="envContent !== null" class="bg-gray-900 text-gray-300 text-sm p-5 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono">{{ envContent || '（空）' }}</pre>
-        <p v-else class="text-gray-400 text-sm">加载中…</p>
+        <p class="mb-3 text-sm text-[var(--color-ink-muted)]">~/.ai-gen-reimbursement-docs/.env</p>
+        <pre v-if="envContent !== null" class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ envContent || '（空）' }}</pre>
+        <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中…</p>
       </section>
       <section>
         <h2 class="text-lg font-semibold mb-4">系统配置 (system_config.yaml)</h2>
-        <p class="text-sm text-gray-500 mb-3">~/.ai-gen-reimbursement-docs/system_config.yaml</p>
-        <pre v-if="systemConfig !== null" class="bg-gray-900 text-gray-300 text-sm p-5 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono">{{ systemConfig || '（空）' }}</pre>
-        <p v-else class="text-gray-400 text-sm">加载中…</p>
+        <p class="mb-3 text-sm text-[var(--color-ink-muted)]">~/.ai-gen-reimbursement-docs/system_config.yaml</p>
+        <pre v-if="systemConfig !== null" class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ systemConfig || '（空）' }}</pre>
+        <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中…</p>
       </section>
       <section>
         <h2 class="text-lg font-semibold mb-4">业务规则 (business_rules.yaml)</h2>
-        <p class="text-sm text-gray-500 mb-3">~/.ai-gen-reimbursement-docs/business_rules.yaml</p>
-        <pre v-if="businessRules !== null" class="bg-gray-900 text-gray-300 text-sm p-5 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono">{{ businessRules || '（空）' }}</pre>
-        <p v-else class="text-gray-400 text-sm">加载中…</p>
+        <p class="mb-3 text-sm text-[var(--color-ink-muted)]">~/.ai-gen-reimbursement-docs/business_rules.yaml</p>
+        <pre v-if="businessRules !== null" class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ businessRules || '（空）' }}</pre>
+        <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中…</p>
       </section>
     </template>
   </div>
@@ -128,9 +128,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { useConfigStore } from '@/stores/config'
-import { apiFetch, normalizeApiError } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth.ts'
+import { useConfigStore } from '@/stores/config.ts'
+import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 // ── 类型 ──────────────────────────────────────────────────
 

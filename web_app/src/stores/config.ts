@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 export type WorkMode = 'local' | 'remote'
+export type BackendStatus = 'checking' | 'connected' | 'offline'
 export type PipelineMode = 'from-excel-gen-all' | 'from-excel-gen-basedata' |
   'from-excel-gen-fpa' | 'from-excel-gen-cosmic' |
   'from-excel-gen-list' | 'from-excel-gen-spec'
@@ -41,6 +42,7 @@ export interface UserSettings {
 
 export const useConfigStore = defineStore('config', () => {
   const workMode = ref<WorkMode>('local')
+  const backendStatus = ref<BackendStatus>('checking')
   const pipelineMode = ref<PipelineMode>(loadStr('pipelineMode', 'from-excel-gen-all') as PipelineMode)
   const xlsxPath = ref('')
   const outputDir = ref('')
@@ -109,7 +111,7 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  return { workMode, pipelineMode, xlsxPath, outputDir, apiKey, model, baseUrl,
+  return { workMode, backendStatus, pipelineMode, xlsxPath, outputDir, apiKey, model, baseUrl,
            maxTokens, projectName, clean, selectedFile, isValid, reset,
            exportSettings, importSettings }
 })

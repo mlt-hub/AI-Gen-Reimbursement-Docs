@@ -58,11 +58,11 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { FolderOpenIcon, ArrowDownTrayIcon, ChatBubbleLeftEllipsisIcon, XCircleIcon } from '@heroicons/vue/24/outline'
-import { useSessionStore } from '@/stores/session'
-import { useConfigStore } from '@/stores/config'
-import { useLogStore } from '@/stores/log'
-import { useToastStore } from '@/stores/toast'
-import { apiFetch, normalizeApiError } from '@/lib/api'
+import { useSessionStore } from '@/stores/session.ts'
+import { useConfigStore } from '@/stores/config.ts'
+import { useLogStore } from '@/stores/log.ts'
+import { useToastStore } from '@/stores/toast.ts'
+import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 const emit = defineEmits<{ ai: [] }>()
 

@@ -1,127 +1,127 @@
 <template>
   <div class="flex h-full">
     <!-- 左侧：通用提示词调试器 -->
-    <div class="flex-1 flex flex-col p-5 bg-white min-w-0 overflow-y-auto">
-      <h2 class="text-base font-semibold mb-4">通用提示词调试</h2>
+    <div class="flex min-w-0 flex-1 flex-col overflow-y-auto bg-[var(--color-surface-raised)] p-5">
+      <h2 class="mb-4 text-base font-semibold text-[var(--color-ink)]">通用提示词调试</h2>
 
-      <label class="text-sm font-medium text-gray-500 mb-1">
-        系统提示词 <span class="font-normal text-xs text-gray-400 ml-1">{{ systemPrompt.length }} 字</span>
+      <label class="mb-1 text-sm font-medium text-[var(--color-ink-muted)]">
+        系统提示词 <span class="ml-1 text-xs font-normal text-[var(--color-ink-soft)]">{{ systemPrompt.length }} 字</span>
       </label>
       <textarea v-model="systemPrompt"
         placeholder="可选，系统级指令（角色设定、输出格式等）"
-        class="flex-1 min-h-[120px] p-3 border border-gray-300 rounded-lg text-sm font-mono leading-relaxed resize-y bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent focus:bg-white transition-colors" />
+        class="field-control min-h-[120px] flex-1 resize-y font-mono leading-relaxed" />
 
-      <label class="text-sm font-medium text-gray-500 mt-4 mb-1">
-        用户提示词 <span class="font-normal text-xs text-gray-400 ml-1">{{ userPrompt.length }} 字</span>
+      <label class="mb-1 mt-4 text-sm font-medium text-[var(--color-ink-muted)]">
+        用户提示词 <span class="ml-1 text-xs font-normal text-[var(--color-ink-soft)]">{{ userPrompt.length }} 字</span>
       </label>
       <textarea v-model="userPrompt"
         placeholder="可选，具体的任务描述或问题"
-        class="flex-1 min-h-[120px] p-3 border border-gray-300 rounded-lg text-sm font-mono leading-relaxed resize-y bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent focus:bg-white transition-colors"
+        class="field-control min-h-[120px] flex-1 resize-y font-mono leading-relaxed"
         @keydown="onKeydown" />
 
       <div class="flex items-center gap-3 mt-4">
         <button @click="submitPrompt" :disabled="running"
-          class="px-6 py-2 bg-primary-500 text-white text-sm font-semibold rounded-lg hover:bg-primary-600 disabled:bg-primary-300 disabled:cursor-not-allowed transition-colors">
+          class="btn-primary">
           发送给 AI
         </button>
-        <button @click="clearAll" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition-colors">清空</button>
+        <button @click="clearAll" class="btn-secondary">清空</button>
         <span :class="['text-sm font-medium ml-auto',
-          runState === 'idle' ? 'text-gray-400' : runState === 'running' ? 'text-primary-500' : runState === 'done' ? 'text-green-500' : 'text-red-500']">
+          runState === 'idle' ? 'text-[var(--color-ink-soft)]' : runState === 'running' ? 'text-[var(--color-accent-strong)]' : runState === 'done' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">
           {{ { idle: '就绪', running: '请求中...', done: '完成', error: '失败' }[runState] }}
         </span>
       </div>
 
       <details class="mt-4">
-        <summary class="text-sm text-primary-600 cursor-pointer select-none font-medium">高级选项</summary>
-        <div class="flex gap-3 mt-3 pt-3 border-t border-gray-100">
+        <summary class="subtle-link cursor-pointer select-none text-sm">高级选项</summary>
+        <div class="mt-3 flex gap-3 border-t border-[var(--color-rule)] pt-3">
           <input type="password" v-model="apiKey" placeholder="API Key（留空使用系统配置）" autocomplete="off"
-            class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            class="field-control flex-1" />
           <input type="text" v-model="model" placeholder="模型（默认 deepseek-v4-flash）"
-            class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            class="field-control flex-1" />
           <input type="text" v-model="baseUrl" placeholder="API 端点（留空使用默认）"
-            class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            class="field-control flex-1" />
         </div>
       </details>
     </div>
 
     <!-- 右侧：结果 + 快捷测试 -->
-    <div class="w-[45%] min-w-[320px] flex flex-col bg-gray-900 overflow-hidden">
+    <div class="flex w-[45%] min-w-[320px] flex-col overflow-hidden bg-[var(--color-console)]">
       <!-- 快捷测试工具 -->
-      <details class="border-b border-gray-700">
-        <summary class="px-4 py-2 text-sm text-gray-400 cursor-pointer select-none hover:text-gray-300">快捷测试工具</summary>
+      <details class="border-b border-[var(--color-console-line)]">
+        <summary class="cursor-pointer select-none px-4 py-2 text-sm text-slate-400 hover:text-slate-300">快捷测试工具</summary>
         <div class="px-4 pb-4 space-y-3">
           <!-- 可靠性描述测试 -->
-          <div class="bg-gray-800 rounded-lg p-3">
-            <h4 class="text-xs text-gray-400 mb-2 font-medium">调整因子 — 可靠性描述 AI 生成</h4>
+          <div class="rounded-lg bg-[var(--color-console-line)] p-3">
+            <h4 class="mb-2 text-xs font-medium text-slate-400">调整因子 — 可靠性描述 AI 生成</h4>
             <div class="flex gap-2">
               <input v-model="quickXlsx" type="text" placeholder="功能清单 .xlsx 路径（留空自动搜索）"
-                class="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 focus:outline-none focus:border-primary-500" />
+                class="flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
               <button @click="runQuickTest('reliability')" :disabled="quickRunning"
-                class="px-3 py-1.5 bg-primary-500 text-white text-xs rounded hover:bg-primary-600 disabled:bg-primary-800 whitespace-nowrap transition-colors">
+                class="btn-primary min-h-0 whitespace-nowrap px-3 py-1.5 text-xs">
                 {{ quickRunning ? '...' : '执行' }}
               </button>
             </div>
           </div>
           <!-- 元数据测试 -->
-          <div class="bg-gray-800 rounded-lg p-3">
-            <h4 class="text-xs text-gray-400 mb-2 font-medium">元数据 #AI生成# 字段测试</h4>
+          <div class="rounded-lg bg-[var(--color-console-line)] p-3">
+            <h4 class="mb-2 text-xs font-medium text-slate-400">元数据 #AI生成# 字段测试</h4>
             <div class="flex gap-2">
               <input v-model="quickXlsx" type="text" placeholder="功能清单 .xlsx 路径"
-                class="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 focus:outline-none focus:border-primary-500" />
+                class="flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
               <input v-model="quickField" type="text" placeholder="字段 key"
-                class="w-32 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 focus:outline-none focus:border-primary-500" />
+                class="w-32 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
               <button @click="runQuickTest('metadata')" :disabled="quickRunning"
-                class="px-3 py-1.5 bg-purple-500 text-white text-xs rounded hover:bg-purple-600 disabled:bg-purple-800 whitespace-nowrap transition-colors">
+                class="btn-secondary min-h-0 whitespace-nowrap px-3 py-1.5 text-xs">
                 {{ quickRunning ? '...' : '执行' }}
               </button>
             </div>
           </div>
           <!-- 快捷测试结果 -->
-          <pre v-if="quickResult" class="text-xs text-gray-300 bg-gray-800 p-3 rounded-lg max-h-48 overflow-y-auto whitespace-pre-wrap">{{ quickResult }}</pre>
+          <pre v-if="quickResult" class="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console-line)] p-3 text-xs text-slate-300">{{ quickResult }}</pre>
         </div>
       </details>
 
       <!-- 结果区 -->
-      <h3 class="px-5 pt-4 text-xs text-gray-500 font-medium">AI 返回结果</h3>
+      <h3 class="px-5 pt-4 text-xs font-medium text-slate-500">AI 返回结果</h3>
       <div class="flex-1 overflow-y-auto p-5">
-        <div v-if="!resultText && !running" class="flex items-center justify-center h-full text-gray-600 text-sm">
+        <div v-if="!resultText && !running" class="flex h-full items-center justify-center text-sm text-slate-500">
           提交提示词后，AI 返回结果将显示在此处
         </div>
-        <div v-else-if="running" class="flex items-center justify-center h-full text-gray-500 text-sm">
+        <div v-else-if="running" class="flex h-full items-center justify-center text-sm text-slate-500">
           等待 AI 响应...
         </div>
         <div v-else class="space-y-3">
           <!-- 折叠块 -->
-          <div v-if="resultSysPrompt" class="border border-gray-700 rounded-lg overflow-hidden">
+          <div v-if="resultSysPrompt" class="overflow-hidden rounded-lg border border-[var(--color-console-line)]">
             <div @click="fold.sys = !fold.sys"
-              :class="['px-4 py-2 bg-gray-800 text-gray-400 text-sm cursor-pointer select-none hover:bg-gray-700 flex items-center gap-2', fold.sys ? 'collapsed' : '']">
+              :class="['flex cursor-pointer select-none items-center gap-2 bg-[var(--color-console-line)] px-4 py-2 text-sm text-slate-400 hover:text-slate-300', fold.sys ? 'collapsed' : '']">
               <span class="text-xs transition-transform" :class="fold.sys ? '-rotate-90' : ''">▼</span>
               系统提示词（{{ resultSysPrompt.length }} 字）
             </div>
-            <pre v-show="!fold.sys" class="p-3 text-sm text-gray-300 leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">{{ resultSysPrompt }}</pre>
+            <pre v-show="!fold.sys" class="max-h-60 overflow-y-auto whitespace-pre-wrap p-3 text-sm leading-relaxed text-slate-300">{{ resultSysPrompt }}</pre>
           </div>
-          <div v-if="resultUserPrompt" class="border border-gray-700 rounded-lg overflow-hidden">
+          <div v-if="resultUserPrompt" class="overflow-hidden rounded-lg border border-[var(--color-console-line)]">
             <div @click="fold.user = !fold.user"
-              :class="['px-4 py-2 bg-gray-800 text-gray-400 text-sm cursor-pointer select-none hover:bg-gray-700 flex items-center gap-2', fold.user ? 'collapsed' : '']">
+              :class="['flex cursor-pointer select-none items-center gap-2 bg-[var(--color-console-line)] px-4 py-2 text-sm text-slate-400 hover:text-slate-300', fold.user ? 'collapsed' : '']">
               <span class="text-xs transition-transform" :class="fold.user ? '-rotate-90' : ''">▼</span>
               用户提示词（{{ resultUserPrompt.length }} 字）
             </div>
-            <pre v-show="!fold.user" class="p-3 text-sm text-gray-300 leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">{{ resultUserPrompt }}</pre>
+            <pre v-show="!fold.user" class="max-h-60 overflow-y-auto whitespace-pre-wrap p-3 text-sm leading-relaxed text-slate-300">{{ resultUserPrompt }}</pre>
           </div>
-          <div v-if="resultThinking" class="border border-gray-700 rounded-lg overflow-hidden">
+          <div v-if="resultThinking" class="overflow-hidden rounded-lg border border-[var(--color-console-line)]">
             <div @click="fold.thinking = !fold.thinking"
-              :class="['px-4 py-2 bg-gray-800 text-gray-400 text-sm cursor-pointer select-none hover:bg-gray-700 flex items-center gap-2']">
+              :class="['flex cursor-pointer select-none items-center gap-2 bg-[var(--color-console-line)] px-4 py-2 text-sm text-slate-400 hover:text-slate-300']">
               <span class="text-xs">▼</span>
               思考过程（{{ resultThinking.length }} 字）
             </div>
-            <pre class="p-3 text-sm text-gray-300 leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">{{ resultThinking }}</pre>
+            <pre class="max-h-60 overflow-y-auto whitespace-pre-wrap p-3 text-sm leading-relaxed text-slate-300">{{ resultThinking }}</pre>
           </div>
           <!-- 最终结果 -->
           <div>
-            <h4 class="text-xs text-gray-500 mb-2 font-medium">AI 返回结果（{{ resultText.length }} 字）</h4>
-            <div class="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{{ resultText }}</div>
+            <h4 class="mb-2 text-xs font-medium text-slate-500">AI 返回结果（{{ resultText.length }} 字）</h4>
+            <div class="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{{ resultText }}</div>
           </div>
-          <p class="text-xs text-gray-600 text-right">结果 {{ resultText.length }} 字</p>
+          <p class="text-right text-xs text-slate-600">结果 {{ resultText.length }} 字</p>
         </div>
       </div>
     </div>
@@ -130,7 +130,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { apiFetch, normalizeApiError } from '@/lib/api'
+import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 interface PromptTestResponse {
   system_prompt?: string

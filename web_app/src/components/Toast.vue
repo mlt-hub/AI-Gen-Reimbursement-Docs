@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { useToastStore, type ToastType } from '@/stores/toast'
+import { useToastStore, type ToastType } from '@/stores/toast.ts'
 import {
   CheckCircleIcon, ExclamationCircleIcon,
   InformationCircleIcon, ExclamationTriangleIcon,

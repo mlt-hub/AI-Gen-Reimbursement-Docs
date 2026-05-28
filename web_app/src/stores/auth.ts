@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { apiFetch } from '@/lib/api'
+import { apiFetch } from '@/lib/api.ts'
 
 interface AuthMeResponse {
   username?: string

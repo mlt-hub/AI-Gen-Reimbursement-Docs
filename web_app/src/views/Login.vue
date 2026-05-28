@@ -1,40 +1,40 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50">
-    <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm">
-      <h1 class="text-xl font-semibold text-center text-gray-800 mb-6">AI 生成项目报账文档</h1>
+  <div class="app-chrome flex min-h-screen items-center justify-center p-4">
+    <div class="surface w-full max-w-sm rounded-lg p-8">
+      <h1 class="mb-6 text-center text-xl font-semibold text-[var(--color-ink)]">AI 生成项目报账文档</h1>
 
       <div class="space-y-4">
         <div>
-          <label for="username" class="block text-sm font-medium text-gray-600 mb-1">用户名</label>
+          <label for="username" class="field-label">用户名</label>
           <input id="username" v-model="user" type="text" @keyup.enter="isRegister ? doRegister() : doLogin()"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            class="field-control" />
         </div>
         <div>
-          <label for="password" class="block text-sm font-medium text-gray-600 mb-1">密码</label>
+          <label for="password" class="field-label">密码</label>
           <input id="password" v-model="pwd" type="password" @keyup.enter="isRegister ? doRegister() : doLogin()"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            class="field-control" />
         </div>
 
-        <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
+        <p v-if="error" class="text-sm text-[var(--color-danger)]">{{ error }}</p>
 
         <button v-if="!isRegister" @click="doLogin" :disabled="loading"
-          class="w-full py-2.5 bg-primary-500 text-white font-semibold rounded-lg hover:bg-primary-600 disabled:bg-primary-300 transition-colors">
+          class="btn-primary w-full">
           {{ loading ? '登录中...' : '登录' }}
         </button>
 
         <template v-if="isRegister">
           <button @click="doRegister" :disabled="loading"
-            class="w-full py-2.5 bg-primary-500 text-white font-semibold rounded-lg hover:bg-primary-600 disabled:bg-primary-300 transition-colors">
+            class="btn-primary w-full">
             {{ loading ? '注册中...' : '注册' }}
           </button>
           <button @click="isRegister = false; error = ''"
-            class="w-full py-2 text-sm text-gray-500 hover:text-primary-600">
+            class="btn-quiet w-full">
             已有账号？去登录
           </button>
         </template>
 
         <button v-if="!isRegister && allowRegister" @click="isRegister = true; error = ''"
-          class="w-full py-2 text-sm text-gray-500 hover:text-primary-600">
+          class="btn-quiet w-full">
           没有账号？注册
         </button>
       </div>
@@ -45,7 +45,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/stores/auth.ts'
 
 const router = useRouter()
 const auth = useAuthStore()

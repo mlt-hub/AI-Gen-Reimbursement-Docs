@@ -13,8 +13,9 @@
     </div>
     <!-- 日志列表 -->
     <div ref="logEl" class="flex-1 overflow-y-auto bg-[var(--color-console)] p-5 font-mono text-sm leading-6">
-      <div v-if="logStore.entries.length === 0" class="flex h-full items-center justify-center text-sm text-slate-500">
-        等待任务启动，实时日志将在此处显示
+      <div v-if="logStore.entries.length === 0" class="flex h-full flex-col items-center justify-center gap-1 text-center text-sm text-slate-500">
+        <p>等待任务启动，实时日志将在此处显示</p>
+        <p v-if="config.backendStatus === 'offline'" class="text-xs text-amber-300">未检测到后端服务。</p>
       </div>
       <template v-for="(entry, i) in filteredEntries" :key="i">
         <div v-if="entry.level === 'DONE'"
@@ -33,9 +34,10 @@
 
 <script setup lang="ts">
 import { ref, computed, watchEffect, onMounted } from 'vue'
-import { useLogStore } from '@/stores/log'
-import { useToastStore } from '@/stores/toast'
-import { apiFetch, normalizeApiError } from '@/lib/api'
+import { useLogStore } from '@/stores/log.ts'
+import { useToastStore } from '@/stores/toast.ts'
+import { useConfigStore } from '@/stores/config.ts'
+import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 interface LogLevelResponse {
   level?: string
@@ -43,6 +45,7 @@ interface LogLevelResponse {
 
 const logStore = useLogStore()
 const toast = useToastStore()
+const config = useConfigStore()
 const logEl = ref<HTMLElement | null>(null)
 const filterLevel = ref('INFO')
 const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
@@ -83,11 +86,11 @@ async function saveLevel() {
 function levelColor(level: string) {
   const map: Record<string, string> = {
     INFO: 'text-blue-400',
-    DEBUG: 'text-gray-400',
+    DEBUG: 'text-slate-400',
     WARNING: 'text-yellow-400',
     ERROR: 'text-red-400',
     DONE: 'text-green-400',
   }
-  return map[level] || 'text-gray-300'
+  return map[level] || 'text-slate-300'
 }
 </script>

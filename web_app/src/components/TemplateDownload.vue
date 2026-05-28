@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { apiFetch } from '@/lib/api'
+import { apiFetch } from '@/lib/api.ts'
 
 interface TemplatesResponse {
   templates?: string[]

@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useConfigStore } from '@/stores/config'
+import { useConfigStore } from '@/stores/config.ts'
 
 const config = useConfigStore()
 const selectedName = ref('')

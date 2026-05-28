@@ -1,8 +1,8 @@
 import { ref, nextTick } from 'vue'
 import { defineStore } from 'pinia'
-import { useSessionStore } from './session'
-import { useStepsStore } from './steps'
-import { useToastStore } from './toast'
+import { useSessionStore } from './session.ts'
+import { useStepsStore } from './steps.ts'
+import { useToastStore } from './toast.ts'
 
 export interface LogEntry {
   level: string

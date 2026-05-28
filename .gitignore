@@ -34,6 +34,9 @@ ard-v*
 # 前端构建
 web_app/node_modules/
 web_app/static/dist/
+web_app/src/**/*.js
+web_app/src/**/*.vue.js
+web_app/src/**/*.vue.d.ts
 
 .understand-anything/
 .agents/skills/hallmark/

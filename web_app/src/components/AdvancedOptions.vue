@@ -8,17 +8,17 @@
           class="field-control" />
       </div>
       <div>
-        <label for="base-url" class="field-label text-xs">BASE URL</label>
+        <label for="base-url" class="field-label text-xs">接口地址</label>
         <input id="base-url" type="text" v-model="config.baseUrl" placeholder="https://api.deepseek.com/anthropic"
           class="field-control" />
       </div>
       <div>
-        <label for="model" class="field-label text-xs">MODEL</label>
+        <label for="model" class="field-label text-xs">模型</label>
         <input id="model" type="text" v-model="config.model" placeholder="deepseek-v4-flash[1m]"
           class="field-control" />
       </div>
       <div>
-        <label for="max-tokens" class="field-label text-xs">Max Tokens</label>
+        <label for="max-tokens" class="field-label text-xs">最大 Token 数</label>
         <input id="max-tokens" type="text" v-model="config.maxTokens" placeholder="留空使用默认"
           class="field-control" />
       </div>
@@ -38,6 +38,6 @@
 </template>
 
 <script setup lang="ts">
-import { useConfigStore } from '@/stores/config'
+import { useConfigStore } from '@/stores/config.ts'
 const config = useConfigStore()
 </script>

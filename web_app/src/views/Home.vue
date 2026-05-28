@@ -1,9 +1,9 @@
 <template>
-  <div class="flex h-full flex-col gap-4 overflow-hidden p-4 lg:flex-row lg:p-5">
+  <div class="box-border flex h-full max-w-full flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 lg:flex-row lg:overflow-hidden lg:p-5">
     <!-- 左侧配置面板 -->
-    <aside class="surface min-h-0 shrink-0 overflow-y-auto rounded-xl p-4 lg:w-[390px]">
+    <aside class="surface min-h-0 w-full max-w-full min-w-0 shrink-0 overflow-y-auto rounded-xl p-4 lg:w-[390px]">
       <div class="mb-5 border-b border-[var(--color-rule)] pb-4">
-        <p class="text-xs font-semibold uppercase text-[var(--color-ink-soft)]">Run setup</p>
+        <p class="text-xs font-semibold text-[var(--color-ink-soft)]">任务设置</p>
         <h2 class="mt-1 text-xl font-bold text-[var(--color-ink)]">生成任务</h2>
         <p class="mt-1 text-sm text-[var(--color-ink-muted)]">选择输入、模式和模板后启动文档生成。</p>
       </div>
@@ -11,11 +11,11 @@
     </aside>
 
     <!-- 右侧日志区 -->
-    <div class="surface flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
+    <div class="surface flex min-h-[420px] min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
       <div class="border-b border-[var(--color-rule)] px-5 py-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="min-w-0">
-            <p class="text-xs font-semibold uppercase text-[var(--color-ink-soft)]">Execution monitor</p>
+            <p class="text-xs font-semibold text-[var(--color-ink-soft)]">执行监控</p>
             <h2 class="mt-1 truncate text-lg font-bold text-[var(--color-ink)]">{{ runTitle }}</h2>
           </div>
           <div :class="['inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
@@ -34,7 +34,7 @@
       <div v-if="session.inputPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div class="surface w-full max-w-[420px] rounded-xl p-6">
           <h3 class="text-lg font-semibold mb-2">FPA核减后的工作量确认</h3>
-          <p class="text-sm text-gray-500 mb-4">请输入FPA核减后的工作量（人/天），或直接确认使用默认值。</p>
+          <p class="mb-4 text-sm text-[var(--color-ink-muted)]">请输入FPA核减后的工作量（人/天），或直接确认使用默认值。</p>
           <div class="mb-4">
             <label class="field-label">FPA核减后的工作量（人/天）</label>
             <input
@@ -59,7 +59,7 @@
       <div v-if="session.listPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div class="surface w-full max-w-[420px] rounded-xl p-6">
           <h3 class="text-lg font-semibold mb-2">送审确认</h3>
-          <p class="text-sm text-gray-500 mb-4">请确认送审工作量和送审功能点，或直接使用默认值。</p>
+          <p class="mb-4 text-sm text-[var(--color-ink-muted)]">请确认送审工作量和送审功能点，或直接使用默认值。</p>
           <div class="mb-3">
             <label class="field-label">送审工作量（人/天）</label>
             <input
@@ -135,13 +135,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useSessionStore } from '@/stores/session'
-import type { DoneFile, RunState } from '@/stores/session'
-import { useConfigStore } from '@/stores/config'
-import { useLogStore } from '@/stores/log'
-import { useStepsStore } from '@/stores/steps'
-import { useToastStore } from '@/stores/toast'
-import { apiFetch, normalizeApiError } from '@/lib/api'
+import { useSessionStore } from '@/stores/session.ts'
+import type { DoneFile, RunState } from '@/stores/session.ts'
+import { useConfigStore } from '@/stores/config.ts'
+import { useLogStore } from '@/stores/log.ts'
+import { useStepsStore } from '@/stores/steps.ts'
+import { useToastStore } from '@/stores/toast.ts'
+import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 import ConfigPanel from '@/components/ConfigPanel.vue'
 import StepsBar from '@/components/StepsBar.vue'
 import LogViewer from '@/components/LogViewer.vue'
