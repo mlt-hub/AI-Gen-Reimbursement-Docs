@@ -23,6 +23,7 @@
         <nav class="flex flex-wrap items-center gap-1 text-sm">
           <router-link to="/" class="nav-link" active-class="nav-link-active">生成</router-link>
           <router-link to="/config" class="nav-link" active-class="nav-link-active">配置</router-link>
+          <router-link to="/history" class="nav-link" active-class="nav-link-active">历史</router-link>
           <router-link to="/license" class="nav-link" active-class="nav-link-active">授权</router-link>
           <router-link to="/prompt-debug" class="nav-link" active-class="nav-link-active">提示词调试</router-link>
           <template v-if="auth.isRemote && auth.isLoggedIn">

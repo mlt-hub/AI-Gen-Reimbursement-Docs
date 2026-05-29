@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from web_app.dependencies import require_auth, require_local
-from web_app.services.artifact_service import cleanup_after_download, find_log_dir
+from web_app.services.artifact_service import find_log_dir
 from web_app.services.session_access import require_session_access
 from web_app.services.session_manager import SessionManager
 
@@ -34,7 +34,6 @@ def create_router(session_manager: SessionManager) -> APIRouter:
             zip_path,
             filename=f"交付物_{datetime.now():%Y%m%d_%H%M%S}.zip",
             media_type="application/zip",
-            background=cleanup_after_download(session_manager, session_id),
         )
 
     @router.get("/api/open-folder")

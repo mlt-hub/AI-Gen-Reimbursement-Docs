@@ -6,6 +6,10 @@ log/
 products/
 data/outputs/
 data/products/
+run_history.sqlite3
+run_history.sqlite3-wal
+run_history.sqlite3-shm
+products/run_history.sqlite3*
 
 # 构建产物
 build/

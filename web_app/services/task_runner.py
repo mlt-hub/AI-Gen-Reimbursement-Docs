@@ -164,12 +164,15 @@ def execute_in_session(
     mode_info: dict[str, dict[str, str]],
     mode_map: dict[str, str],
     on_success: Callable[[str, str, object], None] | None = None,
+    on_finish: Callable[[str, list[dict], str | None], None] | None = None,
 ) -> None:
     """在 session 上下文中执行 pipeline，统一处理事件、异常和清理。"""
     session_token = pipeline_runtime.session_var.set(session_id)
     callbacks = build_web_callbacks(session_manager)
     callbacks_token = callbacks_var.set(callbacks)
     result = None
+    error_message: str | None = None
+    files: list[dict] = []
     try:
         result = execute_mode(
             mode,
@@ -189,18 +192,20 @@ def execute_in_session(
         if on_success:
             on_success(output_dir, session_id, result)
     except CancelledError as e:
+        error_message = "cancelled"
         logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已停止: {e}")
         pipeline_runtime.emit_session_event(session_manager, {"type": "cancelled"})
         session_manager.mark_task_finished(session_id, last_error="cancelled")
     except Exception as e:
+        error_message = str(e)
         logging.getLogger("ai_gen_reimbursement_docs").error(f"执行失败: {e}")
         pipeline_runtime.emit_session_event(
             session_manager,
             {"type": "error", "msg": f"执行失败: {e}"},
         )
-        session_manager.cancel(session_id)
+        session_manager.mark_task_finished(session_id, last_error=error_message)
     finally:
-        if not session_manager.is_cancelled(session_id):
+        if error_message is None and not session_manager.is_cancelled(session_id):
             files = build_file_summary(result) if result else []
             session_manager.set_done_files(session_id, files)
             pipeline_runtime.emit_session_event(
@@ -210,6 +215,9 @@ def execute_in_session(
                     "files": files,
                 },
             )
+            session_manager.mark_task_finished(session_id)
+        if on_finish:
+            on_finish(session_id, files, error_message)
         session_manager.clear_cancelled(session_id)
         callbacks_var.reset(callbacks_token)
         pipeline_runtime.session_var.reset(session_token)

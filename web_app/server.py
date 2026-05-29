@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from web_app.routes.artifacts import create_router as create_artifacts_router
 from web_app.routes.auth import router as auth_router
 from web_app.routes.config import router as config_router
+from web_app.routes.history import create_router as create_history_router
 from web_app.routes.logging import create_router as create_logging_router
 from web_app.routes.prompt_debug import router as prompt_debug_router
 from web_app.routes.system import create_router as create_system_router
@@ -83,6 +84,7 @@ app.include_router(create_artifacts_router(session_manager))
 app.include_router(auth_router)
 app.include_router(config_router)
 app.include_router(create_logging_router(_handler))
+app.include_router(create_history_router(base_dir=BASE_DIR))
 app.include_router(prompt_debug_router)
 app.include_router(create_system_router(base_dir=BASE_DIR, mode_info=MODE_INFO))
 app.include_router(
@@ -90,6 +92,7 @@ app.include_router(
         session_manager=session_manager,
         mode_info=MODE_INFO,
         mode_map=_MODE_MAP,
+        base_dir=BASE_DIR,
     )
 )
 app.include_router(templates_router)
@@ -123,6 +126,11 @@ async def config_page():
 
 @app.get("/license")
 async def license_page():
+    return _spa_index()
+
+
+@app.get("/history")
+async def history_page():
     return _spa_index()
 
 

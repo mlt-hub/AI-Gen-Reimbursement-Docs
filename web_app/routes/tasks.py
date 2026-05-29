@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from web_app.dependencies import require_auth, require_local
 from web_app.services.config_service import remote_session_retention_seconds
 from web_app.services import pipeline_runtime
+from web_app.services.run_history_service import finish_web_run, start_web_run
 from web_app.services.session_access import require_session_access
 from web_app.services.session_manager import SessionManager
 from web_app.services.task_runner import (
@@ -55,6 +56,7 @@ def create_router(
     session_manager: SessionManager,
     mode_info: dict[str, dict[str, str]],
     mode_map: dict[str, str],
+    base_dir: Path,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -201,9 +203,30 @@ def create_router(
 
         session_id = uuid.uuid4().hex[:8]
         session_manager.create(session_id, mode="local", output_dir=out)
+        start_web_run(
+            base_dir=base_dir,
+            session_id=session_id,
+            mode="local",
+            task_mode=mode,
+            input_path=str(xlsx),
+            output_dir=str(out),
+        )
 
         def run():
             pipeline_runtime.web_mode_var.set("local")
+
+            def _finish(sid: str, files: list[dict], error: str | None) -> None:
+                finish_web_run(
+                    base_dir=base_dir,
+                    session_id=sid,
+                    mode="local",
+                    task_mode=mode,
+                    input_path=str(xlsx),
+                    output_dir=str(out),
+                    done_files=files,
+                    error=error or "",
+                )
+
             execute_in_session(
                 session_manager,
                 session_id,
@@ -219,6 +242,7 @@ def create_router(
                 mode,
                 mode_info=mode_info,
                 mode_map=mode_map,
+                on_finish=_finish,
             )
 
         start_background_task(session_manager, session_id, run)
@@ -270,6 +294,15 @@ def create_router(
         )
 
         session_manager.create(session_id, mode="remote", owner=user, work_dir=work_dir)
+        start_web_run(
+            base_dir=base_dir,
+            session_id=session_id,
+            mode="remote",
+            task_mode=mode,
+            input_path=str(file_path),
+            owner_id=user,
+            owner_label=user,
+        )
 
         def run():
             pipeline_runtime.web_mode_var.set("remote")
@@ -280,6 +313,22 @@ def create_router(
                     str(zip_path.with_suffix("")), "zip", str(output_dir_path)
                 )
                 session_manager.set_zip(sid, zip_path)
+
+            def _finish(sid: str, files: list[dict], error: str | None) -> None:
+                state = session_manager.get(sid)
+                zip_path = state.zip_path if state else None
+                finish_web_run(
+                    base_dir=base_dir,
+                    session_id=sid,
+                    mode="remote",
+                    task_mode=mode,
+                    input_path=str(file_path),
+                    owner_id=user,
+                    owner_label=user,
+                    zip_path=str(zip_path) if zip_path else "",
+                    done_files=files,
+                    error=error or "",
+                )
 
             execute_in_session(
                 session_manager,
@@ -297,6 +346,7 @@ def create_router(
                 mode_info=mode_info,
                 mode_map=mode_map,
                 on_success=_pack_zip,
+                on_finish=_finish,
             )
 
         start_background_task(session_manager, session_id, run)

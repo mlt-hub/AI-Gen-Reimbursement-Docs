@@ -27,7 +27,10 @@ $forbiddenPatterns = @(
     "*issued_licenses.jsonl",
     "*license_secret*",
     "*cek*.txt",
-    "*cek*.b64"
+    "*cek*.b64",
+    "run_history.sqlite3",
+    "run_history.sqlite3-wal",
+    "run_history.sqlite3-shm"
 )
 
 foreach ($pattern in $forbiddenPatterns) {

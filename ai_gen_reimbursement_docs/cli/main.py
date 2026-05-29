@@ -1,16 +1,127 @@
 """AI生成项目报账文档 - CLI入口"""
 
 import argparse
+import json
 import logging
 import os
 from pathlib import Path as _Path
 import re
 import shutil
 import sys
+import uuid
 
 from ai_gen_reimbursement_docs.config_utils import load_api_key, load_base_url, load_model_name
+from ai_gen_reimbursement_docs.run_history import (
+    get_run,
+    list_runs,
+    now_iso,
+    upsert_run,
+    user_history_path,
+)
 
 logger = logging.getLogger('ai_gen_reimbursement_docs')
+
+
+def _new_cli_run_id() -> str:
+    from datetime import datetime
+
+    return f"{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"
+
+
+def _summary_files_from_result(result) -> list[tuple[str, str]]:
+    return [
+        ("FPA 工作量评估", getattr(result, "fpa_xlsx", "")),
+        ("项目功能点拆分表", getattr(result, "cosmic_xlsx", "")),
+        ("项目需求清单", getattr(result, "require_xlsx", "")),
+        ("项目需求说明书", getattr(result, "spec_docx", "")),
+    ]
+
+
+def _done_files_from_result(result) -> list[dict]:
+    files = []
+    for label, path in _summary_files_from_result(result):
+        if path and os.path.exists(path):
+            files.append(
+                {
+                    "label": label,
+                    "name": os.path.basename(path),
+                    "path": path,
+                    "size_kb": round(os.path.getsize(path) / 1024),
+                    "is_temp": "_TEMP" in os.path.basename(path),
+                }
+            )
+    return files
+
+
+def _infer_output_dir(result, fallback: str = "") -> str:
+    for _, path in _summary_files_from_result(result):
+        if path:
+            return os.path.dirname(os.path.abspath(path))
+    return fallback
+
+
+def _record_cli_history(
+    *,
+    run_id: str,
+    task_mode: str,
+    run_state: str,
+    input_path: str = "",
+    output_dir: str = "",
+    done_files: list[dict] | None = None,
+    error: str = "",
+    created_at: str | None = None,
+    started_at: str | None = None,
+) -> None:
+    now = now_iso()
+    try:
+        upsert_run(
+            {
+                "run_id": run_id,
+                "source": "cli",
+                "session_id": "",
+                "mode": "local",
+                "task_mode": task_mode,
+                "run_state": run_state,
+                "input_name": os.path.basename(input_path) if input_path else "",
+                "input_path": input_path,
+                "output_dir": output_dir,
+                "artifact_kind": "local_dir",
+                "done_files": done_files or [],
+                "error": error,
+                "created_at": created_at or now,
+                "started_at": started_at or now,
+                "finished_at": now if run_state in {"done", "error", "cancelled"} else "",
+                "updated_at": now,
+            },
+            user_history_path(),
+        )
+    except Exception as exc:
+        logger.warning("运行历史写入失败: %s", exc)
+
+
+def _print_history(*, limit: int, as_json: bool) -> None:
+    try:
+        items = list_runs(user_history_path(), limit=limit, offset=0)
+    except Exception as exc:
+        logger.error("运行历史读取失败: %s", exc)
+        return
+    if as_json:
+        print(json.dumps(items, ensure_ascii=False, indent=2))
+        return
+    if not items:
+        print("暂无运行历史")
+        return
+    for item in items:
+        created_at = item.get("created_at", "")
+        state = item.get("run_state", "")
+        task_mode = item.get("task_mode", "")
+        input_name = item.get("input_name", "")
+        output_dir = item.get("output_dir", "")
+        run_id = item.get("run_id", "")
+        availability = "目录可用" if item.get("open_folder_available") else "目录不存在"
+        print(f"{created_at}  {state:9}  {task_mode:12}  {input_name}")
+        print(f"  run_id: {run_id}")
+        print(f"  输出目录: {output_dir or '-'} ({availability})")
 
 
 def _get_version() -> str:
@@ -119,6 +230,16 @@ def _run_pipeline_with_args(
     from ai_gen_reimbursement_docs.exceptions import CosmicToolError
     from ai_gen_reimbursement_docs.pipeline import run_pipeline_simple
 
+    run_id = _new_cli_run_id()
+    started_at = now_iso()
+    _record_cli_history(
+        run_id=run_id,
+        task_mode="gen-all",
+        run_state="running",
+        input_path=excel_path,
+        created_at=started_at,
+        started_at=started_at,
+    )
     try:
         result = run_pipeline_simple(
             mode='gen-all',
@@ -129,19 +250,53 @@ def _run_pipeline_with_args(
             project_name=project_name,
         )
     except KeyboardInterrupt:
+        _record_cli_history(
+            run_id=run_id,
+            task_mode="gen-all",
+            run_state="cancelled",
+            input_path=excel_path,
+            error="cancelled",
+            created_at=started_at,
+            started_at=started_at,
+        )
         print("\n  任务已取消", file=sys.stderr)
         sys.exit(1)
     except CosmicToolError as e:
+        _record_cli_history(
+            run_id=run_id,
+            task_mode="gen-all",
+            run_state="error",
+            input_path=excel_path,
+            error=str(e),
+            created_at=started_at,
+            started_at=started_at,
+        )
         print(f"\n  错误: {e}", file=sys.stderr)
         play_notify_sound()
         sys.exit(1)
+    except Exception as e:
+        _record_cli_history(
+            run_id=run_id,
+            task_mode="gen-all",
+            run_state="error",
+            input_path=excel_path,
+            error=str(e),
+            created_at=started_at,
+            started_at=started_at,
+        )
+        raise
 
-    _summary_files = [
-        ("FPA 工作量评估", result.fpa_xlsx),
-        ("项目功能点拆分表", result.cosmic_xlsx),
-        ("项目需求清单", result.require_xlsx),
-        ("项目需求说明书", result.spec_docx),
-    ]
+    _summary_files = _summary_files_from_result(result)
+    _record_cli_history(
+        run_id=run_id,
+        task_mode="gen-all",
+        run_state="done",
+        input_path=excel_path,
+        output_dir=_infer_output_dir(result),
+        done_files=_done_files_from_result(result),
+        created_at=started_at,
+        started_at=started_at,
+    )
     print()
     for _label, _path in _summary_files:
         if _path and os.path.exists(_path):
@@ -324,6 +479,14 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='初始化配置文件')
     parser.add_argument('--log', nargs='?', const='tail', default=None,
                         help='查看日志')
+    parser.add_argument('--history', action='store_true',
+                        help='查看 CLI 运行历史')
+    parser.add_argument('--history-limit', '--limit', type=int, default=20,
+                        help='查看历史时返回的记录数')
+    parser.add_argument('--history-json', '--json', action='store_true',
+                        help='以 JSON 格式输出运行历史')
+    parser.add_argument('--history-open', default='',
+                        help='打开指定 run_id 的本机输出目录')
     parser.add_argument('--version', '-v', action='store_true',
                         help='显示版本号')
     parser.add_argument('--test-sound', action='store_true',
@@ -432,6 +595,26 @@ def main():
 
     if args.version:
         print(f"AI生成项目报账文档 v{_get_version()}")
+        return
+
+    if args.history_open:
+        try:
+            item = get_run(args.history_open, user_history_path())
+        except Exception as exc:
+            logger.error("运行历史读取失败: %s", exc)
+            return
+        if item is None:
+            logger.error(f"未找到历史记录: {args.history_open}")
+            return
+        output_dir = item.get("output_dir") or ""
+        if not output_dir or not os.path.isdir(output_dir):
+            logger.error(f"输出目录不存在: {output_dir or '-'}")
+            return
+        os.startfile(output_dir)
+        return
+
+    if args.history:
+        _print_history(limit=args.history_limit, as_json=args.history_json)
         return
 
     if args.web:
@@ -765,6 +948,17 @@ def main():
         # 交互式参数（gen-cosmic/gen-all/gen-list 均由 pipeline 内部处理）
         from ai_gen_reimbursement_docs.pipeline import run_pipeline
         from ai_gen_reimbursement_docs.exceptions import CosmicToolError
+        run_id = _new_cli_run_id()
+        started_at = now_iso()
+        _record_cli_history(
+            run_id=run_id,
+            task_mode=mode,
+            run_state="running",
+            input_path=excel_path,
+            output_dir=out_dir,
+            created_at=started_at,
+            started_at=started_at,
+        )
         try:
             result = run_pipeline(
                 mode=mode,
@@ -777,19 +971,56 @@ def main():
                 templates=templates or None,
             )
         except KeyboardInterrupt:
+            _record_cli_history(
+                run_id=run_id,
+                task_mode=mode,
+                run_state="cancelled",
+                input_path=excel_path,
+                output_dir=out_dir,
+                error="cancelled",
+                created_at=started_at,
+                started_at=started_at,
+            )
             print("\n  任务已取消", file=sys.stderr)
             sys.exit(1)
         except CosmicToolError as e:
+            _record_cli_history(
+                run_id=run_id,
+                task_mode=mode,
+                run_state="error",
+                input_path=excel_path,
+                output_dir=out_dir,
+                error=str(e),
+                created_at=started_at,
+                started_at=started_at,
+            )
             print(f"\n  错误: {e}", file=sys.stderr)
             play_notify_sound()
             sys.exit(1)
+        except Exception as e:
+            _record_cli_history(
+                run_id=run_id,
+                task_mode=mode,
+                run_state="error",
+                input_path=excel_path,
+                output_dir=out_dir,
+                error=str(e),
+                created_at=started_at,
+                started_at=started_at,
+            )
+            raise
 
-        _summary_files = [
-            ("FPA 工作量评估", result.fpa_xlsx),
-            ("项目功能点拆分表", result.cosmic_xlsx),
-            ("项目需求清单", result.require_xlsx),
-            ("项目需求说明书", result.spec_docx),
-        ]
+        _summary_files = _summary_files_from_result(result)
+        _record_cli_history(
+            run_id=run_id,
+            task_mode=mode,
+            run_state="done",
+            input_path=excel_path,
+            output_dir=_infer_output_dir(result, out_dir),
+            done_files=_done_files_from_result(result),
+            created_at=started_at,
+            started_at=started_at,
+        )
         print()
         for _label, _path in _summary_files:
             if _path and os.path.exists(_path):
