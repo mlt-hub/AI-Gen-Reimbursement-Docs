@@ -38,14 +38,15 @@ def read_config() -> dict:
     return result
 
 
-def remote_session_ttl_seconds(default: int = 24 * 3600) -> int:
-    """读取远程 session 过期清理 TTL，配置缺失或非法时使用默认值。"""
-    value = read_config().get("_system", {}).get("remote_session_ttl_seconds", default)
+def remote_session_retention_seconds(default: int = 24 * 3600) -> int:
+    """读取远程 session 下载保留期，配置以天为主，内部换算为秒。"""
+    system_config = read_config().get("_system", {})
+    value = system_config.get("remote_session_retention_days", default / (24 * 3600))
     try:
-        ttl = int(value)
+        days = float(value)
     except (TypeError, ValueError):
         return default
-    return ttl if ttl > 0 else default
+    return int(days * 24 * 3600) if days > 0 else default
 
 
 def mask_env_content(path: Path) -> str:

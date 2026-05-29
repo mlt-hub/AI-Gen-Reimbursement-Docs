@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import StreamingResponse
 
 from web_app.dependencies import require_auth, require_local
-from web_app.services.config_service import remote_session_ttl_seconds
+from web_app.services.config_service import remote_session_retention_seconds
 from web_app.services import pipeline_runtime
 from web_app.services.session_access import require_session_access
 from web_app.services.session_manager import SessionManager
@@ -249,7 +249,7 @@ def create_router(
 
         cleanup_expired_sessions(
             session_manager,
-            max_age_seconds=remote_session_ttl_seconds(),
+            max_age_seconds=remote_session_retention_seconds(),
         )
 
         session_id = uuid.uuid4().hex[:8]

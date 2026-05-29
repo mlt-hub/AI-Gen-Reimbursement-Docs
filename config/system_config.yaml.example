@@ -31,6 +31,10 @@ allow_register: true
 # Web UI端口号，如遇端口冲突（启动报错或页面打不开），换个端口即可，如 9090、3000
 web_port: 8080
 
+# Web UI远程服务模式下，临时交付物下载保留天数（默认1天）
+# 过期后会清理下载文件，但运行历史记录仍应保留
+remote_session_retention_days: 1
+
 # 日志级别（DEBUG/INFO/WARNING/ERROR），默认INFO
 log_level: INFO
 
