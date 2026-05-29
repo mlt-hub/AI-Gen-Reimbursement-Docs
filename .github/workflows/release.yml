@@ -12,10 +12,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: 安装 Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -23,18 +23,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: web_app/package-lock.json
 
-      - name: 安装依赖
+      - name: 安装 Python 依赖
+        shell: pwsh
         run: |
-          pip install pyinstaller
-          pip install -e .
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+          python -m pip install -e ".[dev]"
 
-      - name: 前端构建
-        run: |
-          cd web_app
-          npm install
-          npm run build
-          cd ..
+      - name: 安装前端依赖
+        shell: pwsh
+        working-directory: web_app
+        run: npm ci
 
       - name: 读取版本号
         id: version
@@ -44,47 +46,17 @@ jobs:
           echo "version=$ver" >> $env:GITHUB_ENV
           echo "version=$ver" >> $env:GITHUB_OUTPUT
 
-      - name: 构建 exe（onedir）
+      - name: 发布前检查（不检查产物）
         shell: pwsh
-        run: |
-          pyinstaller `
-            --name ard `
-            --add-data "$env:GITHUB_WORKSPACE\ai_gen_reimbursement_docs;ai_gen_reimbursement_docs" `
-            --add-data "$env:GITHUB_WORKSPACE\pyproject.toml;." `
-            --hidden-import "openpyxl.cell._writer" `
-            --hidden-import "win32com" `
-            --hidden-import "pythoncom" `
-            --collect-all "fastapi" `
-            --collect-all "uvicorn" `
-            --collect-all "starlette" `
-            --collect-all "python_multipart" `
-            --distpath dist --workpath build --specpath build --console `
-            "$env:GITHUB_WORKSPACE\ai_gen_reimbursement_docs\main.py"
+        run: .\scripts\check_release.ps1 -SkipArtifactCheck
 
-      - name: 打包附加文件到 dist/ard/
+      - name: 构建受保护发布包
         shell: pwsh
-        run: |
-          $out = "dist\ard"
-          New-Item -ItemType Directory -Force -Path "$out\data" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$out\config" | Out-Null
-          # 版本标记文件
-          "ai-gen-reimbursement-docs v$env:version" | Out-File -Encoding utf8 "$out\ard-v$env:version"
-          Copy-Item pyproject.toml "$out\pyproject.toml" -Force
-          Copy-Item README.md "$out\README.md" -Force
-          Copy-Item CHANGELOG.md "$out\CHANGELOG.md" -Force
-          Copy-Item data\out_templates "$out\data\out_templates" -Recurse -Force
-          Copy-Item data\in_templates "$out\data\in_templates" -Recurse -Force
-          Copy-Item data\audio "$out\data\audio" -Recurse -Force
-          Copy-Item config\.env.example "$out\config\.env.example" -Force
-          Copy-Item config\system_config.yaml.example "$out\config\system_config.yaml.example" -Force
-          # 只拷贝 web_app 的必要文件（server.py + 前端构建产物）
-          New-Item -ItemType Directory -Force -Path "$out\web_app\static\dist" | Out-Null
-          Copy-Item web_app\server.py "$out\web_app\server.py" -Force
-          Copy-Item web_app\static\dist\* "$out\web_app\static\dist" -Recurse -Force
+        run: .\build_exe.ps1 -RequireProtectedData
 
-      - name: 创建 zip 便携版
+      - name: 发布包检查
         shell: pwsh
-        run: Compress-Archive -Path "dist\ard\*" -DestinationPath "ard-v$env:version.zip" -Force
+        run: .\scripts\check_release.ps1 -RequireProtectedData
 
       - name: 安装 Inno Setup
         shell: pwsh
@@ -96,6 +68,14 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="$env:version" ard.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败" }
 
+      - name: 检查安装包数据保护
+        shell: pwsh
+        run: |
+          $extractDir = Join-Path $env:RUNNER_TEMP "ard-setup-check"
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /? | Out-Null
+          .\scripts\check_release_data_protection.ps1 -ArtifactDir .\dist\ard -RequireProtectedData
+
       - name: 创建 Release（本仓）
         uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
@@ -103,7 +83,7 @@ jobs:
           name: "v${{ env.version }}"
           body_path: CHANGELOG.md
           files: |
-            ard-v${{ env.version }}.zip
+            dist/ard-v${{ env.version }}.zip
             ard-setup_v${{ env.version }}.exe
 
       - name: 手动触发时创建 Release（用 gh CLI）
@@ -114,7 +94,7 @@ jobs:
         run: |
           $ver = "${{ env.version }}"
           $tag = "v$ver"
-          $zip = "ard-v$ver.zip"
+          $zip = "dist\ard-v$ver.zip"
           $setup = "ard-setup_v$ver.exe"
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
@@ -138,7 +118,7 @@ jobs:
             return
           }
           $ver = "${{ env.version }}"
-          $zip = "ard-v$ver.zip"
+          $zip = "dist\ard-v$ver.zip"
           $setup = "ard-setup_v$ver.exe"
           $tag = "v$ver"
           $release_repo = "mlt-hub/ai-gen-reimbursement-docs-release"

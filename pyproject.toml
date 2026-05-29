@@ -18,6 +18,7 @@ dependencies = [
     "uvicorn[standard]>=0.27.0",
     "python-multipart>=0.0.9",
     "pywin32>=300",
+    "cryptography>=41.0",
 ]
 
 [project.optional-dependencies]
@@ -32,7 +33,7 @@ ard = "ai_gen_reimbursement_docs.cli.main:main"
 include = ["ai_gen_reimbursement_docs*"]
 
 [tool.setuptools.package-data]
-ai_gen_reimbursement_docs = ["py.typed"]
+ai_gen_reimbursement_docs = ["py.typed", "licensing/*.pem"]
 
 [tool.pytest.ini_options]
 markers = [

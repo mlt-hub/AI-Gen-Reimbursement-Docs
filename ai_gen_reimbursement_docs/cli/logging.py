@@ -89,16 +89,21 @@ class ReleaseFileHandler(logging.Handler):
         self.encoding = encoding
         self._init_mode = mode  # 首次写入模式
         self._first_write = True
+        self._write_failed = False
 
     def emit(self, record: logging.LogRecord) -> None:
+        if self._write_failed:
+            return
         try:
             msg = self.format(record)
             m = self._init_mode if self._first_write else "a"
             with open(self.filename, m, encoding=self.encoding) as f:
                 f.write(msg + "\n")
             self._first_write = False
+        except OSError:
+            self._write_failed = True
         except Exception:
-            self.handleError(record)
+            self._write_failed = True
 
 
 _global_logging_done = False

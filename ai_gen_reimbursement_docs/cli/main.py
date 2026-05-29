@@ -340,6 +340,20 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='Web UI 端口号（默认读取配置文件 web_port 或 8088）')
     parser.add_argument('--web', action='store_true',
                         help='启动 Web UI 界面')
+    parser.add_argument('--activate', action='store_true',
+                        help='使用 license 文件激活受保护数据')
+    parser.add_argument('--license', default='',
+                        help='license.ard.json 路径')
+    parser.add_argument('--license-secret', default='',
+                        help='license secret/token')
+    parser.add_argument('--data-enc', default='',
+                        help='data.enc 路径（默认使用程序目录下 data.enc）')
+    parser.add_argument('--data-output', default='',
+                        help='解密后的 data 输出目录（默认使用程序目录下 data）')
+    parser.add_argument('--public-key', default='',
+                        help='Ed25519 公钥路径（默认使用内置 public_key.pem）')
+    parser.add_argument('--activation-path', default='',
+                        help='激活元数据路径（默认写入用户配置目录）')
 
     return parser
 
@@ -383,7 +397,7 @@ def main():
     if args.test_sound:
         try:
             import winsound
-            _ap = os.path.join(root, 'data', 'audio', 'ticktick_pop.wav')
+            _ap = os.path.join(root, 'assets', 'audio', 'ticktick_pop.wav')
             if os.path.isfile(_ap):
                 winsound.PlaySound(_ap, winsound.SND_FILENAME | winsound.SND_SYNC)
                 print("提示音已播放")
@@ -423,6 +437,71 @@ def main():
     if args.web:
         _auto_init_config(root)
         _start_web_ui(root, port=args.port)
+        return
+
+    if args.activate:
+        if not args.license:
+            logger.error("缺少 --license 参数")
+            return
+        if not args.license_secret:
+            logger.error("缺少 --license-secret 参数")
+            return
+
+        try:
+            from ai_gen_reimbursement_docs.licensing import activate, load_public_key
+            from ai_gen_reimbursement_docs.licensing.exceptions import LicensingError
+        except ModuleNotFoundError as exc:
+            if exc.name == "cryptography":
+                logger.error("激活功能需要安装依赖: cryptography>=41.0")
+                return
+            raise
+
+        default_data_enc = os.path.join(run_path, 'data.enc')
+        default_data_output = os.path.join(run_path, 'data')
+        default_public_key = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            'licensing',
+            'public_key.pem',
+        )
+
+        license_path = _Path(args.license)
+        data_enc = _Path(args.data_enc or default_data_enc)
+        data_output = _Path(args.data_output or default_data_output)
+        public_key_path = _Path(args.public_key or default_public_key)
+        activation_path = _Path(args.activation_path) if args.activation_path else None
+
+        if not license_path.exists():
+            logger.error(f"license 文件不存在: {license_path}")
+            return
+        if not data_enc.exists():
+            logger.error(f"data.enc 不存在: {data_enc}")
+            return
+        if not public_key_path.exists():
+            logger.error(f"公钥文件不存在: {public_key_path}")
+            return
+
+        try:
+            public_key = load_public_key(public_key_path)
+        except Exception as exc:
+            logger.error(f"公钥加载失败: {exc}")
+            return
+
+        try:
+            result = activate(
+                license_path=license_path,
+                secret=args.license_secret,
+                data_enc=data_enc,
+                output_dir=data_output,
+                public_key=public_key,
+                activation_path=activation_path,
+            )
+        except LicensingError as exc:
+            logger.error(f"激活失败: {exc}")
+            return
+
+        logger.info(f"激活成功: {result.license_id} / {result.customer}")
+        logger.info(f"数据目录: {data_output}")
+        logger.info(f"激活元数据: {result.activation_path}")
         return
 
     if args.init_config:

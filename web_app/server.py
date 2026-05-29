@@ -121,6 +121,11 @@ async def config_page():
     return _spa_index()
 
 
+@app.get("/license")
+async def license_page():
+    return _spa_index()
+
+
 @app.get("/prompt-debug")
 async def prompt_debug():
     return _spa_index()

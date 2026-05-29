@@ -30,7 +30,7 @@ def play_notify_sound():
                     break
         if _notify:
             import winsound
-            _audio_path = os.path.join(root, 'data', 'audio', 'ticktick_pop.wav')
+            _audio_path = os.path.join(root, 'assets', 'audio', 'ticktick_pop.wav')
             if os.path.isfile(_audio_path):
                 winsound.PlaySound(_audio_path, winsound.SND_FILENAME | winsound.SND_SYNC)
     except Exception:

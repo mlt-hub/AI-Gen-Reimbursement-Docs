@@ -21,6 +21,11 @@ const router = createRouter({
       component: () => import('@/views/Config.vue'),
     },
     {
+      path: '/license',
+      name: 'license',
+      component: () => import('@/views/License.vue'),
+    },
+    {
       path: '/prompt-debug',
       name: 'prompt-debug',
       component: () => import('@/views/PromptDebug.vue'),

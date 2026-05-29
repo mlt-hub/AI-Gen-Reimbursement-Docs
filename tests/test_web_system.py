@@ -1,8 +1,10 @@
 import pytest
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
+FastAPI = pytest.importorskip("fastapi").FastAPI
 
 from web_app import server
+from web_app.routes.system import create_router
 
 
 def test_health_endpoint_returns_core_status():
@@ -19,8 +21,45 @@ def test_health_endpoint_returns_core_status():
         "version": True,
         "modes": True,
         "config": True,
+        "license": True,
     }
     assert data["paths"]["templates_readable"] is True
     assert data["paths"]["output_writable"] is None
     assert data["features"]["prompt_debug"] is True
     assert data["features"]["ai_interactions"] is True
+
+
+def test_license_status_endpoint_is_available_without_data_package(tmp_path):
+    app = FastAPI()
+    app.include_router(create_router(base_dir=tmp_path, mode_info=server.MODE_INFO))
+    client = TestClient(app)
+
+    resp = client.get("/api/license/status")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["activated"] is False
+    assert isinstance(data["crypto_available"], bool)
+    assert data["data_package_present"] is False
+    assert "data_enc" in data["paths"]
+
+
+def test_license_activate_requires_license_material():
+    client = TestClient(server.app)
+
+    resp = client.post(
+        "/api/license/activate",
+        json={"license_path": "", "license_secret": "secret"},
+    )
+
+    assert resp.status_code == 400
+    assert "缺少 license 文件或 license 内容" in resp.text
+
+
+def test_license_page_returns_spa_entry():
+    client = TestClient(server.app)
+
+    resp = client.get("/license")
+
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]

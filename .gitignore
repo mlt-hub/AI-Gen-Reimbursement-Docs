@@ -30,10 +30,28 @@ ard-v*
 *.bak
 .pytest_cache/
 .pytest_*/
+tmp_pytest*/
+.tmp_license_e2e*/
+.tmp_release_check*/
+
+# 数据保护发行方敏感材料
+.ard-keys/
+private_key.pem
+signing_private_key.pem
+*private_key*.pem
+*.secret.txt
+*.secret
+*.cek
+*.cek.b64
+*cek*.b64
+issued_licenses.jsonl
+license.ard.json
+licenses/
 
 # 前端构建
 web_app/node_modules/
 web_app/static/dist/
+web_app/tsconfig.tsbuildinfo
 web_app/src/**/*.js
 web_app/src/**/*.vue.js
 web_app/src/**/*.vue.d.ts
