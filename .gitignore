@@ -32,6 +32,7 @@ ard-v*
 # 临时文件
 *.tmp
 *.bak
+~$*
 .pytest_cache/
 .pytest_*/
 tmp_pytest*/
