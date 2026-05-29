@@ -2,7 +2,7 @@ import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 export type WorkMode = 'local' | 'remote'
-export type BackendStatus = 'checking' | 'connected' | 'offline'
+export type BackendStatus = 'checking' | 'connected' | 'degraded' | 'offline'
 export type PipelineMode = 'from-excel-gen-all' | 'from-excel-gen-basedata' |
   'from-excel-gen-fpa' | 'from-excel-gen-cosmic' |
   'from-excel-gen-list' | 'from-excel-gen-spec'

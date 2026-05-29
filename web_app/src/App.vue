@@ -57,6 +57,12 @@ interface IsLocalResponse {
   local?: boolean
 }
 
+interface HealthResponse {
+  ok?: boolean
+  version?: string
+  work_mode?: string
+}
+
 const router = useRouter()
 const route = useRoute()
 const config = useConfigStore()
@@ -68,6 +74,7 @@ const backendStatusText = computed(() => {
   const map = {
     checking: '检查服务中',
     connected: '后端已连接',
+    degraded: '后端部分异常',
     offline: '后端未连接',
   }
   return map[config.backendStatus]
@@ -76,6 +83,7 @@ const backendStatusClass = computed(() => {
   const map = {
     checking: 'bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]',
     connected: 'bg-[var(--color-success-soft)] text-[var(--color-success)]',
+    degraded: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
     offline: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
   }
   return map[config.backendStatus]
@@ -84,14 +92,21 @@ const backendDotClass = computed(() => {
   const map = {
     checking: 'bg-[var(--color-ink-soft)]',
     connected: 'bg-[var(--color-success)]',
+    degraded: 'bg-[var(--color-warning)]',
     offline: 'bg-[var(--color-warning)]',
   }
   return map[config.backendStatus]
 })
 
-onMounted(async () => {
-  await auth.init()
+function applyWorkMode(mode?: string) {
+  if (mode === 'local' || mode === 'remote') {
+    config.workMode = mode
+    return true
+  }
+  return false
+}
 
+async function loadLegacyBackendState() {
   const [versionResult, modeResult, localResult] = await Promise.allSettled([
     apiFetch<VersionResponse>('/api/version'),
     apiFetch<WorkModeResponse>('/api/default-work-mode'),
@@ -110,13 +125,26 @@ onMounted(async () => {
 
   if (modeResult.status === 'fulfilled') {
     const modeData = modeResult.value
-    if (modeData.work_mode === 'local' || modeData.work_mode === 'remote') {
-      config.workMode = modeData.work_mode
-    } else if (localResult.status === 'fulfilled') {
+    if (!applyWorkMode(modeData.work_mode) && localResult.status === 'fulfilled') {
       config.workMode = localResult.value.local ? 'local' : 'remote'
     }
   } else if (localResult.status === 'fulfilled') {
     config.workMode = localResult.value.local ? 'local' : 'remote'
+  }
+}
+
+onMounted(async () => {
+  await auth.init()
+
+  try {
+    const health = await apiFetch<HealthResponse>('/api/health')
+    config.backendStatus = health.ok === false ? 'degraded' : 'connected'
+    version.value = health.version || '-'
+    if (!applyWorkMode(health.work_mode)) {
+      await loadLegacyBackendState()
+    }
+  } catch {
+    await loadLegacyBackendState()
   }
 
   // 路由守卫：远程模式未登录 → 跳转登录页

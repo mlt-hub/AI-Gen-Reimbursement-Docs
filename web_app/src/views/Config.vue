@@ -1,17 +1,62 @@
 <template>
-  <div class="max-w-3xl mx-auto p-6 space-y-8">
+  <div class="mx-auto box-border w-full max-w-3xl space-y-8 overflow-x-hidden px-4 py-6 sm:px-6">
+    <section class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">环境诊断</h2>
+          <p class="mt-1 text-sm text-[var(--color-ink-muted)]">检查后端连接、版本、工作模式和关键能力状态。</p>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="healthLoading" @click="refreshHealth">
+          {{ healthLoading ? '检查中...' : '重新检查' }}
+        </button>
+      </div>
+
+      <div class="grid min-w-0 gap-3 sm:grid-cols-2">
+        <div v-for="item in diagnosticItems" :key="item.label" class="min-w-0 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2">
+          <div class="flex min-w-0 items-center justify-between gap-3">
+            <span class="min-w-0 text-sm text-[var(--color-ink-muted)]">{{ item.label }}</span>
+            <span :class="['shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold', item.className]">{{ item.value }}</span>
+          </div>
+        </div>
+      </div>
+
+      <p v-if="healthError" class="mt-3 text-sm text-[var(--color-warning)]">{{ healthError }}</p>
+      <p v-else-if="healthCheckedAt" class="mt-3 text-xs text-[var(--color-ink-soft)]">最近检查：{{ healthCheckedAt }}</p>
+    </section>
+
+    <nav class="flex flex-wrap gap-2 border-b border-[var(--color-rule)] pb-3" aria-label="配置分区">
+      <button
+        v-for="tab in configTabs"
+        :key="tab.key"
+        type="button"
+        :class="['nav-link', activeTab === tab.key ? 'nav-link-active' : '']"
+        @click="activeTab = tab.key"
+      >
+        {{ tab.label }}
+      </button>
+    </nav>
+
     <!-- 个人配置（可编辑，远程模式） -->
     <template v-if="showUserConfig">
-      <section>
-        <h2 class="text-lg font-semibold mb-1">个人配置</h2>
-        <p class="mb-4 text-xs text-[var(--color-ink-soft)]">~/.ai-gen-reimbursement-docs/users/{{ auth.username }}/</p>
-
+      <section v-if="activeTab === 'personal'">
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 class="text-lg font-semibold">个人配置</h2>
+            <p class="mt-1 text-xs text-[var(--color-ink-soft)]">~/.ai-gen-reimbursement-docs/users/{{ auth.username }}/</p>
+          </div>
+          <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', saveStatusClass]">{{ saveStatusText }}</span>
+        </div>
         <!-- .env -->
         <div class="surface mb-4 space-y-3 rounded-lg p-5">
-          <h3 class="text-sm font-medium text-[var(--color-ink-muted)]">.env</h3>
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-sm font-medium text-[var(--color-ink-muted)]">环境变量 .env</h3>
+            <button type="button" class="btn-quiet min-h-0 px-2 py-1 text-xs" @click="showApiKey = !showApiKey">
+              {{ showApiKey ? '隐藏密钥' : '显示密钥' }}
+            </button>
+          </div>
           <div>
             <label class="field-label text-xs">ANTHROPIC_API_KEY</label>
-            <input v-model="envFields.apiKey" type="password"
+            <input v-model="envFields.apiKey" :type="showApiKey ? 'text' : 'password'"
               class="field-control" />
           </div>
           <div>
@@ -68,7 +113,7 @@
         </div>
 
         <div class="flex gap-3">
-          <button @click="saveUserConfig" :disabled="saving"
+          <button @click="saveUserConfig" :disabled="saving || !hasUnsavedChanges"
             class="btn-primary">
             {{ saving ? '保存中...' : '保存' }}
           </button>
@@ -82,20 +127,21 @@
           </button>
         </div>
         <p v-if="saveMsg" :class="['mt-2 text-sm', saveOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ saveMsg }}</p>
+        <p v-if="lastSavedAt" class="mt-2 text-xs text-[var(--color-ink-soft)]">上次保存：{{ lastSavedAt }}</p>
       </section>
 
       <!-- 服务端全局默认（只读参考） -->
-      <section v-if="globalSystemConfig">
+      <section v-if="activeTab === 'global' && globalSystemConfig">
         <h2 class="text-lg font-semibold mb-4">服务端全局默认 (system_config.yaml)</h2>
         <p class="mb-3 text-sm text-[var(--color-ink-muted)]">只读参考，文件位置: ~/.ai-gen-reimbursement-docs/system_config.yaml</p>
         <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ globalSystemConfig || '（空）' }}</pre>
       </section>
-      <section v-if="globalEnvContent">
+      <section v-if="activeTab === 'global' && globalEnvContent">
         <h2 class="text-lg font-semibold mb-4">服务端全局默认 (.env)</h2>
         <p class="mb-3 text-sm text-[var(--color-ink-muted)]">只读参考，敏感值已遮罩</p>
         <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ globalEnvContent || '（空）' }}</pre>
       </section>
-      <section v-if="businessRules !== null">
+      <section v-if="activeTab === 'rules' && businessRules !== null">
         <h2 class="text-lg font-semibold mb-4">业务规则 (business_rules.yaml)</h2>
         <p class="mb-3 text-sm text-[var(--color-ink-muted)]">只读</p>
         <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ businessRules || '（空）' }}</pre>
@@ -104,19 +150,19 @@
 
     <!-- 本机模式：只读 -->
     <template v-else>
-      <section>
+      <section v-if="activeTab === 'env'">
         <h2 class="text-lg font-semibold mb-4">环境变量 (.env)</h2>
         <p class="mb-3 text-sm text-[var(--color-ink-muted)]">~/.ai-gen-reimbursement-docs/.env</p>
         <pre v-if="envContent !== null" class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ envContent || '（空）' }}</pre>
         <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中…</p>
       </section>
-      <section>
+      <section v-if="activeTab === 'system'">
         <h2 class="text-lg font-semibold mb-4">系统配置 (system_config.yaml)</h2>
         <p class="mb-3 text-sm text-[var(--color-ink-muted)]">~/.ai-gen-reimbursement-docs/system_config.yaml</p>
         <pre v-if="systemConfig !== null" class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ systemConfig || '（空）' }}</pre>
         <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中…</p>
       </section>
-      <section>
+      <section v-if="activeTab === 'rules'">
         <h2 class="text-lg font-semibold mb-4">业务规则 (business_rules.yaml)</h2>
         <p class="mb-3 text-sm text-[var(--color-ink-muted)]">~/.ai-gen-reimbursement-docs/business_rules.yaml</p>
         <pre v-if="businessRules !== null" class="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-5 font-mono text-sm text-slate-300">{{ businessRules || '（空）' }}</pre>
@@ -160,12 +206,37 @@ interface UserConfigResponse {
   _system?: Record<string, any>
 }
 
+interface HealthResponse {
+  ok?: boolean
+  version?: string
+  work_mode?: string
+  api?: Record<string, boolean | null>
+  paths?: Record<string, boolean | null>
+  features?: Record<string, boolean | null>
+}
+
 // ── stores ────────────────────────────────────────────────
 
 const auth = useAuthStore()
 const configStore = useConfigStore()
 
 const showUserConfig = computed(() => auth.isRemote)
+type ConfigTabKey = 'personal' | 'global' | 'env' | 'system' | 'rules'
+const activeTab = ref<ConfigTabKey>(showUserConfig.value ? 'personal' : 'env')
+const configTabs = computed<{ key: ConfigTabKey; label: string }[]>(() => {
+  if (showUserConfig.value) {
+    return [
+      { key: 'personal', label: '个人配置' },
+      { key: 'global', label: '全局默认' },
+      { key: 'rules', label: '业务规则' },
+    ]
+  }
+  return [
+    { key: 'env', label: '环境变量' },
+    { key: 'system', label: '系统配置' },
+    { key: 'rules', label: '业务规则' },
+  ]
+})
 
 // ── 只读内容 ──────────────────────────────────────────────
 
@@ -184,16 +255,122 @@ const nestedFields = ref<NestedField[]>([])
 const saving = ref(false)
 const saveMsg = ref('')
 const saveOk = ref(false)
+const savedSnapshot = ref('')
+const lastSavedAt = ref('')
+const showApiKey = ref(false)
+const health = ref<HealthResponse | null>(null)
+const healthLoading = ref(false)
+const healthError = ref('')
+const healthCheckedAt = ref('')
+
+const statusClass = {
+  ok: 'bg-[var(--color-success-soft)] text-[var(--color-success)]',
+  warn: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+  neutral: 'bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]',
+}
+
+const diagnosticItems = computed(() => {
+  const data = health.value
+  return [
+    {
+      label: '后端连接',
+      value: data ? (data.ok === false ? '部分异常' : '正常') : '未连接',
+      className: data ? (data.ok === false ? statusClass.warn : statusClass.ok) : statusClass.warn,
+    },
+    {
+      label: '后端版本',
+      value: data?.version || '未知',
+      className: data?.version ? statusClass.neutral : statusClass.warn,
+    },
+    {
+      label: '工作模式',
+      value: data?.work_mode === 'remote' ? '远程服务' : data?.work_mode === 'local' ? '本机模式' : '未知',
+      className: data?.work_mode ? statusClass.neutral : statusClass.warn,
+    },
+    {
+      label: '模板目录',
+      value: formatStatus(data?.paths?.templates_readable),
+      className: statusClassFor(data?.paths?.templates_readable),
+    },
+    {
+      label: '配置接口',
+      value: formatStatus(data?.api?.config),
+      className: statusClassFor(data?.api?.config),
+    },
+    {
+      label: '提示词调试',
+      value: formatStatus(data?.features?.prompt_debug),
+      className: statusClassFor(data?.features?.prompt_debug),
+    },
+  ]
+})
+
+const currentConfigSnapshot = computed(() => JSON.stringify({
+  env: {
+    apiKey: envFields.apiKey,
+    baseUrl: envFields.baseUrl,
+    model: envFields.model,
+  },
+  boolFields: boolFields.value.map(f => ({ key: f.key, value: f.value })),
+  scalarFields: scalarFields.value.map(f => ({ key: f.key, value: f.value })),
+  nestedFields: nestedFields.value.map(f => ({ key: f.key, yamlText: f.yamlText })),
+}))
+
+const hasUnsavedChanges = computed(() => {
+  return showUserConfig.value && savedSnapshot.value !== '' && currentConfigSnapshot.value !== savedSnapshot.value
+})
+
+const saveStatusText = computed(() => {
+  if (saving.value) return '保存中'
+  if (saveMsg.value && !saveOk.value) return '保存失败'
+  if (hasUnsavedChanges.value) return '有未保存修改'
+  return '已保存'
+})
+
+const saveStatusClass = computed(() => {
+  if (saving.value) return statusClass.neutral
+  if (saveMsg.value && !saveOk.value) return statusClass.warn
+  if (hasUnsavedChanges.value) return statusClass.warn
+  return statusClass.ok
+})
 
 // ── 初始化 ────────────────────────────────────────────────
 
 onMounted(async () => {
+  await refreshHealth()
   if (showUserConfig.value) {
     await loadUserConfig()
   } else {
     await loadLocalConfig()
   }
 })
+
+function formatStatus(value: boolean | null | undefined): string {
+  if (value === true) return '正常'
+  if (value === false) return '异常'
+  return '未检测'
+}
+
+function statusClassFor(value: boolean | null | undefined): string {
+  if (value === true) return statusClass.ok
+  if (value === false) return statusClass.warn
+  return statusClass.neutral
+}
+
+async function refreshHealth() {
+  healthLoading.value = true
+  healthError.value = ''
+  try {
+    health.value = await apiFetch<HealthResponse>('/api/health')
+    healthCheckedAt.value = new Date().toLocaleTimeString()
+  } catch (e) {
+    health.value = null
+    healthError.value = `后端服务未连接：${normalizeApiError(e)}`
+    healthCheckedAt.value = new Date().toLocaleTimeString()
+  } finally {
+    healthLoading.value = false
+  }
+}
 
 async function loadLocalConfig() {
   try {
@@ -241,6 +418,8 @@ async function loadUserConfig() {
     const sys = data._system || {}
     buildFormFields(sys)
   }
+
+  savedSnapshot.value = currentConfigSnapshot.value
 }
 
 // ── 从 YAML dict 构建表单字段 ──────────────────────────────
@@ -370,6 +549,8 @@ async function saveUserConfig() {
     })
     saveOk.value = true
     saveMsg.value = '保存成功'
+    savedSnapshot.value = currentConfigSnapshot.value
+    lastSavedAt.value = new Date().toLocaleTimeString()
   } catch (e) {
     saveOk.value = false
     saveMsg.value = normalizeApiError(e)
