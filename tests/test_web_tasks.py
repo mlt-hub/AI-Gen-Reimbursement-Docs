@@ -43,6 +43,7 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
             "xlsx_path": str(xlsx_path),
             "output_dir": str(output_dir),
             "mode": "from-excel-gen-fpa",
+            "fpa_profile": "strict_fpa",
         },
     )
 
@@ -54,6 +55,8 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     assert state.mode == "local"
     assert state.output_dir == output_dir
     assert state.task_created_at is not None
+    assert calls
+    assert calls[0]["args"][10] == "strict_fpa"
     server.session_manager.cleanup_download(data["session_id"])
 
 
@@ -69,7 +72,7 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
 
     resp = client.post(
         "/api/run-upload",
-        data={"mode": "from-excel-gen-fpa"},
+        data={"mode": "from-excel-gen-fpa", "fpa_profile": "strict_fpa"},
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
@@ -83,7 +86,74 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
     assert state.work_dir is not None
     assert state.work_dir.exists()
     assert state.task_created_at is not None
+    assert calls
+    assert calls[0]["args"][10] == "strict_fpa"
     server.session_manager.cleanup_download(data["session_id"])
+
+
+def test_fpa_preview_upload_returns_preview(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+    calls: list[dict] = []
+
+    def fake_preview_fpa_module(**kwargs):
+        calls.append(kwargs)
+        return {
+            "module": {
+                "index": 1,
+                "client_type": "地市后台",
+                "l1": "一级",
+                "l2": "二级",
+                "l3": "垂直行业管理",
+                "process_count": 2,
+            },
+            "rows": [
+                {
+                    "name": "垂直行业管理界面开发",
+                    "type": "EI",
+                    "type_reason": "界面能力",
+                    "classification_basis": "规则一",
+                    "classification_basis_index": 1,
+                    "explanation": "说明",
+                    "source_processes": [],
+                    "generation": "ai",
+                }
+            ],
+            "warnings": [],
+            "used_ai": True,
+        }
+
+    monkeypatch.setattr(tasks, "preview_fpa_module", fake_preview_fpa_module)
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        data={
+            "module_name": "垂直行业管理",
+            "api_key": "sk-test",
+            "fpa_profile": "current_project",
+        },
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["module"]["l3"] == "垂直行业管理"
+    assert data["rows"][0]["type"] == "EI"
+    assert calls
+    assert calls[0]["module_name"] == "垂直行业管理"
+    assert calls[0]["api_key"] == "sk-test"
+    assert calls[0]["profile_name"] == "current_project"
+
+
+def test_fpa_preview_requires_module_target(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 400
+    assert "三级模块" in resp.json()["detail"]
 
 
 def test_log_stream_returns_existing_events_and_removes_queue(monkeypatch):

@@ -42,6 +42,17 @@ log_level: INFO
 # 如果AI response数据被截断，增大max_tokens
 max_tokens: 6000
 
+# FPA 规划口径。可用：current_project（当前报账模板口径）、strict_fpa（严格FPA口径）
+fpa_profile: current_project
+
+# strict_fpa 外部数据组扩展规则。
+# 这里只扩展内置规则，不覆盖内置规则；普通外部服务调用不要配置为数据组。
+# source_aliases：外部系统/平台名称或别名；data_name：生成的 EIF 数据组名称；data_nouns：识别为数据组所需的业务名词线索。
+fpa_external_data_rules:
+  - source_aliases: ["统一认证平台", "统一认证"]
+    data_name: "统一认证账号"
+    data_nouns: ["账号", "账户", "人员"]
+
 # LLM API 单次调用超时时间（秒，默认120）
 # 点击"停止"后，系统需等当前API调用结束才能退出
 # 此值设得越大，停止后等待越久，不建议超过 300

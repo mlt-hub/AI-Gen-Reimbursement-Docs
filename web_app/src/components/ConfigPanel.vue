@@ -22,6 +22,7 @@
       <AdvancedOptions />
       <TemplateUpload />
       <TemplateDownload />
+      <FpaPreview />
     </div>
 
     <button @click="$emit('start')"
@@ -47,6 +48,7 @@ import FileInput from './FileInput.vue'
 import AdvancedOptions from './AdvancedOptions.vue'
 import TemplateUpload from './TemplateUpload.vue'
 import TemplateDownload from './TemplateDownload.vue'
+import FpaPreview from './FpaPreview.vue'
 import { apiFetch } from '@/lib/api.ts'
 
 import { ref, onMounted } from 'vue'

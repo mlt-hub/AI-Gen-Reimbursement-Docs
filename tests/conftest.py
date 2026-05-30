@@ -36,7 +36,15 @@ def mock_ai():
     注意：这些函数在 pipeline 中通过 lazy import 使用，
     需要 patch 它们的定义模块而非 pipeline。
     """
-    with patch("ai_gen_reimbursement_docs.gen_fpa.ai_fill_fpa_md") as m1, \
+    def _copy_fpa_template(tree_md, meta_md, output_md, **kwargs):
+        import shutil
+        src = output_md.replace("1.3.gen-fpa-AI填充-FPA.md", "1.1.gen-fpa-FPA-模板.md")
+        if os.path.exists(src):
+            shutil.copy2(src, output_md)
+        return output_md
+
+    with patch("ai_gen_reimbursement_docs.pipeline.plan_fpa_md_from_tree",
+               side_effect=_copy_fpa_template) as m1b, \
          patch("ai_gen_reimbursement_docs.gen_spec.ai_fill_spec_md") as m2, \
          patch("ai_gen_reimbursement_docs.excel_source.ai_fill_meta_md",
                return_value="/fake/meta.md") as m3, \
@@ -44,4 +52,4 @@ def mock_ai():
                return_value="AI填充内容") as m4, \
          patch("ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
                return_value=[]) as m5:
-        yield {"fpa": m1, "spec": m2, "meta": m3, "llm": m4, "cosmic": m5}
+        yield {"fpa_plan": m1b, "spec": m2, "meta": m3, "llm": m4, "cosmic": m5}

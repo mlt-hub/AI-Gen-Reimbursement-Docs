@@ -1,0 +1,193 @@
+<template>
+  <details class="group">
+    <summary class="subtle-link cursor-pointer select-none text-sm">FPA 预览</summary>
+    <div class="mt-3 flex flex-col gap-3 border-t border-[var(--color-rule)] pt-3">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_92px]">
+        <div>
+          <label for="fpa-preview-module" class="field-label text-xs">三级模块</label>
+          <input
+            id="fpa-preview-module"
+            v-model="moduleName"
+            type="text"
+            class="field-control"
+            placeholder="垂直行业管理"
+          />
+        </div>
+        <div>
+          <label for="fpa-preview-index" class="field-label text-xs">序号</label>
+          <input
+            id="fpa-preview-index"
+            v-model="moduleIndex"
+            type="number"
+            min="1"
+            step="1"
+            class="field-control"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label for="fpa-preview-profile" class="field-label text-xs">FPA 方案</label>
+        <select id="fpa-preview-profile" v-model="config.fpaProfile" class="field-control">
+          <option value="current_project">当前报账模板口径</option>
+          <option value="strict_fpa">严格 FPA 口径</option>
+        </select>
+      </div>
+
+      <button
+        type="button"
+        class="btn-quiet inline-flex w-full items-center justify-center gap-2"
+        :disabled="!canPreview || loading"
+        @click="runPreview"
+      >
+        <MagnifyingGlassIcon class="h-4 w-4" />
+        {{ loading ? '生成中...' : '生成预览' }}
+      </button>
+
+      <div v-if="error" class="rounded-md border border-[var(--color-danger)] bg-[var(--color-danger-soft)] px-3 py-2 text-sm text-[var(--color-danger)]">
+        {{ error }}
+      </div>
+
+      <div v-if="result" class="overflow-hidden rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
+        <div class="flex items-center justify-between gap-3 border-b border-[var(--color-rule)] px-3 py-2">
+          <div class="min-w-0">
+            <div class="truncate text-sm font-semibold text-[var(--color-ink)]">{{ result.module.l3 }}</div>
+            <div class="text-xs text-[var(--color-ink-soft)]">{{ result.module.process_count }} 个功能过程 · {{ profileLabel(result.profile) }}</div>
+          </div>
+          <span :class="['shrink-0 rounded px-2 py-1 text-xs font-semibold', result.used_ai ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]']">
+            {{ result.used_ai ? 'AI' : '兜底' }}
+          </span>
+        </div>
+
+        <div class="max-h-[360px] overflow-auto">
+          <table class="w-full min-w-[620px] text-left text-xs">
+            <thead class="sticky top-0 bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]">
+              <tr>
+                <th class="w-12 px-3 py-2 font-semibold">#</th>
+                <th class="w-16 px-3 py-2 font-semibold">类型</th>
+                <th class="px-3 py-2 font-semibold">功能点</th>
+                <th class="px-3 py-2 font-semibold">归类</th>
+                <th class="w-20 px-3 py-2 font-semibold">方式</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, idx) in result.rows" :key="idx" class="border-t border-[var(--color-rule)] align-top">
+                <td class="px-3 py-2 text-[var(--color-ink-soft)]">{{ idx + 1 }}</td>
+                <td class="px-3 py-2 font-semibold text-[var(--color-accent-strong)]">{{ row.type }}</td>
+                <td class="px-3 py-2">
+                  <div class="font-medium text-[var(--color-ink)]">{{ row.name }}</div>
+                  <div v-if="row.type_reason" class="mt-1 text-[var(--color-ink-soft)]">{{ row.type_reason }}</div>
+                </td>
+                <td class="px-3 py-2 text-[var(--color-ink-muted)]">{{ row.classification_basis || '-' }}</td>
+                <td class="px-3 py-2 text-[var(--color-ink-soft)]">{{ row.generation }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="result.warnings.length" class="border-t border-[var(--color-rule)] px-3 py-2 text-xs text-[var(--color-warning)]">
+          <div v-for="item in result.warnings" :key="item" class="leading-5">{{ item }}</div>
+        </div>
+
+        <div class="border-t border-[var(--color-rule)] px-3 py-2">
+          <details>
+            <summary class="subtle-link cursor-pointer select-none text-xs">说明详情</summary>
+            <div class="mt-2 space-y-3">
+              <div v-for="(row, idx) in result.rows" :key="row.name + idx" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="text-xs font-semibold text-[var(--color-ink)]">[{{ idx + 1 }}] {{ row.name }}</div>
+                <p class="mt-2 whitespace-pre-wrap text-xs leading-5 text-[var(--color-ink-muted)]">{{ row.explanation }}</p>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </details>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
+import { useConfigStore } from '@/stores/config.ts'
+import { useSessionStore } from '@/stores/session.ts'
+import { useToastStore } from '@/stores/toast.ts'
+import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+
+interface FpaPreviewRow {
+  name: string
+  type: string
+  type_reason: string
+  classification_basis: string
+  classification_basis_index: number | null
+  explanation: string
+  source_processes: string[]
+  generation: string
+}
+
+interface FpaPreviewResult {
+  module: {
+    index: number
+    client_type: string
+    l1: string
+    l2: string
+    l3: string
+    process_count: number
+  }
+  rows: FpaPreviewRow[]
+  warnings: string[]
+  used_ai: boolean
+  profile: string
+  profile_version: string
+}
+
+const config = useConfigStore()
+const session = useSessionStore()
+const toast = useToastStore()
+
+const moduleName = ref('')
+const moduleIndex = ref('')
+const loading = ref(false)
+const error = ref('')
+const result = ref<FpaPreviewResult | null>(null)
+
+const hasTarget = computed(() => moduleName.value.trim().length > 0 || moduleIndex.value.trim().length > 0)
+const canPreview = computed(() => config.isValid && hasTarget.value && !session.isRunning)
+
+async function runPreview() {
+  if (!canPreview.value) return
+  loading.value = true
+  error.value = ''
+  result.value = null
+
+  const body = new FormData()
+  if (moduleName.value.trim()) body.append('module_name', moduleName.value.trim())
+  if (moduleIndex.value.trim()) body.append('module_index', moduleIndex.value.trim())
+  if (config.apiKey) body.append('api_key', config.apiKey)
+  if (config.model) body.append('model', config.model)
+  if (config.baseUrl) body.append('base_url', config.baseUrl)
+  if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
+
+  if (config.workMode === 'local') {
+    body.append('xlsx_path', config.xlsxPath)
+  } else if (config.selectedFile) {
+    body.append('file', config.selectedFile)
+  }
+
+  try {
+    result.value = await apiFetch<FpaPreviewResult>('/api/fpa/preview-module', {
+      method: 'POST',
+      body,
+    })
+  } catch (e) {
+    const msg = normalizeApiError(e)
+    error.value = msg
+    toast.show('error', msg)
+  } finally {
+    loading.value = false
+  }
+}
+
+function profileLabel(profile: string) {
+  return profile === 'strict_fpa' ? '严格 FPA 口径' : '当前报账模板口径'
+}
+</script>

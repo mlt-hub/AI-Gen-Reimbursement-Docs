@@ -254,6 +254,44 @@ def load_fpa_reduced_use_workload() -> bool:
     return _get_system_config_value('fpa_reduced_use_workload', False)
 
 
+def load_fpa_profile(default: str = "current_project") -> str:
+    """读取 FPA 规划口径名称，默认 current_project。"""
+    return _get_system_config_value('fpa_profile', default).strip()
+
+
+def load_fpa_external_data_rules() -> list[dict[str, object]]:
+    """读取 strict_fpa 外部数据组扩展规则。
+
+    配置只扩展内置规则，不覆盖内置规则。无配置或配置非法时返回空列表。
+    """
+    rules = _get_system_config_value('fpa_external_data_rules', [])
+    if not isinstance(rules, list):
+        return []
+    normalized: list[dict[str, object]] = []
+    for item in rules:
+        if not isinstance(item, dict):
+            continue
+        aliases = item.get("source_aliases")
+        data_name = str(item.get("data_name") or "").strip()
+        data_nouns = item.get("data_nouns", [])
+        if isinstance(aliases, str):
+            aliases = [aliases]
+        if isinstance(data_nouns, str):
+            data_nouns = [data_nouns]
+        if not isinstance(aliases, list) or not data_name:
+            continue
+        alias_values = [str(alias).strip() for alias in aliases if str(alias).strip()]
+        noun_values = [str(noun).strip() for noun in data_nouns if str(noun).strip()] if isinstance(data_nouns, list) else []
+        if not alias_values:
+            continue
+        normalized.append({
+            "source_aliases": alias_values,
+            "data_name": data_name,
+            "data_nouns": noun_values,
+        })
+    return normalized
+
+
 def load_cfp_formula(default: str = DEFAULT_CFP_FORMULA) -> str:
     """读取 CFP 计算公式，优先从 business_rules.yaml 获取。"""
     rules_path = config_dir() / "business_rules.yaml"

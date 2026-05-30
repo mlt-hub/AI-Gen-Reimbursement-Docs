@@ -4,8 +4,11 @@ import json as _json
 import logging
 import os
 import re
+import tempfile
+import hashlib
 from copy import copy
 from datetime import datetime
+from typing import Any
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, Border
@@ -20,9 +23,20 @@ from ai_gen_reimbursement_docs.excel_source import (
     replace_placeholders, strip_ai_marker, parse_module_tree_md,
     safe_load_workbook,
 )
+from ai_gen_reimbursement_docs.fpa_profiles import (
+    CURRENT_PROJECT_PROFILE,
+    CurrentProjectProfile,
+    adjust_value_for_type as _adjust_value_for_type,
+    get_fpa_profile,
+    group_tag as _group_tag,
+    module_change_status as _module_change_status,
+)
 from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_fpa')
+
+VALID_FPA_TYPES = {"EI", "ILF", "EQ", "EO", "EIF"}
+FPA_PROFILE = CURRENT_PROJECT_PROFILE
 
 
 def parse_meta_md(meta_md_path: str) -> dict[str, str]:
@@ -49,6 +63,41 @@ def _receiver_from_client_type(client_type: str, rules_text: str) -> str:
     return default
 
 
+def _group_rows_by_l3(rows: list[dict[str, str]]) -> list[dict[str, object]]:
+    """按客户端/一二三级模块聚合功能过程，供 FPA 三级模块规划使用。"""
+    groups: list[dict[str, object]] = []
+    index: dict[tuple[str, str, str, str], dict[str, object]] = {}
+    for r in rows:
+        key = (
+            str(r.get("客户端类型", "")).strip(),
+            str(r.get("一级模块", "")).strip(),
+            str(r.get("二级模块", "")).strip(),
+            str(r.get("三级模块", "")).strip(),
+        )
+        group = index.get(key)
+        if group is None:
+            group = {
+                "client_type": key[0],
+                "l1": key[1],
+                "l2": key[2],
+                "l3": key[3],
+                "l3_desc": str(r.get("三级模块整体功能描述", "") or "").strip(),
+                "processes": [],
+            }
+            index[key] = group
+            groups.append(group)
+        elif not group.get("l3_desc") and r.get("三级模块整体功能描述"):
+            group["l3_desc"] = str(r.get("三级模块整体功能描述", "")).strip()
+        processes = group["processes"]
+        if isinstance(processes, list):
+            processes.append({
+                "name": str(r.get("功能过程", "") or "").strip(),
+                "type": str(r.get("功能过程类型", "") or "").strip(),
+                "desc": str(r.get("功能过程描述", "") or "").strip(),
+            })
+    return groups
+
+
 def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
               base_url: str, tag: str = "") -> str:
     """调用 LLM（委托至 llm_client 公共模块）。"""
@@ -64,201 +113,438 @@ def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
         return ""
 
 
-def _build_fpa_rule_rows(rows: list[dict[str, str]], meta: dict[str, str]) -> list[dict[str, object]]:
-    """从功能清单行构建 FPA 模板行（规则骨架）。"""
-    prefix_rule = meta.get("新增/修改功能点前缀生成规则",
-                           "【客户端类型】一级模块-二级模块-三级模块-功能过程")
-    receiver_rules = meta.get("功能用户-接收者判定", "")
-    subsystem = meta.get("子系统（模块）", "")
-    asset = meta.get("资产标识", "")
-
-    fpa_rows = []
-    seq = 0
-
-    for r in rows:
-        client_type = r["客户端类型"]
-        l1 = r["一级模块"]
-        l2 = r["二级模块"]
-        l3 = r["三级模块"]
-        proc = r["功能过程"]
-        proc_desc = r["功能过程描述"]
-        proc_type = r["功能过程类型"]
-
-        receiver = _receiver_from_client_type(client_type, receiver_rules)
-
-        fp_prefix = prefix_rule \
-            .replace("【客户端类型】", f"【{client_type}】") \
-            .replace("一级模块", l1) \
-            .replace("二级模块", l2) \
-            .replace("三级模块", l3) \
-            .replace("功能过程", proc)
-
-        # 界面行
-        seq += 1
-        fpa_rows.append({
-            "序号": seq,
-            "子系统(模块)": subsystem,
-            "资产标识": asset,
-            "新增/修改功能点": f"{fp_prefix}-界面开发",
-            "类型": "EI",
-            "计算依据归类": "",
-            "计算依据说明": f"【{client_type}】{l1}-{l2}-{l3}-{proc}-界面开发，具体如下：\n1、",
-            "变更状态": proc_type,
-            "基准值": "",
-            "调整值": 2,
-            "要素数量": 1,
-            "FPA工作量": "",
-            "核减后工作量": "",
-            "备注说明": "",
-        })
-
-        # 接口行
-        seq += 1
-        fpa_rows.append({
-            "序号": seq,
-            "子系统(模块)": subsystem,
-            "资产标识": asset,
-            "新增/修改功能点": f"{fp_prefix}-接口开发",
-            "类型": "ILF",
-            "计算依据归类": "",
-            "计算依据说明": f"【{client_type}】{l1}-{l2}-{l3}-{proc}-接口开发，具体如下：\n1、",
-            "变更状态": proc_type,
-            "基准值": "",
-            "调整值": 1,
-            "要素数量": 1,
-            "FPA工作量": "",
-            "核减后工作量": "",
-            "备注说明": "",
-        })
-
+def _build_fpa_rule_rows(
+    rows: list[dict[str, str]],
+    meta: dict[str, str],
+    profile: CurrentProjectProfile = FPA_PROFILE,
+) -> list[dict[str, object]]:
+    """从功能清单行构建 FPA 模板行（三级模块兜底骨架）。"""
+    fpa_rows: list[dict[str, object]] = []
+    seq = 1
+    for group in _group_rows_by_l3(rows):
+        group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+        fpa_rows.extend(group_rows)
+        seq += len(group_rows)
     return fpa_rows
 
 
-def _ai_fill_fpa(
-    fpa_rows: list[dict[str, object]],
+def _read_fpa_judgement_rules(template_path: str = "") -> list[str]:
+    judgement_rules: list[str] = []
+    if not template_path:
+        return judgement_rules
+    try:
+        wb = openpyxl.load_workbook(template_path, data_only=True)
+        from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
+        appendix_sheet = _get_system_config_value('fpa_appendix_sheet', '附录1-FPA评估方法说明')
+        ws = wb[appendix_sheet]
+        for row_num in range(2, ws.max_row + 1):
+            val = ws.cell(row_num, 3).value
+            if val and str(val).strip():
+                judgement_rules.append(str(val).strip())
+        wb.close()
+        if judgement_rules:
+            logger.debug("从模板附录读取判定原则 %d 条", len(judgement_rules))
+    except Exception as e:
+        logger.warning("从模板附录读取判定原则失败: %s", e)
+    return judgement_rules
+
+
+def _extract_json_obj(resp: str) -> dict[str, Any]:
+    from ai_gen_reimbursement_docs.llm_client import strip_markdown_code_block
+
+    clean = strip_markdown_code_block(resp or "").strip()
+    try:
+        data = _json.loads(clean)
+    except _json.JSONDecodeError:
+        start = clean.find("{")
+        end = clean.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        data = _json.loads(clean[start:end + 1])
+    if isinstance(data, list):
+        data = {"rows": data}
+    if not isinstance(data, dict):
+        raise ValueError("AI 响应 JSON 根节点必须是对象或数组")
+    return data
+
+
+def _normalize_ai_fpa_rows_for_l3(
+    *,
+    group: dict[str, object],
+    meta: dict[str, str],
+    ai_rows: list[Any],
+    judgement_rules: list[str],
+    start_seq: int = 1,
+    profile: CurrentProjectProfile = FPA_PROFILE,
+) -> tuple[list[dict[str, object]], list[str]]:
+    warnings: list[str] = []
+    subsystem = meta.get("子系统（模块）", "")
+    asset = meta.get("资产标识", "")
+    module_status = _module_change_status(group.get("processes", []) if isinstance(group.get("processes"), list) else [])
+
+    ui_rows = [
+        r for r in ai_rows
+        if isinstance(r, dict) and "界面开发" in str(r.get("name", ""))
+    ]
+    if len(ui_rows) > 1 and any(not str(r.get("split_reason", "")).strip() for r in ui_rows):
+        msg = f"{_group_tag(group)} AI 输出多条界面开发行但缺少 split_reason，已合并为三级模块级界面行"
+        logger.warning(msg)
+        warnings.append(msg)
+        ai_rows = [
+            profile.fallback_rows_for_l3(group, meta, start_seq=1)[0],
+            *[
+                r for r in ai_rows
+                if not (isinstance(r, dict) and "界面开发" in str(r.get("name", "")))
+            ],
+        ]
+
+    normalized: list[dict[str, object]] = []
+    seq = start_seq
+    for raw in ai_rows:
+        if not isinstance(raw, dict):
+            warnings.append(f"{_group_tag(group)} AI rows 中存在非对象项，已跳过")
+            continue
+        name = str(raw.get("name", "") or raw.get("新增/修改功能点", "") or "").strip()
+        if not name:
+            warnings.append(f"{_group_tag(group)} AI 行缺少 name，已跳过")
+            continue
+        explanation = str(raw.get("explanation", "") or raw.get("计算依据说明", "") or "").strip()
+        normalized_name = profile.normalize_output_name(name, explanation)
+        if normalized_name != name:
+            warnings.append(f"{_group_tag(group)} AI 行名称不符合 {profile.name} 口径，已规范化: {name} -> {normalized_name}")
+            name = normalized_name
+        if not explanation:
+            explanation = f"{name}，具体为以下：\n1、基于该三级模块功能过程完成对应业务能力。"
+            warnings.append(f"{_group_tag(group)} AI 行缺少 explanation，已使用兜底说明: {name}")
+
+        ai_type = str(raw.get("type", "") or raw.get("类型", "") or "").strip().upper()
+        fallback_type, fallback_reason = profile.infer_type(name, explanation)
+        type_reason = str(raw.get("type_reason", "") or "").strip()
+        if ai_type not in VALID_FPA_TYPES:
+            if ai_type:
+                warnings.append(f"{name} AI 返回非法 type={ai_type}，已使用 {fallback_type} 兜底")
+            fpa_type = fallback_type
+            type_reason = type_reason or fallback_reason
+        elif profile.has_obvious_conflict(name, explanation, ai_type):
+            warnings.append(f"{name} AI type={ai_type} 与关键词规则明显冲突，已使用 {fallback_type} 兜底")
+            fpa_type = fallback_type
+            type_reason = fallback_reason
+        else:
+            fpa_type = ai_type
+            type_reason = type_reason or "AI 根据功能点名称和业务说明判定。"
+
+        basis = ""
+        idx = raw.get("classification_basis_index")
+        parsed_idx: int | None = None
+        if idx is not None:
+            try:
+                parsed_idx = int(idx)
+            except (TypeError, ValueError):
+                warnings.append(f"{name} classification_basis_index 非数字: {idx}")
+        if parsed_idx is not None:
+            if judgement_rules and 1 <= parsed_idx <= len(judgement_rules):
+                basis = judgement_rules[parsed_idx - 1]
+            else:
+                warnings.append(f"{name} classification_basis_index 越界: {parsed_idx}")
+        if not basis and raw.get("classification_basis"):
+            val = str(raw.get("classification_basis", "")).strip()
+            for rule in judgement_rules:
+                if val and (val in rule or rule in val):
+                    basis = rule
+                    break
+            if not basis:
+                warnings.append(f"{name} classification_basis 未匹配模板规则，已留空")
+
+        source_processes = raw.get("source_processes", [])
+        if isinstance(source_processes, list):
+            source_text = "、".join(str(x) for x in source_processes if str(x).strip())
+        else:
+            source_text = str(source_processes or "")
+
+        normalized.append({
+            "序号": seq,
+            "子系统(模块)": subsystem,
+            "资产标识": asset,
+            "新增/修改功能点": name,
+            "类型": fpa_type,
+            "计算依据归类": basis,
+            "计算依据说明": explanation,
+            "变更状态": str(raw.get("change_status", "") or module_status),
+            "调整值": _adjust_value_for_type(fpa_type),
+            "要素数量": int(raw.get("element_count", 1) or 1),
+            "生成方式": "ai",
+            "类型理由": type_reason,
+            "源功能过程": source_text,
+            "后处理警告": "；".join(warnings),
+        })
+        seq += 1
+    return normalized, warnings
+
+
+def _ai_plan_fpa_rows_for_l3(
+    group: dict[str, object],
+    judgement_rules: list[str],
+    domain_context: dict[str, object] | None,
+    api_key: str,
+    model: str,
+    base_url: str,
+    profile: CurrentProjectProfile = FPA_PROFILE,
+) -> list[dict[str, object]]:
+    """调用 AI 规划一个三级模块的 FPA 行，返回原始 AI rows。"""
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
+
+    system_prompt = load_ai_system_prompt("fpa_eval") or (
+        "你是一个严谨的 FPA 功能点评估助手。必须按用户给定的项目 FPA 核心口径规划行，"
+        "只输出合法 JSON。"
+    )
+    prompt = profile.build_prompt(group, judgement_rules, domain_context)
+    resp = _call_llm(
+        prompt,
+        system_prompt,
+        api_key,
+        model,
+        base_url,
+        tag=f"fpa_l3_{group.get('l3', '')}",
+    )
+    if not resp:
+        raise ValueError("LLM 返回空响应")
+    data = _extract_json_obj(resp)
+    rows = data.get("rows")
+    if not isinstance(rows, list):
+        raise ValueError("AI 响应缺少 rows 列表")
+    return rows
+
+
+def _build_domain_context(meta: dict[str, str]) -> dict[str, object]:
+    keys = [
+        "子系统（模块）",
+        "资产标识",
+        "新增/修改功能点前缀生成规则",
+        "功能用户-接收者判定",
+    ]
+    return {k: meta.get(k, "") for k in keys if meta.get(k)}
+
+
+def _fpa_ai_cache_key(
+    group: dict[str, object],
+    judgement_rules: list[str],
+    domain_context: dict[str, object],
+    model: str,
+    profile: CurrentProjectProfile = FPA_PROFILE,
+) -> str:
+    payload = {
+        "profile": profile.name,
+        "profile_version": profile.version,
+        "core_rules": profile.core_rules,
+        "domain_context": domain_context,
+        "group": group,
+        "judgement_rules": judgement_rules,
+        "model": model,
+    }
+    raw = _json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load_fpa_ai_cache(cache_path: str) -> dict[str, object]:
+    if not cache_path or not os.path.exists(cache_path):
+        return {"version": 1, "entries": {}}
+    try:
+        with open(cache_path, encoding="utf-8") as f:
+            data = _json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError("cache root must be object")
+        entries = data.get("entries")
+        if not isinstance(entries, dict):
+            data["entries"] = {}
+        data["version"] = 1
+        return data
+    except Exception as exc:
+        logger.warning("FPA AI 缓存读取失败，将忽略缓存: %s", exc)
+        return {"version": 1, "entries": {}}
+
+
+def _save_fpa_ai_cache(cache_path: str, cache: dict[str, object]) -> None:
+    if not cache_path:
+        return
+    try:
+        os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            _json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.warning("FPA AI 缓存写入失败: %s", exc)
+
+
+def _as_float(value: object) -> float:
+    try:
+        if value is None or value == "":
+            return 0.0
+        return float(value)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def calculate_fpa_row_workload(row: dict[str, object]) -> float:
+    """按代码化业务口径计算单行 FPA 工作量。"""
+    return _as_float(row.get("调整值")) * _as_float(row.get("要素数量"))
+
+
+def calculate_fpa_total(rows: list[dict[str, object]]) -> float:
+    """按代码化业务口径计算 FPA 工作量总和。"""
+    return sum(calculate_fpa_row_workload(row) for row in rows)
+
+
+def write_fpa_summary_md(summary_md_path: str, total: float) -> None:
+    os.makedirs(os.path.dirname(summary_md_path) or '.', exist_ok=True)
+    with open(summary_md_path, 'w', encoding='utf-8') as f:
+        f.write("# FPA 工作量\n\n")
+        f.write(f"FPA工作量（人/天）: {total}\n")
+
+
+def _plan_fpa_rows_with_ai(
+    rows: list[dict[str, str]],
+    meta: dict[str, str],
     judgement_rules: list[str],
     api_key: str,
     model: str,
     base_url: str,
+    cache_path: str = "",
+    profile: CurrentProjectProfile = FPA_PROFILE,
 ) -> list[dict[str, object]]:
-    """AI 填充 FPA 行的 F/G 列。"""
+    groups = _group_rows_by_l3(rows)
     if not api_key:
-        logger.warning("未设置 API Key，跳过 AI 填充 FPA")
-        return fpa_rows
+        logger.warning("未设置 API Key，使用三级模块兜底规则生成 FPA")
+        return _build_fpa_rule_rows(rows, meta, profile=profile)
 
-    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
-    system_prompt = load_ai_system_prompt("fpa_eval") or (
-        "你是一个 FPA 功能点评估助手。根据功能过程描述和类型，"
-        "从判定原则中选择最匹配的一项，并展开计算依据说明。"
-        "直接输出结果，不要输出其他内容。"
-    )
-
-    total = len(fpa_rows)
     from ai_gen_reimbursement_docs.config_utils import load_flow_max_ai, load_gen_fpa_ai_limit
-    _max_ai = load_flow_max_ai("gen_fpa")
-    _proc_limit = load_gen_fpa_ai_limit()
-    _seen_fpa_procs: list[str] = []
-    _allowed_fpa_procs: set[str] | None = None
-    if _proc_limit > 0:
-        for _r in fpa_rows:
-            _base = _r["新增/修改功能点"].rsplit('-', 1)[0]
-            if _base not in _seen_fpa_procs:
-                _seen_fpa_procs.append(_base)
-        _allowed_fpa_procs = set(_seen_fpa_procs[:_proc_limit])
-        _seen_fpa_procs.clear()
-    _skip_ai_limit = 0
-    _skip_proc_limit = 0
-    _filled_count = 0
-    for idx, row in enumerate(fpa_rows, 1):
-        _base_name = row["新增/修改功能点"].rsplit('-', 1)[0]
-        if _max_ai > 0 and idx > _max_ai:
-            _skip_ai_limit += 1
-            continue
-        if _allowed_fpa_procs is not None and _base_name not in _allowed_fpa_procs:
-            _skip_proc_limit += 1
-            continue
-        if not row["计算依据说明"]:
+
+    max_ai = load_flow_max_ai("gen_fpa")
+    module_limit = load_gen_fpa_ai_limit()
+    all_rows: list[dict[str, object]] = []
+    seq = 1
+    attempted = success = parse_failed = empty_response = generated = fallback = skipped = warning_count = cache_hits = 0
+    domain_context = _build_domain_context(meta)
+    cache = _load_fpa_ai_cache(cache_path) if cache_path else {"version": 1, "entries": {}}
+    cache_entries = cache.get("entries")
+    if not isinstance(cache_entries, dict):
+        cache_entries = {}
+        cache["entries"] = cache_entries
+
+    for idx, group in enumerate(groups, 1):
+        limited = (max_ai > 0 and idx > max_ai) or (module_limit > 0 and idx > module_limit)
+        if limited:
+            skipped += 1
+            group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            fallback += len(group_rows)
+            all_rows.extend(group_rows)
+            seq += len(group_rows)
             continue
 
-        _rules_list = judgement_rules
-        _numbered_rules = "\n".join(f"{i}) {r}" for i, r in enumerate(_rules_list, 1))
-
-        row_tag = f"fpa_{row['类型']}_{row['新增/修改功能点']}"
-        prompt = (
-            f"新增/修改功能点描述：{row['新增/修改功能点']}\n\n"
-            f"计算依据归类判定原则列表（请返回最匹配的序号，序号从1开始）：\n{_numbered_rules}\n\n"
-            f"请直接输出JSON，不要输出其他内容：\n"
-            f'{{"type":"EI/EO/EQ/ILF/EIF","classification_basis_index":1,"explanation":"<展开的说明，包含触发事件、事件流、业务规则、业务数据、涉及表/文件/接口>"}}'
-        )
-
-        _filled_count += 1
-        logger.info(f"  FPA AI 填充 [{idx}/{total}] {row['新增/修改功能点'][:40]}...")
-        resp = _call_llm(prompt, system_prompt, api_key, model, base_url, tag=row_tag)
-        if resp:
+        cache_key = _fpa_ai_cache_key(group, judgement_rules, domain_context, model, profile=profile)
+        cached = cache_entries.get(cache_key) if cache_path else None
+        if isinstance(cached, dict) and isinstance(cached.get("rows"), list):
             try:
-                from ai_gen_reimbursement_docs.llm_client import strip_markdown_code_block
-                _clean = strip_markdown_code_block(resp)
-                _data = _json.loads(_clean)
-                if isinstance(_data, list):
-                    _data = _data[0]
-                if _data.get("type"):
-                    row["类型"] = _data["type"].strip()
-                _basis = None
-                _idx = _data.get("classification_basis_index")
-                if _idx is not None:
-                    try:
-                        _idx = int(_idx)
-                    except (ValueError, TypeError):
-                        pass
-                if isinstance(_idx, int) and _rules_list and 1 <= _idx <= len(_rules_list):
-                    _basis = _rules_list[_idx - 1]
-                elif _data.get("classification_basis"):
-                    _val = _data["classification_basis"].strip()
-                    for _rule in _rules_list:
-                        if _rule and (_val in _rule or _rule in _val):
-                            _basis = _rule
-                            break
-                    if _basis is None:
-                        _basis = _val
-                if _basis is not None:
-                    row["计算依据归类"] = _basis
-                else:
-                    logger.warning(f"AI 响应中未找到归类依据，序号={_idx}，原始响应片段={resp[:200]}")
-                if _data.get("explanation"):
-                    exp = _data["explanation"].strip()
-                    exp = exp.replace("具体如下", "具体如下" + chr(10))
-                    exp = exp.replace("；", "；" + chr(10))
-                    exp = exp.replace("事件流：", "事件流：" + chr(10))
-                    row["计算依据说明"] = exp
-            except Exception:
-                pass
+                raw_rows = cached["rows"]
+                group_rows, warnings = _normalize_ai_fpa_rows_for_l3(
+                    group=group,
+                    meta=meta,
+                    ai_rows=raw_rows,
+                    judgement_rules=judgement_rules,
+                    start_seq=seq,
+                    profile=profile,
+                )
+                if group_rows:
+                    cache_hits += 1
+                    success += 1
+                    generated += len(group_rows)
+                    warning_count += len(warnings)
+                    logger.info("  FPA AI 缓存命中 [%d/%d] %s", idx, len(groups), _group_tag(group))
+                    all_rows.extend(group_rows)
+                    seq += len(group_rows)
+                    continue
+            except Exception as exc:
+                logger.warning("FPA AI 缓存内容无效 [%s]: %s，将重新调用 AI", _group_tag(group), exc)
 
-    _total_skipped = _skip_ai_limit + _skip_proc_limit
-    if _total_skipped > 0 or _filled_count > 0:
-        _parts = [f"AI 填充 {_filled_count}/{total} 行"]
-        if _skip_ai_limit > 0:
-            _parts.append(f"l3_modules_ai__limit={_max_ai} 跳过 {_skip_ai_limit} 行")
-        if _skip_proc_limit > 0:
-            _parts.append(f"gen_fpa_ai_limit={_proc_limit} 跳过 {_skip_proc_limit} 行")
-        _msg = "FPA AI 填充完成: %s" % "，".join(_parts)
-        if _total_skipped > 0:
-            logger.warning(_msg)
-        else:
-            logger.info(_msg)
-    if _filled_count == 0 and total > 0:
-        _reasons = []
-        if _skip_ai_limit > 0:
-            _reasons.append(f"l3_modules_ai__limit={_max_ai}（跳过 {_skip_ai_limit} 行）")
-        if _skip_proc_limit > 0:
-            _reasons.append(f"gen_fpa_ai_limit={_proc_limit}（跳过 {_skip_proc_limit} 行）")
-        if _reasons:
-            logger.warning(
-                "⚠ FPA AI 填充全部跳过（共 %d 行），请检查配置限制：%s。"
-                "如需 AI 填充，请在 ~/.ai-gen-reimbursement-docs/system_config.yaml 中将对应值设为 0",
-                total, "、".join(_reasons),
+        attempted += 1
+        try:
+            logger.info("  FPA AI 规划三级模块 [%d/%d] %s", idx, len(groups), _group_tag(group))
+            raw_rows = _ai_plan_fpa_rows_for_l3(
+                group, judgement_rules, domain_context, api_key, model, base_url, profile=profile
             )
+            group_rows, warnings = _normalize_ai_fpa_rows_for_l3(
+                group=group,
+                meta=meta,
+                ai_rows=raw_rows,
+                judgement_rules=judgement_rules,
+                start_seq=seq,
+                profile=profile,
+            )
+            warning_count += len(warnings)
+            if not group_rows:
+                raise ValueError("AI 规划未生成有效 FPA 行")
+            success += 1
+            generated += len(group_rows)
+            if cache_path:
+                cache_entries[cache_key] = {
+                    "created_at": datetime.now().isoformat(timespec="seconds"),
+                    "model": model,
+                    "profile": profile.name,
+                    "profile_version": profile.version,
+                    "rows": raw_rows,
+                }
+        except Exception as exc:
+            msg = str(exc)
+            if "空响应" in msg:
+                empty_response += 1
+            else:
+                parse_failed += 1
+            logger.warning("FPA AI 响应解析失败 [%s]: %s", _group_tag(group), exc)
+            group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            fallback += len(group_rows)
 
-    return fpa_rows
+        all_rows.extend(group_rows)
+        seq += len(group_rows)
+
+    msg = (
+        "FPA AI 规划完成: 尝试 %d 个三级模块，成功 %d 个，空响应 %d 个，解析失败 %d 个，"
+        "AI 生成 %d 行，兜底生成 %d 行，配置跳过 %d 个三级模块，缓存命中 %d 个，后处理 warning %d 个"
+    ) % (attempted, success, empty_response, parse_failed, generated, fallback, skipped, cache_hits, warning_count)
+    if attempted and success == 0:
+        logger.warning(msg)
+    else:
+        logger.info(msg)
+    if cache_path:
+        _save_fpa_ai_cache(cache_path, cache)
+    return all_rows
+
+
+def _write_fpa_rows_md(fpa_rows: list[dict[str, object]], output_md_path: str, ai_filled: bool = False) -> float:
+    with open(output_md_path, 'w', encoding='utf-8') as f:
+        f.write("# FPA 工作量评估\n\n")
+        f.write(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if ai_filled:
+            f.write(f"**AI 规划**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("\n")
+        f.write("| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |\n")
+        f.write("|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|\n")
+        for row in fpa_rows:
+            vals = [
+                str(row.get("序号", "")),
+                str(row.get("子系统(模块)", "")),
+                str(row.get("资产标识", "")),
+                str(row.get("新增/修改功能点", "")).replace('|', '\\|'),
+                str(row.get("类型", "")),
+                str(row.get("计算依据归类", "")),
+                str(row.get("计算依据说明", "")).replace("|", chr(92) + "|").replace(chr(10), " "),
+                str(row.get("变更状态", "")),
+                str(row.get("调整值", "")),
+                str(row.get("要素数量", "")),
+                str(row.get("生成方式", "")),
+                str(row.get("类型理由", "")).replace('|', '\\|'),
+                str(row.get("源功能过程", "")).replace('|', '\\|'),
+                str(row.get("后处理警告", "")).replace('|', '\\|'),
+            ]
+            f.write("| " + " | ".join(vals) + " |\n")
+    return calculate_fpa_total(fpa_rows)
 
 
 def init_fpa_template_md(
@@ -266,6 +552,7 @@ def init_fpa_template_md(
     meta_md_path: str,
     output_md_path: str,
     summary_md_path: str = "",
+    profile_name: str = "",
 ) -> str:
     """生成 FPA 模板 MD（规则骨架，F/G 列留空待 AI 填充）。
 
@@ -275,126 +562,170 @@ def init_fpa_template_md(
     logger.info("第1.1步：生成 FPA 模板 MD...")
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)
-    fpa_rows = _build_fpa_rule_rows(rows, meta)
+    profile = get_fpa_profile(profile_name)
+    fpa_rows = _build_fpa_rule_rows(rows, meta, profile=profile)
 
-    total = 0.0
-    with open(output_md_path, 'w', encoding='utf-8') as f:
-        f.write("# FPA 工作量评估\n\n")
-        f.write(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        f.write("| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 |\n")
-        f.write("|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|\n")
-        for row in fpa_rows:
-            vals = [
-                str(row["序号"]),
-                row["子系统(模块)"],
-                row["资产标识"],
-                row["新增/修改功能点"].replace('|', '\\|'),
-                row["类型"],
-                row["计算依据归类"],
-                row["计算依据说明"].replace("|", chr(92) + "|").replace(chr(10), " "),
-                row["变更状态"],
-                str(row["调整值"]),
-                str(row["要素数量"]),
-            ]
-            f.write("| " + " | ".join(vals) + " |\n")
-            try:
-                total += float(row["调整值"]) * float(row["要素数量"])
-            except (ValueError, TypeError):
-                pass
+    total = _write_fpa_rows_md(fpa_rows, output_md_path)
 
     logger.info(f"FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
 
     if summary_md_path:
-        os.makedirs(os.path.dirname(summary_md_path) or '.', exist_ok=True)
-        with open(summary_md_path, 'w', encoding='utf-8') as f:
-            f.write("# FPA 工作量\n\n")
-            f.write(f"FPA工作量（人/天）: {total}\n")
+        write_fpa_summary_md(summary_md_path, total)
         logger.info(f"第1.2步：FPA工作量已写入: {summary_md_path} ({total})")
 
     return output_md_path
 
 
-def ai_fill_fpa_md(
-    fpa_md_path: str,
+def plan_fpa_md_from_tree(
+    tree_md_path: str,
+    meta_md_path: str,
+    output_md_path: str,
     template_path: str = "",
     api_key: str = "",
     model: str = "",
     base_url: str = "",
+    summary_md_path: str = "",
+    profile_name: str = "",
 ) -> str:
-    """读取 FPA 模板 MD，AI 填充 F/G 列，写回 MD。"""
-    logger.info("第1.3步：AI 填充 FPA 数据...")
-    logger.debug(f"MODEL: {model}  BASE URL: {base_url or '默认'}  API Key: {'已设置' if api_key else '未设置'}")
-
-    judgement_rules: list[str] = []
-    if template_path:
-        try:
-            wb = openpyxl.load_workbook(template_path)
-            from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
-            _appendix_sheet = _get_system_config_value('fpa_appendix_sheet', '附录1-FPA评估方法说明')
-            ws = wb[_appendix_sheet]
-            for row_num in range(2, 15):
-                val = ws.cell(row_num, 3).value
-                if val and str(val).strip():
-                    judgement_rules.append(str(val).strip())
-            wb.close()
-            if judgement_rules:
-                logger.debug(f"从模板附录读取判定原则 {len(judgement_rules)} 条")
-        except Exception as e:
-            logger.warning(f"从模板附录读取判定原则失败: {e}")
+    """以三级模块为单位 AI 规划 FPA 行，并写入 MD。"""
+    logger.info("第1.3步：AI 规划 FPA 数据...")
+    meta = parse_meta_md(meta_md_path)
+    rows = parse_module_tree_md(tree_md_path)
+    profile = get_fpa_profile(profile_name)
+    judgement_rules = _read_fpa_judgement_rules(template_path)
     if not judgement_rules:
-        logger.warning("未配置「计算依据归类判定原则」，AI 输出的归类将原样保留")
+        logger.warning("未配置「计算依据归类判定原则」，AI 输出的归类将无法按模板 index 映射")
+    cache_path = os.path.join(os.path.dirname(output_md_path) or ".", "fpa_ai_cache.json") if api_key else ""
+    fpa_rows = _plan_fpa_rows_with_ai(
+        rows,
+        meta,
+        judgement_rules,
+        api_key,
+        model,
+        base_url,
+        cache_path=cache_path,
+        profile=profile,
+    )
+    total = _write_fpa_rows_md(fpa_rows, output_md_path, ai_filled=bool(api_key))
+    if summary_md_path:
+        write_fpa_summary_md(summary_md_path, total)
+        logger.info("第1.2步：FPA工作量已更新: %s (%s)", summary_md_path, total)
+    logger.info("FPA 规划 MD 已生成: %s (%d 行)", output_md_path, len(fpa_rows))
+    return output_md_path
 
-    fpa_rows = []
-    with open(fpa_md_path, encoding='utf-8') as f:
-        in_table = False
-        for line in f:
-            line = line.rstrip()
-            if "| 序号 | 子系统" in line:
-                in_table = True
-                continue
-            if "|------|" in line and in_table:
-                continue
-            if in_table:
-                cells = parse_md_table_row(line, min_cols=10)
-                if cells is not None:
-                    fpa_rows.append({
-                        "序号": cells[0],
-                        "子系统(模块)": cells[1],
-                        "资产标识": cells[2],
-                        "新增/修改功能点": cells[3],
-                        "类型": cells[4],
-                        "计算依据归类": cells[5],
-                        "计算依据说明": cells[6],
-                        "变更状态": cells[7],
-                        "调整值": cells[8],
-                        "要素数量": cells[9],
-                    })
 
-    fpa_rows = _ai_fill_fpa(fpa_rows, judgement_rules, api_key, model, base_url)
+def preview_fpa_module(
+    *,
+    file_path: str,
+    module_name: str = "",
+    module_index: int | None = None,
+    api_key: str = "",
+    model: str = "",
+    base_url: str = "",
+    template_path: str = "",
+    work_dir: str = "",
+    profile_name: str = "",
+) -> dict[str, object]:
+    """预览单个三级模块的 FPA 规划结果，不生成正式 Excel。"""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
+    profile = get_fpa_profile(profile_name)
+    temp_ctx = None
+    if work_dir:
+        md_dir = os.path.join(work_dir, "fpa-preview-md")
+        os.makedirs(md_dir, exist_ok=True)
+    else:
+        temp_ctx = tempfile.TemporaryDirectory(prefix="ard-fpa-preview-")
+        md_dir = temp_ctx.name
+    try:
+        from ai_gen_reimbursement_docs.excel_source import generate_md_files
 
-    with open(fpa_md_path, 'w', encoding='utf-8') as f:
-        f.write("# FPA 工作量评估\n\n")
-        f.write(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"**AI 填充**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        f.write("| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 |\n")
-        f.write("|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|\n")
-        for row in fpa_rows:
-            vals = [
-                str(row["序号"]),
-                row["子系统(模块)"],
-                row["资产标识"],
-                row["新增/修改功能点"].replace('|', '\\|'),
-                row["类型"],
-                row["计算依据归类"],
-                row["计算依据说明"].replace('|', '\\|').replace(chr(10), ' '),
-                row["变更状态"],
-                str(row["调整值"]),
-                str(row["要素数量"]),
-            ]
-            f.write("| " + " | ".join(vals) + " |\n")
+        generate_md_files(file_path, md_dir)
+        tree_md = os.path.join(md_dir, "0.1.gen-basedata-功能清单-模块树.md")
+        meta_md = os.path.join(md_dir, "0.2.gen-basedata-录入文档元数据-模板.md")
+        rows = parse_module_tree_md(tree_md)
+        meta = parse_meta_md(meta_md) if os.path.exists(meta_md) else {}
+        groups = _group_rows_by_l3(rows)
 
-    logger.info(f"FPA MD 已填充: {fpa_md_path}")
-    return fpa_md_path
+        matches: list[tuple[int, dict[str, object]]] = []
+        for idx, group in enumerate(groups, 1):
+            if module_index is not None and idx == module_index:
+                matches.append((idx, group))
+            elif module_index is None and module_name and str(group.get("l3", "")) == module_name:
+                matches.append((idx, group))
+        if module_index is None and not module_name:
+            raise ValueError("请指定 module_name 或 module_index")
+        if not matches:
+            raise ValueError(f"未找到三级模块: {module_name or module_index}")
+        if module_index is None and len(matches) > 1:
+            indexes = [idx for idx, _ in matches]
+            raise ValueError(f"存在多个同名三级模块「{module_name}」，请用 module_index 指定: {indexes}")
+
+        idx, group = matches[0]
+        judgement_rules = _read_fpa_judgement_rules(template_path)
+        warnings: list[str] = []
+        used_ai = bool(api_key)
+        try:
+            if api_key:
+                raw_rows = _ai_plan_fpa_rows_for_l3(
+                    group, judgement_rules, _build_domain_context(meta), api_key, model, base_url,
+                    profile=profile,
+                )
+                fpa_rows, warnings = _normalize_ai_fpa_rows_for_l3(
+                    group=group,
+                    meta=meta,
+                    ai_rows=raw_rows,
+                    judgement_rules=judgement_rules,
+                    start_seq=1,
+                    profile=profile,
+                )
+                if not fpa_rows:
+                    raise ValueError("AI 规划未生成有效 FPA 行")
+            else:
+                used_ai = False
+                fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+        except Exception as exc:
+            used_ai = False
+            warnings.append(f"AI 调用或解析失败，已使用兜底生成: {exc}")
+            logger.warning("FPA 预览 AI 失败 [%s]: %s", _group_tag(group), exc)
+            fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+
+        def _row_to_preview(row: dict[str, object]) -> dict[str, object]:
+            basis = str(row.get("计算依据归类", ""))
+            basis_index = judgement_rules.index(basis) + 1 if basis in judgement_rules else None
+            return {
+                "name": row.get("新增/修改功能点", ""),
+                "type": row.get("类型", ""),
+                "type_reason": row.get("类型理由", ""),
+                "classification_basis": basis,
+                "classification_basis_index": basis_index,
+                "explanation": row.get("计算依据说明", ""),
+                "source_processes": [
+                    x for x in str(row.get("源功能过程", "")).split("、") if x
+                ],
+                "generation": row.get("生成方式", "ai" if used_ai else "fallback"),
+            }
+
+        processes = group.get("processes", [])
+        process_count = len(processes) if isinstance(processes, list) else 0
+        return {
+            "module": {
+                "index": idx,
+                "client_type": group.get("client_type", ""),
+                "l1": group.get("l1", ""),
+                "l2": group.get("l2", ""),
+                "l3": group.get("l3", ""),
+                "process_count": process_count,
+            },
+            "rows": [_row_to_preview(row) for row in fpa_rows],
+            "warnings": warnings,
+            "used_ai": used_ai,
+            "profile": profile.name,
+            "profile_version": profile.version,
+        }
+    finally:
+        if temp_ctx is not None:
+            temp_ctx.cleanup()
 
 
 def _format_fpa_explanation(text: str) -> str:
@@ -441,7 +772,7 @@ def generate_fpa_xlsx_from_md(
             if "|------|" in line and in_table:
                 continue
             if in_table:
-                cells = parse_md_table_row(line, min_cols=10)
+                cells = parse_md_table_row(line, min_cols=14)
                 if cells is not None:
                     fpa_rows.append({
                         "序号": cells[0],

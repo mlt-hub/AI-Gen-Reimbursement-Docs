@@ -108,6 +108,7 @@ def execute_mode(
     base_url: str,
     project_name: str = "",
     max_tokens: str = "",
+    fpa_profile: str = "",
     clean: bool = False,
     *,
     mode_info: dict[str, dict[str, str]],
@@ -143,6 +144,7 @@ def execute_mode(
         base_url=base_url,
         project_name=project_name,
         templates=templates or None,
+        fpa_profile=fpa_profile,
         callbacks=callbacks,
     )
 
@@ -158,6 +160,7 @@ def execute_in_session(
     base_url: str,
     project_name: str,
     max_tokens: str,
+    fpa_profile: str,
     clean: bool,
     mode: str,
     *,
@@ -184,6 +187,7 @@ def execute_in_session(
             base_url,
             project_name,
             max_tokens=max_tokens,
+            fpa_profile=fpa_profile,
             clean=clean,
             mode_info=mode_info,
             mode_map=mode_map,

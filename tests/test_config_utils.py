@@ -11,6 +11,8 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_cfp_formula,
     load_cosmic_warn_marker,
     load_fpa_reduced_use_workload,
+    load_fpa_profile,
+    load_fpa_external_data_rules,
     load_model_name,
     _read_env_value,
 )
@@ -118,6 +120,69 @@ class TestBooleanLoaders:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=Path("/nonexistent")):
             assert load_fpa_reduced_use_workload() is False
+
+
+class TestLoadFpaProfile:
+    def test_default_profile(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            assert load_fpa_profile() == "current_project"
+
+    def test_configured_profile(self, tmp_path):
+        yaml_file = tmp_path / "system_config.yaml"
+        yaml_file.write_text("fpa_profile: strict_fpa\n", encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_profile() == "strict_fpa"
+
+
+class TestLoadFpaExternalDataRules:
+    def test_default_rules_empty_when_not_configured(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            assert load_fpa_external_data_rules() == []
+
+    def test_configured_rules_are_normalized(self, tmp_path):
+        yaml_file = tmp_path / "system_config.yaml"
+        yaml_file.write_text(
+            """
+fpa_external_data_rules:
+  - source_aliases: ["统一认证平台", "统一认证"]
+    data_name: "统一认证账号"
+    data_nouns: ["账号", "账户"]
+  - source_aliases: "供应商平台"
+    data_name: "供应商档案"
+    data_nouns: "供应商"
+""",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_external_data_rules() == [
+                {
+                    "source_aliases": ["统一认证平台", "统一认证"],
+                    "data_name": "统一认证账号",
+                    "data_nouns": ["账号", "账户"],
+                },
+                {
+                    "source_aliases": ["供应商平台"],
+                    "data_name": "供应商档案",
+                    "data_nouns": ["供应商"],
+                },
+            ]
+
+    def test_invalid_rules_are_ignored(self, tmp_path):
+        yaml_file = tmp_path / "system_config.yaml"
+        yaml_file.write_text(
+            """
+fpa_external_data_rules:
+  - source_aliases: []
+    data_name: "空来源"
+  - source_aliases: ["缺名称"]
+  - "not a dict"
+""",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_external_data_rules() == []
 
 
 class TestLoadModelName:

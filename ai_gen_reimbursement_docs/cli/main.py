@@ -467,6 +467,14 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='输出文件夹名称')
     parser.add_argument('--fpa-out-template', default='',
                         help='FPA 输出模板路径')
+    parser.add_argument('--fpa-profile', default='',
+                        help='FPA 规划口径（默认读取 system_config.yaml）')
+    parser.add_argument('--preview-fpa-module', default='',
+                        help='只预览指定三级模块的 FPA 拆分结果，不生成 Excel')
+    parser.add_argument('--preview-fpa-module-index', type=int, default=None,
+                        help='按序号预览三级模块 FPA 拆分结果，用于同名三级模块')
+    parser.add_argument('--preview-fpa-json', action='store_true',
+                        help='FPA 预览以 JSON 输出')
     parser.add_argument('--cosmic-out-template', default='',
                         help='COSMIC 输出模板路径')
     parser.add_argument('--list-out-template', default='',
@@ -712,6 +720,52 @@ def main():
 
     from ai_gen_reimbursement_docs.config_utils import load_max_tokens
     logger.info(f"配置: MAX_TOKENS={load_max_tokens()}")
+
+    if args.preview_fpa_module or args.preview_fpa_module_index is not None:
+        excel_path = args.from_excel
+        if not excel_path:
+            logger.error("FPA 预览需要指定 --from-excel")
+            return
+        if args.from_dir and not os.path.isabs(excel_path):
+            excel_path = os.path.join(os.path.abspath(args.from_dir), excel_path)
+        if not os.path.exists(excel_path):
+            logger.error(f"文件不存在: {excel_path}")
+            return
+        template_path = args.fpa_out_template if args.fpa_out_template and os.path.exists(args.fpa_out_template) else ""
+        if not template_path:
+            from ai_gen_reimbursement_docs.pipeline import _resolve_templates
+            template_path = _resolve_templates(excel_path, None).get("fpa", "")
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_profile
+        from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module
+        result = preview_fpa_module(
+            file_path=excel_path,
+            module_name=args.preview_fpa_module,
+            module_index=args.preview_fpa_module_index,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            template_path=template_path,
+            profile_name=args.fpa_profile or load_fpa_profile(),
+        )
+        if args.preview_fpa_json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return
+        module = result["module"]
+        print(f"三级模块：{module['l3']}")
+        print(f"功能过程数：{module['process_count']}")
+        print()
+        print("序号  类型  功能点名称                         归类")
+        for i, row in enumerate(result["rows"], 1):
+            print(f"{i:<5} {row['type']:<5} {row['name']:<32} {row.get('classification_basis') or '-'}")
+        if result.get("warnings"):
+            print("\nWarnings:")
+            for item in result["warnings"]:
+                print(f"- {item}")
+        print("\n说明：")
+        for i, row in enumerate(result["rows"], 1):
+            print(f"[{i}] {row['name']}")
+            print(row.get("explanation", ""))
+        return
 
     # ── 测试：调整因子中的可靠性描述 AI 生成 ──
     if args.test_ai_gen_reliability_desc:
@@ -969,6 +1023,7 @@ def main():
                 base_url=base_url,
                 project_name=args.project_name,
                 templates=templates or None,
+                fpa_profile=args.fpa_profile,
             )
         except KeyboardInterrupt:
             _record_cli_history(

@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+import openpyxl
 import pytest
 from ai_gen_reimbursement_docs.pipeline import run_pipeline, PipelineResult
 
@@ -81,6 +82,29 @@ class TestGenFpa:
                              output_dir=output_dir, templates=TEMPLATES,
                              api_key="sk-test")
         assert result.fpa_reduced > 0  # 从 MD 文件读取
+
+    def test_fpa_summary_is_calculated_while_excel_preserves_formula(self, output_dir, test_excel, mock_ai):
+        result = run_pipeline(mode="gen-fpa", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        wb = openpyxl.load_workbook(result.fpa_xlsx, data_only=False)
+        ws = wb["FPA功能点估算"]
+        excel_total_formula = ws.cell(1, 12).value
+        wb.close()
+
+        assert result.fpa_reduced > 0
+        assert excel_total_formula.startswith("=SUM(L3:L")
+
+    def test_rejects_unknown_profile(self, output_dir, test_excel):
+        with pytest.raises(ValueError, match="未知 FPA profile"):
+            run_pipeline(
+                mode="gen-fpa",
+                file_path=test_excel,
+                output_dir=output_dir,
+                templates=TEMPLATES,
+                fpa_profile="unknown_profile",
+            )
 
 
 class TestGenCosmic:

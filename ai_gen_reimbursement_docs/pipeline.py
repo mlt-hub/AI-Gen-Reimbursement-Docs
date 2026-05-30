@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from ai_gen_reimbursement_docs.config_utils import (
     load_enable_ai_fill_meta,
+    load_fpa_profile,
     load_spec_remind_update_toc, load_spec_auto_update_toc,
     load_out_templates,
 )
@@ -23,7 +24,7 @@ from ai_gen_reimbursement_docs.gen_spec import (
     generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md, parse_meta_md
 )
 from ai_gen_reimbursement_docs.gen_fpa import (
-    generate_fpa_xlsx_from_md, init_fpa_template_md, ai_fill_fpa_md,
+    generate_fpa_xlsx_from_md, init_fpa_template_md, plan_fpa_md_from_tree,
 )
 from ai_gen_reimbursement_docs.gen_list import generate_list_xlsx_from_md
 from ai_gen_reimbursement_docs.gen_cosmic import (
@@ -112,6 +113,7 @@ def run_pipeline(
     templates: dict[str, str] | None = None,
     fpa_reduced: float | None = None,
     cfp_total: float | None = None,
+    fpa_profile: str = "",
     callbacks: PipelineCallbacks | None = None,
 ) -> PipelineResult:
     """from-excel 管道总入口。
@@ -145,6 +147,7 @@ def run_pipeline(
                 templates=templates,
                 fpa_reduced=fpa_reduced,
                 cfp_total=cfp_total,
+                fpa_profile=fpa_profile,
             )
         finally:
             callbacks_var.reset(token)
@@ -227,6 +230,7 @@ def run_pipeline(
             fpa_xlsx, cosmic_xlsx, require_xlsx, spec_docx,
             templates_dict, api_key, model, base_url, project_name, result,
             fpa_reduced, cfp_total,
+            fpa_profile,
         )
     elif mode == "gen-basedata":
         result.tree_md = tree_md
@@ -235,7 +239,7 @@ def run_pipeline(
         meta_md = _current_meta
         result = _generate_fpa(
             file_path, output_dir, md_dir, tree_md, meta_md, fpa_sum_md, fpa_xlsx,
-            templates_dict, api_key, model, base_url, result
+            templates_dict, api_key, model, base_url, result, fpa_profile
         )
     elif mode == "gen-cosmic":
         meta_md = _current_meta
@@ -448,7 +452,8 @@ def _check_template(templates_dict: dict, key: str, name: str):
 
 
 def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
-             fpa_sum_md, fpa_xlsx, templates_dict, api_key, model, base_url, result):
+             fpa_sum_md, fpa_xlsx, templates_dict, api_key, model, base_url, result,
+             fpa_profile=""):
     """第1步：FPA 工作量评估。"""
     _check_cancelled()
     _step("fpa")
@@ -457,12 +462,23 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
 
     fpa_md = os.path.join(md_dir, '1.1.gen-fpa-FPA-模板.md')
     fpa_filled_md = os.path.join(md_dir, '1.3.gen-fpa-AI填充-FPA.md')
-    init_fpa_template_md(tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md)
+    profile_name = fpa_profile or load_fpa_profile()
+    init_fpa_template_md(
+        tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md, profile_name=profile_name
+    )
 
-    if api_key:        
-        shutil.copy2(fpa_md, fpa_filled_md)
-        ai_fill_fpa_md(fpa_filled_md, template_path=fpa_src,
-                       api_key=api_key, model=model, base_url=base_url)
+    if api_key:
+        plan_fpa_md_from_tree(
+            tree_md,
+            meta_md,
+            fpa_filled_md,
+            template_path=fpa_src,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            summary_md_path=fpa_sum_md,
+            profile_name=profile_name,
+        )
     else:
         fpa_filled_md = fpa_md
 
@@ -595,7 +611,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
              tree_md, meta_md_tpl, meta_filled_md, fpa_sum_md,
              fpa_xlsx, cosmic_xlsx, require_xlsx, spec_docx,
              templates_dict, api_key, model, base_url, project_name, result,
-             fpa_reduced=None, cfp_total=None):
+             fpa_reduced=None, cfp_total=None, fpa_profile=""):
     """全流程：basedata → fpa → spec → cosmic → list（委托独立函数按依赖顺序编排）。"""
 
     # 入口检查所有模板（提前发现模板缺失）
@@ -610,7 +626,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     # Step 1: FPA
     result = _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
                            fpa_sum_md, fpa_xlsx, templates_dict, api_key, model,
-                           base_url, result)
+                           base_url, result, fpa_profile)
 
     # Step 2: SPEC
     result = _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl,
@@ -694,6 +710,7 @@ def run_pipeline_simple(
     base_url: str = "",
     project_name: str = "",
     templates: dict | None = None,
+    fpa_profile: str = "",
     callbacks: PipelineCallbacks | None = None,
 ) -> PipelineResult:
     """一站式管道入口，CLI / Web UI / 零参数 共享。
@@ -743,5 +760,6 @@ def run_pipeline_simple(
         base_url=base_url,
         project_name=project_name,
         templates=templates,
+        fpa_profile=fpa_profile or load_fpa_profile(),
         callbacks=callbacks,
     )

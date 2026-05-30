@@ -1,10 +1,19 @@
 """gen_xlsx 核心逻辑测试 —— FPA 行构建、接收者判定、说明格式化。"""
+from pathlib import Path
+
 import pytest
+import openpyxl
 from ai_gen_reimbursement_docs.gen_fpa import (
     _build_fpa_rule_rows,
     _receiver_from_client_type,
     _format_fpa_explanation,
+    calculate_fpa_row_workload,
+    calculate_fpa_total,
+    generate_fpa_xlsx_from_md,
 )
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class TestReceiverFromClientType:
@@ -55,16 +64,18 @@ class TestBuildFpaRuleRows:
             "功能过程描述": "用户通过表单注册新账户",
         }
 
-    def test_generates_two_rows_per_function(self):
-        """每个功能过程生成 2 行：界面(EI) + 接口(ILF)。"""
-        rows = [self._make_row()]
+    def test_generates_l3_ui_and_logic_rows(self):
+        """三级模块生成 1 条合并界面行 + 每个功能过程 1 条逻辑行。"""
+        rows = [self._make_row(proc="添加用户"), self._make_row(proc="查询用户")]
         meta = self._make_meta()
         result = _build_fpa_rule_rows(rows, meta)
-        assert len(result) == 2
+        assert len(result) == 3
         assert result[0]["类型"] == "EI"
         assert result[0]["新增/修改功能点"].endswith("-界面开发")
         assert result[1]["类型"] == "ILF"
-        assert result[1]["新增/修改功能点"].endswith("-接口开发")
+        assert result[1]["新增/修改功能点"].endswith("-逻辑处理开发")
+        assert result[2]["类型"] == "EQ"
+        assert result[2]["新增/修改功能点"].endswith("-查询处理开发")
 
     def test_prefix_generation(self):
         """验证功能点前缀替换正确。"""
@@ -74,7 +85,7 @@ class TestBuildFpaRuleRows:
         result = _build_fpa_rule_rows(rows, meta)
         prefix_ui = result[0]["新增/修改功能点"]
         assert "【普通】" in prefix_ui
-        assert "业务模块-订单模块-创建订单-提交订单" in prefix_ui
+        assert "业务模块-订单模块-创建订单" in prefix_ui
 
     def test_sequential_numbering(self):
         """验证序号连续递增。"""
@@ -82,9 +93,9 @@ class TestBuildFpaRuleRows:
                 self._make_row(proc="p3")]
         meta = self._make_meta()
         result = _build_fpa_rule_rows(rows, meta)
-        assert len(result) == 6  # 3 功能 × 2 行
+        assert len(result) == 4  # 1 条三级模块界面 + 3 条逻辑行
         seqs = [r["序号"] for r in result]
-        assert seqs == [1, 2, 3, 4, 5, 6]
+        assert seqs == [1, 2, 3, 4]
 
     def test_empty_rows(self):
         """空输入返回空列表。"""
@@ -104,7 +115,7 @@ class TestBuildFpaRuleRows:
         result = _build_fpa_rule_rows(rows, self._make_meta())
         g_val = result[0]["计算依据说明"]
         assert "界面开发" in g_val
-        assert "具体如下" in g_val
+        assert "具体为以下" in g_val
 
     def test_adjustment_values(self):
         """界面行调整值=2，接口行调整值=1。"""
@@ -120,6 +131,45 @@ class TestBuildFpaRuleRows:
         result = _build_fpa_rule_rows(rows, meta)
         assert result[0]["子系统(模块)"] == "和乐业"
         assert result[0]["资产标识"] == "YXGJ-01"
+
+
+class TestFpaTotalCalculation:
+    def test_calculates_total_from_adjust_and_elements(self):
+        rows = [
+            {"调整值": 2, "要素数量": 3},
+            {"调整值": "1.5", "要素数量": "2"},
+            {"调整值": "", "要素数量": 9},
+        ]
+
+        assert calculate_fpa_row_workload(rows[0]) == 6
+        assert calculate_fpa_total(rows) == 9
+
+    def test_generate_xlsx_preserves_workload_formulas(self, tmp_path):
+        template = FIXTURES / "output_templates" / "FPA工作量评估-输出模板.xlsx"
+        if not template.exists():
+            pytest.skip(f"模板文件缺失: {template}")
+
+        fpa_md = tmp_path / "fpa.md"
+        meta_md = tmp_path / "meta.md"
+        output = tmp_path / "FPA工作量评估.xlsx"
+        fpa_md.write_text(
+            "# FPA 工作量评估\n\n"
+            "| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |\n"
+            "|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|\n"
+            "| 1 | 测试系统 | TEST | 界面开发 | EI | 规则一 | 说明 | 新增 | 2 | 3 | fallback | - | - |  |\n"
+            "| 2 | 测试系统 | TEST | 查询 | EQ | 规则二 | 说明 | 新增 | 1 | 2 | fallback | - | - |  |\n",
+            encoding="utf-8",
+        )
+        meta_md.write_text("# 元数据\n", encoding="utf-8")
+
+        generate_fpa_xlsx_from_md(str(fpa_md), str(meta_md), str(template), str(output))
+
+        wb = openpyxl.load_workbook(output, data_only=False)
+        ws = wb["FPA功能点估算"]
+        assert ws.cell(3, 12).value == "=J3*K3"
+        assert ws.cell(4, 12).value == "=J4*K4"
+        assert ws.cell(1, 12).value == "=SUM(L3:L4)"
+        wb.close()
 
 
 class TestFormatFpaExplanation:

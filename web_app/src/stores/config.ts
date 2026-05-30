@@ -36,6 +36,7 @@ export interface UserSettings {
   baseUrl: string
   maxTokens: string
   projectName: string
+  fpaProfile: string
   pipelineMode: PipelineMode
   clean: boolean
 }
@@ -51,6 +52,7 @@ export const useConfigStore = defineStore('config', () => {
   const baseUrl = ref(loadStr('baseUrl', ''))
   const maxTokens = ref(loadStr('maxTokens', ''))
   const projectName = ref(loadStr('projectName', ''))
+  const fpaProfile = ref(loadStr('fpaProfile', 'current_project'))
   const clean = ref(loadBool('clean', false))
   const selectedFile = ref<File | null>(null)
 
@@ -60,6 +62,7 @@ export const useConfigStore = defineStore('config', () => {
   watch(baseUrl, v => saveStr('baseUrl', v))
   watch(maxTokens, v => saveStr('maxTokens', v))
   watch(projectName, v => saveStr('projectName', v))
+  watch(fpaProfile, v => saveStr('fpaProfile', v))
   watch(pipelineMode, v => saveStr('pipelineMode', v))
   watch(clean, v => saveBool('clean', v))
 
@@ -76,6 +79,7 @@ export const useConfigStore = defineStore('config', () => {
     baseUrl.value = ''
     maxTokens.value = ''
     projectName.value = ''
+    fpaProfile.value = 'current_project'
     clean.value = false
     selectedFile.value = null
   }
@@ -88,6 +92,7 @@ export const useConfigStore = defineStore('config', () => {
       baseUrl: baseUrl.value,
       maxTokens: maxTokens.value,
       projectName: projectName.value,
+      fpaProfile: fpaProfile.value,
       pipelineMode: pipelineMode.value,
       clean: clean.value,
     }
@@ -103,6 +108,7 @@ export const useConfigStore = defineStore('config', () => {
       if (data.baseUrl !== undefined) baseUrl.value = data.baseUrl
       if (data.maxTokens !== undefined) maxTokens.value = data.maxTokens
       if (data.projectName !== undefined) projectName.value = data.projectName
+      if (data.fpaProfile !== undefined) fpaProfile.value = data.fpaProfile
       if (data.pipelineMode !== undefined) pipelineMode.value = data.pipelineMode
       if (data.clean !== undefined) clean.value = data.clean
       return true
@@ -112,6 +118,6 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   return { workMode, backendStatus, pipelineMode, xlsxPath, outputDir, apiKey, model, baseUrl,
-           maxTokens, projectName, clean, selectedFile, isValid, reset,
+           maxTokens, projectName, fpaProfile, clean, selectedFile, isValid, reset,
            exportSettings, importSettings }
 })

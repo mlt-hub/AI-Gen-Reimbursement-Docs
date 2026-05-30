@@ -280,6 +280,7 @@ async function startTask() {
   if (config.baseUrl) body.append('base_url', config.baseUrl)
   if (config.maxTokens) body.append('max_tokens', config.maxTokens)
   if (config.projectName) body.append('project_name', config.projectName)
+  if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
   if (config.clean) body.append('clean', '1')
 
   let url: string

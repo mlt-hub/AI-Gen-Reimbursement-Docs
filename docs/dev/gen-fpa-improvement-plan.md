@@ -1478,47 +1478,107 @@ explanation 能对应输入功能过程，不编造不存在的业务。
 
 ## 第二阶段：汇总值一致性
 
-### 问题
+### 已确认方向
 
-当前 `1.2.gen-fpa-FPA工作量-总和.md` 在 Excel 生成前写入，可能与最终 Excel 公式计算结果不一致。
-
-### 方案
-
-在 `generate_fpa_xlsx_from_md()` 保存 Excel 后，增加一个可选返回值或独立函数重新计算汇总。
-
-可选实现：
-
-```python
-def write_fpa_summary_from_xlsx(fpa_xlsx_path: str, summary_md_path: str) -> float:
-    total = read_fpa_xlsx_sum(fpa_xlsx_path)
-    with open(summary_md_path, "w", encoding="utf-8") as f:
-        f.write("# FPA 工作量\n\n")
-        f.write(f"FPA工作量（人/天）: {total}\n")
-    return total
-```
-
-然后在 `_generate_fpa()` 中：
-
-```python
-fpa_xlsx = generate_fpa_xlsx_from_md(...)
-result.fpa_reduced = write_fpa_summary_from_xlsx(fpa_xlsx, fpa_sum_md)
-```
-
-注意：
-
-- `openpyxl` 不会计算公式。
-- 如果 Excel 中 L 列是公式，直接读取保存后的文件可能读不到公式结果。
-- 当前项目已有 `read_fpa_xlsx_sum()`，但它依赖 `data_only=True`，对新写公式文件可能不可靠。
-
-因此更稳妥的第一步是根据同一套公式输入在 Python 内计算汇总，或者继续使用当前规则汇总，并在文档中明确其含义是“送审工作量初始估算值”。
-
-建议第二阶段先做需求确认：
+第二阶段不把“Excel 公式自动计算”作为默认依赖。默认方案应把 FPA 汇总口径代码化：
 
 ```text
-FPA工作量总和应以“规则调整值×要素数量”为准，还是以 Excel 最终公式计算值为准？
+同一套 Python 业务计算规则
+  -> 得出 FPA 工作量总和
+  -> 写入 1.2.gen-fpa-FPA工作量-总和.md
+  -> 供 pipeline 后续步骤稳定使用
 ```
 
-如果以 Excel 公式为准，需要设计公式求值方案。
+核心目标是：
+
+```text
+MD 汇总值、pipeline result.fpa_reduced、后续 COSMIC/List 使用值来自同一套代码计算规则。
+FPA Excel 保留模板原有逐行公式和汇总公式，不用静态数值覆盖。
+```
+
+### 问题
+
+当前 `1.2.gen-fpa-FPA工作量-总和.md` 在 Excel 生成前写入，汇总来自 MD 行的 `调整值 × 要素数量`。
+
+最终 Excel 模板中可能存在自己的公式、基准值映射、工作量公式、隐藏列或汇总单元格，因此会产生风险：
+
+```text
+MD 汇总值 != Excel 最终显示值
+pipeline 传给后续步骤的 fpa_reduced != 用户在 Excel 中看到的值
+```
+
+### 不推荐默认依赖 Excel 公式引擎
+
+`openpyxl` 不会重新计算公式，只会读取公式或已有缓存值。
+
+如果不用 `openpyxl` 计算公式，也可以选择：
+
+```text
+Excel COM：最接近 Microsoft Excel 实际显示，但依赖 Windows + Office。
+LibreOffice headless：可服务器化，但和 Excel 公式兼容性不是 100%。
+第三方公式计算库：无 Office 依赖，但 Excel 函数兼容范围有限。
+```
+
+这些方案适合作为“校验模式”或“可选复算模式”，不适合作为默认主流程依赖。
+
+### 推荐默认方案
+
+第二阶段默认实现应为：
+
+```text
+1. 明确 FPA 行级工作量计算口径。
+2. 在代码中实现 calculate_fpa_total(rows, profile)。
+3. MD 汇总和 pipeline result 使用 calculate_fpa_total 的结果。
+4. Excel 模板中的逐行工作量公式和汇总公式继续保留。
+5. 测试中断言 MD 汇总值与 result.fpa_reduced 一致，并断言 Excel 公式未被静态数值覆盖。
+```
+
+建议函数形态：
+
+```python
+def calculate_fpa_row_workload(row: dict[str, object]) -> float:
+    return float(row.get("调整值", 0)) * float(row.get("要素数量", 0))
+
+
+def calculate_fpa_total(rows: list[dict[str, object]]) -> float:
+    return sum(calculate_fpa_row_workload(row) for row in rows)
+```
+
+如果后续确认 Excel 模板实际公式不是 `调整值 × 要素数量`，则应把模板公式背后的业务规则翻译成 Python 规则，而不是依赖 Excel 引擎隐式计算。
+
+### 可选校验模式
+
+可后续增加可选配置：
+
+```yaml
+fpa_excel_recalc_check: none
+```
+
+可选值：
+
+```text
+none：默认，不调用外部 Excel 引擎。
+excel_com：Windows + Microsoft Excel 环境下打开、重算、保存后读取结果。
+libreoffice：使用 soffice --headless 重算后读取结果。
+```
+
+校验模式只做对比和 warning：
+
+```text
+代码计算汇总值 != Excel/LibreOffice 复算值
+  -> 记录 warning
+  -> 不默认覆盖主流程结果
+```
+
+### 第二阶段验收标准
+
+```text
+gen-fpa 后，1.2.gen-fpa-FPA工作量-总和.md 与 result.fpa_reduced 一致。
+生成的 FPA Excel 仍保留逐行工作量公式和汇总公式。
+gen-all 后续 COSMIC/List 使用的 FPA 值来自代码汇总。
+current_project 与 strict_fpa 都通过一致性测试。
+不要求本机安装 Excel 或 LibreOffice 才能跑通默认流程。
+```
 
 ## 第三阶段：类型判断规则精细化
 
@@ -1919,10 +1979,11 @@ POST /api/fpa/preview-module 返回 rows。
 
 ### 第二阶段实施项
 
-1. 明确 FPA 汇总口径。
-2. 如果继续使用规则汇总，重命名或注释说明其含义。
-3. 如果使用 Excel 最终值，设计公式求值方案。
-4. 增加汇总一致性测试。
+1. 实现代码化 FPA 汇总规则，例如 `calculate_fpa_total(rows, profile)`。
+2. 让 MD 汇总和 pipeline result 使用同一代码计算结果。
+3. 保留 Excel 模板逐行公式和汇总公式，不把 Excel 公式引擎作为默认依赖。
+4. 增加汇总一致性测试，覆盖 current_project 和 strict_fpa。
+5. 可选增加 Excel COM / LibreOffice 复算校验模式，只记录 warning。
 
 ### 第三阶段实施项
 
@@ -2000,8 +2061,19 @@ row_tag
 
 ## 推荐推进顺序
 
-建议先推进第一阶段。这个阶段会改变 FPA 行生成策略，但这是必要改动，因为旧的“每个功能过程固定拆界面和接口”会系统性放大界面工作量。
+第一阶段已经完成基础版：`gen-fpa` 已改为三级模块整体规划，支持 current_project / strict_fpa 两套 profile。
 
-第二阶段涉及 FPA 汇总口径，建议先确认业务含义再动。
+第二阶段已经完成基础版：默认采用代码化业务计算规则，Excel 继续保留模板公式，Excel/LibreOffice 复算只作为可选校验。
 
-第三阶段属于类型判断规则精细化，应在“AI 判断 + 代码校验 + 关键词兜底”版本稳定后再做。
+后续增强事项当前暂缓推进。完整任务池和恢复推进指令统一记录在：
+
+```text
+docs/dev/gen-fpa-implementation-notes.md
+```
+
+对应章节：
+
+```text
+暂缓推进任务池
+后续恢复指令
+```

@@ -27,6 +27,13 @@
         <input id="project-name" type="text" v-model="config.projectName" placeholder="自动从 xlsx 读取"
           class="field-control" />
       </div>
+      <div>
+        <label for="fpa-profile" class="field-label text-xs">FPA 方案</label>
+        <select id="fpa-profile" v-model="config.fpaProfile" class="field-control">
+          <option value="current_project">当前报账模板口径</option>
+          <option value="strict_fpa">严格 FPA 口径</option>
+        </select>
+      </div>
       <div class="flex items-end pb-2">
         <label class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)]">
           <input type="checkbox" v-model="config.clean" class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]" />

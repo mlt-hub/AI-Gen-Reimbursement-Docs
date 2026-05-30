@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
+from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module
 from web_app.dependencies import require_auth, require_local
 from web_app.services.config_service import remote_session_retention_seconds
 from web_app.services import pipeline_runtime
@@ -59,6 +60,28 @@ def create_router(
     base_dir: Path,
 ) -> APIRouter:
     router = APIRouter()
+
+    def _resolve_local_xlsx_input(xlsx_path: str) -> Path:
+        xlsx_input = Path(xlsx_path)
+        if not xlsx_input.exists():
+            raise HTTPException(400, f"路径不存在: {xlsx_path}")
+        if not xlsx_input.is_dir():
+            return xlsx_input
+
+        import glob
+        from ai_gen_reimbursement_docs.excel_source import is_valid_input_xlsx
+
+        xlsx_files = [
+            f for f in glob.glob(os.path.join(str(xlsx_input), "*.xlsx"))
+            if is_valid_input_xlsx(f)
+        ]
+        if not xlsx_files:
+            raise HTTPException(400, f"目录中未找到符合规范的功能清单 .xlsx: {xlsx_path}")
+        preferred = [
+            f for f in xlsx_files
+            if os.path.basename(f) in ("功能清单-录入模板.xlsx", "功能清单.xlsx")
+        ]
+        return Path(preferred[0] if preferred else xlsx_files[0])
 
     @router.get("/api/sessions/{session_id}")
     async def get_session_status(
@@ -143,6 +166,7 @@ def create_router(
         base_url: str = Form(""),
         max_tokens: str = Form(""),
         project_name: str = Form(""),
+        fpa_profile: str = Form(""),
         clean: str = Form(""),
         fpa_template: UploadFile | None = File(None),
         cosmic_template: UploadFile | None = File(None),
@@ -154,29 +178,10 @@ def create_router(
         if mode not in mode_info:
             raise HTTPException(400, f"未知模式: {mode}")
 
-        xlsx_input = Path(xlsx_path)
-        if not xlsx_input.exists():
-            raise HTTPException(400, f"路径不存在: {xlsx_path}")
-
         from_dir = ""
-        if xlsx_input.is_dir():
-            from_dir = str(xlsx_input)
-            import glob
-            from ai_gen_reimbursement_docs.excel_source import is_valid_input_xlsx
-
-            xlsx_files = [
-                f for f in glob.glob(os.path.join(from_dir, "*.xlsx"))
-                if is_valid_input_xlsx(f)
-            ]
-            if not xlsx_files:
-                raise HTTPException(400, f"目录中未找到符合规范的功能清单 .xlsx: {xlsx_path}")
-            preferred = [
-                f for f in xlsx_files
-                if os.path.basename(f) in ("功能清单-录入模板.xlsx", "功能清单.xlsx")
-            ]
-            xlsx = Path(preferred[0] if preferred else xlsx_files[0])
-        else:
-            xlsx = xlsx_input
+        if Path(xlsx_path).is_dir():
+            from_dir = xlsx_path
+        xlsx = _resolve_local_xlsx_input(xlsx_path)
 
         import re
         from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
@@ -238,6 +243,7 @@ def create_router(
                 base_url,
                 project_name,
                 max_tokens,
+                fpa_profile,
                 bool(clean),
                 mode,
                 mode_info=mode_info,
@@ -257,6 +263,7 @@ def create_router(
         base_url: str = Form(""),
         max_tokens: str = Form(""),
         project_name: str = Form(""),
+        fpa_profile: str = Form(""),
         clean: str = Form(""),
         fpa_template: UploadFile | None = File(None),
         cosmic_template: UploadFile | None = File(None),
@@ -341,6 +348,7 @@ def create_router(
                 base_url,
                 project_name,
                 max_tokens,
+                fpa_profile,
                 bool(clean),
                 mode,
                 mode_info=mode_info,
@@ -351,5 +359,74 @@ def create_router(
 
         start_background_task(session_manager, session_id, run)
         return {"session_id": session_id, "has_download": True}
+
+    @router.post("/api/fpa/preview-module")
+    async def api_preview_fpa_module(
+        request: Request,
+        xlsx_path: str = Form(""),
+        module_name: str = Form(""),
+        module_index: int | None = Form(None),
+        api_key: str = Form(""),
+        model: str = Form(""),
+        base_url: str = Form(""),
+        fpa_profile: str = Form(""),
+        file: UploadFile | None = File(None),
+        user: str = Depends(require_auth),
+    ):
+        """预览单个三级模块的 FPA 规划结果，不创建任务和交付物。"""
+        from ai_gen_reimbursement_docs.config_utils import (
+            load_api_key,
+            load_base_url,
+            load_fpa_profile,
+            load_model_name,
+        )
+        from ai_gen_reimbursement_docs.pipeline import _resolve_templates
+
+        if module_index is None and not module_name.strip():
+            raise HTTPException(400, "请填写三级模块名称或序号")
+
+        temp_ctx: tempfile.TemporaryDirectory | None = None
+        try:
+            if file is not None and file.filename:
+                temp_ctx = tempfile.TemporaryDirectory(prefix="ard_web_fpa_preview_")
+                input_dir = Path(temp_ctx.name) / "input"
+                input_dir.mkdir(parents=True, exist_ok=True)
+                safe_name = Path(file.filename).name
+                file_path = input_dir / safe_name
+                file_path.write_bytes(await file.read())
+                work_dir = str(Path(temp_ctx.name) / "work")
+                Path(work_dir).mkdir(parents=True, exist_ok=True)
+            else:
+                require_local(request)
+                if not xlsx_path.strip():
+                    raise HTTPException(400, "请提供功能清单 .xlsx 路径")
+                file_path = _resolve_local_xlsx_input(xlsx_path)
+                temp_ctx = tempfile.TemporaryDirectory(prefix="ard_web_fpa_preview_")
+                work_dir = str(Path(temp_ctx.name) / "work")
+                Path(work_dir).mkdir(parents=True, exist_ok=True)
+
+            api_key_value = api_key or load_api_key()
+            model_value = model or load_model_name()
+            base_url_value = base_url or load_base_url()
+            templates = _resolve_templates(str(file_path), None)
+            result = preview_fpa_module(
+                file_path=str(file_path),
+                module_name=module_name.strip(),
+                module_index=module_index,
+                api_key=api_key_value,
+                model=model_value,
+                base_url=base_url_value,
+                template_path=templates.get("fpa", ""),
+                work_dir=work_dir,
+                profile_name=fpa_profile.strip() or load_fpa_profile(),
+            )
+            return result
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(400, str(exc)) from exc
+        finally:
+            if temp_ctx is not None:
+                temp_ctx.cleanup()
 
     return router
