@@ -281,6 +281,8 @@ async function startTask() {
   if (config.maxTokens) body.append('max_tokens', config.maxTokens)
   if (config.projectName) body.append('project_name', config.projectName)
   if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
+  if (config.fpaStrategy) body.append('fpa_strategy', config.fpaStrategy)
+  if (config.fpaRuleSet) body.append('fpa_rule_set', config.fpaRuleSet)
   if (config.clean) body.append('clean', '1')
 
   let url: string

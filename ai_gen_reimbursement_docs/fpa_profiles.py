@@ -9,7 +9,18 @@ import re
 from string import Template
 
 
-CURRENT_PROJECT_CORE_RULES = """
+VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
+DEFAULT_FPA_STRATEGIES = {
+    "custom_rules": "rules_first",
+    "strict_fpa": "ai_first",
+}
+DEFAULT_FPA_RULE_SETS = {
+    "custom_rules": "custom_rules_default",
+    "strict_fpa": "strict_fpa_default",
+}
+
+
+CUSTOM_RULES_CORE_RULES = """
 FPA 核心口径：
 1. 拆分先按业务能力粒度，不按按钮、弹窗、数据库表、字段或技术实现拆分。
 2. 同一三级模块中的列表、查询条件、按钮、新增/编辑弹窗、状态切换等界面能力默认合并为 1 条界面开发行。
@@ -63,6 +74,15 @@ class ExternalDataGroupRule:
 
     def matches(self, text: str) -> bool:
         return any(alias in text for alias in self.source_aliases) and any(noun in text for noun in self.data_nouns)
+
+
+@dataclass(frozen=True)
+class FpaExecutionConfig:
+    """一次 FPA 执行使用的 profile、策略和规则集。"""
+
+    profile: "CustomRulesProfile"
+    strategy: str
+    rule_set: str
 
 
 DEFAULT_EXTERNAL_DATA_GROUP_RULES = [
@@ -146,13 +166,13 @@ def _render_configured_fpa_prompt(
 
 
 @dataclass(frozen=True)
-class CurrentProjectProfile:
-    """当前报账模板口径。"""
+class CustomRulesProfile:
+    """用户自定义规则口径。"""
 
-    name: str = "current_project"
+    name: str = "custom_rules"
     version: str = "1"
-    description: str = "当前报账模板口径：三级模块合并界面能力，非界面逻辑按动作拆分。"
-    core_rules: str = CURRENT_PROJECT_CORE_RULES
+    description: str = "用户自定义规则口径：三级模块合并界面能力，非界面逻辑按动作拆分。"
+    core_rules: str = CUSTOM_RULES_CORE_RULES
 
     def infer_type(self, name: str, desc: str = "") -> tuple[str, str]:
         """按当前项目关键词规则给出类型兜底。"""
@@ -295,7 +315,7 @@ class CurrentProjectProfile:
 
 
 @dataclass(frozen=True)
-class StrictFpaProfile(CurrentProjectProfile):
+class StrictFpaProfile(CustomRulesProfile):
     """严格 FPA 口径。"""
 
     name: str = "strict_fpa"
@@ -575,16 +595,48 @@ class StrictFpaProfile(CurrentProjectProfile):
         return name.replace("-逻辑处理开发", "").replace("-接口处理开发", "").replace("-界面开发", "").strip()
 
 
-CURRENT_PROJECT_PROFILE = CurrentProjectProfile()
+CUSTOM_RULES_PROFILE = CustomRulesProfile()
 STRICT_FPA_PROFILE = StrictFpaProfile()
 FPA_PROFILES = {
-    CURRENT_PROJECT_PROFILE.name: CURRENT_PROJECT_PROFILE,
+    CUSTOM_RULES_PROFILE.name: CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE.name: STRICT_FPA_PROFILE,
 }
 
 
-def get_fpa_profile(name: str = "current_project") -> CurrentProjectProfile:
-    profile = FPA_PROFILES.get(name or CURRENT_PROJECT_PROFILE.name)
+def get_fpa_profile(name: str = "custom_rules") -> CustomRulesProfile:
+    profile = FPA_PROFILES.get(name or CUSTOM_RULES_PROFILE.name)
     if profile is not None:
         return profile
     raise ValueError(f"未知 FPA profile: {name}")
+
+
+def resolve_fpa_strategy(profile_name: str = "", strategy: str = "") -> str:
+    """解析 FPA 执行策略。空值使用 profile 默认策略。"""
+    profile_key = (profile_name or CUSTOM_RULES_PROFILE.name).strip()
+    value = (strategy or "").strip()
+    if not value:
+        value = DEFAULT_FPA_STRATEGIES.get(profile_key, "rules_first")
+    if value not in VALID_FPA_STRATEGIES:
+        raise ValueError(f"未知 FPA strategy: {strategy}")
+    return value
+
+
+def resolve_fpa_rule_set(profile_name: str = "", rule_set: str = "") -> str:
+    """解析 FPA 规则集名称。空值使用 profile 默认规则集。"""
+    profile_key = (profile_name or CUSTOM_RULES_PROFILE.name).strip()
+    value = (rule_set or "").strip()
+    return value or DEFAULT_FPA_RULE_SETS.get(profile_key, "custom_rules_default")
+
+
+def resolve_fpa_execution_config(
+    profile_name: str = "",
+    strategy: str = "",
+    rule_set: str = "",
+) -> FpaExecutionConfig:
+    """统一解析一次 FPA 执行配置。"""
+    profile = get_fpa_profile(profile_name)
+    return FpaExecutionConfig(
+        profile=profile,
+        strategy=resolve_fpa_strategy(profile.name, strategy),
+        rule_set=resolve_fpa_rule_set(profile.name, rule_set),
+    )

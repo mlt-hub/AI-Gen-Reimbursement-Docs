@@ -55,6 +55,8 @@ export interface UserSettings {
   maxTokens: string
   projectName: string
   fpaProfile: string
+  fpaStrategy: string
+  fpaRuleSet: string
   pipelineMode: PipelineMode
   clean: boolean
 }
@@ -70,7 +72,9 @@ export const useConfigStore = defineStore('config', () => {
   const baseUrl = ref(loadStr('baseUrl', ''))
   const maxTokens = ref(loadStr('maxTokens', ''))
   const projectName = ref(loadStr('projectName', ''))
-  const fpaProfile = ref(loadStr('fpaProfile', 'current_project'))
+  const fpaProfile = ref(normalizeFpaProfile(loadStr('fpaProfile', 'custom_rules')))
+  const fpaStrategy = ref(normalizeFpaStrategy(loadStr('fpaStrategy', '')))
+  const fpaRuleSet = ref(loadStr('fpaRuleSet', ''))
   const clean = ref(loadBool('clean', false))
   const selectedFile = ref<File | null>(null)
 
@@ -80,7 +84,9 @@ export const useConfigStore = defineStore('config', () => {
   watch(baseUrl, v => saveStr('baseUrl', v))
   watch(maxTokens, v => saveStr('maxTokens', v))
   watch(projectName, v => saveStr('projectName', v))
-  watch(fpaProfile, v => saveStr('fpaProfile', v))
+  watch(fpaProfile, v => saveStr('fpaProfile', normalizeFpaProfile(v)))
+  watch(fpaStrategy, v => saveStr('fpaStrategy', normalizeFpaStrategy(v)))
+  watch(fpaRuleSet, v => saveStr('fpaRuleSet', v))
   watch(pipelineMode, v => saveStr('pipelineMode', v))
   watch(clean, v => saveBool('clean', v))
 
@@ -97,7 +103,9 @@ export const useConfigStore = defineStore('config', () => {
     baseUrl.value = ''
     maxTokens.value = ''
     projectName.value = ''
-    fpaProfile.value = 'current_project'
+    fpaProfile.value = 'custom_rules'
+    fpaStrategy.value = ''
+    fpaRuleSet.value = ''
     clean.value = false
     selectedFile.value = null
   }
@@ -111,6 +119,8 @@ export const useConfigStore = defineStore('config', () => {
       maxTokens: maxTokens.value,
       projectName: projectName.value,
       fpaProfile: fpaProfile.value,
+      fpaStrategy: fpaStrategy.value,
+      fpaRuleSet: fpaRuleSet.value,
       pipelineMode: pipelineMode.value,
       clean: clean.value,
     }
@@ -126,7 +136,9 @@ export const useConfigStore = defineStore('config', () => {
       if (data.baseUrl !== undefined) baseUrl.value = data.baseUrl
       if (data.maxTokens !== undefined) maxTokens.value = data.maxTokens
       if (data.projectName !== undefined) projectName.value = data.projectName
-      if (data.fpaProfile !== undefined) fpaProfile.value = data.fpaProfile
+      if (data.fpaProfile !== undefined) fpaProfile.value = normalizeFpaProfile(data.fpaProfile)
+      if (data.fpaStrategy !== undefined) fpaStrategy.value = normalizeFpaStrategy(data.fpaStrategy)
+      if (data.fpaRuleSet !== undefined) fpaRuleSet.value = data.fpaRuleSet
       if (data.pipelineMode !== undefined) pipelineMode.value = data.pipelineMode
       if (data.clean !== undefined) clean.value = data.clean
       return true
@@ -138,6 +150,15 @@ export const useConfigStore = defineStore('config', () => {
   const apiKeyForRequest = computed(() => normalizeApiKeyInput(apiKey.value))
 
   return { workMode, backendStatus, pipelineMode, xlsxPath, outputDir, apiKey, apiKeyForRequest, model, baseUrl,
-           maxTokens, projectName, fpaProfile, clean, selectedFile, isValid, reset,
+           maxTokens, projectName, fpaProfile, fpaStrategy, fpaRuleSet, clean, selectedFile, isValid, reset,
            exportSettings, importSettings }
 })
+
+function normalizeFpaProfile(value: string): string {
+  return value === 'strict_fpa' ? 'strict_fpa' : 'custom_rules'
+}
+
+function normalizeFpaStrategy(value: string): string {
+  const v = value.trim()
+  return ['', 'rules_first', 'ai_first', 'rules_only', 'ai_only'].includes(v) ? v : ''
+}

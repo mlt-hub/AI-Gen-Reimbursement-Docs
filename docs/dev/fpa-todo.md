@@ -75,7 +75,7 @@ strict_fpa 类型冲突规则已收紧：AI 为主，名称明确动作优先，
 
 ## 已确认的下一阶段 FPA 重构方向
 
-状态：已讨论确认，尚未实现。
+状态：第一阶段已实现。剩余的可配置规则文件、审核工作簿和预览审核面板继续暂缓。
 
 ```text
 profile  = FPA 方法学 / 业务口径
@@ -93,16 +93,17 @@ strict_fpa   = ai_first    + strict_fpa_default
 关键决策：
 
 ```text
-current_project 后续改名为 custom_rules。
+已将 current_project 改名为 custom_rules。
 系统未上线，不保留 current_project 兼容别名。
 strict_fpa 默认 ai_first。
+custom_rules 默认 rules_first。
 strict_fpa 无 API Key 时默认不生成，只提示需要 API Key。
 AI 不完整时，rules 补漏缺失行，并标记 generation=rules_fallback。
 rules 不改 AI 已给出的合法 type；业务冲突只 warning。
 只有 type 非法、JSON 非法、结构非法时才硬处理。
-支持多套 rule_set，后续允许 extends 继承。
-预览和正式生成必须使用同一套 profile / strategy / rule_set。
-AI 缓存 key 必须包含 profile、strategy、rule_set、rule_set_version、prompt、model、输入模块内容。
+预览和正式生成已使用同一套 profile / strategy / rule_set。
+AI 缓存 key 已包含 profile、strategy、rule_set、prompt、model、输入模块内容。
+支持多套 rule_set 的配置入口已落地；规则文件、rule_set_version、extends 继承后续再实现。
 ```
 
 第一版 rule_set 建议支持：
@@ -112,6 +113,48 @@ AI 缓存 key 必须包含 profile、strategy、rule_set、rule_set_version、pr
 外部数据源规则。
 ILF / EIF 判定规则。
 功能过程覆盖检查规则。
+```
+
+本轮代码落地点：
+
+```text
+ai_gen_reimbursement_docs/fpa_profiles.py
+  定义 VALID_FPA_STRATEGIES、默认 strategy、默认 rule_set、FpaExecutionConfig。
+
+ai_gen_reimbursement_docs/config_utils.py
+  增加 load_fpa_strategy、load_fpa_rule_set。
+  load_fpa_profile 会将系统配置中的无效 profile 回退为 custom_rules，避免旧占位配置阻断默认运行。
+
+ai_gen_reimbursement_docs/gen_fpa.py
+  正式生成与预览均解析 FpaExecutionConfig。
+  rules_first / rules_only 直接使用规则生成。
+  ai_first / ai_only 需要 API Key。
+  ai_first 在 AI 覆盖不完整时追加 rules_fallback 行。
+  ai_first 保留 AI 合法 type；规则冲突仅记录 warning。
+  ai_only 不使用 rules 补行，AI 失败或被限制跳过时直接报错。
+  FPA AI cache key 和 cache entry 写入 profile、strategy、rule_set。
+
+ai_gen_reimbursement_docs/pipeline.py
+  run_pipeline、run_pipeline_simple、gen-fpa、gen-all 均透传 fpa_strategy / fpa_rule_set。
+
+ai_gen_reimbursement_docs/cli/main.py
+  增加 --fpa-strategy、--fpa-rule-set。
+
+web_app
+  高级选项和 FPA 预览页增加 FPA 执行策略。
+  Store 持久化 fpaStrategy / fpaRuleSet。
+  Web 正式生成和预览接口透传 fpa_strategy / fpa_rule_set。
+```
+
+本轮未做、后续继续：
+
+```text
+J1. 将 rule_set 从“名称入口”升级为真正的外部 YAML/JSON 规则文件。
+J2. 为 rule_set 增加 version，并写入 AI cache key、正式 MD、预览结果和审核工作簿。
+J3. 支持 rule_set extends 继承和覆盖。
+J4. 将关键词规则、外部数据源规则、ILF/EIF 判定规则从代码中逐步迁移到 rule_set。
+J5. 细化 rules_first 中“rules 无法判定再交给 AI”的判定条件；当前 custom_rules 的内置规则可覆盖现有场景，因此 rules_first 直接使用规则生成。
+J6. 增加 UI 中的 rule_set 下拉选择；当前先提供文本输入和配置入口。
 ```
 
 ## FPA 审核工作簿与预览审核面板

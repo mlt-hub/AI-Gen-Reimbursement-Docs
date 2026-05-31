@@ -24,19 +24,20 @@ from ai_gen_reimbursement_docs.excel_source import (
     safe_load_workbook,
 )
 from ai_gen_reimbursement_docs.fpa_profiles import (
-    CURRENT_PROJECT_PROFILE,
-    CurrentProjectProfile,
+    CUSTOM_RULES_PROFILE,
+    CustomRulesProfile,
     adjust_value_for_type as _adjust_value_for_type,
     get_fpa_profile,
     group_tag as _group_tag,
     module_change_status as _module_change_status,
+    resolve_fpa_execution_config,
 )
 from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_fpa')
 
 VALID_FPA_TYPES = {"EI", "ILF", "EQ", "EO", "EIF"}
-FPA_PROFILE = CURRENT_PROJECT_PROFILE
+FPA_PROFILE = CUSTOM_RULES_PROFILE
 
 
 def parse_meta_md(meta_md_path: str) -> dict[str, str]:
@@ -116,7 +117,7 @@ def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
 def _build_fpa_rule_rows(
     rows: list[dict[str, str]],
     meta: dict[str, str],
-    profile: CurrentProjectProfile = FPA_PROFILE,
+    profile: CustomRulesProfile = FPA_PROFILE,
 ) -> list[dict[str, object]]:
     """从功能清单行构建 FPA 模板行（三级模块兜底骨架）。"""
     fpa_rows: list[dict[str, object]] = []
@@ -175,7 +176,8 @@ def _normalize_ai_fpa_rows_for_l3(
     ai_rows: list[Any],
     judgement_rules: list[str],
     start_seq: int = 1,
-    profile: CurrentProjectProfile = FPA_PROFILE,
+    profile: CustomRulesProfile = FPA_PROFILE,
+    strategy: str = "",
 ) -> tuple[list[dict[str, object]], list[str]]:
     warnings: list[str] = []
     subsystem = meta.get("子系统（模块）", "")
@@ -226,9 +228,14 @@ def _normalize_ai_fpa_rows_for_l3(
             fpa_type = fallback_type
             type_reason = type_reason or fallback_reason
         elif profile.has_obvious_conflict(name, explanation, ai_type):
-            warnings.append(f"{name} AI type={ai_type} 与关键词规则明显冲突，已使用 {fallback_type} 兜底")
-            fpa_type = fallback_type
-            type_reason = fallback_reason
+            if strategy in {"ai_first", "ai_only"}:
+                warnings.append(f"{name} AI type={ai_type} 与规则存在冲突，AI 优先策略下保留 AI type")
+                fpa_type = ai_type
+                type_reason = type_reason or "AI 根据功能点名称和业务说明判定。"
+            else:
+                warnings.append(f"{name} AI type={ai_type} 与关键词规则明显冲突，已使用 {fallback_type} 兜底")
+                fpa_type = fallback_type
+                type_reason = fallback_reason
         else:
             fpa_type = ai_type
             type_reason = type_reason or "AI 根据功能点名称和业务说明判定。"
@@ -281,6 +288,73 @@ def _normalize_ai_fpa_rows_for_l3(
     return normalized, warnings
 
 
+def _process_names_for_group(group: dict[str, object]) -> list[str]:
+    processes = group.get("processes", [])
+    if not isinstance(processes, list):
+        return []
+    return [
+        str(p.get("name", "") or "").strip()
+        for p in processes
+        if isinstance(p, dict) and str(p.get("name", "") or "").strip()
+    ]
+
+
+def _source_process_set(row: dict[str, object]) -> set[str]:
+    raw = str(row.get("源功能过程", "") or "")
+    return {item.strip() for item in raw.split("、") if item.strip()}
+
+
+def _supplement_ai_rows_with_rules(
+    *,
+    group: dict[str, object],
+    meta: dict[str, str],
+    ai_rows: list[dict[str, object]],
+    profile: CustomRulesProfile,
+    strategy: str,
+) -> tuple[list[dict[str, object]], list[str]]:
+    """AI 优先策略下，用规则补齐 AI 没覆盖的功能过程，不覆盖 AI 已判定的类型。"""
+    if strategy != "ai_first" or not ai_rows:
+        return ai_rows, []
+
+    rule_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+    expected_processes = set(_process_names_for_group(group))
+    covered_processes: set[str] = set()
+    for row in ai_rows:
+        covered_processes.update(_source_process_set(row))
+
+    missing_processes = expected_processes - covered_processes
+    has_data_function = any(str(row.get("类型", "")) in {"ILF", "EIF"} for row in ai_rows)
+    supplemental: list[dict[str, object]] = []
+
+    for row in rule_rows:
+        row_type = str(row.get("类型", ""))
+        row_sources = _source_process_set(row)
+        include_data_row = row_type in {"ILF", "EIF"} and not has_data_function
+        include_missing_process = bool(row_sources & missing_processes)
+        if not include_data_row and not include_missing_process:
+            continue
+
+        copied = dict(row)
+        copied["生成方式"] = "rules_fallback"
+        reason = str(copied.get("类型理由", "") or "")
+        copied["类型理由"] = reason or "AI 未覆盖该功能过程，按规则集补齐。"
+        warning = "AI 结果未覆盖该功能过程，已按规则集补齐；未覆盖 AI 已判定类型。"
+        old_warning = str(copied.get("后处理警告", "") or "")
+        copied["后处理警告"] = f"{old_warning}；{warning}" if old_warning else warning
+        supplemental.append(copied)
+
+    if not supplemental:
+        return ai_rows, []
+
+    combined = [*ai_rows, *supplemental]
+    for seq, row in enumerate(combined, 1):
+        row["序号"] = seq
+    warnings = [
+        f"{_group_tag(group)} AI 结果未覆盖 {len(missing_processes)} 个功能过程，已追加 {len(supplemental)} 条 rules_fallback 行"
+    ]
+    return combined, warnings
+
+
 def _ai_plan_fpa_rows_for_l3(
     group: dict[str, object],
     judgement_rules: list[str],
@@ -288,7 +362,7 @@ def _ai_plan_fpa_rows_for_l3(
     api_key: str,
     model: str,
     base_url: str,
-    profile: CurrentProjectProfile = FPA_PROFILE,
+    profile: CustomRulesProfile = FPA_PROFILE,
 ) -> list[dict[str, object]]:
     """调用 AI 规划一个三级模块的 FPA 行，返回原始 AI rows。"""
     from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
@@ -330,11 +404,15 @@ def _fpa_ai_cache_key(
     judgement_rules: list[str],
     domain_context: dict[str, object],
     model: str,
-    profile: CurrentProjectProfile = FPA_PROFILE,
+    profile: CustomRulesProfile = FPA_PROFILE,
+    strategy: str = "",
+    rule_set: str = "",
 ) -> str:
     payload = {
         "profile": profile.name,
         "profile_version": profile.version,
+        "strategy": strategy,
+        "rule_set": rule_set,
         "core_rules": profile.core_rules,
         "domain_context": domain_context,
         "group": group,
@@ -408,12 +486,20 @@ def _plan_fpa_rows_with_ai(
     model: str,
     base_url: str,
     cache_path: str = "",
-    profile: CurrentProjectProfile = FPA_PROFILE,
+    profile: CustomRulesProfile = FPA_PROFILE,
+    strategy: str = "",
+    rule_set: str = "",
 ) -> list[dict[str, object]]:
+    execution = resolve_fpa_execution_config(profile.name, strategy, rule_set)
+    profile = execution.profile
+    strategy = execution.strategy
+    rule_set = execution.rule_set
     groups = _group_rows_by_l3(rows)
-    if not api_key:
-        logger.warning("未设置 API Key，使用三级模块兜底规则生成 FPA")
+    if strategy in {"rules_first", "rules_only"}:
+        logger.info("FPA strategy=%s，使用规则集 %s 生成 FPA", strategy, rule_set)
         return _build_fpa_rule_rows(rows, meta, profile=profile)
+    if not api_key:
+        raise ValueError(f"FPA strategy={strategy} 需要 API Key，当前未配置")
 
     from ai_gen_reimbursement_docs.config_utils import load_flow_max_ai, load_gen_fpa_ai_limit
 
@@ -432,6 +518,8 @@ def _plan_fpa_rows_with_ai(
     for idx, group in enumerate(groups, 1):
         limited = (max_ai > 0 and idx > max_ai) or (module_limit > 0 and idx > module_limit)
         if limited:
+            if strategy == "ai_only":
+                raise ValueError(f"FPA strategy=ai_only 但三级模块 {_group_tag(group)} 被 AI 限制跳过")
             skipped += 1
             group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
             fallback += len(group_rows)
@@ -439,7 +527,10 @@ def _plan_fpa_rows_with_ai(
             seq += len(group_rows)
             continue
 
-        cache_key = _fpa_ai_cache_key(group, judgement_rules, domain_context, model, profile=profile)
+        cache_key = _fpa_ai_cache_key(
+            group, judgement_rules, domain_context, model,
+            profile=profile, strategy=strategy, rule_set=rule_set,
+        )
         cached = cache_entries.get(cache_key) if cache_path else None
         if isinstance(cached, dict) and isinstance(cached.get("rows"), list):
             try:
@@ -451,7 +542,16 @@ def _plan_fpa_rows_with_ai(
                     judgement_rules=judgement_rules,
                     start_seq=seq,
                     profile=profile,
+                    strategy=strategy,
                 )
+                group_rows, supplement_warnings = _supplement_ai_rows_with_rules(
+                    group=group,
+                    meta=meta,
+                    ai_rows=group_rows,
+                    profile=profile,
+                    strategy=strategy,
+                )
+                warnings.extend(supplement_warnings)
                 if group_rows:
                     cache_hits += 1
                     success += 1
@@ -477,7 +577,16 @@ def _plan_fpa_rows_with_ai(
                 judgement_rules=judgement_rules,
                 start_seq=seq,
                 profile=profile,
+                strategy=strategy,
             )
+            group_rows, supplement_warnings = _supplement_ai_rows_with_rules(
+                group=group,
+                meta=meta,
+                ai_rows=group_rows,
+                profile=profile,
+                strategy=strategy,
+            )
+            warnings.extend(supplement_warnings)
             warning_count += len(warnings)
             if not group_rows:
                 raise ValueError("AI 规划未生成有效 FPA 行")
@@ -489,9 +598,13 @@ def _plan_fpa_rows_with_ai(
                     "model": model,
                     "profile": profile.name,
                     "profile_version": profile.version,
+                    "strategy": strategy,
+                    "rule_set": rule_set,
                     "rows": raw_rows,
                 }
         except Exception as exc:
+            if strategy == "ai_only":
+                raise
             msg = str(exc)
             if "空响应" in msg:
                 empty_response += 1
@@ -586,12 +699,16 @@ def plan_fpa_md_from_tree(
     base_url: str = "",
     summary_md_path: str = "",
     profile_name: str = "",
+    strategy: str = "",
+    rule_set: str = "",
 ) -> str:
     """以三级模块为单位 AI 规划 FPA 行，并写入 MD。"""
     logger.info("第1.3步：AI 规划 FPA 数据...")
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)
     profile = get_fpa_profile(profile_name)
+    execution = resolve_fpa_execution_config(profile.name, strategy, rule_set)
+    profile = execution.profile
     judgement_rules = _read_fpa_judgement_rules(template_path)
     if not judgement_rules:
         logger.warning("未配置「计算依据归类判定原则」，AI 输出的归类将无法按模板 index 映射")
@@ -605,8 +722,14 @@ def plan_fpa_md_from_tree(
         base_url,
         cache_path=cache_path,
         profile=profile,
+        strategy=execution.strategy,
+        rule_set=execution.rule_set,
     )
-    total = _write_fpa_rows_md(fpa_rows, output_md_path, ai_filled=bool(api_key))
+    total = _write_fpa_rows_md(
+        fpa_rows,
+        output_md_path,
+        ai_filled=bool(api_key) and execution.strategy in {"ai_first", "ai_only"},
+    )
     if summary_md_path:
         write_fpa_summary_md(summary_md_path, total)
         logger.info("第1.2步：FPA工作量已更新: %s (%s)", summary_md_path, total)
@@ -676,11 +799,14 @@ def preview_fpa_module(
     template_path: str = "",
     work_dir: str = "",
     profile_name: str = "",
+    strategy: str = "",
+    rule_set: str = "",
 ) -> dict[str, object]:
     """预览单个三级模块的 FPA 规划结果，不生成正式 Excel。"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
-    profile = get_fpa_profile(profile_name)
+    execution = resolve_fpa_execution_config(profile_name, strategy, rule_set)
+    profile = execution.profile
     temp_ctx = None
     if work_dir:
         md_dir = os.path.join(work_dir, "fpa-preview-md")
@@ -715,9 +841,14 @@ def preview_fpa_module(
         idx, group = matches[0]
         judgement_rules = _read_fpa_judgement_rules(template_path)
         warnings: list[str] = []
-        used_ai = bool(api_key)
+        used_ai = execution.strategy in {"ai_first", "ai_only"}
         try:
-            if api_key:
+            if execution.strategy in {"rules_first", "rules_only"}:
+                used_ai = False
+                fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+            elif not api_key:
+                raise ValueError(f"FPA strategy={execution.strategy} 需要 API Key，当前未配置")
+            else:
                 raw_rows = _ai_plan_fpa_rows_for_l3(
                     group, judgement_rules, _build_domain_context(meta), api_key, model, base_url,
                     profile=profile,
@@ -729,13 +860,21 @@ def preview_fpa_module(
                     judgement_rules=judgement_rules,
                     start_seq=1,
                     profile=profile,
+                    strategy=execution.strategy,
                 )
+                fpa_rows, supplement_warnings = _supplement_ai_rows_with_rules(
+                    group=group,
+                    meta=meta,
+                    ai_rows=fpa_rows,
+                    profile=profile,
+                    strategy=execution.strategy,
+                )
+                warnings.extend(supplement_warnings)
                 if not fpa_rows:
                     raise ValueError("AI 规划未生成有效 FPA 行")
-            else:
-                used_ai = False
-                fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
         except Exception as exc:
+            if execution.strategy == "ai_only" or not api_key:
+                raise
             used_ai = False
             warnings.append(f"AI 调用或解析失败，已使用兜底生成: {exc}")
             logger.warning("FPA 预览 AI 失败 [%s]: %s", _group_tag(group), exc)
@@ -773,6 +912,8 @@ def preview_fpa_module(
             "used_ai": used_ai,
             "profile": profile.name,
             "profile_version": profile.version,
+            "strategy": execution.strategy,
+            "rule_set": execution.rule_set,
         }
     finally:
         if temp_ctx is not None:

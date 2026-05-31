@@ -470,6 +470,10 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='FPA 输出模板路径')
     parser.add_argument('--fpa-profile', default='',
                         help='FPA 规划口径（默认读取 system_config.yaml）')
+    parser.add_argument('--fpa-strategy', default='',
+                        help='FPA 执行策略：rules_first / ai_first / rules_only / ai_only（默认跟随 profile）')
+    parser.add_argument('--fpa-rule-set', default='',
+                        help='FPA 规则集名称（默认跟随 profile）')
     parser.add_argument('--preview-fpa-module', default='',
                         help='只预览指定三级模块的 FPA 拆分结果，不生成 Excel')
     parser.add_argument('--preview-fpa-module-index', type=int, default=None,
@@ -737,7 +741,7 @@ def main():
         if not template_path:
             from ai_gen_reimbursement_docs.pipeline import _resolve_templates
             template_path = _resolve_templates(excel_path, None).get("fpa", "")
-        from ai_gen_reimbursement_docs.config_utils import load_fpa_profile
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_profile, load_fpa_rule_set, load_fpa_strategy
         from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module
         result = preview_fpa_module(
             file_path=excel_path,
@@ -748,6 +752,8 @@ def main():
             base_url=base_url,
             template_path=template_path,
             profile_name=args.fpa_profile or load_fpa_profile(),
+            strategy=args.fpa_strategy or load_fpa_strategy(),
+            rule_set=args.fpa_rule_set or load_fpa_rule_set(),
         )
         if args.preview_fpa_json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -1026,6 +1032,8 @@ def main():
                 project_name=args.project_name,
                 templates=templates or None,
                 fpa_profile=args.fpa_profile,
+                fpa_strategy=args.fpa_strategy,
+                fpa_rule_set=args.fpa_rule_set,
             )
         except KeyboardInterrupt:
             _record_cli_history(

@@ -39,7 +39,7 @@ ai_prompts:
       你是一个严谨的 FPA 功能点评估助手。你的任务是根据用户提示词中给定的 profile 口径、计算依据归类判定原则和三级模块业务输入，规划 FPA 功能点评估行。
 
       ## 通用约束
-      1. 必须遵守用户提示词中的 FPA profile 口径；current_project 与 strict_fpa 的拆分方式不同，不要混用。
+      1. 必须遵守用户提示词中的 FPA profile 口径；custom_rules 与 strict_fpa 的拆分方式不同，不要混用。
       2. 不要机械地为每个功能过程固定生成界面开发或接口开发行。
       3. 类型必须为 EI / EO / EQ / ILF / EIF 之一。
       4. 用户提供了带序号的「计算依据归类判定原则列表」，请返回最匹配的 classification_basis_index。

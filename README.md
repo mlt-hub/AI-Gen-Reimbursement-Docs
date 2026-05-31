@@ -77,19 +77,20 @@ ard --from-excel 功能清单-录入模板.xlsx --gen-spec \
 
 ## FPA 方案
 
-FPA 生成支持两套口径：
+FPA 生成支持两套口径，并可单独选择 AI / rules 执行策略：
 
 | 方案 | 适用场景 |
 |------|----------|
-| `current_project` | 当前报账模板口径，默认方案，保留界面开发/逻辑处理开发等模板友好表达 |
+| `custom_rules` | 用户自定义规则口径，默认 `rules_first`，保留界面开发/逻辑处理开发等模板友好表达 |
 | `strict_fpa` | 严格 FPA 口径，按数据功能和事务功能拆分，不生成界面开发/接口开发行 |
 
 ```bash
 ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa
-ard --from-excel 功能清单.xlsx --gen-all --fpa-profile current_project
+ard --from-excel 功能清单.xlsx --gen-all --fpa-profile custom_rules
+ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa --fpa-strategy ai_first
 ```
 
-Web UI 可在高级选项中选择 FPA 方案。详细说明见 [FPA 方案选择说明](docs/fpa-profiles.md)。
+Web UI 可在高级选项中选择 FPA 方案、执行策略和规则集。详细说明见 [FPA 方案选择说明](docs/fpa-profiles.md)。
 
 ---
 
@@ -176,7 +177,9 @@ set ANTHROPIC_API_KEY=sk-xxx
 | `--api-key`, `-k` | API Key |
 | `--model`, `-m` | 模型名称（默认 deepseek-v4-flash） |
 | `--max-tokens` | 覆盖 AI max_tokens |
-| `--fpa-profile` | FPA 方案：`current_project` 或 `strict_fpa` |
+| `--fpa-profile` | FPA 方案：`custom_rules` 或 `strict_fpa` |
+| `--fpa-strategy` | FPA 执行策略：`rules_first`、`ai_first`、`rules_only`、`ai_only` |
+| `--fpa-rule-set` | FPA 规则集名称，留空使用 profile 默认规则集 |
 | `--init-config` | 初始化配置文件 |
 | `--web` | 启动 Web UI |
 | `--log` | 查看日志（可选 `tail`/`watch`/`open`） |

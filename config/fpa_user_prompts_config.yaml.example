@@ -10,12 +10,12 @@
 # 1. 如果本文件不存在，或某个 profile 未配置模板，系统会使用代码内置模板兜底。
 # 2. 建议保留 ${core_rules}、${judgement_rules}、${payload_json} 三个占位符。
 # 3. 模板可以调整表达方式，但不要修改输出 JSON 的字段结构，除非同步修改解析和测试。
-# 4. current_project 和 strict_fpa 是两套不同口径，建议分别维护，不要混用。
+# 4. custom_rules 和 strict_fpa 是两套不同口径，建议分别维护，不要混用。
 # 5. 未知占位符会原样保留，不会中断任务；修改后建议先用 FPA 预览验证。
 
 fpa_eval:
   user_templates:
-    current_project: |-
+    custom_rules: |-
       ${core_rules}
 
       计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：

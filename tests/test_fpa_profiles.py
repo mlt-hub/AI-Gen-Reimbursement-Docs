@@ -2,15 +2,16 @@ import pytest
 from unittest.mock import patch
 
 from ai_gen_reimbursement_docs.fpa_profiles import (
-    CURRENT_PROJECT_PROFILE,
+    CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
     get_fpa_profile,
+    resolve_fpa_execution_config,
 )
 
 
-def test_default_profile_is_current_project():
-    assert get_fpa_profile() is CURRENT_PROJECT_PROFILE
-    assert get_fpa_profile("current_project") is CURRENT_PROJECT_PROFILE
+def test_default_profile_is_custom_rules():
+    assert get_fpa_profile() is CUSTOM_RULES_PROFILE
+    assert get_fpa_profile("custom_rules") is CUSTOM_RULES_PROFILE
     assert get_fpa_profile("strict_fpa") is STRICT_FPA_PROFILE
 
 
@@ -19,8 +20,26 @@ def test_unknown_profile_is_rejected():
         get_fpa_profile("unknown_profile")
 
 
-def test_current_project_prompt_contains_profile_rules():
-    prompt = CURRENT_PROJECT_PROFILE.build_prompt(
+def test_execution_config_uses_profile_defaults():
+    custom = resolve_fpa_execution_config("custom_rules")
+    assert custom.profile is CUSTOM_RULES_PROFILE
+    assert custom.strategy == "rules_first"
+    assert custom.rule_set == "custom_rules_default"
+
+    strict = resolve_fpa_execution_config("strict_fpa")
+    assert strict.profile is STRICT_FPA_PROFILE
+    assert strict.strategy == "ai_first"
+    assert strict.rule_set == "strict_fpa_default"
+
+
+def test_execution_config_accepts_explicit_strategy_and_rule_set():
+    config = resolve_fpa_execution_config("strict_fpa", "ai_only", "telecom_rules")
+    assert config.strategy == "ai_only"
+    assert config.rule_set == "telecom_rules"
+
+
+def test_custom_rules_prompt_contains_profile_rules():
+    prompt = CUSTOM_RULES_PROFILE.build_prompt(
         {
             "client_type": "后台",
             "l1": "业务",
@@ -31,7 +50,7 @@ def test_current_project_prompt_contains_profile_rules():
         ["规则一"],
     )
 
-    assert CURRENT_PROJECT_PROFILE.core_rules in prompt
+    assert CUSTOM_RULES_PROFILE.core_rules in prompt
     assert "默认生成 1 条三级模块级界面开发行" in prompt
 
 

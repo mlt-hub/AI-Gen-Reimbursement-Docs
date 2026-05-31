@@ -254,9 +254,20 @@ def load_fpa_reduced_use_workload() -> bool:
     return _get_system_config_value('fpa_reduced_use_workload', False)
 
 
-def load_fpa_profile(default: str = "current_project") -> str:
-    """读取 FPA 规划口径名称，默认 current_project。"""
-    return _get_system_config_value('fpa_profile', default).strip()
+def load_fpa_profile(default: str = "custom_rules") -> str:
+    """读取 FPA 规划口径名称，默认 custom_rules。"""
+    value = _get_system_config_value('fpa_profile', default).strip()
+    return value if value in {"custom_rules", "strict_fpa"} else default
+
+
+def load_fpa_strategy(default: str = "") -> str:
+    """读取 FPA 执行策略。空值表示使用 profile 默认策略。"""
+    return _get_system_config_value('fpa_strategy', default).strip()
+
+
+def load_fpa_rule_set(default: str = "") -> str:
+    """读取 FPA 规则集名称。空值表示使用 profile 默认规则集。"""
+    return _get_system_config_value('fpa_rule_set', default).strip()
 
 
 def load_fpa_external_data_rules() -> list[dict[str, object]]:

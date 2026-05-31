@@ -1576,7 +1576,7 @@ libreoffice：使用 soffice --headless 重算后读取结果。
 gen-fpa 后，1.2.gen-fpa-FPA工作量-总和.md 与 result.fpa_reduced 一致。
 生成的 FPA Excel 仍保留逐行工作量公式和汇总公式。
 gen-all 后续 COSMIC/List 使用的 FPA 值来自代码汇总。
-current_project 与 strict_fpa 都通过一致性测试。
+custom_rules 与 strict_fpa 都通过一致性测试。
 不要求本机安装 Excel 或 LibreOffice 才能跑通默认流程。
 ```
 
@@ -1982,7 +1982,7 @@ POST /api/fpa/preview-module 返回 rows。
 1. 实现代码化 FPA 汇总规则，例如 `calculate_fpa_total(rows, profile)`。
 2. 让 MD 汇总和 pipeline result 使用同一代码计算结果。
 3. 保留 Excel 模板逐行公式和汇总公式，不把 Excel 公式引擎作为默认依赖。
-4. 增加汇总一致性测试，覆盖 current_project 和 strict_fpa。
+4. 增加汇总一致性测试，覆盖 custom_rules 和 strict_fpa。
 5. 可选增加 Excel COM / LibreOffice 复算校验模式，只记录 warning。
 
 ### 第三阶段实施项
@@ -2061,7 +2061,7 @@ row_tag
 
 ## 推荐推进顺序
 
-第一阶段已经完成基础版：`gen-fpa` 已改为三级模块整体规划，支持 current_project / strict_fpa 两套 profile。
+第一阶段已经完成基础版：`gen-fpa` 已改为三级模块整体规划，支持 custom_rules / strict_fpa 两套 profile。
 
 第二阶段已经完成基础版：默认采用代码化业务计算规则，Excel 继续保留模板公式，Excel/LibreOffice 复算只作为可选校验。
 

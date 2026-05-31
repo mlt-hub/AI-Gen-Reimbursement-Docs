@@ -2,7 +2,7 @@
   <div class="flex h-full min-h-0 flex-col">
     <div class="border-b border-[var(--color-rule)] px-5 py-4">
       <div class="flex flex-col gap-4">
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_180px_160px]">
           <div>
             <label for="fpa-preview-module" class="field-label text-xs">三级模块</label>
             <select
@@ -20,8 +20,18 @@
           <div>
             <label for="fpa-preview-profile" class="field-label text-xs">FPA 方案</label>
             <select id="fpa-preview-profile" v-model="config.fpaProfile" class="field-control">
-              <option value="current_project">当前报账模板口径</option>
+              <option value="custom_rules">用户自定义规则口径</option>
               <option value="strict_fpa">严格 FPA 口径</option>
+            </select>
+          </div>
+          <div>
+            <label for="fpa-preview-strategy" class="field-label text-xs">执行策略</label>
+            <select id="fpa-preview-strategy" v-model="config.fpaStrategy" class="field-control">
+              <option value="">默认</option>
+              <option value="rules_first">规则优先</option>
+              <option value="ai_first">AI 优先</option>
+              <option value="rules_only">仅规则</option>
+              <option value="ai_only">仅 AI</option>
             </select>
           </div>
         </div>
@@ -79,7 +89,7 @@
         <div class="flex items-center justify-between gap-3 border-b border-[var(--color-rule)] px-3 py-2">
           <div class="min-w-0">
             <div class="truncate text-sm font-semibold text-[var(--color-ink)]">{{ result.module.l3 }}</div>
-            <div class="text-xs text-[var(--color-ink-soft)]">{{ result.module.process_count }} 个功能过程 · {{ profileLabel(result.profile) }}</div>
+            <div class="text-xs text-[var(--color-ink-soft)]">{{ result.module.process_count }} 个功能过程 · {{ profileLabel(result.profile) }} · {{ strategyLabel(result.strategy) }}</div>
           </div>
           <span :class="['shrink-0 rounded px-2 py-1 text-xs font-semibold', result.used_ai ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]']">
             {{ result.used_ai ? 'AI' : '兜底' }}
@@ -165,6 +175,8 @@ interface FpaPreviewResult {
   used_ai: boolean
   profile: string
   profile_version: string
+  strategy: string
+  rule_set: string
 }
 
 interface FpaPreviewModule {
@@ -258,6 +270,8 @@ async function runPreview() {
   if (config.model) body.append('model', config.model)
   if (config.baseUrl) body.append('base_url', config.baseUrl)
   if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
+  if (config.fpaStrategy) body.append('fpa_strategy', config.fpaStrategy)
+  if (config.fpaRuleSet) body.append('fpa_rule_set', config.fpaRuleSet)
   appendInputSource(body)
 
   try {
@@ -275,6 +289,16 @@ async function runPreview() {
 }
 
 function profileLabel(profile: string) {
-  return profile === 'strict_fpa' ? '严格 FPA 口径' : '当前报账模板口径'
+  return profile === 'strict_fpa' ? '严格 FPA 口径' : '用户自定义规则口径'
+}
+
+function strategyLabel(strategy: string) {
+  const labels: Record<string, string> = {
+    rules_first: '规则优先',
+    ai_first: 'AI 优先',
+    rules_only: '仅规则',
+    ai_only: '仅 AI',
+  }
+  return labels[strategy] ?? strategy
 }
 </script>

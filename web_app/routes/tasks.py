@@ -167,6 +167,8 @@ def create_router(
         max_tokens: str = Form(""),
         project_name: str = Form(""),
         fpa_profile: str = Form(""),
+        fpa_strategy: str = Form(""),
+        fpa_rule_set: str = Form(""),
         clean: str = Form(""),
         fpa_template: UploadFile | None = File(None),
         cosmic_template: UploadFile | None = File(None),
@@ -244,6 +246,8 @@ def create_router(
                 project_name,
                 max_tokens,
                 fpa_profile,
+                fpa_strategy,
+                fpa_rule_set,
                 bool(clean),
                 mode,
                 mode_info=mode_info,
@@ -264,6 +268,8 @@ def create_router(
         max_tokens: str = Form(""),
         project_name: str = Form(""),
         fpa_profile: str = Form(""),
+        fpa_strategy: str = Form(""),
+        fpa_rule_set: str = Form(""),
         clean: str = Form(""),
         fpa_template: UploadFile | None = File(None),
         cosmic_template: UploadFile | None = File(None),
@@ -349,6 +355,8 @@ def create_router(
                 project_name,
                 max_tokens,
                 fpa_profile,
+                fpa_strategy,
+                fpa_rule_set,
                 bool(clean),
                 mode,
                 mode_info=mode_info,
@@ -370,6 +378,8 @@ def create_router(
         model: str = Form(""),
         base_url: str = Form(""),
         fpa_profile: str = Form(""),
+        fpa_strategy: str = Form(""),
+        fpa_rule_set: str = Form(""),
         file: UploadFile | None = File(None),
         user: str = Depends(require_auth),
     ):
@@ -378,6 +388,8 @@ def create_router(
             load_api_key,
             load_base_url,
             load_fpa_profile,
+            load_fpa_rule_set,
+            load_fpa_strategy,
             load_model_name,
         )
         from ai_gen_reimbursement_docs.pipeline import _resolve_templates
@@ -419,6 +431,8 @@ def create_router(
                 template_path=templates.get("fpa", ""),
                 work_dir=work_dir,
                 profile_name=fpa_profile.strip() or load_fpa_profile(),
+                strategy=fpa_strategy.strip() or load_fpa_strategy(),
+                rule_set=fpa_rule_set.strip() or load_fpa_rule_set(),
             )
             return result
         except HTTPException:

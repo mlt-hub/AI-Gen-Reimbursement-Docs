@@ -1,13 +1,15 @@
 import logging
 import json
 
+import pytest
+
 from ai_gen_reimbursement_docs.gen_fpa import (
     _extract_json_obj,
     _group_rows_by_l3,
     _normalize_ai_fpa_rows_for_l3,
     _plan_fpa_rows_with_ai,
 )
-from ai_gen_reimbursement_docs.fpa_profiles import CURRENT_PROJECT_PROFILE, STRICT_FPA_PROFILE
+from ai_gen_reimbursement_docs.fpa_profiles import CUSTOM_RULES_PROFILE, STRICT_FPA_PROFILE
 
 
 def _meta():
@@ -165,6 +167,39 @@ def test_strict_profile_corrects_external_service_eif_misclassification():
     assert any("明显冲突" in w for w in warnings)
 
 
+def test_ai_first_keeps_valid_ai_type_without_keyword_override():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "消息管理",
+            "二级模块": "通知发送",
+            "三级模块": "短信通知",
+            "三级模块整体功能描述": "系统调用短信平台发送通知短信。",
+            "功能过程": "发送测试短信",
+            "功能过程类型": "新增",
+            "功能过程描述": "调用短信平台发送测试短信。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "发送测试短信",
+                "type": "EIF",
+                "explanation": "调用短信平台发送测试短信。",
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "EIF"
+    assert any("AI 优先策略下保留 AI type" in w for w in warnings)
+
+
 def test_strict_profile_keeps_real_external_data_group_eif():
     group = _group_rows_by_l3([
         {
@@ -198,13 +233,13 @@ def test_strict_profile_keeps_real_external_data_group_eif():
 
 
 def test_keyword_type_fallbacks():
-    assert CURRENT_PROJECT_PROFILE.infer_type("客户界面开发")[0] == "EI"
-    assert CURRENT_PROJECT_PROFILE.infer_type("添加客户-逻辑处理开发")[0] == "ILF"
-    assert CURRENT_PROJECT_PROFILE.infer_type("查询客户-查询处理开发")[0] == "EQ"
-    assert CURRENT_PROJECT_PROFILE.infer_type("导出客户-导出处理开发")[0] == "EO"
-    assert CURRENT_PROJECT_PROFILE.infer_type("导入客户-导入处理开发")[0] == "EI"
-    assert CURRENT_PROJECT_PROFILE.infer_type("同步外部接口数据-逻辑处理开发")[0] == "ILF"
-    assert CURRENT_PROJECT_PROFILE.infer_type("引用统一用户中心账号-外部接口处理开发")[0] == "EIF"
+    assert CUSTOM_RULES_PROFILE.infer_type("客户界面开发")[0] == "EI"
+    assert CUSTOM_RULES_PROFILE.infer_type("添加客户-逻辑处理开发")[0] == "ILF"
+    assert CUSTOM_RULES_PROFILE.infer_type("查询客户-查询处理开发")[0] == "EQ"
+    assert CUSTOM_RULES_PROFILE.infer_type("导出客户-导出处理开发")[0] == "EO"
+    assert CUSTOM_RULES_PROFILE.infer_type("导入客户-导入处理开发")[0] == "EI"
+    assert CUSTOM_RULES_PROFILE.infer_type("同步外部接口数据-逻辑处理开发")[0] == "ILF"
+    assert CUSTOM_RULES_PROFILE.infer_type("引用统一用户中心账号-外部接口处理开发")[0] == "EIF"
 
 
 def test_ai_parse_failure_falls_back(monkeypatch, caplog):
@@ -220,9 +255,24 @@ def test_ai_parse_failure_falls_back(monkeypatch, caplog):
         api_key="sk-test",
         model="test",
         base_url="",
+        strategy="ai_first",
     )
     assert result[0]["生成方式"] == "fallback"
     assert any("FPA AI 响应解析失败" in r.message for r in caplog.records)
+
+
+def test_ai_first_requires_api_key():
+    with pytest.raises(ValueError, match="需要 API Key"):
+        _plan_fpa_rows_with_ai(
+            _rows(),
+            _meta(),
+            ["规则一"],
+            api_key="",
+            model="test",
+            base_url="",
+            profile=STRICT_FPA_PROFILE,
+            strategy="ai_first",
+        )
 
 
 def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
@@ -252,14 +302,17 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
         model="test-model",
         base_url="",
         cache_path=str(cache_path),
+        strategy="ai_first",
     )
     assert calls["count"] == 1
     assert cache_path.exists()
     assert first[0]["生成方式"] == "ai"
     cache = json.loads(cache_path.read_text(encoding="utf-8"))
     entry = next(iter(cache["entries"].values()))
-    assert entry["profile"] == "current_project"
+    assert entry["profile"] == "custom_rules"
     assert entry["profile_version"] == "1"
+    assert entry["strategy"] == "ai_first"
+    assert entry["rule_set"] == "custom_rules_default"
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError("LLM should not be called on cache hit")
@@ -274,6 +327,7 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
         model="test-model",
         base_url="",
         cache_path=str(cache_path),
+        strategy="ai_first",
     )
 
     assert second[0]["新增/修改功能点"] == "垂直行业管理界面开发"

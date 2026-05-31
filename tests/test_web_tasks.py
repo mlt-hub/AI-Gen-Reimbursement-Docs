@@ -45,6 +45,8 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
             "output_dir": str(output_dir),
             "mode": "from-excel-gen-fpa",
             "fpa_profile": "strict_fpa",
+            "fpa_strategy": "ai_first",
+            "fpa_rule_set": "strict_fpa_default",
         },
     )
 
@@ -58,6 +60,8 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     assert state.task_created_at is not None
     assert calls
     assert calls[0]["args"][10] == "strict_fpa"
+    assert calls[0]["args"][11] == "ai_first"
+    assert calls[0]["args"][12] == "strict_fpa_default"
     server.session_manager.cleanup_download(data["session_id"])
 
 
@@ -73,7 +77,12 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
 
     resp = client.post(
         "/api/run-upload",
-        data={"mode": "from-excel-gen-fpa", "fpa_profile": "strict_fpa"},
+        data={
+            "mode": "from-excel-gen-fpa",
+            "fpa_profile": "strict_fpa",
+            "fpa_strategy": "ai_first",
+            "fpa_rule_set": "strict_fpa_default",
+        },
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
@@ -89,6 +98,8 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
     assert state.task_created_at is not None
     assert calls
     assert calls[0]["args"][10] == "strict_fpa"
+    assert calls[0]["args"][11] == "ai_first"
+    assert calls[0]["args"][12] == "strict_fpa_default"
     server.session_manager.cleanup_download(data["session_id"])
 
 
@@ -130,7 +141,9 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
         data={
             "module_name": "垂直行业管理",
             "api_key": "sk-test",
-            "fpa_profile": "current_project",
+            "fpa_profile": "custom_rules",
+            "fpa_strategy": "rules_first",
+            "fpa_rule_set": "custom_rules_default",
         },
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
@@ -142,7 +155,9 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
     assert calls
     assert calls[0]["module_name"] == "垂直行业管理"
     assert calls[0]["api_key"] == "sk-test"
-    assert calls[0]["profile_name"] == "current_project"
+    assert calls[0]["profile_name"] == "custom_rules"
+    assert calls[0]["strategy"] == "rules_first"
+    assert calls[0]["rule_set"] == "custom_rules_default"
 
 
 def test_fpa_preview_modules_upload_returns_selectable_modules(monkeypatch):

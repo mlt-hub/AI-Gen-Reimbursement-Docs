@@ -42,8 +42,17 @@ log_level: INFO
 # 如果AI response数据被截断，增大max_tokens
 max_tokens: 6000
 
-# FPA 规划口径。可用：current_project（当前报账模板口径）、strict_fpa（严格FPA口径）
-fpa_profile: current_project
+# FPA 规划口径。可用：custom_rules（用户自定义规则口径）、strict_fpa（严格FPA口径）
+fpa_profile: custom_rules
+
+# FPA 执行策略。留空时跟随 profile 默认：
+# custom_rules => rules_first；strict_fpa => ai_first。
+# 可用：rules_first（规则优先）、ai_first（AI优先）、rules_only（仅规则）、ai_only（仅AI）。
+fpa_strategy: ""
+
+# FPA 规则集名称。留空时跟随 profile 默认：
+# custom_rules => custom_rules_default；strict_fpa => strict_fpa_default。
+fpa_rule_set: ""
 
 # strict_fpa 外部数据组扩展规则。
 # 这里只扩展内置规则，不覆盖内置规则；普通外部服务调用不要配置为数据组。

@@ -12,6 +12,8 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_cosmic_warn_marker,
     load_fpa_reduced_use_workload,
     load_fpa_profile,
+    load_fpa_rule_set,
+    load_fpa_strategy,
     load_fpa_external_data_rules,
     load_fpa_user_prompt_template,
     load_model_name,
@@ -127,13 +129,37 @@ class TestLoadFpaProfile:
     def test_default_profile(self):
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=Path("/nonexistent")):
-            assert load_fpa_profile() == "current_project"
+            assert load_fpa_profile() == "custom_rules"
 
     def test_configured_profile(self, tmp_path):
         yaml_file = tmp_path / "system_config.yaml"
         yaml_file.write_text("fpa_profile: strict_fpa\n", encoding="utf-8")
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_profile() == "strict_fpa"
+
+    def test_invalid_configured_profile_uses_default(self, tmp_path):
+        yaml_file = tmp_path / "system_config.yaml"
+        yaml_file.write_text("fpa_profile: fpa_profile\n", encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_profile() == "custom_rules"
+
+
+class TestLoadFpaExecutionOptions:
+    def test_strategy_and_rule_set_default_to_empty(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            assert load_fpa_strategy() == ""
+            assert load_fpa_rule_set() == ""
+
+    def test_strategy_and_rule_set_from_config(self, tmp_path):
+        yaml_file = tmp_path / "system_config.yaml"
+        yaml_file.write_text(
+            "fpa_strategy: ai_first\nfpa_rule_set: strict_fpa_default\n",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_strategy() == "ai_first"
+            assert load_fpa_rule_set() == "strict_fpa_default"
 
 
 class TestLoadFpaExternalDataRules:
