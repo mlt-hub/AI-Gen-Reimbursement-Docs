@@ -2856,7 +2856,7 @@ H6 已完成：
 G1. 已完成：增加 Excel COM / LibreOffice 复算校验，只做 warning。
 G2. 已完成：预览模式增加 --use-preview-cache / --keep-preview-files。
 G3. 已完成：预览模式增加纯内存解析，减少临时 MD 文件。
-G4. 如模板真实公式不是 调整值 × 要素数量，将业务公式翻译为 Python 规则并补测试。
+G4. 已完成：已确认模板真实公式仍为 调整值 × 要素数量，无需翻译额外业务公式，已补模板公式守护测试。
 ```
 
 G1 实现记录：
@@ -2912,6 +2912,23 @@ G3 实现记录：
 已补测试：
 - test_preview_fpa_module_uses_memory_parse_by_default
 - test_preview_fpa_modules_uses_memory_parse_by_default
+```
+
+G4 实现记录：
+
+```text
+复核模板：
+- data/out_templates/FPA工作量评估-输出模板.xlsx
+- tests/fixtures/output_templates/FPA工作量评估-输出模板.xlsx
+
+结论：
+- FPA功能点估算 Sheet 中 L3 公式为 =J3*K3。
+- L1 汇总公式为 =SUM(L3:...)。
+- 当前 Python calculate_fpa_row_workload(row) = 调整值 × 要素数量 与模板真实工作量公式一致。
+- 当前无需把额外业务公式翻译为 Python 规则。
+
+已补测试：
+- test_fpa_template_workload_formula_matches_python_total_rule
 ```
 
 ### 后续恢复指令

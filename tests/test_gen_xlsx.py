@@ -135,6 +135,20 @@ class TestBuildFpaRuleRows:
 
 
 class TestFpaTotalCalculation:
+    def test_fpa_template_workload_formula_matches_python_total_rule(self):
+        template_paths = [
+            Path("data/out_templates/FPA工作量评估-输出模板.xlsx"),
+            FIXTURES / "output_templates" / "FPA工作量评估-输出模板.xlsx",
+        ]
+        for template in template_paths:
+            if not template.exists():
+                pytest.skip(f"模板文件缺失: {template}")
+            wb = openpyxl.load_workbook(template, data_only=False)
+            ws = wb["FPA功能点估算"]
+            assert ws.cell(3, 12).value == "=J3*K3"
+            assert str(ws.cell(1, 12).value).startswith("=SUM(L3:")
+            wb.close()
+
     def test_calculates_total_from_adjust_and_elements(self):
         rows = [
             {"调整值": 2, "要素数量": 3},
