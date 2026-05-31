@@ -2627,6 +2627,40 @@ strict_fpa 外部数据组识别增加否定句保护，例如“不作为外部
 43 passed
 ```
 
+本轮针对 A4-A5 Golden Case 已补充：
+
+```text
+tests/fixtures/fpa_golden_cases/internal_vs_external_org_reference.json
+tests/fixtures/fpa_golden_cases/mixed_internal_external_data_functions.json
+```
+
+覆盖内容：
+
+```text
+A4. 内部组织维护 ILF 与外部组织引用 EIF 对照：本系统维护内部组织信息按 ILF，引用主数据平台组织主数据按 EIF。
+A5. 同一三级模块同时包含多个数据功能：CRM客户档案 EIF、OA流程单据 EIF、供应商准入协同信息 ILF，并保留对应 EI / EQ 事务功能。
+```
+
+同步修复：
+
+```text
+strict_fpa 数据功能识别支持同一三级模块同时输出多个 EIF，并可与明确“本系统维护”的 ILF 并存。
+收紧内部数据功能触发条件，避免把“CRM 系统维护”“ERP 系统维护”“OA 系统维护”等外部系统维护误识别为本系统 ILF。
+主数据平台命中“组织主数据”时不再同时输出通用“外部主数据”。
+```
+
+已执行：
+
+```powershell
+.\scripts\test.ps1 tests/test_fpa_golden_fixture_reports.py tests/test_fpa_external_data_rules.py tests/test_fpa_acceptance.py tests/test_gen_fpa_strict_profile.py -vv
+```
+
+结果：
+
+```text
+47 passed
+```
+
 ## 暂缓推进任务池
 
 以下事项已确认暂不推进。后续如需继续，可按本节末尾的指令模板恢复。
@@ -2637,8 +2671,8 @@ strict_fpa 外部数据组识别增加否定句保护，例如“不作为外部
 A1. 已完成：增加 OA 审批流程引用样例：OA流程单据 EIF、关联审批单 EI、查看审批进度 EQ。
 A2. 已完成：增加主数据平台组织引用样例：组织主数据 EIF、选择归属组织 EI。
 A3. 已完成：增加支付网关退款反例：普通支付服务不生成 EIF、发起退款 EI、查看退款结果 EQ。
-A4. 增加内部组织维护 ILF 与外部组织引用 EIF 的对照样例。
-A5. 增加一个三级模块同时包含多个 ILF / EIF 的复杂样例。
+A4. 已完成：增加内部组织维护 ILF 与外部组织引用 EIF 的对照样例。
+A5. 已完成：增加一个三级模块同时包含多个 ILF / EIF 的复杂样例。
 A6. 在 JSON fixture 之外，补充真实 Excel / MD 验收样例。
 ```
 

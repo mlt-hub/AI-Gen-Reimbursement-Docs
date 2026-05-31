@@ -627,14 +627,16 @@ class StrictFpaProfile(CustomRulesProfile):
             ]
         )
         data_functions: list[tuple[str, str, str]] = []
-        if self._is_external_data_group(all_text):
+        for external_name in self._external_data_names(all_text, l3):
             data_functions.append((
-                self._external_data_name(all_text, l3),
+                external_name,
                 "EIF",
                 "外部系统维护、本系统引用的数据组，按 EIF。",
             ))
-            return data_functions
-        if any(k in all_text for k in ["维护", "保存", "新增", "添加", "修改", "编辑", "删除", "导入", "配置"]):
+        if self._has_internal_data_function(all_text) or (
+            not data_functions
+            and any(k in all_text for k in ["维护", "保存", "新增", "添加", "修改", "编辑", "删除", "导入", "配置"])
+        ):
             data_functions.append((
                 self._internal_data_name(l3),
                 "ILF",
@@ -667,6 +669,36 @@ class StrictFpaProfile(CustomRulesProfile):
             return extracted
         name = fallback or "外部维护数据组"
         return name if "数据组" in name else f"{name}数据组"
+
+    def _external_data_names(self, text: str, fallback: str) -> list[str]:
+        if not self._is_external_data_group(text):
+            return []
+        names: list[str] = []
+        for rule in self._external_data_group_rules():
+            if rule.matches(text):
+                names.append(rule.data_name)
+        if not names:
+            extracted = self._extract_external_data_name(text)
+            if extracted:
+                names.append(extracted)
+        if not names:
+            name = fallback or "外部维护数据组"
+            names.append(name if "数据组" in name else f"{name}数据组")
+        if len(names) > 1 and "外部主数据" in names:
+            names = [name for name in names if name != "外部主数据"]
+        result: list[str] = []
+        seen: set[str] = set()
+        for name in names:
+            if name and name not in seen:
+                seen.add(name)
+                result.append(name)
+        return result
+
+    def _has_internal_data_function(self, text: str) -> bool:
+        return any(k in text for k in [
+            "本系统维护", "本系统保存",
+            "维护本系统", "记录本系统",
+        ])
 
     def _external_data_group_rules(self) -> list[ExternalDataGroupRule]:
         rules = list(DEFAULT_EXTERNAL_DATA_GROUP_RULES)
