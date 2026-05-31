@@ -323,7 +323,8 @@ K5. 已完成：增加用户可配置的审核列。
 
 ```text
 F2. 部分完成：已在不调用真实 AI API 的前提下，使用 mock、fixture、golden cases 和本地规则路径验证预览、正式生成、check.xlsx、warning 来源、规则命中详情。
-F3. 部分完成：已自动化复核代表样例的拆分粒度、类型判断、覆盖情况和 FPA 工作量汇总值。
+F2. 补充完成：已自动化验证 mock AI cache 命中后 audit trace 与 check.xlsx 的 AI原始返回 Sheet 标记为 ai_cache。
+F3. 部分完成：已自动化复核代表样例的拆分粒度、类型判断、覆盖情况、预览/正式规则路径一致性和 FPA 工作量汇总值。
 ```
 
 仍需人工/真实模型验收：
