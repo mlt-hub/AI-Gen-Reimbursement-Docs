@@ -3,6 +3,7 @@ from pathlib import Path
 
 import openpyxl
 
+from ai_gen_reimbursement_docs.excel_source import generate_md_files
 from ai_gen_reimbursement_docs.gen_fpa import (
     _read_fpa_rows_md_for_audit,
     generate_fpa_check_xlsx_from_md,
@@ -51,6 +52,7 @@ def _write_minimal_excel(path: Path, rows: list[dict[str, str]], meta: dict[str,
     wb = openpyxl.Workbook()
     ws_meta = wb.active
     ws_meta.title = "1、工单需求-元数据录入"
+    ws_meta.append(["项目", "内容"])
     for key, value in meta.items():
         ws_meta.append([key, value])
     for title in [
@@ -178,6 +180,56 @@ def test_fpa_acceptance_preview_and_formal_rules_use_same_rows(tmp_path):
     assert preview_summary == formal_summary == case["expected"]["custom_rules"]
     assert preview["audit"]["coverage"]["missing_count"] == 0
     assert not list((tmp_path / "preview").glob("**/FPA工作量评估.xlsx"))
+
+
+def test_fpa_acceptance_real_excel_to_md_to_formal_check_workbook(tmp_path):
+    case = json.loads((FIXTURE_DIR / "mixed_internal_external_data_functions.json").read_text(encoding="utf-8"))
+    input_xlsx = tmp_path / "mixed.xlsx"
+    md_dir = tmp_path / "md"
+    fpa_md = tmp_path / "fpa.md"
+    summary_md = tmp_path / "summary.md"
+    audit_trace = tmp_path / "trace.json"
+    check_xlsx = tmp_path / "check.xlsx"
+
+    _write_minimal_excel(input_xlsx, case["rows"], case["meta"])
+    md_paths = generate_md_files(str(input_xlsx), str(md_dir))
+
+    plan_fpa_md_from_tree(
+        md_paths["module_tree_md"],
+        md_paths["doc_meta_md"],
+        str(fpa_md),
+        summary_md_path=str(summary_md),
+        profile_name="strict_fpa",
+        strategy="rules_only",
+        audit_trace_path=str(audit_trace),
+    )
+    generate_fpa_check_xlsx_from_md(str(fpa_md), md_paths["module_tree_md"], str(check_xlsx), str(audit_trace))
+
+    _, fpa_rows = _read_fpa_rows_md_for_audit(str(fpa_md))
+    actual = [
+        {"name": row["新增/修改功能点"], "type": row["类型"]}
+        for row in fpa_rows
+    ]
+    assert actual == case["expected"]["strict_fpa"]
+    assert "FPA工作量（人/天）: 10" in summary_md.read_text(encoding="utf-8")
+
+    wb = openpyxl.load_workbook(check_xlsx, data_only=True)
+    assert wb.sheetnames == ["FPA结果", "覆盖审核", "Warnings", "规则命中详情", "AI原始返回"]
+    ws_coverage = wb["覆盖审核"]
+    coverage_headers = _headers(ws_coverage)
+    assert ws_coverage.cell(2, coverage_headers.index("功能过程总数") + 1).value == 4
+    assert ws_coverage.cell(2, coverage_headers.index("已覆盖数") + 1).value == 4
+    assert ws_coverage.cell(2, coverage_headers.index("未覆盖数") + 1).value == 0
+
+    ws_rule_hits = wb["规则命中详情"]
+    rule_headers = _headers(ws_rule_hits)
+    rule_ids = [
+        ws_rule_hits.cell(row=row, column=rule_headers.index("规则ID") + 1).value
+        for row in range(2, ws_rule_hits.max_row + 1)
+    ]
+    assert rule_ids.count("strict_fpa.external_data_group") >= 2
+    assert "strict_fpa.internal_data_group" in rule_ids
+    wb.close()
 
 
 def test_fpa_acceptance_mock_ai_warning_source_reaches_check_workbook(monkeypatch, tmp_path):
