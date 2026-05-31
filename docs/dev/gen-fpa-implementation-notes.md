@@ -2855,7 +2855,7 @@ H6 已完成：
 ```text
 G1. 已完成：增加 Excel COM / LibreOffice 复算校验，只做 warning。
 G2. 已完成：预览模式增加 --use-preview-cache / --keep-preview-files。
-G3. 预览模式增加纯内存解析，减少临时 MD 文件。
+G3. 已完成：预览模式增加纯内存解析，减少临时 MD 文件。
 G4. 如模板真实公式不是 调整值 × 要素数量，将业务公式翻译为 Python 规则并补测试。
 ```
 
@@ -2895,6 +2895,23 @@ G2 实现记录：
 已补测试：
 - test_preview_fpa_module_can_use_cached_preview_md
 - test_preview_fpa_module_keep_preview_files_without_work_dir
+```
+
+G3 实现记录：
+
+```text
+新增内存解析入口：
+- excel_source.read_base_data_from_excel(...)
+
+行为：
+- preview_fpa_module / preview_fpa_modules 默认直接从 Excel 读取模块树和元数据内存结构，不写 fpa-preview-md。
+- 只有传入 work_dir、CLI --output-dir、--keep-preview-files 或 --use-preview-cache 时，才走文件型 fpa-preview-md 路径。
+- generate_md_files(...) 复用同一套 read_base_data_from_excel(...)，避免内存解析和文件生成逻辑分叉。
+- preview 返回 preview_md_dir="" 表示本次为纯内存解析；preview_cache_used=false。
+
+已补测试：
+- test_preview_fpa_module_uses_memory_parse_by_default
+- test_preview_fpa_modules_uses_memory_parse_by_default
 ```
 
 ### 后续恢复指令

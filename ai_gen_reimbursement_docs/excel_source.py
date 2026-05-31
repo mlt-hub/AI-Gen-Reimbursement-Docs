@@ -70,20 +70,9 @@ def _key_value_sheet(ws: "openpyxl.worksheet.worksheet.Worksheet") -> dict[str, 
     return data
 
 
-def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
-    """读取功能清单.xlsx，生成gen-basedata-功能清单-模块树.md 和 gen-basedata-录入文档元数据-模板.md。
-
-    Args:
-        excel_path: 功能清单.xlsx 路径
-        output_dir: 交付物输出目录（空则取 excel 所在目录）
-
-    Returns:
-        {"module_tree_md": 路径, "doc_meta_md": 路径}
-    """
+def read_base_data_from_excel(excel_path: str) -> dict[str, object]:
+    """读取功能清单 Excel 的模块树和元数据，返回内存结构，不写中间 MD。"""
     _s = load_sheet_names()
-    if not output_dir:
-        output_dir = os.path.dirname(os.path.abspath(excel_path))
-    os.makedirs(output_dir, exist_ok=True)
 
     try:
         wb = openpyxl.load_workbook(excel_path, data_only=False)
@@ -95,36 +84,16 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
             f"内部错误: {e}"
         ) from e
 
-    # ========== 解析各个 sheet ==========
-
     actual_sheets = {key: _resolve_sheet_name(wb, _s, key) for key in [
         "work_order_meta", "func_list", "fpa_meta", "spec_meta", "cosmic_meta", "list_meta"
     ]}
 
-    # 1、工单需求-元数据录入
-    ws1 = wb[actual_sheets["work_order_meta"]]
-    project_info = _key_value_sheet(ws1)
-
-    # 2、功能清单-内容录入 — 模块树 + 功能过程
-    ws2 = wb[actual_sheets["func_list"]]
-    func_rows = _resolve_inherited_rows(ws2)
-
-    # 3、FPA工作量评估-元数据录入
-    ws3 = wb[actual_sheets["fpa_meta"]]
-    fpa_meta = _key_value_sheet(ws3)
-
-    # 4、项目需求说明书-元数据录入
-    ws4 = wb[actual_sheets["spec_meta"]]
-    docx_meta = _key_value_sheet(ws4)
-
-    # 6、项目功能点拆分表-元数据录入
-    ws6 = wb[actual_sheets["cosmic_meta"]]
-    cosmic_meta = _key_value_sheet(ws6)
-
-    # 7、项目需求清单-元数据录入
-    ws7 = wb[actual_sheets["list_meta"]]
-    list_meta = _key_value_sheet(ws7)
-
+    project_info = _key_value_sheet(wb[actual_sheets["work_order_meta"]])
+    func_rows = _resolve_inherited_rows(wb[actual_sheets["func_list"]])
+    fpa_meta = _key_value_sheet(wb[actual_sheets["fpa_meta"]])
+    docx_meta = _key_value_sheet(wb[actual_sheets["spec_meta"]])
+    cosmic_meta = _key_value_sheet(wb[actual_sheets["cosmic_meta"]])
+    list_meta = _key_value_sheet(wb[actual_sheets["list_meta"]])
     wb.close()
 
     # data_only=True 还原公式单元格的计算值
@@ -144,7 +113,6 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
                 list_meta[wk] = wv
     wb_val.close()
 
-    # 统计元数据自动统计（层级去重，与 Excel 展示一致）
     stats_meta = {
         "入口（个数）": str(len({r[0] for r in func_rows if r[0]})),
         "一级模块（个数）": str(len({(r[0], r[1]) for r in func_rows if r[1]})),
@@ -152,6 +120,66 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
         "三级模块（个数）": str(len({(r[0], r[1], r[2], r[3]) for r in func_rows if r[3]})),
         "功能过程（个数）": str(len({r[6] for r in func_rows if r[6]})),
     }
+
+    sections = [
+        (_s["work_order_meta"], project_info),
+        (_s["fpa_meta"], fpa_meta),
+        (_s["spec_meta"], docx_meta),
+        (_s["cosmic_meta"], cosmic_meta),
+        (_s["list_meta"], list_meta),
+        (_s["stats_meta"], stats_meta),
+    ]
+    flat_meta: dict[str, str] = {}
+    normalized_sections: list[tuple[str, dict[str, str]]] = []
+    for sheet_name, kv in sections:
+        normalized: dict[str, str] = {}
+        for key, val in kv.items():
+            v = val
+            for ph, src in [
+                ("${工单编号}", project_info.get("工单编号", "")),
+                ("${工单名称}", project_info.get("工单标题", "")),
+                ("${工单标题}", project_info.get("工单标题", "")),
+                ("${子系统（模块）}", fpa_meta.get("子系统（模块）", "")),
+            ]:
+                v = v.replace(ph, src)
+            normalized[key] = v
+            flat_meta[key] = v
+            flat_meta[f"{sheet_name}.{key}"] = v
+        normalized_sections.append((sheet_name, normalized))
+
+    tree_headers = [
+        "入口", "一级模块", "二级模块", "三级模块", "客户端类型",
+        "三级模块整体功能描述", "功能过程", "功能过程类型", "功能过程描述",
+    ]
+    tree_rows = [
+        {key: row[idx] if idx < len(row) else "" for idx, key in enumerate(tree_headers)}
+        for row in func_rows
+    ]
+    return {
+        "source_file": os.path.basename(excel_path),
+        "func_rows": func_rows,
+        "tree_rows": tree_rows,
+        "sections": normalized_sections,
+        "meta": flat_meta,
+    }
+
+
+def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
+    """读取功能清单.xlsx，生成gen-basedata-功能清单-模块树.md 和 gen-basedata-录入文档元数据-模板.md。
+
+    Args:
+        excel_path: 功能清单.xlsx 路径
+        output_dir: 交付物输出目录（空则取 excel 所在目录）
+
+    Returns:
+        {"module_tree_md": 路径, "doc_meta_md": 路径}
+    """
+    if not output_dir:
+        output_dir = os.path.dirname(os.path.abspath(excel_path))
+    os.makedirs(output_dir, exist_ok=True)
+    base_data = read_base_data_from_excel(excel_path)
+    func_rows = base_data["func_rows"]
+    sections = base_data["sections"]
 
     # ========== 生成 gen-basedata-功能清单-模块树.md ==========
 
@@ -179,28 +207,12 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
         f.write(f"**生成日期**：{datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
 
         # 按 sheet 分组写入
-        sections = [
-            (_s["work_order_meta"], project_info),
-            (_s["fpa_meta"], fpa_meta),
-            (_s["spec_meta"], docx_meta),
-            (_s["cosmic_meta"], cosmic_meta),
-            (_s["list_meta"], list_meta),
-            (_s["stats_meta"], stats_meta),
-        ]
-
         for sheet_name, kv in sections:
             f.write(f"## {sheet_name}\n\n")
             f.write("| 项目 | 内容 |\n")
             f.write("|------|------|\n")
             for key, val in kv.items():
-                # 替换 【占位符】 为实际值
-                v = val
-                for ph, src in [("${工单编号}", project_info.get("工单编号", "")),
-                                 ("${工单名称}", project_info.get("工单标题", "")),
-                                 ("${工单标题}", project_info.get("工单标题", "")),
-                                 ("${子系统（模块）}", fpa_meta.get("子系统（模块）", ""))]:
-                    v = v.replace(ph, src)
-                val_escaped = v.replace('|', '\\|').replace('\n', ' ').replace('\r', ' ')
+                val_escaped = val.replace('|', '\\|').replace('\n', ' ').replace('\r', ' ')
                 f.write(f"| {key} | {val_escaped} |\n")
             f.write("\n")
 

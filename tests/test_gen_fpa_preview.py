@@ -50,6 +50,41 @@ def test_preview_fpa_modules_returns_selectable_l3_modules(test_excel, tmp_path)
     assert not list(tmp_path.glob("**/FPA工作量评估.xlsx"))
 
 
+def test_preview_fpa_module_uses_memory_parse_by_default(test_excel, monkeypatch):
+    def fail_generate_md_files(*args, **kwargs):
+        raise AssertionError("default preview should not write intermediate MD files")
+
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.excel_source.generate_md_files",
+        fail_generate_md_files,
+    )
+
+    result = preview_fpa_module(
+        file_path=test_excel,
+        module_index=1,
+    )
+
+    assert result["rows"]
+    assert result["preview_md_dir"] == ""
+    assert result["preview_cache_used"] is False
+
+
+def test_preview_fpa_modules_uses_memory_parse_by_default(test_excel, monkeypatch):
+    def fail_generate_md_files(*args, **kwargs):
+        raise AssertionError("default module preview list should not write intermediate MD files")
+
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.excel_source.generate_md_files",
+        fail_generate_md_files,
+    )
+
+    result = preview_fpa_modules(file_path=test_excel)
+
+    assert result["modules"]
+    assert result["preview_md_dir"] == ""
+    assert result["preview_cache_used"] is False
+
+
 def test_preview_fpa_module_can_use_cached_preview_md(test_excel, tmp_path, monkeypatch):
     first = preview_fpa_module(
         file_path=test_excel,
