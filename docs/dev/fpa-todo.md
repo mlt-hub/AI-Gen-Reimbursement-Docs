@@ -324,13 +324,14 @@ K5. 已完成：增加用户可配置的审核列。
 ```text
 F2. 部分完成：已在不调用真实 AI API 的前提下，使用 mock、fixture、golden cases 和本地规则路径验证预览、正式生成、check.xlsx、warning 来源、规则命中详情。
 F2. 补充完成：已自动化验证 mock AI cache 命中后 audit trace 与 check.xlsx 的 AI原始返回 Sheet 标记为 ai_cache。
+F2. 真实模型验收已尝试但当前受执行环境限制：2026-05-31 已确认 API Key、base_url、model 配置存在，并选取 mixed_internal_external_data_functions、payment_gateway_refund、master_data_org_reference 作为代表样例；受限沙箱内真实模型连接失败，流程按设计回退 rules_fallback，不能作为真实模型质量结论；申请沙箱外网络调用被策略拒绝，因为会向外部 LLM 端点发送仓库 fixture / 业务样例数据。
+F2. 真实模型验收完成：2026-05-31 在用户明确允许外发 FPA 验收样例后，使用 deepseek-v4-flash[1m] / api.deepseek.com 跑通 mixed_internal_external_data_functions、payment_gateway_refund、master_data_org_reference；三例均生成 check.xlsx 五张 Sheet，AI原始返回来源为 ai，复跑后 AI原始返回 Sheet 来源为 ai_cache；warning 可追溯到 postprocess.ai_first_type_conflict / coverage.missing_process，规则命中详情记录 postprocess.ai_type_validation / postprocess.ai_first_type_conflict。
 F3. 部分完成：已自动化复核代表样例的拆分粒度、类型判断、覆盖情况、预览/正式规则路径一致性和 FPA 工作量汇总值。
 ```
 
 仍需人工/真实模型验收：
 
 ```text
-F2. 使用真实模型跑代表性样例，检查 AI 说明质量、warning、缓存、预览和正式生成结果。
 F3. 使用真实业务输入复核拆分粒度、类型判断和汇总值。
 ```
 
