@@ -2854,7 +2854,7 @@ H6 已完成：
 
 ```text
 G1. 已完成：增加 Excel COM / LibreOffice 复算校验，只做 warning。
-G2. 预览模式增加 --use-preview-cache / --keep-preview-files。
+G2. 已完成：预览模式增加 --use-preview-cache / --keep-preview-files。
 G3. 预览模式增加纯内存解析，减少临时 MD 文件。
 G4. 如模板真实公式不是 调整值 × 要素数量，将业务公式翻译为 Python 规则并补测试。
 ```
@@ -2877,6 +2877,24 @@ G1 实现记录：
 - validate_fpa_excel_recalculation 复算成功且缓存值一致时无 warning。
 - 缓存值与代码汇总不一致时返回 warning。
 - Excel COM / LibreOffice 均不可用时返回 warning。
+```
+
+G2 实现记录：
+
+```text
+新增 CLI 参数：
+- --use-preview-cache：FPA 预览复用已有 fpa-preview-md，缓存齐备时不重新解析 Excel。
+- --keep-preview-files：保留 FPA 预览生成的中间 MD 文件，便于调试。
+
+目录行为：
+- 默认行为不变：未传 work_dir 且未开启 keep 时使用临时目录，预览结束后清理。
+- 传入 work_dir 或 CLI --output-dir 时使用 <work_dir>/fpa-preview-md。
+- 未传 work_dir 且开启 keep 时使用输入 Excel 同目录下的 .fpa-preview/fpa-preview-md。
+- preview_fpa_module / preview_fpa_modules 返回 preview_md_dir 和 preview_cache_used，CLI 在开启 keep/cache 时打印对应状态。
+
+已补测试：
+- test_preview_fpa_module_can_use_cached_preview_md
+- test_preview_fpa_module_keep_preview_files_without_work_dir
 ```
 
 ### 后续恢复指令

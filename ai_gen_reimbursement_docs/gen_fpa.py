@@ -1745,25 +1745,55 @@ def plan_fpa_md_from_tree(
     return output_md_path
 
 
+def _prepare_fpa_preview_md_dir(
+    *,
+    file_path: str,
+    work_dir: str,
+    keep_preview_files: bool,
+    use_preview_cache: bool,
+    temp_prefix: str,
+    required_files: list[str],
+) -> tuple[str, tempfile.TemporaryDirectory[str] | None, bool]:
+    temp_ctx: tempfile.TemporaryDirectory[str] | None = None
+    if work_dir:
+        md_dir = os.path.join(work_dir, "fpa-preview-md")
+        os.makedirs(md_dir, exist_ok=True)
+    elif keep_preview_files:
+        md_dir = os.path.join(os.path.dirname(os.path.abspath(file_path)), ".fpa-preview", "fpa-preview-md")
+        os.makedirs(md_dir, exist_ok=True)
+    else:
+        temp_ctx = tempfile.TemporaryDirectory(prefix=temp_prefix)
+        md_dir = temp_ctx.name
+
+    cache_ready = all(os.path.exists(os.path.join(md_dir, name)) for name in required_files)
+    if use_preview_cache and cache_ready:
+        return md_dir, temp_ctx, True
+
+    from ai_gen_reimbursement_docs.excel_source import generate_md_files
+
+    generate_md_files(file_path, md_dir)
+    return md_dir, temp_ctx, False
+
+
 def preview_fpa_modules(
     *,
     file_path: str,
     work_dir: str = "",
+    use_preview_cache: bool = False,
+    keep_preview_files: bool = False,
 ) -> dict[str, object]:
     """解析功能清单并返回可预览的三级模块列表，不调用 AI，不生成正式交付物。"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
-    temp_ctx = None
-    if work_dir:
-        md_dir = os.path.join(work_dir, "fpa-preview-md")
-        os.makedirs(md_dir, exist_ok=True)
-    else:
-        temp_ctx = tempfile.TemporaryDirectory(prefix="ard-fpa-preview-modules-")
-        md_dir = temp_ctx.name
+    md_dir, temp_ctx, cache_used = _prepare_fpa_preview_md_dir(
+        file_path=file_path,
+        work_dir=work_dir,
+        keep_preview_files=keep_preview_files,
+        use_preview_cache=use_preview_cache,
+        temp_prefix="ard-fpa-preview-modules-",
+        required_files=["0.1.gen-basedata-功能清单-模块树.md"],
+    )
     try:
-        from ai_gen_reimbursement_docs.excel_source import generate_md_files
-
-        generate_md_files(file_path, md_dir)
         tree_md = os.path.join(md_dir, "0.1.gen-basedata-功能清单-模块树.md")
         rows = parse_module_tree_md(tree_md)
         modules: list[dict[str, object]] = []
@@ -1790,6 +1820,8 @@ def preview_fpa_modules(
         return {
             "modules": modules,
             "warnings": [] if modules else ["未解析到三级模块"],
+            "preview_md_dir": md_dir,
+            "preview_cache_used": cache_used,
         }
     finally:
         if temp_ctx is not None:
@@ -1809,23 +1841,26 @@ def preview_fpa_module(
     profile_name: str = "",
     strategy: str = "",
     rule_set: str = "",
+    use_preview_cache: bool = False,
+    keep_preview_files: bool = False,
 ) -> dict[str, object]:
     """预览单个三级模块的 FPA 规划结果，不生成正式 Excel。"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
     execution = resolve_fpa_execution_config(profile_name, strategy, rule_set)
     profile = execution.profile
-    temp_ctx = None
-    if work_dir:
-        md_dir = os.path.join(work_dir, "fpa-preview-md")
-        os.makedirs(md_dir, exist_ok=True)
-    else:
-        temp_ctx = tempfile.TemporaryDirectory(prefix="ard-fpa-preview-")
-        md_dir = temp_ctx.name
+    md_dir, temp_ctx, cache_used = _prepare_fpa_preview_md_dir(
+        file_path=file_path,
+        work_dir=work_dir,
+        keep_preview_files=keep_preview_files,
+        use_preview_cache=use_preview_cache,
+        temp_prefix="ard-fpa-preview-",
+        required_files=[
+            "0.1.gen-basedata-功能清单-模块树.md",
+            "0.2.gen-basedata-录入文档元数据-模板.md",
+        ],
+    )
     try:
-        from ai_gen_reimbursement_docs.excel_source import generate_md_files
-
-        generate_md_files(file_path, md_dir)
         tree_md = os.path.join(md_dir, "0.1.gen-basedata-功能清单-模块树.md")
         meta_md = os.path.join(md_dir, "0.2.gen-basedata-录入文档元数据-模板.md")
         rows = parse_module_tree_md(tree_md)
@@ -1939,6 +1974,8 @@ def preview_fpa_module(
             "rule_set": execution.rule_set,
             "rule_set_version": execution.rule_set_version,
             "audit": audit.to_dict(),
+            "preview_md_dir": md_dir,
+            "preview_cache_used": cache_used,
         }
     finally:
         if temp_ctx is not None:

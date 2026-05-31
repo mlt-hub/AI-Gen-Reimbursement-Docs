@@ -469,6 +469,10 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='按序号预览三级模块 FPA 拆分结果，用于同名三级模块')
     parser.add_argument('--preview-fpa-json', action='store_true',
                         help='FPA 预览以 JSON 输出')
+    parser.add_argument('--use-preview-cache', action='store_true',
+                        help='FPA 预览复用已生成的 fpa-preview-md，不重新解析 Excel')
+    parser.add_argument('--keep-preview-files', action='store_true',
+                        help='保留 FPA 预览生成的中间 MD 文件，便于调试')
     parser.add_argument('--cosmic-out-template', default='',
                         help='COSMIC 输出模板路径')
     parser.add_argument('--list-out-template', default='',
@@ -731,6 +735,7 @@ def main():
             template_path = _resolve_templates(excel_path, None).get("fpa", "")
         from ai_gen_reimbursement_docs.config_utils import load_fpa_profile, load_fpa_rule_set, load_fpa_strategy
         from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module
+        preview_work_dir = args.output_dir or ""
         result = preview_fpa_module(
             file_path=excel_path,
             module_name=args.preview_fpa_module,
@@ -742,6 +747,9 @@ def main():
             profile_name=args.fpa_profile or load_fpa_profile(),
             strategy=args.fpa_strategy or load_fpa_strategy(),
             rule_set=args.fpa_rule_set or load_fpa_rule_set(),
+            work_dir=preview_work_dir,
+            use_preview_cache=args.use_preview_cache,
+            keep_preview_files=args.keep_preview_files,
         )
         if args.preview_fpa_json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -757,6 +765,9 @@ def main():
             print("\nWarnings:")
             for item in result["warnings"]:
                 print(f"- {item}")
+        if args.keep_preview_files or args.use_preview_cache:
+            print(f"\n预览中间文件: {result.get('preview_md_dir')}")
+            print(f"使用缓存: {'是' if result.get('preview_cache_used') else '否'}")
         print("\n说明：")
         for i, row in enumerate(result["rows"], 1):
             print(f"[{i}] {row['name']}")
