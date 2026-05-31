@@ -2156,6 +2156,26 @@ Sheet: FPA结果
 Sheet: 覆盖审核
   按三级模块展示功能过程覆盖情况。
   包含功能过程总数、已覆盖数、未覆盖数、已覆盖功能过程、未覆盖功能过程、生成方式统计和 warnings。
+
+Sheet: Warnings
+  汇总行级 warning 和模块级 warning。
+  包含级别、FPA行序号、模块序号、对象、Warning。
+  未覆盖功能过程会作为模块级 warning 写入。
+
+Sheet: AI原始返回
+  按三级模块展示 AI 原始 rows JSON。
+  展示来源：ai、ai_cache、rules、rules_fallback。
+  展示 AI 调用或解析异常，以及规则优先策略未调用 AI 的说明。
+```
+
+当前格式增强：
+
+```text
+三张 Sheet 均启用首行冻结和自动筛选。
+首行表头加粗并使用浅蓝底色。
+有 warning 的 FPA 行使用浅黄色底色。
+rules_fallback 行使用浅橙色底色。
+存在未覆盖功能过程的模块行使用浅橙色底色。
 ```
 
 同一个 `FpaAuditReport` 同时服务：
@@ -2443,6 +2463,18 @@ npm run build
 
 ```text
 5 passed
+```
+
+本轮针对 AI 原始返回审计已执行：
+
+```powershell
+.\scripts\test.ps1 tests/test_gen_fpa_ai.py tests/test_pipeline.py::TestGenFpa -vv
+```
+
+结果：
+
+```text
+17 passed
 ```
 
 ## 暂缓推进任务池

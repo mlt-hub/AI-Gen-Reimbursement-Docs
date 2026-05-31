@@ -13,6 +13,7 @@ from typing import Any
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, Border
+from openpyxl.styles import PatternFill
 
 from ai_gen_reimbursement_docs.constants import (
     FPA_COL_SEQ, FPA_COL_SUBSYSTEM, FPA_COL_ASSET, FPA_COL_FUNC_POINT,
@@ -535,6 +536,29 @@ def _save_fpa_ai_cache(cache_path: str, cache: dict[str, object]) -> None:
         logger.warning("FPA AI 缓存写入失败: %s", exc)
 
 
+def _save_fpa_audit_trace(audit_trace_path: str, trace: dict[str, object]) -> None:
+    if not audit_trace_path:
+        return
+    try:
+        os.makedirs(os.path.dirname(audit_trace_path) or ".", exist_ok=True)
+        with open(audit_trace_path, "w", encoding="utf-8") as f:
+            _json.dump(trace, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.warning("FPA audit trace 写入失败: %s", exc)
+
+
+def _load_fpa_audit_trace(audit_trace_path: str) -> dict[str, object]:
+    if not audit_trace_path or not os.path.exists(audit_trace_path):
+        return {}
+    try:
+        with open(audit_trace_path, encoding="utf-8") as f:
+            data = _json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        logger.warning("FPA audit trace 读取失败: %s", exc)
+        return {}
+
+
 def _as_float(value: object) -> float:
     try:
         if value is None or value == "":
@@ -572,6 +596,7 @@ def _plan_fpa_rows_with_ai(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
+    audit_trace_path: str = "",
 ) -> list[dict[str, object]]:
     execution = resolve_fpa_execution_config(profile.name, strategy, rule_set)
     profile = execution.profile
@@ -591,6 +616,7 @@ def _plan_fpa_rows_with_ai(
             strategy=strategy,
             rule_set=rule_set,
             rule_set_version=execution.rule_set_version,
+            audit_trace_path=audit_trace_path,
         )
     finally:
         reset_current_fpa_rule_set_config(rule_set_token)
@@ -608,10 +634,28 @@ def _plan_fpa_rows_with_execution(
     strategy: str = "",
     rule_set: str = "",
     rule_set_version: str = "",
+    audit_trace_path: str = "",
 ) -> list[dict[str, object]]:
     groups = _group_rows_by_l3(rows)
     if strategy in {"rules_first", "rules_only"}:
         logger.info("FPA strategy=%s，使用规则集 %s 生成 FPA", strategy, rule_set)
+        _save_fpa_audit_trace(audit_trace_path, {
+            "version": 1,
+            "profile": profile.name,
+            "strategy": strategy,
+            "rule_set": rule_set,
+            "rule_set_version": rule_set_version,
+            "modules": [
+                {
+                    "module": _group_tag(group),
+                    "l3": group.get("l3", ""),
+                    "source": "rules",
+                    "raw_rows": [],
+                    "warnings": ["规则优先策略未调用 AI"],
+                }
+                for group in groups
+            ],
+        })
         return _build_fpa_rule_rows(rows, meta, profile=profile)
     if not api_key:
         raise ValueError(f"FPA strategy={strategy} 需要 API Key，当前未配置")
@@ -629,6 +673,7 @@ def _plan_fpa_rows_with_execution(
     if not isinstance(cache_entries, dict):
         cache_entries = {}
         cache["entries"] = cache_entries
+    audit_modules: list[dict[str, object]] = []
 
     for idx, group in enumerate(groups, 1):
         limited = (max_ai > 0 and idx > max_ai) or (module_limit > 0 and idx > module_limit)
@@ -640,6 +685,13 @@ def _plan_fpa_rows_with_execution(
             fallback += len(group_rows)
             all_rows.extend(group_rows)
             seq += len(group_rows)
+            audit_modules.append({
+                "module": _group_tag(group),
+                "l3": group.get("l3", ""),
+                "source": "rules_fallback",
+                "raw_rows": [],
+                "warnings": ["模块超过 AI 调用限制，已使用规则生成"],
+            })
             continue
 
         cache_key = _fpa_ai_cache_key(
@@ -678,6 +730,13 @@ def _plan_fpa_rows_with_execution(
                     logger.info("  FPA AI 缓存命中 [%d/%d] %s", idx, len(groups), _group_tag(group))
                     all_rows.extend(group_rows)
                     seq += len(group_rows)
+                    audit_modules.append({
+                        "module": _group_tag(group),
+                        "l3": group.get("l3", ""),
+                        "source": "ai_cache",
+                        "raw_rows": raw_rows,
+                        "warnings": warnings,
+                    })
                     continue
             except Exception as exc:
                 logger.warning("FPA AI 缓存内容无效 [%s]: %s，将重新调用 AI", _group_tag(group), exc)
@@ -721,6 +780,13 @@ def _plan_fpa_rows_with_execution(
                     "rule_set_version": rule_set_version,
                     "rows": raw_rows,
                 }
+            audit_modules.append({
+                "module": _group_tag(group),
+                "l3": group.get("l3", ""),
+                "source": "ai",
+                "raw_rows": raw_rows,
+                "warnings": warnings,
+            })
         except Exception as exc:
             if strategy == "ai_only":
                 raise
@@ -732,6 +798,13 @@ def _plan_fpa_rows_with_execution(
             logger.warning("FPA AI 响应解析失败 [%s]: %s", _group_tag(group), exc)
             group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
             fallback += len(group_rows)
+            audit_modules.append({
+                "module": _group_tag(group),
+                "l3": group.get("l3", ""),
+                "source": "rules_fallback",
+                "raw_rows": locals().get("raw_rows", []),
+                "warnings": [f"AI 调用或解析失败: {exc}"],
+            })
 
         all_rows.extend(group_rows)
         seq += len(group_rows)
@@ -746,6 +819,14 @@ def _plan_fpa_rows_with_execution(
         logger.info(msg)
     if cache_path:
         _save_fpa_ai_cache(cache_path, cache)
+    _save_fpa_audit_trace(audit_trace_path, {
+        "version": 1,
+        "profile": profile.name,
+        "strategy": strategy,
+        "rule_set": rule_set,
+        "rule_set_version": rule_set_version,
+        "modules": audit_modules,
+    })
     return all_rows
 
 
@@ -828,16 +909,52 @@ def _read_fpa_rows_md_for_audit(fpa_md_path: str) -> tuple[dict[str, str], list[
     return execution_meta, fpa_rows
 
 
+def _warning_items(text: object) -> list[str]:
+    raw = str(text or "").strip()
+    if not raw:
+        return []
+    return [item.strip() for item in re.split(r"[；;]", raw) if item.strip()]
+
+
+def _group_rows_for_audit(
+    fpa_rows: list[dict[str, object]],
+    groups: list[dict[str, object]],
+) -> dict[int, list[dict[str, object]]]:
+    remaining = list(fpa_rows)
+    result: dict[int, list[dict[str, object]]] = {}
+    for idx, group in enumerate(groups, 1):
+        process_names = set(_process_names_for_group(group))
+        l3 = str(group.get("l3", "") or "")
+        matched: list[dict[str, object]] = []
+        still_remaining: list[dict[str, object]] = []
+        for row in remaining:
+            sources = _source_process_set(row)
+            point_name = str(row.get("新增/修改功能点", "") or "")
+            explanation = str(row.get("计算依据说明", "") or "")
+            if (process_names and sources & process_names) or (l3 and (l3 in point_name or l3 in explanation)):
+                matched.append(row)
+            else:
+                still_remaining.append(row)
+        result[idx] = matched
+        remaining = still_remaining
+    if remaining and groups:
+        result.setdefault(len(groups), []).extend(remaining)
+    return result
+
+
 def generate_fpa_check_xlsx_from_md(
     fpa_md_path: str,
     tree_md_path: str,
     output_path: str,
+    audit_trace_path: str = "",
 ) -> str:
     """生成 FPA 审核副本，不影响正式交付 Excel。"""
     logger.info("第1.5步：生成 FPA 审核副本...")
     execution_meta, fpa_rows = _read_fpa_rows_md_for_audit(fpa_md_path)
     tree_rows = parse_module_tree_md(tree_md_path)
     groups = _group_rows_by_l3(tree_rows)
+    rows_by_module = _group_rows_for_audit(fpa_rows, groups)
+    audit_trace = _load_fpa_audit_trace(audit_trace_path)
 
     wb = openpyxl.Workbook()
     ws_result = wb.active
@@ -848,6 +965,7 @@ def generate_fpa_check_xlsx_from_md(
         "源功能过程", "后处理警告", "profile", "strategy", "rule_set", "rule_set_version",
     ]
     ws_result.append(result_headers)
+    warning_rows: list[list[object]] = []
     for row in fpa_rows:
         ws_result.append([
             row.get("序号", ""),
@@ -869,6 +987,15 @@ def generate_fpa_check_xlsx_from_md(
             execution_meta.get("rule_set", ""),
             execution_meta.get("rule_set_version", ""),
         ])
+        excel_row = ws_result.max_row
+        for warning in _warning_items(row.get("后处理警告", "")):
+            warning_rows.append([
+                "row",
+                row.get("序号", ""),
+                "",
+                row.get("新增/修改功能点", ""),
+                warning,
+            ])
 
     ws_coverage = wb.create_sheet("覆盖审核")
     ws_coverage.append([
@@ -876,28 +1003,22 @@ def generate_fpa_check_xlsx_from_md(
         "功能过程总数", "已覆盖数", "未覆盖数", "已覆盖功能过程", "未覆盖功能过程",
         "生成方式统计", "Warnings",
     ])
-    all_warnings = [
-        str(row.get("后处理警告", "") or "")
-        for row in fpa_rows
-        if str(row.get("后处理警告", "") or "").strip()
-    ]
     for idx, group in enumerate(groups, 1):
         process_names = _process_names_for_group(group)
         expected = set(process_names)
-        related_rows = [
-            row for row in fpa_rows
-            if _source_process_set(row) & expected or (
-                expected and _source_process_set(row) == expected
-            )
-        ]
+        related_rows = rows_by_module.get(idx, [])
         covered: set[str] = set()
         generation_counts: dict[str, int] = {}
+        module_warnings: list[str] = []
         for row in related_rows:
             covered.update(_source_process_set(row))
             generation = str(row.get("生成方式", "") or "unknown")
             generation_counts[generation] = generation_counts.get(generation, 0) + 1
+            module_warnings.extend(_warning_items(row.get("后处理警告", "")))
         covered_list = [name for name in process_names if name in covered]
         missing_list = [name for name in process_names if name not in covered]
+        if missing_list:
+            module_warnings.append(f"未覆盖功能过程: {'、'.join(missing_list)}")
         ws_coverage.append([
             idx,
             group.get("client_type", ""),
@@ -910,18 +1031,75 @@ def generate_fpa_check_xlsx_from_md(
             "、".join(covered_list),
             "、".join(missing_list),
             _json.dumps(generation_counts, ensure_ascii=False, sort_keys=True),
-            "；".join(all_warnings),
+            "；".join(module_warnings),
         ])
+        for warning in module_warnings:
+            warning_rows.append([
+                "module",
+                "",
+                idx,
+                group.get("l3", ""),
+                warning,
+            ])
 
-    for ws in (ws_result, ws_coverage):
+    ws_warnings = wb.create_sheet("Warnings")
+    ws_warnings.append(["级别", "FPA行序号", "模块序号", "对象", "Warning"])
+    for item in warning_rows:
+        ws_warnings.append(item)
+
+    ws_raw = wb.create_sheet("AI原始返回")
+    ws_raw.append(["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"])
+    raw_modules = audit_trace.get("modules", [])
+    if isinstance(raw_modules, list):
+        for item in raw_modules:
+            if not isinstance(item, dict):
+                continue
+            ws_raw.append([
+                item.get("module", ""),
+                item.get("l3", ""),
+                item.get("source", ""),
+                "；".join(str(x) for x in item.get("warnings", []) if str(x).strip())
+                if isinstance(item.get("warnings"), list)
+                else str(item.get("warnings", "") or ""),
+                _json.dumps(item.get("raw_rows", []), ensure_ascii=False, indent=2),
+            ])
+
+    header_fill = PatternFill("solid", fgColor="D9EAF7")
+    warning_fill = PatternFill("solid", fgColor="FFF2CC")
+    missing_fill = PatternFill("solid", fgColor="FCE4D6")
+
+    for ws in (ws_result, ws_coverage, ws_warnings, ws_raw):
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
         for cell in ws[1]:
             cell.font = Font(bold=True)
+            cell.fill = header_fill
         for column_cells in ws.columns:
             max_len = max(len(str(cell.value or "")) for cell in column_cells)
             ws.column_dimensions[column_cells[0].column_letter].width = min(max(max_len + 2, 10), 48)
         for row in ws.iter_rows():
             for cell in row:
                 cell.alignment = Alignment(wrap_text=True, vertical="center")
+        if ws.title == "FPA结果":
+            for row in ws.iter_rows(min_row=2):
+                warning_cell = row[13]
+                generation_cell = row[10]
+                if str(warning_cell.value or "").strip():
+                    for cell in row:
+                        cell.fill = warning_fill
+                if str(generation_cell.value or "") == "rules_fallback":
+                    for cell in row:
+                        cell.fill = missing_fill
+        if ws.title == "覆盖审核":
+            for row in ws.iter_rows(min_row=2):
+                missing_count = row[7].value
+                try:
+                    has_missing = int(missing_count or 0) > 0
+                except (TypeError, ValueError):
+                    has_missing = False
+                if has_missing:
+                    for cell in row:
+                        cell.fill = missing_fill
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     wb.save(output_path)
@@ -985,6 +1163,7 @@ def plan_fpa_md_from_tree(
     profile_name: str = "",
     strategy: str = "",
     rule_set: str = "",
+    audit_trace_path: str = "",
 ) -> str:
     """以三级模块为单位 AI 规划 FPA 行，并写入 MD。"""
     logger.info("第1.3步：AI 规划 FPA 数据...")
@@ -1008,6 +1187,7 @@ def plan_fpa_md_from_tree(
         profile=profile,
         strategy=execution.strategy,
         rule_set=execution.rule_set,
+        audit_trace_path=audit_trace_path,
     )
     total = _write_fpa_rows_md(
         fpa_rows,

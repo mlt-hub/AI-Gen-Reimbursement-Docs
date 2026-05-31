@@ -277,6 +277,7 @@ def test_ai_first_requires_api_key():
 
 def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
     cache_path = tmp_path / "fpa_ai_cache.json"
+    audit_trace_path = tmp_path / "fpa_audit_trace.json"
     response = {
         "rows": [
             {
@@ -303,6 +304,7 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
         base_url="",
         cache_path=str(cache_path),
         strategy="ai_first",
+        audit_trace_path=str(audit_trace_path),
     )
     assert calls["count"] == 1
     assert cache_path.exists()
@@ -314,6 +316,9 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
     assert entry["strategy"] == "ai_first"
     assert entry["rule_set"] == "custom_rules_default"
     assert entry["rule_set_version"] == "1"
+    trace = json.loads(audit_trace_path.read_text(encoding="utf-8"))
+    assert trace["modules"][0]["source"] == "ai"
+    assert trace["modules"][0]["raw_rows"] == response["rows"]
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError("LLM should not be called on cache hit")
@@ -329,7 +334,10 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
         base_url="",
         cache_path=str(cache_path),
         strategy="ai_first",
+        audit_trace_path=str(audit_trace_path),
     )
 
     assert second[0]["新增/修改功能点"] == "垂直行业管理界面开发"
+    trace = json.loads(audit_trace_path.read_text(encoding="utf-8"))
+    assert trace["modules"][0]["source"] == "ai_cache"
     assert any("缓存命中" in r.message for r in caplog.records)

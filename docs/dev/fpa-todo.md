@@ -278,16 +278,37 @@ FPA结果：
 覆盖审核：
   按三级模块汇总功能过程覆盖情况。
   展示功能过程总数、已覆盖数、未覆盖数、已覆盖功能过程、未覆盖功能过程、生成方式统计和 warnings。
+
+Warnings：
+  汇总行级 warning 和模块级 warning。
+  包含级别、FPA行序号、模块序号、对象、Warning。
+  未覆盖功能过程会作为模块级 warning 写入。
+
+AI原始返回：
+  按三级模块展示 AI 原始 rows JSON。
+  展示来源：ai、ai_cache、rules、rules_fallback。
+  展示 AI 调用或解析异常，以及规则优先策略未调用 AI 的说明。
+```
+
+当前格式增强：
+
+```text
+三张 Sheet 均启用首行冻结。
+三张 Sheet 均启用自动筛选。
+首行表头加粗并使用浅蓝底色。
+有 warning 的 FPA 行使用浅黄色底色。
+rules_fallback 行使用浅橙色底色。
+存在未覆盖功能过程的模块行使用浅橙色底色。
 ```
 
 后续可增强：
 
 ```text
 K1. 将预览 audit 和正式 check.xlsx 统一为完全同一份多模块 FpaAuditReport。
-K2. 增加 AI 原始返回 Sheet。
+K2. 已完成基础版：增加 AI 原始返回 Sheet。
 K3. 增加规则命中详情 Sheet。
-K4. 将 warnings 从全局列表细化到模块/行级。
-K5. 给 check.xlsx 增加更友好的筛选、冻结窗格、颜色标记。
+K4. 继续细化 warnings 到更明确的规则命中来源。
+K5. 增加用户可配置的审核列。
 ```
 
 后续预留：

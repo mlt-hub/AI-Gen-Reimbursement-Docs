@@ -86,13 +86,24 @@ class TestGenFpa:
         wb = openpyxl.load_workbook(result.fpa_check_xlsx, data_only=True)
         assert "FPA结果" in wb.sheetnames
         assert "覆盖审核" in wb.sheetnames
+        assert "Warnings" in wb.sheetnames
+        assert "AI原始返回" in wb.sheetnames
         ws_result = wb["FPA结果"]
         headers = [cell.value for cell in ws_result[1]]
         assert "生成方式" in headers
         assert "rule_set_version" in headers
+        assert ws_result.freeze_panes == "A2"
+        assert ws_result.auto_filter.ref is not None
         ws_coverage = wb["覆盖审核"]
         coverage_headers = [cell.value for cell in ws_coverage[1]]
         assert "未覆盖功能过程" in coverage_headers
+        assert "Warnings" in coverage_headers
+        ws_warnings = wb["Warnings"]
+        warning_headers = [cell.value for cell in ws_warnings[1]]
+        assert warning_headers == ["级别", "FPA行序号", "模块序号", "对象", "Warning"]
+        ws_raw = wb["AI原始返回"]
+        raw_headers = [cell.value for cell in ws_raw[1]]
+        assert raw_headers == ["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"]
         wb.close()
 
     def test_fpa_reduced_read_from_md(self, output_dir, test_excel, mock_ai):

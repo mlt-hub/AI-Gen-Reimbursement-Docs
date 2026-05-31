@@ -474,6 +474,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
 
     fpa_md = os.path.join(md_dir, '1.1.gen-fpa-FPA-模板.md')
     fpa_filled_md = os.path.join(md_dir, '1.3.gen-fpa-AI填充-FPA.md')
+    fpa_audit_trace = os.path.join(md_dir, '1.5.gen-fpa-audit-trace.json')
     execution = resolve_fpa_execution_config(
         fpa_profile or load_fpa_profile(),
         fpa_strategy or load_fpa_strategy(),
@@ -502,13 +503,41 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
             profile_name=profile_name,
             strategy=execution.strategy,
             rule_set=execution.rule_set,
+            audit_trace_path=fpa_audit_trace,
         )
     else:
         fpa_filled_md = fpa_md
+        from ai_gen_reimbursement_docs.gen_fpa import _save_fpa_audit_trace
+        from ai_gen_reimbursement_docs.gen_fpa import _group_rows_by_l3
+        from ai_gen_reimbursement_docs.gen_fpa import _group_tag
+        from ai_gen_reimbursement_docs.excel_source import parse_module_tree_md
+        groups = _group_rows_by_l3(parse_module_tree_md(tree_md))
+        _save_fpa_audit_trace(fpa_audit_trace, {
+            "version": 1,
+            "profile": execution.profile.name,
+            "strategy": execution.strategy,
+            "rule_set": execution.rule_set,
+            "rule_set_version": execution.rule_set_version,
+            "modules": [
+                {
+                    "module": _group_tag(group),
+                    "l3": group.get("l3", ""),
+                    "source": "rules",
+                    "raw_rows": [],
+                    "warnings": ["规则优先策略未调用 AI"],
+                }
+                for group in groups
+            ],
+        })
 
     fpa_xlsx = generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src, fpa_xlsx)
     fpa_check_xlsx = os.path.splitext(fpa_xlsx)[0] + "-check.xlsx"
-    fpa_check_xlsx = generate_fpa_check_xlsx_from_md(fpa_filled_md, tree_md, fpa_check_xlsx)
+    fpa_check_xlsx = generate_fpa_check_xlsx_from_md(
+        fpa_filled_md,
+        tree_md,
+        fpa_check_xlsx,
+        audit_trace_path=fpa_audit_trace,
+    )
 
     from ai_gen_reimbursement_docs.excel_source import read_md_value
     result.fpa_reduced = read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
