@@ -942,6 +942,32 @@ def _group_rows_for_audit(
     return result
 
 
+def _rule_hit_for_audit(row: dict[str, object]) -> tuple[str, str]:
+    """根据当前已落表的审计字段还原规则/校验命中说明。"""
+    generation = str(row.get("生成方式", "") or "").strip()
+    name = str(row.get("新增/修改功能点", "") or "")
+    fpa_type = str(row.get("类型", "") or "")
+    reason = str(row.get("类型理由", "") or "").strip()
+    warning = str(row.get("后处理警告", "") or "").strip()
+    text = f"{name} {reason} {warning}"
+
+    if generation == "rules_fallback":
+        return "coverage.rules_fallback", reason or "AI 未覆盖功能过程时，按规则集补齐。"
+    if "界面开发" in name:
+        return "custom_rules.ui_merge", reason or "同一三级模块界面能力默认合并为一条。"
+    if "外部系统维护" in text or "外部应用维护" in text or "引用外部" in text:
+        return "strict_fpa.external_data_group", reason or "命中外部维护数据组规则。"
+    if "本系统维护" in text or "逻辑数据组" in text:
+        return "strict_fpa.internal_data_group", reason or "命中内部逻辑数据组规则。"
+    if "事务功能" in text:
+        return f"strict_fpa.transaction.{fpa_type.lower()}", reason or "命中事务功能类型规则。"
+    if "关键词命中" in text:
+        return f"custom_rules.keyword.{fpa_type.lower()}", reason or "命中关键词类型兜底规则。"
+    if generation in {"ai", "ai_cache"}:
+        return "postprocess.ai_type_validation", reason or "AI 输出经类型合法性和业务冲突规则校验后采用。"
+    return "profile.fallback", reason or "按当前 profile 兜底规则生成。"
+
+
 def generate_fpa_check_xlsx_from_md(
     fpa_md_path: str,
     tree_md_path: str,
@@ -1047,6 +1073,40 @@ def generate_fpa_check_xlsx_from_md(
     for item in warning_rows:
         ws_warnings.append(item)
 
+    ws_rule_hits = wb.create_sheet("规则命中详情")
+    ws_rule_hits.append([
+        "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
+        "FPA行序号", "功能点名称", "生成方式", "rule_set", "rule_set_version",
+        "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
+    ])
+    written_rule_rows: set[str] = set()
+    for idx, group in enumerate(groups, 1):
+        for row in rows_by_module.get(idx, []):
+            row_seq = str(row.get("序号", "") or "")
+            if row_seq in written_rule_rows:
+                continue
+            written_rule_rows.add(row_seq)
+            rule_id, rule_desc = _rule_hit_for_audit(row)
+            warnings = "；".join(_warning_items(row.get("后处理警告", "")))
+            ws_rule_hits.append([
+                idx,
+                group.get("client_type", ""),
+                group.get("l1", ""),
+                group.get("l2", ""),
+                group.get("l3", ""),
+                row.get("序号", ""),
+                row.get("新增/修改功能点", ""),
+                row.get("生成方式", ""),
+                execution_meta.get("rule_set", ""),
+                execution_meta.get("rule_set_version", ""),
+                row.get("源功能过程", "") or group.get("l3", ""),
+                rule_id,
+                rule_desc,
+                row.get("类型", ""),
+                "是",
+                warnings,
+            ])
+
     ws_raw = wb.create_sheet("AI原始返回")
     ws_raw.append(["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"])
     raw_modules = audit_trace.get("modules", [])
@@ -1068,7 +1128,7 @@ def generate_fpa_check_xlsx_from_md(
     warning_fill = PatternFill("solid", fgColor="FFF2CC")
     missing_fill = PatternFill("solid", fgColor="FCE4D6")
 
-    for ws in (ws_result, ws_coverage, ws_warnings, ws_raw):
+    for ws in (ws_result, ws_coverage, ws_warnings, ws_rule_hits, ws_raw):
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
         for cell in ws[1]:
@@ -1098,6 +1158,16 @@ def generate_fpa_check_xlsx_from_md(
                 except (TypeError, ValueError):
                     has_missing = False
                 if has_missing:
+                    for cell in row:
+                        cell.fill = missing_fill
+        if ws.title == "规则命中详情":
+            for row in ws.iter_rows(min_row=2):
+                generation_cell = row[7]
+                warning_cell = row[15]
+                if str(warning_cell.value or "").strip():
+                    for cell in row:
+                        cell.fill = warning_fill
+                if str(generation_cell.value or "") == "rules_fallback":
                     for cell in row:
                         cell.fill = missing_fill
 

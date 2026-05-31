@@ -2166,16 +2166,22 @@ Sheet: AI原始返回
   按三级模块展示 AI 原始 rows JSON。
   展示来源：ai、ai_cache、rules、rules_fallback。
   展示 AI 调用或解析异常，以及规则优先策略未调用 AI 的说明。
+
+Sheet: 规则命中详情
+  按 FPA 行展示规则/后处理命中来源。
+  包含模块序号、功能点名称、生成方式、rule_set、rule_set_version、命中对象、规则ID、规则说明、建议类型、是否采用和 warnings。
+  当前基于已落表的 generation、类型理由、源功能过程和 warnings 还原规则命中详情，不伪造未配置化的规则引擎事件。
 ```
 
 当前格式增强：
 
 ```text
-三张 Sheet 均启用首行冻结和自动筛选。
+五张 Sheet 均启用首行冻结和自动筛选。
 首行表头加粗并使用浅蓝底色。
 有 warning 的 FPA 行使用浅黄色底色。
 rules_fallback 行使用浅橙色底色。
 存在未覆盖功能过程的模块行使用浅橙色底色。
+规则命中详情中有 warning 的行使用浅黄色底色，rules_fallback 行使用浅橙色底色。
 ```
 
 同一个 `FpaAuditReport` 同时服务：
@@ -2313,7 +2319,6 @@ rule_set 字段级覆盖策略。
 关键词规则配置化。
 ILF / EIF 判定规则配置化。
 UI 中的 rule_set 下拉选择。
-FPA 审核工作簿 FPA工作量评估-check.xlsx。
 预览页审核面板。
 ```
 
@@ -2466,6 +2471,18 @@ npm run build
 ```
 
 本轮针对 AI 原始返回审计已执行：
+
+```powershell
+.\scripts\test.ps1 tests/test_gen_fpa_ai.py tests/test_pipeline.py::TestGenFpa -vv
+```
+
+结果：
+
+```text
+17 passed
+```
+
+本轮针对规则命中详情 Sheet 已执行：
 
 ```powershell
 .\scripts\test.ps1 tests/test_gen_fpa_ai.py tests/test_pipeline.py::TestGenFpa -vv

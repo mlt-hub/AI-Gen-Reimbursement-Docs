@@ -87,6 +87,7 @@ class TestGenFpa:
         assert "FPA结果" in wb.sheetnames
         assert "覆盖审核" in wb.sheetnames
         assert "Warnings" in wb.sheetnames
+        assert "规则命中详情" in wb.sheetnames
         assert "AI原始返回" in wb.sheetnames
         ws_result = wb["FPA结果"]
         headers = [cell.value for cell in ws_result[1]]
@@ -101,6 +102,16 @@ class TestGenFpa:
         ws_warnings = wb["Warnings"]
         warning_headers = [cell.value for cell in ws_warnings[1]]
         assert warning_headers == ["级别", "FPA行序号", "模块序号", "对象", "Warning"]
+        ws_rule_hits = wb["规则命中详情"]
+        rule_hit_headers = [cell.value for cell in ws_rule_hits[1]]
+        assert rule_hit_headers == [
+            "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
+            "FPA行序号", "功能点名称", "生成方式", "rule_set", "rule_set_version",
+            "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
+        ]
+        assert ws_rule_hits.max_row > 1
+        assert ws_rule_hits.freeze_panes == "A2"
+        assert ws_rule_hits.auto_filter.ref is not None
         ws_raw = wb["AI原始返回"]
         raw_headers = [cell.value for cell in ws_raw[1]]
         assert raw_headers == ["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"]
