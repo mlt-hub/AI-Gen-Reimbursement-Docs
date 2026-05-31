@@ -287,6 +287,11 @@ def test_fpa_acceptance_mock_ai_warning_source_reaches_check_workbook(monkeypatc
     }
     assert "classification_basis_index 越界" in warning_values["Warning"]
     assert warning_values["来源规则ID"] == "postprocess.classification_basis_index"
+    warning_source_ids = [
+        ws_warnings.cell(row=row, column=warning_headers.index("来源规则ID") + 1).value
+        for row in range(2, ws_warnings.max_row + 1)
+    ]
+    assert "coverage.missing_process" not in warning_source_ids
 
     ws_rule_hits = wb["规则命中详情"]
     rule_headers = _headers(ws_rule_hits)

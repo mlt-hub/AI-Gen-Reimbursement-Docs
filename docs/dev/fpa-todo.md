@@ -327,12 +327,13 @@ F2. 补充完成：已自动化验证 mock AI cache 命中后 audit trace 与 ch
 F2. 真实模型验收已尝试但当前受执行环境限制：2026-05-31 已确认 API Key、base_url、model 配置存在，并选取 mixed_internal_external_data_functions、payment_gateway_refund、master_data_org_reference 作为代表样例；受限沙箱内真实模型连接失败，流程按设计回退 rules_fallback，不能作为真实模型质量结论；申请沙箱外网络调用被策略拒绝，因为会向外部 LLM 端点发送仓库 fixture / 业务样例数据。
 F2. 真实模型验收完成：2026-05-31 在用户明确允许外发 FPA 验收样例后，使用 deepseek-v4-flash[1m] / api.deepseek.com 跑通 mixed_internal_external_data_functions、payment_gateway_refund、master_data_org_reference；三例均生成 check.xlsx 五张 Sheet，AI原始返回来源为 ai，复跑后 AI原始返回 Sheet 来源为 ai_cache；warning 可追溯到 postprocess.ai_first_type_conflict / coverage.missing_process，规则命中详情记录 postprocess.ai_type_validation / postprocess.ai_first_type_conflict。
 F3. 部分完成：已自动化复核代表样例的拆分粒度、类型判断、覆盖情况、预览/正式规则路径一致性和 FPA 工作量汇总值。
+F3. 真实业务输入复核完成：2026-05-31 使用 1111/md 下“垂直行业场景化营销”真实业务输入，覆盖 56 个功能过程、19 个三级模块；rules_only 生成 65 行、汇总 96.0 人/天、覆盖缺口 0、warning 0；ai_first 真实模型生成 69 行、汇总 98.0 人/天、覆盖缺口 0、warning 40 条且均来自 postprocess.ai_first_type_conflict。复核中修复 check.xlsx 覆盖审核误归属和 Warnings Sheet 将行级 postprocess warning 误标为 coverage.missing_process 的问题。
 ```
 
 仍需人工/真实模型验收：
 
 ```text
-F3. 使用真实业务输入复核拆分粒度、类型判断和汇总值。
+无。
 ```
 
 ## Golden Case 状态

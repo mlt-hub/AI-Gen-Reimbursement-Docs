@@ -6,6 +6,7 @@ import pytest
 
 from ai_gen_reimbursement_docs.gen_fpa import (
     _extract_json_obj,
+    _group_rows_for_audit,
     _group_rows_by_l3,
     _normalize_ai_fpa_rows_for_l3,
     _plan_fpa_rows_with_ai,
@@ -41,6 +42,44 @@ def _rows():
             "功能过程描述": "按行业名称查询垂直行业列表。",
         },
     ]
+
+
+def test_fpa_audit_grouping_prefers_source_process_over_l3_substring():
+    tree_rows = [
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "垂直行业营销",
+            "二级模块": "垂直行业管理",
+            "三级模块": "垂直行业管理",
+            "三级模块整体功能描述": "",
+            "功能过程": "添加垂直行业",
+            "功能过程类型": "新增",
+            "功能过程描述": "",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "垂直行业营销",
+            "二级模块": "垂直行业管理",
+            "三级模块": "合伙商管理",
+            "三级模块整体功能描述": "",
+            "功能过程": "搜索合作商",
+            "功能过程类型": "查询",
+            "功能过程描述": "",
+        },
+    ]
+    groups = _group_rows_by_l3(tree_rows)
+    fpa_rows = [
+        {
+            "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-合伙商管理-搜索合作商",
+            "计算依据说明": "",
+            "源功能过程": "搜索合作商",
+        }
+    ]
+
+    grouped = _group_rows_for_audit(fpa_rows, groups)
+
+    assert grouped[1] == []
+    assert grouped[2] == fpa_rows
 
 
 def test_markdown_code_block_json_is_parsed():

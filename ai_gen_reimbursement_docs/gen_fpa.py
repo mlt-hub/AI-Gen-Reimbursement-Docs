@@ -1132,23 +1132,68 @@ def _group_rows_for_audit(
     fpa_rows: list[dict[str, object]],
     groups: list[dict[str, object]],
 ) -> dict[int, list[dict[str, object]]]:
-    remaining = list(fpa_rows)
-    result: dict[int, list[dict[str, object]]] = {}
-    for idx, group in enumerate(groups, 1):
-        process_names = set(_process_names_for_group(group))
-        l3 = str(group.get("l3", "") or "")
-        matched: list[dict[str, object]] = []
-        still_remaining: list[dict[str, object]] = []
-        for row in remaining:
-            sources = _source_process_set(row)
-            point_name = str(row.get("新增/修改功能点", "") or "")
-            explanation = str(row.get("计算依据说明", "") or "")
-            if (process_names and sources & process_names) or (l3 and (l3 in point_name or l3 in explanation)):
-                matched.append(row)
-            else:
-                still_remaining.append(row)
-        result[idx] = matched
-        remaining = still_remaining
+    result: dict[int, list[dict[str, object]]] = {idx: [] for idx in range(1, len(groups) + 1)}
+    remaining: list[dict[str, object]] = []
+    process_names_by_idx = {
+        idx: set(_process_names_for_group(group))
+        for idx, group in enumerate(groups, 1)
+    }
+
+    def module_markers(group: dict[str, object]) -> list[str]:
+        client = str(group.get("client_type", "") or "").strip()
+        l1 = str(group.get("l1", "") or "").strip()
+        l2 = str(group.get("l2", "") or "").strip()
+        l3 = str(group.get("l3", "") or "").strip()
+        markers = [
+            f"【{client}】{l1}-{l2}-{l3}" if client and l1 and l2 and l3 else "",
+            f"{l1}-{l2}-{l3}" if l1 and l2 and l3 else "",
+            f"{l2}-{l3}" if l2 and l3 else "",
+        ]
+        return [marker for marker in markers if marker]
+
+    def choose_by_module_marker(row: dict[str, object], candidate_idxs: list[int]) -> int | None:
+        point_name = str(row.get("新增/修改功能点", "") or "")
+        explanation = str(row.get("计算依据说明", "") or "")
+        haystack = f"{point_name}\n{explanation}"
+        matches: list[tuple[int, int]] = []
+        for idx in candidate_idxs:
+            marker_len = max(
+                (len(marker) for marker in module_markers(groups[idx - 1]) if marker in haystack),
+                default=0,
+            )
+            if marker_len:
+                matches.append((marker_len, idx))
+        if not matches:
+            return None
+        matches.sort(reverse=True)
+        return matches[0][1]
+
+    for row in fpa_rows:
+        sources = _source_process_set(row)
+        source_matches = [
+            idx
+            for idx, process_names in process_names_by_idx.items()
+            if process_names and sources & process_names
+        ]
+        if len(source_matches) == 1:
+            result[source_matches[0]].append(row)
+            continue
+        if len(source_matches) > 1:
+            idx = choose_by_module_marker(row, source_matches) or source_matches[0]
+            result[idx].append(row)
+            continue
+
+        marker_matches = [
+            idx
+            for idx in range(1, len(groups) + 1)
+            if choose_by_module_marker(row, [idx]) is not None
+        ]
+        if marker_matches:
+            idx = choose_by_module_marker(row, marker_matches) or marker_matches[0]
+            result[idx].append(row)
+        else:
+            remaining.append(row)
+
     if remaining and groups:
         result.setdefault(len(groups), []).extend(remaining)
     return result
@@ -1327,6 +1372,7 @@ def generate_fpa_check_xlsx_from_md(
         covered: set[str] = set()
         generation_counts: dict[str, int] = {}
         module_warnings: list[str] = []
+        coverage_warnings: list[str] = []
         for row in related_rows:
             covered.update(_source_process_set(row))
             generation = str(row.get("生成方式", "") or "unknown")
@@ -1335,7 +1381,8 @@ def generate_fpa_check_xlsx_from_md(
         covered_list = [name for name in process_names if name in covered]
         missing_list = [name for name in process_names if name not in covered]
         if missing_list:
-            module_warnings.append(f"未覆盖功能过程: {'、'.join(missing_list)}")
+            coverage_warnings.append(f"未覆盖功能过程: {'、'.join(missing_list)}")
+            module_warnings.extend(coverage_warnings)
         _append_audit_row(ws_coverage, sheet_columns["覆盖审核"], {
             "模块序号": idx,
             "客户端类型": group.get("client_type", ""),
@@ -1350,7 +1397,7 @@ def generate_fpa_check_xlsx_from_md(
             "生成方式统计": _json.dumps(generation_counts, ensure_ascii=False, sort_keys=True),
             "Warnings": "；".join(module_warnings),
         })
-        for warning in module_warnings:
+        for warning in coverage_warnings:
             warning_rows.append({
                 "级别": "module",
                 "FPA行序号": "",
