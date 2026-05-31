@@ -13,7 +13,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import STRICT_FPA_PROFILE
         ("本模块引用财务核算系统维护的报账单据，本系统不维护单据主数据。", "财务核算单据"),
         ("系统引用 ERP 系统维护的采购订单，本系统不维护订单主数据。", "ERP业务单据"),
         ("系统引用 OA 系统维护的审批流程记录。", "OA流程单据"),
-        ("系统引用主数据平台维护的组织主数据。", "外部主数据"),
+        ("系统引用主数据平台维护的组织主数据。", "组织主数据"),
     ],
 )
 def test_strict_fpa_external_data_rule_table_matches_known_sources(text, expected_name):
@@ -26,6 +26,7 @@ def test_strict_fpa_external_data_rule_table_matches_known_sources(text, expecte
     [
         "系统调用短信平台发送通知短信。",
         "系统调用支付网关完成支付扣款。",
+        "系统调用支付网关发起退款，支付网关为普通外部服务，不作为外部维护数据组计量。",
         "系统调用文件存储服务上传附件。",
         "系统调用地图服务查询经纬度。",
         "系统调用 OCR 服务识别发票图片。",

@@ -60,6 +60,10 @@ EXTERNAL_MAINTAINED_HINTS = [
     "外部应用维护", "外部系统维护", "第三方系统维护", "外部维护", "外部应用提供",
     "外部系统提供", "第三方系统提供", "本系统不维护", "引用外部数据组",
 ]
+EXTERNAL_DATA_NEGATION_HINTS = [
+    "不作为外部维护数据组", "不是外部维护数据组", "不按外部维护数据组",
+    "不作为外部数据组", "不是外部数据组", "不按外部数据组",
+]
 
 STRICT_EO_ACTIONS = ("导出", "报表", "下载", "生成文件")
 STRICT_EQ_ACTIONS = ("查询", "查看", "详情", "检索", "列表")
@@ -118,6 +122,7 @@ DEFAULT_EXTERNAL_DATA_GROUP_RULES = [
     ExternalDataGroupRule(("财务系统",), "财务系统单据", ("单据", "报账", "凭证", "记录", "信息")),
     ExternalDataGroupRule(("ERP", "ERP系统"), "ERP业务单据", ("单据", "订单", "物料", "供应商", "记录", "信息")),
     ExternalDataGroupRule(("OA", "OA系统"), "OA流程单据", ("单据", "流程", "审批", "记录", "信息")),
+    ExternalDataGroupRule(("主数据平台", "外部主数据"), "组织主数据", ("组织", "机构")),
     ExternalDataGroupRule(("主数据平台", "外部主数据"), "外部主数据", ("主数据", "基础数据", "数据组", "信息")),
 ]
 
@@ -593,6 +598,8 @@ class StrictFpaProfile(CustomRulesProfile):
         )
 
     def _is_external_data_group(self, text: str) -> bool:
+        if any(k in text for k in EXTERNAL_DATA_NEGATION_HINTS):
+            return False
         has_external_source = any(rule.matches(text) for rule in self._external_data_group_rules())
         has_maintenance_hint = any(k in text for k in EXTERNAL_MAINTAINED_HINTS)
         has_data_noun = any(k in text for k in EXTERNAL_DATA_GROUP_NOUNS)
