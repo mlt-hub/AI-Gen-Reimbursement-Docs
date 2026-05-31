@@ -1,0 +1,52 @@
+# FPA 用户提示词模板配置
+# 复制到 ~/.ai-gen-reimbursement-docs/fpa_user_prompts_config.yaml 后生效
+#
+# 可用占位符：
+# ${core_rules}       当前 FPA profile 的核心规则
+# ${judgement_rules}  从 FPA 输出模板附录读取的计算依据归类判定原则
+# ${payload_json}     当前三级模块、功能过程和领域上下文 JSON
+#
+# 注意：
+# 1. 如果本文件不存在，或某个 profile 未配置模板，系统会使用代码内置模板兜底。
+# 2. 建议保留 ${core_rules}、${judgement_rules}、${payload_json} 三个占位符。
+# 3. 模板可以调整表达方式，但不要修改输出 JSON 的字段结构，除非同步修改解析和测试。
+# 4. current_project 和 strict_fpa 是两套不同口径，建议分别维护，不要混用。
+# 5. 未知占位符会原样保留，不会中断任务；修改后建议先用 FPA 预览验证。
+
+fpa_eval:
+  user_templates:
+    current_project: |-
+      ${core_rules}
+
+      计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：
+      ${judgement_rules}
+
+      请以三级模块为单位规划 FPA 行：
+      1. 默认生成 1 条三级模块级界面开发行，覆盖同一页面内的列表、查询条件、按钮、弹窗和状态组件。
+      2. 非界面逻辑按功能动作拆分，一行一个动作。
+      3. 不要为数据库表、字段、保存表动作单独生成行。
+      4. 如果确实需要多条界面开发行，每条都必须给出 split_reason。
+
+      模块输入 JSON：
+      ${payload_json}
+
+      请直接输出 JSON，不要输出其他内容。格式：
+      {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"<计算依据说明>","source_processes":["<功能过程名称>"],"split_reason":"<多界面拆分理由，可空>"}]}
+
+    strict_fpa: |-
+      ${core_rules}
+
+      计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：
+      ${judgement_rules}
+
+      请以严格 FPA 口径规划本三级模块的 FPA 行：
+      1. 先识别数据功能：本系统维护的数据组为 ILF，外部维护且本系统引用的数据组为 EIF。
+      2. 再识别事务功能：新增/修改/删除/保存/提交/审批/导入为 EI，查询/查看/详情为 EQ，导出/报表/下载文件为 EO。
+      3. 禁止输出界面开发、接口开发、逻辑处理开发、按钮、弹窗、数据库表或字段行。
+      4. 普通外部服务调用不要直接输出 EIF，除非明确引用外部维护的数据组。
+
+      模块输入 JSON：
+      ${payload_json}
+
+      请直接输出 JSON，不要输出其他内容。格式：
+      {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"<计算依据说明>","source_processes":["<功能过程名称>"],"split_reason":""}]}

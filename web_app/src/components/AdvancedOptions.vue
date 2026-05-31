@@ -4,7 +4,7 @@
     <div class="mt-3 flex flex-col gap-3 border-t border-[var(--color-rule)] pt-3">
       <div>
         <label for="api-key" class="field-label text-xs">API Key（留空使用系统配置）</label>
-        <input id="api-key" type="password" v-model="config.apiKey" placeholder="sk-..." autocomplete="off"
+        <input id="api-key" type="password" v-model.trim="config.apiKey" placeholder="留空使用系统配置" autocomplete="off"
           class="field-control" />
       </div>
       <div>

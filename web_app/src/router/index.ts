@@ -31,6 +31,11 @@ const router = createRouter({
       component: () => import('@/views/History.vue'),
     },
     {
+      path: '/preview/fpa',
+      name: 'preview-fpa',
+      component: () => import('@/views/FpaPreviewPage.vue'),
+    },
+    {
       path: '/prompt-debug',
       name: 'prompt-debug',
       component: () => import('@/views/PromptDebug.vue'),

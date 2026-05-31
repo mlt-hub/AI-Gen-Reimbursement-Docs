@@ -6,6 +6,7 @@
 
 from dataclasses import dataclass
 import re
+from string import Template
 
 
 CURRENT_PROJECT_CORE_RULES = """
@@ -98,6 +99,50 @@ def module_change_status(processes: list[object]) -> str:
     if "新增" in statuses:
         return "新增"
     return statuses[0]
+
+
+def _prompt_payload(
+    group: dict[str, object],
+    domain_context: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return {
+        "module": {
+            "client_type": group.get("client_type", ""),
+            "l1": group.get("l1", ""),
+            "l2": group.get("l2", ""),
+            "l3": group.get("l3", ""),
+            "l3_desc": group.get("l3_desc", ""),
+        },
+        "processes": group.get("processes", []),
+        "domain_context": domain_context or {},
+    }
+
+
+def _numbered_judgement_rules(judgement_rules: list[str]) -> str:
+    return "\n".join(f"{i}) {r}" for i, r in enumerate(judgement_rules, 1)) or "（无）"
+
+
+def _render_configured_fpa_prompt(
+    profile_name: str,
+    core_rules: str,
+    group: dict[str, object],
+    judgement_rules: list[str],
+    domain_context: dict[str, object] | None = None,
+) -> str:
+    try:
+        import json
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_user_prompt_template
+
+        template = load_fpa_user_prompt_template(profile_name)
+        if not template:
+            return ""
+        return Template(template).safe_substitute({
+            "core_rules": core_rules,
+            "judgement_rules": _numbered_judgement_rules(judgement_rules),
+            "payload_json": json.dumps(_prompt_payload(group, domain_context), ensure_ascii=False, indent=2),
+        })
+    except Exception:
+        return ""
 
 
 @dataclass(frozen=True)
@@ -228,18 +273,11 @@ class CurrentProjectProfile:
     ) -> str:
         import json
 
-        numbered_rules = "\n".join(f"{i}) {r}" for i, r in enumerate(judgement_rules, 1)) or "（无）"
-        payload = {
-            "module": {
-                "client_type": group.get("client_type", ""),
-                "l1": group.get("l1", ""),
-                "l2": group.get("l2", ""),
-                "l3": group.get("l3", ""),
-                "l3_desc": group.get("l3_desc", ""),
-            },
-            "processes": group.get("processes", []),
-            "domain_context": domain_context or {},
-        }
+        configured_prompt = _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
+        if configured_prompt:
+            return configured_prompt
+        numbered_rules = _numbered_judgement_rules(judgement_rules)
+        payload = _prompt_payload(group, domain_context)
         return (
             f"{self.core_rules}\n\n"
             f"计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：\n{numbered_rules}\n\n"
@@ -269,19 +307,28 @@ class StrictFpaProfile(CurrentProjectProfile):
         text = f"{name} {desc}"
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
+        name_action = self._explicit_transaction_type(name)
+        if name_action:
+            return name_action
+        if self._is_external_data_group(text):
+            return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
+        if self._looks_like_data_group(name, desc):
+            return "ILF", "本系统维护的逻辑数据组，按 ILF。"
+        desc_action = self._explicit_transaction_type(desc)
+        if desc_action:
+            return desc_action
+        if any(k in text for k in EXTERNAL_SERVICE_CALL_HINTS):
+            return "EI", "普通外部服务调用按触发事务处理，不能直接判 EIF。"
+        return "EI", "未命中明确数据功能关键词，按事务功能 EI 兜底。"
+
+    def _explicit_transaction_type(self, text: str) -> tuple[str, str] | None:
         if any(k in text for k in STRICT_EO_ACTIONS):
             return "EO", "事务功能产生派生或格式化输出，按 EO。"
         if any(k in text for k in STRICT_EQ_ACTIONS):
             return "EQ", "事务功能读取数据且无派生输出，按 EQ。"
         if any(k in text for k in STRICT_EI_ACTIONS):
             return "EI", "事务功能进入或改变系统边界内数据，按 EI。"
-        if self._is_external_data_group(text):
-            return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
-        if self._looks_like_data_group(name, desc):
-            return "ILF", "本系统维护的逻辑数据组，按 ILF。"
-        if any(k in text for k in EXTERNAL_SERVICE_CALL_HINTS):
-            return "EI", "普通外部服务调用按触发事务处理，不能直接判 EIF。"
-        return "EI", "未命中明确数据功能关键词，按事务功能 EI 兜底。"
+        return None
 
     def _looks_like_external_data_function_name(self, name: str) -> bool:
         return (
@@ -293,13 +340,10 @@ class StrictFpaProfile(CurrentProjectProfile):
         text = f"{name} {desc}"
         if any(k in text for k in ["界面开发", "接口开发", "逻辑处理开发", "按钮", "弹窗"]):
             return True
-        expected, _ = self.infer_type(name, desc)
-        if any(k in text for k in EXTERNAL_SERVICE_CALL_HINTS) and expected != "EIF":
+        if any(k in text for k in EXTERNAL_SERVICE_CALL_HINTS):
             return ai_type == "EIF"
-        return expected != ai_type and any(
-            k in text
-            for k in STRICT_EI_ACTIONS + STRICT_EQ_ACTIONS + STRICT_EO_ACTIONS
-        )
+        name_action = self._explicit_transaction_type(name)
+        return name_action is not None and name_action[0] != ai_type
 
     def logic_point_name(self, name: str, desc: str = "") -> str:
         return name
@@ -378,18 +422,11 @@ class StrictFpaProfile(CurrentProjectProfile):
     ) -> str:
         import json
 
-        numbered_rules = "\n".join(f"{i}) {r}" for i, r in enumerate(judgement_rules, 1)) or "（无）"
-        payload = {
-            "module": {
-                "client_type": group.get("client_type", ""),
-                "l1": group.get("l1", ""),
-                "l2": group.get("l2", ""),
-                "l3": group.get("l3", ""),
-                "l3_desc": group.get("l3_desc", ""),
-            },
-            "processes": group.get("processes", []),
-            "domain_context": domain_context or {},
-        }
+        configured_prompt = _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
+        if configured_prompt:
+            return configured_prompt
+        numbered_rules = _numbered_judgement_rules(judgement_rules)
+        payload = _prompt_payload(group, domain_context)
         return (
             f"{self.core_rules}\n\n"
             f"计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：\n{numbered_rules}\n\n"

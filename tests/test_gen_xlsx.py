@@ -118,7 +118,7 @@ class TestBuildFpaRuleRows:
         assert "具体为以下" in g_val
 
     def test_adjustment_values(self):
-        """界面行调整值=2，接口行调整值=1。"""
+        """界面行调整值=2，非 EI 行调整值=1。"""
         rows = [self._make_row()]
         result = _build_fpa_rule_rows(rows, self._make_meta())
         assert result[0]["调整值"] == 2

@@ -28,6 +28,24 @@ function saveBool(key: string, val: boolean) {
   try { localStorage.setItem(key, String(val)) } catch { /* 忽略 */ }
 }
 
+const API_KEY_PLACEHOLDERS = new Set([
+  'sk-...',
+  'sk-',
+  'your-api-key',
+  'your_api_key',
+  'api-key',
+  'api_key',
+  'here',
+  '****here',
+])
+
+export function normalizeApiKeyInput(value: string): string {
+  const v = value.trim()
+  if (!v) return ''
+  if (API_KEY_PLACEHOLDERS.has(v.toLowerCase())) return ''
+  return v
+}
+
 // ── 导出/导入 ─────────────────────────────────────────────
 
 export interface UserSettings {
@@ -47,7 +65,7 @@ export const useConfigStore = defineStore('config', () => {
   const pipelineMode = ref<PipelineMode>(loadStr('pipelineMode', 'from-excel-gen-all') as PipelineMode)
   const xlsxPath = ref('')
   const outputDir = ref('')
-  const apiKey = ref(loadStr('apiKey', ''))
+  const apiKey = ref(normalizeApiKeyInput(loadStr('apiKey', '')))
   const model = ref(loadStr('model', ''))
   const baseUrl = ref(loadStr('baseUrl', ''))
   const maxTokens = ref(loadStr('maxTokens', ''))
@@ -57,7 +75,7 @@ export const useConfigStore = defineStore('config', () => {
   const selectedFile = ref<File | null>(null)
 
   // ── 自动持久化 ──
-  watch(apiKey, v => saveStr('apiKey', v))
+  watch(apiKey, v => saveStr('apiKey', normalizeApiKeyInput(v)))
   watch(model, v => saveStr('model', v))
   watch(baseUrl, v => saveStr('baseUrl', v))
   watch(maxTokens, v => saveStr('maxTokens', v))
@@ -87,7 +105,7 @@ export const useConfigStore = defineStore('config', () => {
   /** 导出用户设置为 JSON 字符串。 */
   function exportSettings(): string {
     const data: UserSettings = {
-      apiKey: apiKey.value,
+      apiKey: normalizeApiKeyInput(apiKey.value),
       model: model.value,
       baseUrl: baseUrl.value,
       maxTokens: maxTokens.value,
@@ -103,7 +121,7 @@ export const useConfigStore = defineStore('config', () => {
   function importSettings(json: string) {
     try {
       const data = JSON.parse(json) as Partial<UserSettings>
-      if (data.apiKey !== undefined) apiKey.value = data.apiKey
+      if (data.apiKey !== undefined) apiKey.value = normalizeApiKeyInput(data.apiKey)
       if (data.model !== undefined) model.value = data.model
       if (data.baseUrl !== undefined) baseUrl.value = data.baseUrl
       if (data.maxTokens !== undefined) maxTokens.value = data.maxTokens
@@ -117,7 +135,9 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  return { workMode, backendStatus, pipelineMode, xlsxPath, outputDir, apiKey, model, baseUrl,
+  const apiKeyForRequest = computed(() => normalizeApiKeyInput(apiKey.value))
+
+  return { workMode, backendStatus, pipelineMode, xlsxPath, outputDir, apiKey, apiKeyForRequest, model, baseUrl,
            maxTokens, projectName, fpaProfile, clean, selectedFile, isValid, reset,
            exportSettings, importSettings }
 })

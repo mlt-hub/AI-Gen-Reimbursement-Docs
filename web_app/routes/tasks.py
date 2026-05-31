@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
-from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module
+from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module, preview_fpa_modules
 from web_app.dependencies import require_auth, require_local
 from web_app.services.config_service import remote_session_retention_seconds
 from web_app.services import pipeline_runtime
@@ -421,6 +421,46 @@ def create_router(
                 profile_name=fpa_profile.strip() or load_fpa_profile(),
             )
             return result
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(400, str(exc)) from exc
+        finally:
+            if temp_ctx is not None:
+                temp_ctx.cleanup()
+
+    @router.post("/api/fpa/preview-modules")
+    async def api_preview_fpa_modules(
+        request: Request,
+        xlsx_path: str = Form(""),
+        file: UploadFile | None = File(None),
+        user: str = Depends(require_auth),
+    ):
+        """生成 FPA 预览用基础数据，返回可选择的三级模块列表。"""
+        temp_ctx: tempfile.TemporaryDirectory | None = None
+        try:
+            if file is not None and file.filename:
+                temp_ctx = tempfile.TemporaryDirectory(prefix="ard_web_fpa_preview_modules_")
+                input_dir = Path(temp_ctx.name) / "input"
+                input_dir.mkdir(parents=True, exist_ok=True)
+                safe_name = Path(file.filename).name
+                file_path = input_dir / safe_name
+                file_path.write_bytes(await file.read())
+                work_dir = str(Path(temp_ctx.name) / "work")
+                Path(work_dir).mkdir(parents=True, exist_ok=True)
+            else:
+                require_local(request)
+                if not xlsx_path.strip():
+                    raise HTTPException(400, "请提供功能清单 .xlsx 路径")
+                file_path = _resolve_local_xlsx_input(xlsx_path)
+                temp_ctx = tempfile.TemporaryDirectory(prefix="ard_web_fpa_preview_modules_")
+                work_dir = str(Path(temp_ctx.name) / "work")
+                Path(work_dir).mkdir(parents=True, exist_ok=True)
+
+            return preview_fpa_modules(
+                file_path=str(file_path),
+                work_dir=work_dir,
+            )
         except HTTPException:
             raise
         except Exception as exc:

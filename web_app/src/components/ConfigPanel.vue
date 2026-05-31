@@ -22,7 +22,7 @@
       <AdvancedOptions />
       <TemplateUpload />
       <TemplateDownload />
-      <FpaPreview />
+      <router-link to="/preview/fpa" class="btn-quiet inline-flex w-full items-center justify-center">打开 FPA 预览</router-link>
     </div>
 
     <button @click="$emit('start')"
@@ -48,7 +48,6 @@ import FileInput from './FileInput.vue'
 import AdvancedOptions from './AdvancedOptions.vue'
 import TemplateUpload from './TemplateUpload.vue'
 import TemplateDownload from './TemplateDownload.vue'
-import FpaPreview from './FpaPreview.vue'
 import { apiFetch } from '@/lib/api.ts'
 
 import { ref, onMounted } from 'vue'

@@ -1,5 +1,5 @@
 from ai_gen_reimbursement_docs.fpa_profiles import STRICT_FPA_PROFILE
-from ai_gen_reimbursement_docs.gen_fpa import _build_fpa_rule_rows
+from ai_gen_reimbursement_docs.gen_fpa import _build_fpa_rule_rows, _normalize_ai_fpa_rows_for_l3
 
 
 def _meta():
@@ -133,3 +133,31 @@ def test_strict_fpa_erp_document_reference_uses_external_rule_table():
     assert types["ERP业务单据"] == "EIF"
     assert types["关联ERP订单"] == "EI"
     assert types["查看ERP订单信息"] == "EQ"
+
+
+def test_strict_fpa_keeps_valid_ai_ei_when_description_mentions_query_list():
+    group = {
+        "client_type": "地市后台",
+        "l1": "垂直行业营销",
+        "l2": "垂直行业管理",
+        "l3": "垂直行业管理",
+        "processes": [],
+    }
+
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        ai_rows=[
+            {
+                "name": "添加垂直行业",
+                "type": "EI",
+                "explanation": "保存垂直行业后刷新列表，并展示查询结果。",
+                "source_processes": ["添加垂直行业"],
+            }
+        ],
+        judgement_rules=[],
+        profile=STRICT_FPA_PROFILE,
+    )
+
+    assert rows[0]["类型"] == "EI"
+    assert not any("关键词规则明显冲突" in warning for warning in warnings)

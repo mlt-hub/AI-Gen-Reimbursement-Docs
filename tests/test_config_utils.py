@@ -13,6 +13,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_reduced_use_workload,
     load_fpa_profile,
     load_fpa_external_data_rules,
+    load_fpa_user_prompt_template,
     load_model_name,
     _read_env_value,
 )
@@ -183,6 +184,27 @@ fpa_external_data_rules:
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_external_data_rules() == []
+
+
+class TestLoadFpaUserPromptTemplate:
+    def test_default_template_empty_when_not_configured(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            assert load_fpa_user_prompt_template("strict_fpa") == ""
+
+    def test_configured_template(self, tmp_path):
+        yaml_file = tmp_path / "fpa_user_prompts_config.yaml"
+        yaml_file.write_text(
+            """
+fpa_eval:
+  user_templates:
+    strict_fpa: |-
+      STRICT ${core_rules}
+""",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_user_prompt_template("strict_fpa") == "STRICT ${core_rules}"
 
 
 class TestLoadModelName:

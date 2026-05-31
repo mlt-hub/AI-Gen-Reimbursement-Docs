@@ -275,7 +275,7 @@ async function startTask() {
   const mode = config.pipelineMode
   const body = new FormData()
   body.append('mode', mode)
-  if (config.apiKey) body.append('api_key', config.apiKey)
+  if (config.apiKeyForRequest) body.append('api_key', config.apiKeyForRequest)
   if (config.model) body.append('model', config.model)
   if (config.baseUrl) body.append('base_url', config.baseUrl)
   if (config.maxTokens) body.append('max_tokens', config.maxTokens)

@@ -34,7 +34,7 @@
       <details class="mt-4">
         <summary class="subtle-link cursor-pointer select-none text-sm">高级选项</summary>
         <div class="mt-3 flex gap-3 border-t border-[var(--color-rule)] pt-3">
-          <input type="password" v-model="apiKey" placeholder="API Key（留空使用系统配置）" autocomplete="off"
+          <input type="password" v-model.trim="apiKey" placeholder="API Key（留空使用系统配置）" autocomplete="off"
             class="field-control flex-1" />
           <input type="text" v-model="model" placeholder="模型（默认 deepseek-v4-flash）"
             class="field-control flex-1" />
@@ -131,6 +131,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import { normalizeApiKeyInput } from '@/stores/config.ts'
 
 interface PromptTestResponse {
   system_prompt?: string
@@ -175,7 +176,7 @@ async function submitPrompt() {
       body: JSON.stringify({
         system_prompt: systemPrompt.value.trim(),
         user_prompt: userPrompt.value.trim(),
-        api_key: apiKey.value.trim(),
+        api_key: normalizeApiKeyInput(apiKey.value),
         model: model.value.trim(),
         base_url: baseUrl.value.trim(),
       }),

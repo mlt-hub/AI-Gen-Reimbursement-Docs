@@ -103,6 +103,24 @@ def cleanup_expired_sessions(max_age_seconds: int = 24 * 3600) -> int:
     return _cleanup_expired_sessions(session_manager, max_age_seconds)
 
 
+# SPA history 路由必须先于 /static/dist 挂载声明。
+# 否则 /static/dist/... 会被 StaticFiles 当作真实文件路径处理。
+@app.get("/static/dist")
+@app.get("/static/dist/")
+@app.get("/static/dist/login")
+@app.get("/static/dist/config")
+@app.get("/static/dist/license")
+@app.get("/static/dist/history")
+@app.get("/static/dist/prompt-debug")
+async def static_dist_spa_page():
+    return _spa_index()
+
+
+@app.get("/static/dist/preview/{path:path}")
+async def static_dist_preview_page(path: str):
+    return _spa_index()
+
+
 # 静态文件：Vite 构建产物
 _dist_dir = Path(__file__).parent / "static" / "dist"
 if _dist_dir.exists():
@@ -119,6 +137,11 @@ async def index():
     return _spa_index()
 
 
+@app.get("/login")
+async def login_page():
+    return _spa_index()
+
+
 @app.get("/config")
 async def config_page():
     return _spa_index()
@@ -131,6 +154,11 @@ async def license_page():
 
 @app.get("/history")
 async def history_page():
+    return _spa_index()
+
+
+@app.get("/preview/{path:path}")
+async def preview_page(path: str):
     return _spa_index()
 
 

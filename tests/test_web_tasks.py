@@ -1,5 +1,6 @@
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -144,6 +145,43 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
     assert calls[0]["profile_name"] == "current_project"
 
 
+def test_fpa_preview_modules_upload_returns_selectable_modules(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+    calls: list[dict] = []
+
+    def fake_preview_fpa_modules(**kwargs):
+        calls.append(kwargs)
+        return {
+            "modules": [
+                {
+                    "index": 1,
+                    "client_type": "地市后台",
+                    "l1": "一级",
+                    "l2": "二级",
+                    "l3": "垂直行业管理",
+                    "l3_desc": "描述",
+                    "process_count": 2,
+                    "label": "1. 地市后台 / 一级 / 二级 / 垂直行业管理",
+                }
+            ],
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(tasks, "preview_fpa_modules", fake_preview_fpa_modules)
+
+    resp = client.post(
+        "/api/fpa/preview-modules",
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["modules"][0]["index"] == 1
+    assert data["modules"][0]["l3"] == "垂直行业管理"
+    assert calls
+    assert Path(calls[0]["file_path"]).name == "功能清单.xlsx"
+
+
 def test_fpa_preview_requires_module_target(monkeypatch):
     client = _client(monkeypatch, user="alice")
 
@@ -154,6 +192,43 @@ def test_fpa_preview_requires_module_target(monkeypatch):
 
     assert resp.status_code == 400
     assert "三级模块" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/static/dist",
+        "/static/dist/",
+        "/static/dist/login",
+        "/static/dist/config",
+        "/static/dist/license",
+        "/static/dist/history",
+        "/static/dist/prompt-debug",
+        "/static/dist/preview/fpa",
+    ],
+)
+def test_static_dist_spa_routes_return_spa_index(monkeypatch, path):
+    client = _client(monkeypatch, user="alice")
+
+    resp = client.get(path)
+
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "id=\"app\"" in resp.text or "前端未构建" in resp.text
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/login", "/preview/fpa"],
+)
+def test_top_level_spa_routes_return_spa_index(monkeypatch, path):
+    client = _client(monkeypatch, user="alice")
+
+    resp = client.get(path)
+
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "id=\"app\"" in resp.text or "前端未构建" in resp.text
 
 
 def test_log_stream_returns_existing_events_and_removes_queue(monkeypatch):

@@ -1,54 +1,81 @@
 <template>
-  <details class="group">
-    <summary class="subtle-link cursor-pointer select-none text-sm">FPA 预览</summary>
-    <div class="mt-3 flex flex-col gap-3 border-t border-[var(--color-rule)] pt-3">
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_92px]">
-        <div>
-          <label for="fpa-preview-module" class="field-label text-xs">三级模块</label>
-          <input
-            id="fpa-preview-module"
-            v-model="moduleName"
-            type="text"
-            class="field-control"
-            placeholder="垂直行业管理"
-          />
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="border-b border-[var(--color-rule)] px-5 py-4">
+      <div class="flex flex-col gap-4">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+          <div>
+            <label for="fpa-preview-module" class="field-label text-xs">三级模块</label>
+            <select
+              id="fpa-preview-module"
+              v-model="selectedModuleIndex"
+              class="field-control"
+              :disabled="!modules.length || modulesLoading || previewLoading"
+            >
+              <option value="">请先生成基础数据</option>
+              <option v-for="module in modules" :key="module.index" :value="String(module.index)">
+                {{ module.label }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label for="fpa-preview-profile" class="field-label text-xs">FPA 方案</label>
+            <select id="fpa-preview-profile" v-model="config.fpaProfile" class="field-control">
+              <option value="current_project">当前报账模板口径</option>
+              <option value="strict_fpa">严格 FPA 口径</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label for="fpa-preview-index" class="field-label text-xs">序号</label>
-          <input
-            id="fpa-preview-index"
-            v-model="moduleIndex"
-            type="number"
-            min="1"
-            step="1"
-            class="field-control"
-          />
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="min-h-5 text-xs text-[var(--color-ink-soft)]">
+            <span v-if="modules.length">已生成 {{ modules.length }} 个三级模块，可从下拉框选择。</span>
+            <span v-else>先生成基础数据，再选择三级模块预览 FPA 行。</span>
+          </div>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              class="btn-secondary inline-flex shrink-0 items-center justify-center gap-2 px-5"
+              :disabled="!canLoadModules || modulesLoading"
+              @click="loadModules"
+            >
+              <ArrowPathIcon class="h-4 w-4" />
+              {{ modulesLoading ? '生成中...' : '生成基础数据' }}
+            </button>
+            <button
+              type="button"
+              class="btn-primary inline-flex shrink-0 items-center justify-center gap-2 px-5"
+              :disabled="!canPreview || previewLoading"
+              @click="runPreview"
+            >
+              <MagnifyingGlassIcon class="h-4 w-4" />
+              {{ previewLoading ? '生成中...' : '生成预览' }}
+            </button>
+          </div>
         </div>
       </div>
+    </div>
 
-      <div>
-        <label for="fpa-preview-profile" class="field-label text-xs">FPA 方案</label>
-        <select id="fpa-preview-profile" v-model="config.fpaProfile" class="field-control">
-          <option value="current_project">当前报账模板口径</option>
-          <option value="strict_fpa">严格 FPA 口径</option>
-        </select>
+    <div class="min-h-0 flex-1 overflow-y-auto p-5">
+      <div v-if="!config.isValid" class="rounded-lg border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-4 py-3 text-sm text-[var(--color-warning)]">
+        请先在左侧选择功能清单输入来源。
       </div>
 
-      <button
-        type="button"
-        class="btn-quiet inline-flex w-full items-center justify-center gap-2"
-        :disabled="!canPreview || loading"
-        @click="runPreview"
-      >
-        <MagnifyingGlassIcon class="h-4 w-4" />
-        {{ loading ? '生成中...' : '生成预览' }}
-      </button>
+      <div v-else-if="!modules.length" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-4 py-3 text-sm text-[var(--color-ink-muted)]">
+        点击“生成基础数据”后，系统会解析功能清单并列出可预览的三级模块。
+      </div>
 
-      <div v-if="error" class="rounded-md border border-[var(--color-danger)] bg-[var(--color-danger-soft)] px-3 py-2 text-sm text-[var(--color-danger)]">
+      <div v-else-if="!selectedModuleIndex" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-4 py-3 text-sm text-[var(--color-ink-muted)]">
+        从下拉框选择一个三级模块后生成预览。
+      </div>
+
+      <div v-if="error" class="mt-4 rounded-md border border-[var(--color-danger)] bg-[var(--color-danger-soft)] px-3 py-2 text-sm text-[var(--color-danger)]">
         {{ error }}
       </div>
 
-      <div v-if="result" class="overflow-hidden rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
+      <div v-if="moduleWarnings.length" class="mt-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-xs text-[var(--color-warning)]">
+        <div v-for="item in moduleWarnings" :key="item" class="leading-5">{{ item }}</div>
+      </div>
+
+      <div v-if="result" class="mt-4 overflow-hidden rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
         <div class="flex items-center justify-between gap-3 border-b border-[var(--color-rule)] px-3 py-2">
           <div class="min-w-0">
             <div class="truncate text-sm font-semibold text-[var(--color-ink)]">{{ result.module.l3 }}</div>
@@ -59,7 +86,7 @@
           </span>
         </div>
 
-        <div class="max-h-[360px] overflow-auto">
+        <div class="max-h-[50vh] overflow-auto">
           <table class="w-full min-w-[620px] text-left text-xs">
             <thead class="sticky top-0 bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]">
               <tr>
@@ -85,8 +112,8 @@
           </table>
         </div>
 
-        <div v-if="result.warnings.length" class="border-t border-[var(--color-rule)] px-3 py-2 text-xs text-[var(--color-warning)]">
-          <div v-for="item in result.warnings" :key="item" class="leading-5">{{ item }}</div>
+        <div v-if="previewWarnings.length" class="border-t border-[var(--color-rule)] px-3 py-2 text-xs text-[var(--color-warning)]">
+          <div v-for="item in previewWarnings" :key="item" class="leading-5">{{ item }}</div>
         </div>
 
         <div class="border-t border-[var(--color-rule)] px-3 py-2">
@@ -102,12 +129,12 @@
         </div>
       </div>
     </div>
-  </details>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
+import { computed, ref, watch } from 'vue'
+import { ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
 import { useConfigStore } from '@/stores/config.ts'
 import { useSessionStore } from '@/stores/session.ts'
 import { useToastStore } from '@/stores/toast.ts'
@@ -140,38 +167,98 @@ interface FpaPreviewResult {
   profile_version: string
 }
 
+interface FpaPreviewModule {
+  index: number
+  client_type: string
+  l1: string
+  l2: string
+  l3: string
+  l3_desc: string
+  process_count: number
+  label: string
+}
+
+interface FpaPreviewModulesResult {
+  modules: FpaPreviewModule[]
+  warnings: string[]
+}
+
 const config = useConfigStore()
 const session = useSessionStore()
 const toast = useToastStore()
 
-const moduleName = ref('')
-const moduleIndex = ref('')
-const loading = ref(false)
+const modules = ref<FpaPreviewModule[]>([])
+const moduleWarnings = ref<string[]>([])
+const selectedModuleIndex = ref('')
+const modulesLoading = ref(false)
+const previewLoading = ref(false)
 const error = ref('')
 const result = ref<FpaPreviewResult | null>(null)
 
-const hasTarget = computed(() => moduleName.value.trim().length > 0 || moduleIndex.value.trim().length > 0)
-const canPreview = computed(() => config.isValid && hasTarget.value && !session.isRunning)
+const previewWarnings = computed(() => result.value?.warnings ?? [])
+const canLoadModules = computed(() => config.isValid && !session.isRunning && !previewLoading.value)
+const canPreview = computed(() => config.isValid && selectedModuleIndex.value !== '' && !session.isRunning && !modulesLoading.value)
 
-async function runPreview() {
-  if (!canPreview.value) return
-  loading.value = true
-  error.value = ''
-  result.value = null
+watch(
+  () => [config.workMode, config.xlsxPath, config.selectedFile],
+  () => {
+    modules.value = []
+    moduleWarnings.value = []
+    selectedModuleIndex.value = ''
+    result.value = null
+    error.value = ''
+  },
+)
 
-  const body = new FormData()
-  if (moduleName.value.trim()) body.append('module_name', moduleName.value.trim())
-  if (moduleIndex.value.trim()) body.append('module_index', moduleIndex.value.trim())
-  if (config.apiKey) body.append('api_key', config.apiKey)
-  if (config.model) body.append('model', config.model)
-  if (config.baseUrl) body.append('base_url', config.baseUrl)
-  if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
-
+function appendInputSource(body: FormData) {
   if (config.workMode === 'local') {
     body.append('xlsx_path', config.xlsxPath)
   } else if (config.selectedFile) {
     body.append('file', config.selectedFile)
   }
+}
+
+async function loadModules() {
+  if (!canLoadModules.value) return
+  modulesLoading.value = true
+  error.value = ''
+  result.value = null
+  moduleWarnings.value = []
+  selectedModuleIndex.value = ''
+
+  const body = new FormData()
+  appendInputSource(body)
+
+  try {
+    const data = await apiFetch<FpaPreviewModulesResult>('/api/fpa/preview-modules', {
+      method: 'POST',
+      body,
+    })
+    modules.value = data.modules ?? []
+    moduleWarnings.value = data.warnings ?? []
+    selectedModuleIndex.value = modules.value.length ? String(modules.value[0].index) : ''
+  } catch (e) {
+    const msg = normalizeApiError(e)
+    error.value = msg
+    toast.show('error', msg)
+  } finally {
+    modulesLoading.value = false
+  }
+}
+
+async function runPreview() {
+  if (!canPreview.value) return
+  previewLoading.value = true
+  error.value = ''
+  result.value = null
+
+  const body = new FormData()
+  body.append('module_index', selectedModuleIndex.value)
+  if (config.apiKeyForRequest) body.append('api_key', config.apiKeyForRequest)
+  if (config.model) body.append('model', config.model)
+  if (config.baseUrl) body.append('base_url', config.baseUrl)
+  if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
+  appendInputSource(body)
 
   try {
     result.value = await apiFetch<FpaPreviewResult>('/api/fpa/preview-module', {
@@ -183,7 +270,7 @@ async function runPreview() {
     error.value = msg
     toast.show('error', msg)
   } finally {
-    loading.value = false
+    previewLoading.value = false
   }
 }
 

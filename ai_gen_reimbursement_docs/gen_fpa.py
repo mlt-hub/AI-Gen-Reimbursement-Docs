@@ -614,6 +614,57 @@ def plan_fpa_md_from_tree(
     return output_md_path
 
 
+def preview_fpa_modules(
+    *,
+    file_path: str,
+    work_dir: str = "",
+) -> dict[str, object]:
+    """解析功能清单并返回可预览的三级模块列表，不调用 AI，不生成正式交付物。"""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
+    temp_ctx = None
+    if work_dir:
+        md_dir = os.path.join(work_dir, "fpa-preview-md")
+        os.makedirs(md_dir, exist_ok=True)
+    else:
+        temp_ctx = tempfile.TemporaryDirectory(prefix="ard-fpa-preview-modules-")
+        md_dir = temp_ctx.name
+    try:
+        from ai_gen_reimbursement_docs.excel_source import generate_md_files
+
+        generate_md_files(file_path, md_dir)
+        tree_md = os.path.join(md_dir, "0.1.gen-basedata-功能清单-模块树.md")
+        rows = parse_module_tree_md(tree_md)
+        modules: list[dict[str, object]] = []
+        for idx, group in enumerate(_group_rows_by_l3(rows), 1):
+            processes = group.get("processes", [])
+            process_count = len(processes) if isinstance(processes, list) else 0
+            path_parts = [
+                str(group.get("client_type", "") or "").strip(),
+                str(group.get("l1", "") or "").strip(),
+                str(group.get("l2", "") or "").strip(),
+                str(group.get("l3", "") or "").strip(),
+            ]
+            label_path = " / ".join([part for part in path_parts if part])
+            modules.append({
+                "index": idx,
+                "client_type": group.get("client_type", ""),
+                "l1": group.get("l1", ""),
+                "l2": group.get("l2", ""),
+                "l3": group.get("l3", ""),
+                "l3_desc": group.get("l3_desc", ""),
+                "process_count": process_count,
+                "label": f"{idx}. {label_path}" if label_path else str(idx),
+            })
+        return {
+            "modules": modules,
+            "warnings": [] if modules else ["未解析到三级模块"],
+        }
+    finally:
+        if temp_ctx is not None:
+            temp_ctx.cleanup()
+
+
 def preview_fpa_module(
     *,
     file_path: str,

@@ -57,6 +57,8 @@
           <div>
             <label class="field-label text-xs">ANTHROPIC_API_KEY</label>
             <input v-model="envFields.apiKey" :type="showApiKey ? 'text' : 'password'"
+              placeholder="留空使用全局默认配置"
+              autocomplete="off"
               class="field-control" />
           </div>
           <div>
@@ -175,7 +177,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useAuthStore } from '@/stores/auth.ts'
-import { useConfigStore } from '@/stores/config.ts'
+import { normalizeApiKeyInput, useConfigStore } from '@/stores/config.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 // ── 类型 ──────────────────────────────────────────────────
@@ -405,7 +407,7 @@ async function loadUserConfig() {
         if (m) {
           const k = m[1].trim()
           const v = m[2].trim()
-          if (k === 'ANTHROPIC_API_KEY') envFields.apiKey = v
+          if (k === 'ANTHROPIC_API_KEY') envFields.apiKey = normalizeApiKeyInput(v)
           else if (k === 'ANTHROPIC_BASE_URL') envFields.baseUrl = v
           else if (k === 'ANTHROPIC_MODEL') envFields.model = v
         }
@@ -513,7 +515,8 @@ async function saveUserConfig() {
 
   // 构建 _env
   const env: Record<string, string> = {}
-  if (envFields.apiKey) env['ANTHROPIC_API_KEY'] = envFields.apiKey
+  const apiKey = normalizeApiKeyInput(envFields.apiKey)
+  if (apiKey) env['ANTHROPIC_API_KEY'] = apiKey
   if (envFields.baseUrl) env['ANTHROPIC_BASE_URL'] = envFields.baseUrl
   if (envFields.model) env['ANTHROPIC_MODEL'] = envFields.model
 

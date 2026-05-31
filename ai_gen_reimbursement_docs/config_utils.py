@@ -420,6 +420,22 @@ def load_ai_examples(name: str) -> str:
         return ""
 
 
+def load_fpa_user_prompt_template(profile_name: str, scene: str = "fpa_eval") -> str:
+    """从 fpa_user_prompts_config.yaml 读取 FPA 用户提示词模板。"""
+    yaml_path = config_dir() / "fpa_user_prompts_config.yaml"
+    if not yaml_path.exists():
+        return ""
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        templates = cfg.get(scene, {}).get("user_templates", {})
+        val = templates.get(profile_name, "")
+        return val if isinstance(val, str) else ""
+    except Exception:
+        return ""
+
+
 def migrate_config() -> None:
     """自动迁移配置：将模板中的新键追加到用户配置文件末尾。
 
@@ -463,6 +479,7 @@ def migrate_config() -> None:
     # 对比 .example 和用户配置，自动追加新增的顶层键（含嵌套块）
     yaml_pairs = [
         (home / "system_config.yaml", local / "system_config.yaml.example", "system_config"),
+        (home / "fpa_user_prompts_config.yaml", local / "fpa_user_prompts_config.yaml.example", "fpa_user_prompts_config"),
     ]
     try:
         import yaml
