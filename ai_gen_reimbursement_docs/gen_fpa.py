@@ -42,6 +42,7 @@ logger = logging.getLogger('ai_gen_reimbursement_docs.gen_fpa')
 
 VALID_FPA_TYPES = {"EI", "ILF", "EQ", "EO", "EIF"}
 FPA_PROFILE = CUSTOM_RULES_PROFILE
+RULE_HITS_KEY = "_规则命中详情"
 
 
 @dataclass
@@ -209,6 +210,100 @@ def _extract_json_obj(resp: str) -> dict[str, Any]:
     return data
 
 
+def _row_rule_hits(row: dict[str, object]) -> list[dict[str, object]]:
+    hits = row.get(RULE_HITS_KEY)
+    if not isinstance(hits, list):
+        return []
+    return [hit for hit in hits if isinstance(hit, dict)]
+
+
+def _add_rule_hit(
+    row: dict[str, object],
+    *,
+    hit_object: str,
+    rule_id: str,
+    rule_desc: str,
+    suggested_type: str = "",
+    adopted: bool = True,
+    warnings: list[str] | None = None,
+) -> None:
+    hits = row.setdefault(RULE_HITS_KEY, [])
+    if not isinstance(hits, list):
+        hits = []
+        row[RULE_HITS_KEY] = hits
+    hits.append({
+        "hit_object": hit_object,
+        "rule_id": rule_id,
+        "rule_desc": rule_desc,
+        "suggested_type": suggested_type,
+        "adopted": "是" if adopted else "否",
+        "warnings": list(warnings or []),
+    })
+
+
+def _attach_profile_rule_hits(
+    rows: list[dict[str, object]],
+    *,
+    profile: CustomRulesProfile,
+    generation: str = "",
+) -> None:
+    """给规则生成行补充生成期命中信息，避免审核副本只靠落表后反推。"""
+    for row in rows:
+        if generation:
+            row["生成方式"] = generation
+        row_generation = str(row.get("生成方式", "") or generation or "fallback")
+        if _row_rule_hits(row):
+            continue
+        name = str(row.get("新增/修改功能点", "") or "")
+        fpa_type = str(row.get("类型", "") or "")
+        reason = str(row.get("类型理由", "") or "")
+        rule_id = "profile.fallback"
+        if row_generation == "rules_fallback":
+            rule_id = "coverage.rules_fallback"
+        elif profile.name == "custom_rules" and "界面开发" in name:
+            rule_id = "custom_rules.ui_merge"
+        elif profile.name == "strict_fpa" and fpa_type == "EIF":
+            rule_id = "strict_fpa.external_data_group"
+        elif profile.name == "strict_fpa" and fpa_type == "ILF":
+            rule_id = "strict_fpa.internal_data_group"
+        elif profile.name == "strict_fpa":
+            rule_id = f"strict_fpa.transaction.{fpa_type.lower()}"
+        elif "关键词" in reason or fpa_type:
+            rule_id = f"custom_rules.keyword.{fpa_type.lower()}"
+        _add_rule_hit(
+            row,
+            hit_object=str(row.get("源功能过程", "") or name),
+            rule_id=rule_id,
+            rule_desc=reason or "按当前 profile 兜底规则生成。",
+            suggested_type=fpa_type,
+            adopted=True,
+            warnings=_warning_items(row.get("后处理警告", "")),
+        )
+
+
+def _trace_rule_hits_for_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    trace_hits: list[dict[str, object]] = []
+    for row in rows:
+        for hit in _row_rule_hits(row):
+            trace_hits.append({
+                "fpa_seq": row.get("序号", ""),
+                "name": row.get("新增/修改功能点", ""),
+                "generation": row.get("生成方式", ""),
+                "hit_object": hit.get("hit_object", ""),
+                "rule_id": hit.get("rule_id", ""),
+                "rule_desc": hit.get("rule_desc", ""),
+                "suggested_type": hit.get("suggested_type", ""),
+                "adopted": hit.get("adopted", ""),
+                "warnings": hit.get("warnings", []),
+            })
+    return trace_hits
+
+
+def _renumber_rows(rows: list[dict[str, object]], start_seq: int) -> None:
+    for offset, row in enumerate(rows):
+        row["序号"] = start_seq + offset
+
+
 def _normalize_ai_fpa_rows_for_l3(
     *,
     group: dict[str, object],
@@ -250,35 +345,95 @@ def _normalize_ai_fpa_rows_for_l3(
         if not name:
             warnings.append(f"{_group_tag(group)} AI 行缺少 name，已跳过")
             continue
+        row_warnings: list[str] = []
+        row_hits: list[dict[str, object]] = []
         explanation = str(raw.get("explanation", "") or raw.get("计算依据说明", "") or "").strip()
         normalized_name = profile.normalize_output_name(name, explanation)
         if normalized_name != name:
-            warnings.append(f"{_group_tag(group)} AI 行名称不符合 {profile.name} 口径，已规范化: {name} -> {normalized_name}")
+            warning = f"{_group_tag(group)} AI 行名称不符合 {profile.name} 口径，已规范化: {name} -> {normalized_name}"
+            warnings.append(warning)
+            row_warnings.append(warning)
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": f"{profile.name}.normalize_output_name",
+                "rule_desc": f"AI 输出名称需符合 {profile.name} 口径。",
+                "suggested_type": "",
+                "adopted": "是",
+                "warnings": [warning],
+            })
             name = normalized_name
         if not explanation:
             explanation = f"{name}，具体为以下：\n1、基于该三级模块功能过程完成对应业务能力。"
-            warnings.append(f"{_group_tag(group)} AI 行缺少 explanation，已使用兜底说明: {name}")
+            warning = f"{_group_tag(group)} AI 行缺少 explanation，已使用兜底说明: {name}"
+            warnings.append(warning)
+            row_warnings.append(warning)
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.explanation_fallback",
+                "rule_desc": "AI 未提供计算依据说明时，使用兜底说明。",
+                "suggested_type": "",
+                "adopted": "是",
+                "warnings": [warning],
+            })
 
         ai_type = str(raw.get("type", "") or raw.get("类型", "") or "").strip().upper()
         fallback_type, fallback_reason = profile.infer_type(name, explanation)
         type_reason = str(raw.get("type_reason", "") or "").strip()
         if ai_type not in VALID_FPA_TYPES:
             if ai_type:
-                warnings.append(f"{name} AI 返回非法 type={ai_type}，已使用 {fallback_type} 兜底")
+                warning = f"{name} AI 返回非法 type={ai_type}，已使用 {fallback_type} 兜底"
+                warnings.append(warning)
+                row_warnings.append(warning)
             fpa_type = fallback_type
             type_reason = type_reason or fallback_reason
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.invalid_ai_type",
+                "rule_desc": fallback_reason or "AI type 非法时使用 profile 类型规则兜底。",
+                "suggested_type": fallback_type,
+                "adopted": "是",
+                "warnings": row_warnings[-1:] if ai_type else [],
+            })
         elif profile.has_obvious_conflict(name, explanation, ai_type):
             if strategy in {"ai_first", "ai_only"}:
-                warnings.append(f"{name} AI type={ai_type} 与规则存在冲突，AI 优先策略下保留 AI type")
+                warning = f"{name} AI type={ai_type} 与规则存在冲突，AI 优先策略下保留 AI type"
+                warnings.append(warning)
+                row_warnings.append(warning)
                 fpa_type = ai_type
                 type_reason = type_reason or "AI 根据功能点名称和业务说明判定。"
+                row_hits.append({
+                    "hit_object": name,
+                    "rule_id": "postprocess.ai_first_type_conflict",
+                    "rule_desc": fallback_reason or "规则认为 AI type 存在业务冲突，但 AI 优先策略保留合法 AI type。",
+                    "suggested_type": fallback_type,
+                    "adopted": "否",
+                    "warnings": [warning],
+                })
             else:
-                warnings.append(f"{name} AI type={ai_type} 与关键词规则明显冲突，已使用 {fallback_type} 兜底")
+                warning = f"{name} AI type={ai_type} 与关键词规则明显冲突，已使用 {fallback_type} 兜底"
+                warnings.append(warning)
+                row_warnings.append(warning)
                 fpa_type = fallback_type
                 type_reason = fallback_reason
+                row_hits.append({
+                    "hit_object": name,
+                    "rule_id": "postprocess.keyword_type_conflict",
+                    "rule_desc": fallback_reason or "AI type 与关键词规则明显冲突，采用规则建议类型。",
+                    "suggested_type": fallback_type,
+                    "adopted": "是",
+                    "warnings": [warning],
+                })
         else:
             fpa_type = ai_type
             type_reason = type_reason or "AI 根据功能点名称和业务说明判定。"
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.ai_type_validation",
+                "rule_desc": type_reason,
+                "suggested_type": fpa_type,
+                "adopted": "是",
+                "warnings": [],
+            })
 
         basis = ""
         idx = raw.get("classification_basis_index")
@@ -287,12 +442,32 @@ def _normalize_ai_fpa_rows_for_l3(
             try:
                 parsed_idx = int(idx)
             except (TypeError, ValueError):
-                warnings.append(f"{name} classification_basis_index 非数字: {idx}")
+                warning = f"{name} classification_basis_index 非数字: {idx}"
+                warnings.append(warning)
+                row_warnings.append(warning)
+                row_hits.append({
+                    "hit_object": name,
+                    "rule_id": "postprocess.classification_basis_index",
+                    "rule_desc": "classification_basis_index 必须是模板判定原则中的数字序号。",
+                    "suggested_type": fpa_type,
+                    "adopted": "是",
+                    "warnings": [warning],
+                })
         if parsed_idx is not None:
             if judgement_rules and 1 <= parsed_idx <= len(judgement_rules):
                 basis = judgement_rules[parsed_idx - 1]
             else:
-                warnings.append(f"{name} classification_basis_index 越界: {parsed_idx}")
+                warning = f"{name} classification_basis_index 越界: {parsed_idx}"
+                warnings.append(warning)
+                row_warnings.append(warning)
+                row_hits.append({
+                    "hit_object": name,
+                    "rule_id": "postprocess.classification_basis_index",
+                    "rule_desc": "classification_basis_index 必须落在模板判定原则范围内。",
+                    "suggested_type": fpa_type,
+                    "adopted": "是",
+                    "warnings": [warning],
+                })
         if not basis and raw.get("classification_basis"):
             val = str(raw.get("classification_basis", "")).strip()
             for rule in judgement_rules:
@@ -300,7 +475,17 @@ def _normalize_ai_fpa_rows_for_l3(
                     basis = rule
                     break
             if not basis:
-                warnings.append(f"{name} classification_basis 未匹配模板规则，已留空")
+                warning = f"{name} classification_basis 未匹配模板规则，已留空"
+                warnings.append(warning)
+                row_warnings.append(warning)
+                row_hits.append({
+                    "hit_object": name,
+                    "rule_id": "postprocess.classification_basis_match",
+                    "rule_desc": "classification_basis 必须能匹配模板判定原则。",
+                    "suggested_type": fpa_type,
+                    "adopted": "是",
+                    "warnings": [warning],
+                })
 
         source_processes = raw.get("source_processes", [])
         if isinstance(source_processes, list):
@@ -308,7 +493,7 @@ def _normalize_ai_fpa_rows_for_l3(
         else:
             source_text = str(source_processes or "")
 
-        normalized.append({
+        row = {
             "序号": seq,
             "子系统(模块)": subsystem,
             "资产标识": asset,
@@ -322,8 +507,19 @@ def _normalize_ai_fpa_rows_for_l3(
             "生成方式": "ai",
             "类型理由": type_reason,
             "源功能过程": source_text,
-            "后处理警告": "；".join(warnings),
-        })
+            "后处理警告": "；".join(row_warnings),
+        }
+        for hit in row_hits:
+            _add_rule_hit(
+                row,
+                hit_object=str(hit.get("hit_object", "")),
+                rule_id=str(hit.get("rule_id", "")),
+                rule_desc=str(hit.get("rule_desc", "")),
+                suggested_type=str(hit.get("suggested_type", "")),
+                adopted=str(hit.get("adopted", "是")) == "是",
+                warnings=hit.get("warnings", []) if isinstance(hit.get("warnings"), list) else [],
+            )
+        normalized.append(row)
         seq += 1
     return normalized, warnings
 
@@ -381,6 +577,7 @@ def _supplement_ai_rows_with_rules(
         warning = "AI 结果未覆盖该功能过程，已按规则集补齐；未覆盖 AI 已判定类型。"
         old_warning = str(copied.get("后处理警告", "") or "")
         copied["后处理警告"] = f"{old_warning}；{warning}" if old_warning else warning
+        _attach_profile_rule_hits([copied], profile=profile, generation="rules_fallback")
         supplemental.append(copied)
 
     if not supplemental:
@@ -639,24 +836,31 @@ def _plan_fpa_rows_with_execution(
     groups = _group_rows_by_l3(rows)
     if strategy in {"rules_first", "rules_only"}:
         logger.info("FPA strategy=%s，使用规则集 %s 生成 FPA", strategy, rule_set)
+        all_rows: list[dict[str, object]] = []
+        audit_modules: list[dict[str, object]] = []
+        seq = 1
+        for group in groups:
+            group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            _attach_profile_rule_hits(group_rows, profile=profile, generation="fallback")
+            all_rows.extend(group_rows)
+            seq += len(group_rows)
+            audit_modules.append({
+                "module": _group_tag(group),
+                "l3": group.get("l3", ""),
+                "source": "rules",
+                "raw_rows": [],
+                "warnings": ["规则优先策略未调用 AI"],
+                "rule_hits": _trace_rule_hits_for_rows(group_rows),
+            })
         _save_fpa_audit_trace(audit_trace_path, {
             "version": 1,
             "profile": profile.name,
             "strategy": strategy,
             "rule_set": rule_set,
             "rule_set_version": rule_set_version,
-            "modules": [
-                {
-                    "module": _group_tag(group),
-                    "l3": group.get("l3", ""),
-                    "source": "rules",
-                    "raw_rows": [],
-                    "warnings": ["规则优先策略未调用 AI"],
-                }
-                for group in groups
-            ],
+            "modules": audit_modules,
         })
-        return _build_fpa_rule_rows(rows, meta, profile=profile)
+        return all_rows
     if not api_key:
         raise ValueError(f"FPA strategy={strategy} 需要 API Key，当前未配置")
 
@@ -682,6 +886,7 @@ def _plan_fpa_rows_with_execution(
                 raise ValueError(f"FPA strategy=ai_only 但三级模块 {_group_tag(group)} 被 AI 限制跳过")
             skipped += 1
             group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            _attach_profile_rule_hits(group_rows, profile=profile, generation="rules_fallback")
             fallback += len(group_rows)
             all_rows.extend(group_rows)
             seq += len(group_rows)
@@ -691,6 +896,7 @@ def _plan_fpa_rows_with_execution(
                 "source": "rules_fallback",
                 "raw_rows": [],
                 "warnings": ["模块超过 AI 调用限制，已使用规则生成"],
+                "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
             continue
 
@@ -721,6 +927,7 @@ def _plan_fpa_rows_with_execution(
                     profile=profile,
                     strategy=strategy,
                 )
+                _renumber_rows(group_rows, seq)
                 warnings.extend(supplement_warnings)
                 if group_rows:
                     cache_hits += 1
@@ -736,6 +943,7 @@ def _plan_fpa_rows_with_execution(
                         "source": "ai_cache",
                         "raw_rows": raw_rows,
                         "warnings": warnings,
+                        "rule_hits": _trace_rule_hits_for_rows(group_rows),
                     })
                     continue
             except Exception as exc:
@@ -763,6 +971,7 @@ def _plan_fpa_rows_with_execution(
                 profile=profile,
                 strategy=strategy,
             )
+            _renumber_rows(group_rows, seq)
             warnings.extend(supplement_warnings)
             warning_count += len(warnings)
             if not group_rows:
@@ -786,6 +995,7 @@ def _plan_fpa_rows_with_execution(
                 "source": "ai",
                 "raw_rows": raw_rows,
                 "warnings": warnings,
+                "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
         except Exception as exc:
             if strategy == "ai_only":
@@ -797,6 +1007,7 @@ def _plan_fpa_rows_with_execution(
                 parse_failed += 1
             logger.warning("FPA AI 响应解析失败 [%s]: %s", _group_tag(group), exc)
             group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            _attach_profile_rule_hits(group_rows, profile=profile, generation="fallback")
             fallback += len(group_rows)
             audit_modules.append({
                 "module": _group_tag(group),
@@ -804,6 +1015,7 @@ def _plan_fpa_rows_with_execution(
                 "source": "rules_fallback",
                 "raw_rows": locals().get("raw_rows", []),
                 "warnings": [f"AI 调用或解析失败: {exc}"],
+                "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
 
         all_rows.extend(group_rows)
@@ -968,6 +1180,38 @@ def _rule_hit_for_audit(row: dict[str, object]) -> tuple[str, str]:
     return "profile.fallback", reason or "按当前 profile 兜底规则生成。"
 
 
+def _rule_hits_from_audit_trace(audit_trace: dict[str, object]) -> dict[str, list[dict[str, object]]]:
+    by_seq: dict[str, list[dict[str, object]]] = {}
+    modules = audit_trace.get("modules", [])
+    if not isinstance(modules, list):
+        return by_seq
+    for module in modules:
+        if not isinstance(module, dict):
+            continue
+        hits = module.get("rule_hits", [])
+        if not isinstance(hits, list):
+            continue
+        for hit in hits:
+            if not isinstance(hit, dict):
+                continue
+            seq = str(hit.get("fpa_seq", "") or "").strip()
+            if seq:
+                by_seq.setdefault(seq, []).append(hit)
+    return by_seq
+
+
+def _warning_source_for_row(
+    rule_hits_by_seq: dict[str, list[dict[str, object]]],
+    row_seq: object,
+    warning: str,
+) -> tuple[str, str]:
+    for hit in rule_hits_by_seq.get(str(row_seq or ""), []):
+        hit_warnings = hit.get("warnings", [])
+        if isinstance(hit_warnings, list) and any(str(item).strip() == warning for item in hit_warnings):
+            return str(hit.get("rule_id", "") or ""), str(hit.get("rule_desc", "") or "")
+    return "", ""
+
+
 def generate_fpa_check_xlsx_from_md(
     fpa_md_path: str,
     tree_md_path: str,
@@ -981,6 +1225,7 @@ def generate_fpa_check_xlsx_from_md(
     groups = _group_rows_by_l3(tree_rows)
     rows_by_module = _group_rows_for_audit(fpa_rows, groups)
     audit_trace = _load_fpa_audit_trace(audit_trace_path)
+    rule_hits_by_seq = _rule_hits_from_audit_trace(audit_trace)
 
     wb = openpyxl.Workbook()
     ws_result = wb.active
@@ -1015,12 +1260,19 @@ def generate_fpa_check_xlsx_from_md(
         ])
         excel_row = ws_result.max_row
         for warning in _warning_items(row.get("后处理警告", "")):
+            source_rule_id, source_rule_desc = _warning_source_for_row(
+                rule_hits_by_seq,
+                row.get("序号", ""),
+                warning,
+            )
             warning_rows.append([
                 "row",
                 row.get("序号", ""),
                 "",
                 row.get("新增/修改功能点", ""),
                 warning,
+                source_rule_id,
+                source_rule_desc,
             ])
 
     ws_coverage = wb.create_sheet("覆盖审核")
@@ -1066,10 +1318,12 @@ def generate_fpa_check_xlsx_from_md(
                 idx,
                 group.get("l3", ""),
                 warning,
+                "coverage.missing_process",
+                "功能过程未被任何 FPA 行源功能过程覆盖。",
             ])
 
     ws_warnings = wb.create_sheet("Warnings")
-    ws_warnings.append(["级别", "FPA行序号", "模块序号", "对象", "Warning"])
+    ws_warnings.append(["级别", "FPA行序号", "模块序号", "对象", "Warning", "来源规则ID", "来源说明"])
     for item in warning_rows:
         ws_warnings.append(item)
 
@@ -1086,26 +1340,40 @@ def generate_fpa_check_xlsx_from_md(
             if row_seq in written_rule_rows:
                 continue
             written_rule_rows.add(row_seq)
-            rule_id, rule_desc = _rule_hit_for_audit(row)
-            warnings = "；".join(_warning_items(row.get("后处理警告", "")))
-            ws_rule_hits.append([
-                idx,
-                group.get("client_type", ""),
-                group.get("l1", ""),
-                group.get("l2", ""),
-                group.get("l3", ""),
-                row.get("序号", ""),
-                row.get("新增/修改功能点", ""),
-                row.get("生成方式", ""),
-                execution_meta.get("rule_set", ""),
-                execution_meta.get("rule_set_version", ""),
-                row.get("源功能过程", "") or group.get("l3", ""),
-                rule_id,
-                rule_desc,
-                row.get("类型", ""),
-                "是",
-                warnings,
-            ])
+            traced_hits = rule_hits_by_seq.get(row_seq, [])
+            if not traced_hits:
+                rule_id, rule_desc = _rule_hit_for_audit(row)
+                traced_hits = [{
+                    "hit_object": row.get("源功能过程", "") or group.get("l3", ""),
+                    "rule_id": rule_id,
+                    "rule_desc": rule_desc,
+                    "suggested_type": row.get("类型", ""),
+                    "adopted": "是",
+                    "warnings": _warning_items(row.get("后处理警告", "")),
+                }]
+            for hit in traced_hits:
+                warnings = "；".join(
+                    str(x) for x in hit.get("warnings", [])
+                    if isinstance(hit.get("warnings", []), list) and str(x).strip()
+                )
+                ws_rule_hits.append([
+                    idx,
+                    group.get("client_type", ""),
+                    group.get("l1", ""),
+                    group.get("l2", ""),
+                    group.get("l3", ""),
+                    row.get("序号", ""),
+                    row.get("新增/修改功能点", ""),
+                    row.get("生成方式", ""),
+                    execution_meta.get("rule_set", ""),
+                    execution_meta.get("rule_set_version", ""),
+                    hit.get("hit_object", "") or row.get("源功能过程", "") or group.get("l3", ""),
+                    hit.get("rule_id", ""),
+                    hit.get("rule_desc", ""),
+                    hit.get("suggested_type", "") or row.get("类型", ""),
+                    hit.get("adopted", "") or "是",
+                    warnings,
+                ])
 
     ws_raw = wb.create_sheet("AI原始返回")
     ws_raw.append(["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"])

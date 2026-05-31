@@ -2159,7 +2159,7 @@ Sheet: 覆盖审核
 
 Sheet: Warnings
   汇总行级 warning 和模块级 warning。
-  包含级别、FPA行序号、模块序号、对象、Warning。
+  包含级别、FPA行序号、模块序号、对象、Warning、来源规则ID、来源说明。
   未覆盖功能过程会作为模块级 warning 写入。
 
 Sheet: AI原始返回
@@ -2170,7 +2170,7 @@ Sheet: AI原始返回
 Sheet: 规则命中详情
   按 FPA 行展示规则/后处理命中来源。
   包含模块序号、功能点名称、生成方式、rule_set、rule_set_version、命中对象、规则ID、规则说明、建议类型、是否采用和 warnings。
-  当前基于已落表的 generation、类型理由、源功能过程和 warnings 还原规则命中详情，不伪造未配置化的规则引擎事件。
+  当前生成时会把规则/后处理命中事件写入 audit trace，check.xlsx 优先使用生成期记录；缺少 trace 时才基于已落表字段兜底还原。
 ```
 
 当前格式增强：
@@ -2199,6 +2199,19 @@ rules_fallback 行使用浅橙色底色。
 ```text
 正式审核 Excel 和预览页面看到的是同一套口径。
 不会出现预览说一套、正式文件写另一套。
+```
+
+### K4 落地：warning 来源细化
+
+已完成：
+
+```text
+生成 FPA 行时同步记录规则/后处理命中事件。
+AI type 校验、非法 type 兜底、AI 优先冲突保留、关键词冲突纠正、归类序号校验、名称规范化、说明兜底、rules_fallback 补齐等都会记录 rule_id / rule_desc / suggested_type / adopted / warnings。
+正式生成会把这些事件写入 fpa_audit_trace.json。
+FPA工作量评估-check.xlsx 的“规则命中详情”优先读取生成期 audit trace，不再只靠 generation、类型理由、源功能过程和 warnings 事后推断。
+Warnings Sheet 新增“来源规则ID”“来源说明”两列，用于定位每条 warning 来自哪条规则或后处理。
+缺少 audit trace 时仍保留旧的兜底还原逻辑，方便单独从 MD 生成审核副本。
 ```
 
 ### 审核 Excel Sheet 草案
@@ -2483,6 +2496,18 @@ npm run build
 ```
 
 本轮针对规则命中详情 Sheet 已执行：
+
+```powershell
+.\scripts\test.ps1 tests/test_gen_fpa_ai.py tests/test_pipeline.py::TestGenFpa -vv
+```
+
+结果：
+
+```text
+17 passed
+```
+
+本轮针对 K4 warning 来源细化已执行：
 
 ```powershell
 .\scripts\test.ps1 tests/test_gen_fpa_ai.py tests/test_pipeline.py::TestGenFpa -vv

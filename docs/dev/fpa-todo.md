@@ -281,7 +281,7 @@ FPA结果：
 
 Warnings：
   汇总行级 warning 和模块级 warning。
-  包含级别、FPA行序号、模块序号、对象、Warning。
+  包含级别、FPA行序号、模块序号、对象、Warning、来源规则ID、来源说明。
   未覆盖功能过程会作为模块级 warning 写入。
 
 AI原始返回：
@@ -292,7 +292,7 @@ AI原始返回：
 规则命中详情：
   按 FPA 行展示规则/后处理命中来源。
   包含模块序号、功能点名称、生成方式、rule_set、rule_set_version、命中对象、规则ID、规则说明、建议类型、是否采用和 warnings。
-  当前基于已落表的 generation、类型理由、源功能过程和 warnings 还原规则命中详情，不伪造未配置化的规则引擎事件。
+  当前生成时会把规则/后处理命中事件写入 audit trace，check.xlsx 优先使用生成期记录；缺少 trace 时才基于已落表字段兜底还原。
 ```
 
 当前格式增强：
@@ -313,7 +313,7 @@ rules_fallback 行使用浅橙色底色。
 K1. 将预览 audit 和正式 check.xlsx 统一为完全同一份多模块 FpaAuditReport。
 K2. 已完成基础版：增加 AI 原始返回 Sheet。
 K3. 已完成基础版：增加规则命中详情 Sheet。
-K4. 继续细化 warnings 到更明确的规则命中来源。
+K4. 已完成：细化 warnings 到更明确的规则命中来源。
 K5. 增加用户可配置的审核列。
 ```
 

@@ -94,6 +94,9 @@ def test_invalid_index_warns_and_leaves_basis_empty():
     )
     assert rows[0]["计算依据归类"] == ""
     assert any("越界" in w for w in warnings)
+    rule_hits = rows[0]["_规则命中详情"]
+    assert any(hit["rule_id"] == "postprocess.classification_basis_index" for hit in rule_hits)
+    assert any("越界" in warning for hit in rule_hits for warning in hit["warnings"])
 
 
 def test_multiple_ui_rows_without_split_reason_are_merged():

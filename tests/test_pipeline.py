@@ -101,7 +101,7 @@ class TestGenFpa:
         assert "Warnings" in coverage_headers
         ws_warnings = wb["Warnings"]
         warning_headers = [cell.value for cell in ws_warnings[1]]
-        assert warning_headers == ["级别", "FPA行序号", "模块序号", "对象", "Warning"]
+        assert warning_headers == ["级别", "FPA行序号", "模块序号", "对象", "Warning", "来源规则ID", "来源说明"]
         ws_rule_hits = wb["规则命中详情"]
         rule_hit_headers = [cell.value for cell in ws_rule_hits[1]]
         assert rule_hit_headers == [
@@ -110,6 +110,8 @@ class TestGenFpa:
             "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
         ]
         assert ws_rule_hits.max_row > 1
+        rule_ids = [ws_rule_hits.cell(row=row, column=12).value for row in range(2, ws_rule_hits.max_row + 1)]
+        assert any(rule_id for rule_id in rule_ids)
         assert ws_rule_hits.freeze_panes == "A2"
         assert ws_rule_hits.auto_filter.ref is not None
         ws_raw = wb["AI原始返回"]
