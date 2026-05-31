@@ -30,7 +30,9 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     get_fpa_profile,
     group_tag as _group_tag,
     module_change_status as _module_change_status,
+    reset_current_fpa_rule_set_config,
     resolve_fpa_execution_config,
+    set_current_fpa_rule_set_config,
 )
 from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
@@ -407,12 +409,14 @@ def _fpa_ai_cache_key(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
+    rule_set_version: str = "",
 ) -> str:
     payload = {
         "profile": profile.name,
         "profile_version": profile.version,
         "strategy": strategy,
         "rule_set": rule_set,
+        "rule_set_version": rule_set_version,
         "core_rules": profile.core_rules,
         "domain_context": domain_context,
         "group": group,
@@ -494,6 +498,38 @@ def _plan_fpa_rows_with_ai(
     profile = execution.profile
     strategy = execution.strategy
     rule_set = execution.rule_set
+    rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
+    try:
+        return _plan_fpa_rows_with_execution(
+            rows,
+            meta,
+            judgement_rules,
+            api_key,
+            model,
+            base_url,
+            cache_path=cache_path,
+            profile=profile,
+            strategy=strategy,
+            rule_set=rule_set,
+            rule_set_version=execution.rule_set_version,
+        )
+    finally:
+        reset_current_fpa_rule_set_config(rule_set_token)
+
+
+def _plan_fpa_rows_with_execution(
+    rows: list[dict[str, str]],
+    meta: dict[str, str],
+    judgement_rules: list[str],
+    api_key: str,
+    model: str,
+    base_url: str,
+    cache_path: str = "",
+    profile: CustomRulesProfile = FPA_PROFILE,
+    strategy: str = "",
+    rule_set: str = "",
+    rule_set_version: str = "",
+) -> list[dict[str, object]]:
     groups = _group_rows_by_l3(rows)
     if strategy in {"rules_first", "rules_only"}:
         logger.info("FPA strategy=%s，使用规则集 %s 生成 FPA", strategy, rule_set)
@@ -529,7 +565,10 @@ def _plan_fpa_rows_with_ai(
 
         cache_key = _fpa_ai_cache_key(
             group, judgement_rules, domain_context, model,
-            profile=profile, strategy=strategy, rule_set=rule_set,
+            profile=profile,
+            strategy=strategy,
+            rule_set=rule_set,
+            rule_set_version=rule_set_version,
         )
         cached = cache_entries.get(cache_key) if cache_path else None
         if isinstance(cached, dict) and isinstance(cached.get("rows"), list):
@@ -600,6 +639,7 @@ def _plan_fpa_rows_with_ai(
                     "profile_version": profile.version,
                     "strategy": strategy,
                     "rule_set": rule_set,
+                    "rule_set_version": rule_set_version,
                     "rows": raw_rows,
                 }
         except Exception as exc:
@@ -630,12 +670,22 @@ def _plan_fpa_rows_with_ai(
     return all_rows
 
 
-def _write_fpa_rows_md(fpa_rows: list[dict[str, object]], output_md_path: str, ai_filled: bool = False) -> float:
+def _write_fpa_rows_md(
+    fpa_rows: list[dict[str, object]],
+    output_md_path: str,
+    ai_filled: bool = False,
+    execution_meta: dict[str, str] | None = None,
+) -> float:
     with open(output_md_path, 'w', encoding='utf-8') as f:
         f.write("# FPA 工作量评估\n\n")
         f.write(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         if ai_filled:
             f.write(f"**AI 规划**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if execution_meta:
+            for key in ("profile", "strategy", "rule_set", "rule_set_version"):
+                val = execution_meta.get(key, "")
+                if val:
+                    f.write(f"**{key}**: {val}\n")
         f.write("\n")
         f.write("| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |\n")
         f.write("|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|\n")
@@ -666,6 +716,7 @@ def init_fpa_template_md(
     output_md_path: str,
     summary_md_path: str = "",
     profile_name: str = "",
+    rule_set: str = "",
 ) -> str:
     """生成 FPA 模板 MD（规则骨架，F/G 列留空待 AI 填充）。
 
@@ -675,10 +726,24 @@ def init_fpa_template_md(
     logger.info("第1.1步：生成 FPA 模板 MD...")
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)
-    profile = get_fpa_profile(profile_name)
-    fpa_rows = _build_fpa_rule_rows(rows, meta, profile=profile)
+    execution = resolve_fpa_execution_config(profile_name, rule_set=rule_set)
+    profile = execution.profile
+    rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
+    try:
+        fpa_rows = _build_fpa_rule_rows(rows, meta, profile=profile)
+    finally:
+        reset_current_fpa_rule_set_config(rule_set_token)
 
-    total = _write_fpa_rows_md(fpa_rows, output_md_path)
+    total = _write_fpa_rows_md(
+        fpa_rows,
+        output_md_path,
+        execution_meta={
+            "profile": execution.profile.name,
+            "strategy": execution.strategy,
+            "rule_set": execution.rule_set,
+            "rule_set_version": execution.rule_set_version,
+        },
+    )
 
     logger.info(f"FPA 模板 MD 已生成: {output_md_path} ({len(fpa_rows)} 行)")
 
@@ -729,6 +794,12 @@ def plan_fpa_md_from_tree(
         fpa_rows,
         output_md_path,
         ai_filled=bool(api_key) and execution.strategy in {"ai_first", "ai_only"},
+        execution_meta={
+            "profile": execution.profile.name,
+            "strategy": execution.strategy,
+            "rule_set": execution.rule_set,
+            "rule_set_version": execution.rule_set_version,
+        },
     )
     if summary_md_path:
         write_fpa_summary_md(summary_md_path, total)
@@ -842,6 +913,7 @@ def preview_fpa_module(
         judgement_rules = _read_fpa_judgement_rules(template_path)
         warnings: list[str] = []
         used_ai = execution.strategy in {"ai_first", "ai_only"}
+        rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
         try:
             if execution.strategy in {"rules_first", "rules_only"}:
                 used_ai = False
@@ -879,6 +951,8 @@ def preview_fpa_module(
             warnings.append(f"AI 调用或解析失败，已使用兜底生成: {exc}")
             logger.warning("FPA 预览 AI 失败 [%s]: %s", _group_tag(group), exc)
             fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+        finally:
+            reset_current_fpa_rule_set_config(rule_set_token)
 
         def _row_to_preview(row: dict[str, object]) -> dict[str, object]:
             basis = str(row.get("计算依据归类", ""))
@@ -914,6 +988,7 @@ def preview_fpa_module(
             "profile_version": profile.version,
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
+            "rule_set_version": execution.rule_set_version,
         }
     finally:
         if temp_ctx is not None:

@@ -1756,7 +1756,7 @@ strict_fpa 以 AI 规划为主。
 
 ## 下一阶段设计决策：profile / strategy / rule_set
 
-状态：第一阶段已实现；rule_set 外部规则文件、version、extends 继承和审核产物仍待后续推进。
+状态：第二阶段已推进 rule_set 外部规则文件、version 和 extends 继承；审核产物仍待后续推进。
 
 ### 核心抽象
 
@@ -2218,9 +2218,9 @@ Warnings:
 }
 ```
 
-### 第一阶段落地状态
+### 第二阶段落地状态
 
-本轮已完成 profile / strategy / rule_set 的第一阶段工程落地：
+已完成 profile / strategy / rule_set 的第二阶段工程落地：
 
 ```text
 current_project 已改名为 custom_rules。
@@ -2233,14 +2233,20 @@ ai_first 保留 AI 合法 type；与 rules 冲突时只记录 warning。
 ai_first 在 AI 覆盖不完整时追加 rules_fallback 行。
 ai_only 不使用 rules 补行，AI 失败或被配置限制跳过时直接报错。
 FPA AI 缓存 key 和 cache entry 已记录 profile、strategy、rule_set。
+新增 fpa_rule_sets_config.yaml 独立配置文件。
+rule_set 支持 version。
+rule_set 支持 extends 继承，并检测循环继承。
+rule_set external_data_rules 会参与 strict_fpa 外部数据组识别。
+正式 FPA MD 头部写入 rule_set_version。
+预览接口返回 rule_set_version。
 ```
 
 本轮未实现，继续留在暂缓任务池：
 
 ```text
-rule_set 外部规则文件。
-rule_set_version。
-rule_set extends 继承。
+rule_set 字段级覆盖策略。
+关键词规则配置化。
+ILF / EIF 判定规则配置化。
 UI 中的 rule_set 下拉选择。
 FPA 审核工作簿 FPA工作量评估-check.xlsx。
 预览页审核面板。
@@ -2368,6 +2374,18 @@ npm run build
 76 passed
 19 passed
 前端构建通过
+```
+
+本轮针对 rule_set 外部配置第二阶段已执行：
+
+```powershell
+.\scripts\test.ps1 tests/test_fpa_profiles.py tests/test_config_utils.py tests/test_gen_fpa_ai.py tests/test_gen_fpa_preview.py
+```
+
+结果：
+
+```text
+59 passed
 ```
 
 ## 暂缓推进任务池

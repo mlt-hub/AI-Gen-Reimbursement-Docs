@@ -4,7 +4,8 @@
 避免把多套口径分支散落到 gen_fpa.py 主流程中。
 """
 
-from dataclasses import dataclass
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 import re
 from string import Template
 
@@ -17,6 +18,11 @@ DEFAULT_FPA_STRATEGIES = {
 DEFAULT_FPA_RULE_SETS = {
     "custom_rules": "custom_rules_default",
     "strict_fpa": "strict_fpa_default",
+}
+
+BUILTIN_FPA_RULE_SET_VERSIONS = {
+    "custom_rules_default": "1",
+    "strict_fpa_default": "1",
 }
 
 
@@ -83,6 +89,25 @@ class FpaExecutionConfig:
     profile: "CustomRulesProfile"
     strategy: str
     rule_set: str
+    rule_set_version: str
+    rule_set_config: "FpaRuleSetConfig"
+
+
+@dataclass(frozen=True)
+class FpaRuleSetConfig:
+    """一套可配置 FPA 规则集。"""
+
+    name: str
+    version: str = "1"
+    extends: str = ""
+    external_data_rules: tuple[ExternalDataGroupRule, ...] = field(default_factory=tuple)
+    raw: dict[str, object] = field(default_factory=dict)
+
+
+_CURRENT_RULE_SET_CONFIG: ContextVar[FpaRuleSetConfig | None] = ContextVar(
+    "fpa_rule_set_config",
+    default=None,
+)
 
 
 DEFAULT_EXTERNAL_DATA_GROUP_RULES = [
@@ -163,6 +188,111 @@ def _render_configured_fpa_prompt(
         })
     except Exception:
         return ""
+
+
+def _external_rule_from_dict(item: dict[str, object]) -> ExternalDataGroupRule | None:
+    aliases = item.get("source_aliases")
+    data_name = str(item.get("data_name") or "").strip()
+    data_nouns = item.get("data_nouns", [])
+    if isinstance(aliases, str):
+        aliases = [aliases]
+    if isinstance(data_nouns, str):
+        data_nouns = [data_nouns]
+    if not isinstance(aliases, list) or not data_name:
+        return None
+    alias_values = tuple(str(alias).strip() for alias in aliases if str(alias).strip())
+    noun_values = tuple(str(noun).strip() for noun in data_nouns if str(noun).strip()) if isinstance(data_nouns, list) else ()
+    if not alias_values:
+        return None
+    return ExternalDataGroupRule(alias_values, data_name, noun_values or tuple(EXTERNAL_DATA_GROUP_NOUNS))
+
+
+def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
+    external_rules: list[ExternalDataGroupRule] = []
+    raw_rules = data.get("external_data_rules", [])
+    if isinstance(raw_rules, list):
+        for item in raw_rules:
+            if isinstance(item, dict):
+                rule = _external_rule_from_dict(item)
+                if rule is not None:
+                    external_rules.append(rule)
+    return FpaRuleSetConfig(
+        name=name,
+        version=str(data.get("version") or BUILTIN_FPA_RULE_SET_VERSIONS.get(name, "1")).strip() or "1",
+        extends=str(data.get("extends") or "").strip(),
+        external_data_rules=tuple(external_rules),
+        raw=dict(data),
+    )
+
+
+def _builtin_rule_set(name: str) -> FpaRuleSetConfig:
+    if name not in BUILTIN_FPA_RULE_SET_VERSIONS:
+        raise ValueError(f"未知 FPA rule_set: {name}")
+    return FpaRuleSetConfig(
+        name=name,
+        version=BUILTIN_FPA_RULE_SET_VERSIONS[name],
+        raw={"version": BUILTIN_FPA_RULE_SET_VERSIONS[name]},
+    )
+
+
+def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRuleSetConfig:
+    raw = dict(parent.raw)
+    raw.update(child.raw)
+    return FpaRuleSetConfig(
+        name=child.name,
+        version=child.version or parent.version,
+        extends=child.extends,
+        external_data_rules=(*parent.external_data_rules, *child.external_data_rules),
+        raw=raw,
+    )
+
+
+def load_configured_fpa_rule_sets() -> dict[str, FpaRuleSetConfig]:
+    """读取用户配置的 FPA rule_set。"""
+    try:
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_rule_sets_config
+    except Exception:
+        return {}
+
+    raw_sets = load_fpa_rule_sets_config()
+    configs: dict[str, FpaRuleSetConfig] = {}
+    for name, data in raw_sets.items():
+        if isinstance(data, dict) and str(name).strip():
+            configs[str(name).strip()] = _rule_set_from_dict(str(name).strip(), data)
+    return configs
+
+
+def resolve_fpa_rule_set_config(rule_set: str) -> FpaRuleSetConfig:
+    """解析 rule_set 配置，支持 extends 继承。"""
+    configured = load_configured_fpa_rule_sets()
+    resolving: set[str] = set()
+
+    def _resolve(name: str) -> FpaRuleSetConfig:
+        if name in resolving:
+            raise ValueError(f"FPA rule_set 继承出现循环: {name}")
+        resolving.add(name)
+        try:
+            current = configured.get(name) or _builtin_rule_set(name)
+            if current.extends:
+                parent = _resolve(current.extends)
+                current = _merge_rule_sets(parent, current)
+            return current
+        finally:
+            resolving.remove(name)
+
+    return _resolve(rule_set)
+
+
+def current_fpa_rule_set_config() -> FpaRuleSetConfig | None:
+    return _CURRENT_RULE_SET_CONFIG.get()
+
+
+def set_current_fpa_rule_set_config(config: FpaRuleSetConfig):
+    return _CURRENT_RULE_SET_CONFIG.set(config)
+
+
+def reset_current_fpa_rule_set_config(token) -> None:
+    _CURRENT_RULE_SET_CONFIG.reset(token)
 
 
 @dataclass(frozen=True)
@@ -533,6 +663,9 @@ class StrictFpaProfile(CustomRulesProfile):
 
     def _external_data_group_rules(self) -> list[ExternalDataGroupRule]:
         rules = list(DEFAULT_EXTERNAL_DATA_GROUP_RULES)
+        current_rule_set = current_fpa_rule_set_config()
+        if current_rule_set is not None:
+            rules.extend(current_rule_set.external_data_rules)
         try:
             from ai_gen_reimbursement_docs.config_utils import load_fpa_external_data_rules
             configured_rules = load_fpa_external_data_rules()
@@ -635,8 +768,12 @@ def resolve_fpa_execution_config(
 ) -> FpaExecutionConfig:
     """统一解析一次 FPA 执行配置。"""
     profile = get_fpa_profile(profile_name)
+    resolved_rule_set = resolve_fpa_rule_set(profile.name, rule_set)
+    rule_set_config = resolve_fpa_rule_set_config(resolved_rule_set)
     return FpaExecutionConfig(
         profile=profile,
         strategy=resolve_fpa_strategy(profile.name, strategy),
-        rule_set=resolve_fpa_rule_set(profile.name, rule_set),
+        rule_set=resolved_rule_set,
+        rule_set_version=rule_set_config.version,
+        rule_set_config=rule_set_config,
     )

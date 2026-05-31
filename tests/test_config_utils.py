@@ -14,6 +14,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_profile,
     load_fpa_rule_set,
     load_fpa_strategy,
+    load_fpa_rule_sets_config,
     load_fpa_external_data_rules,
     load_fpa_user_prompt_template,
     load_model_name,
@@ -160,6 +161,20 @@ class TestLoadFpaExecutionOptions:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_strategy() == "ai_first"
             assert load_fpa_rule_set() == "strict_fpa_default"
+
+    def test_rule_sets_config_from_separate_file(self, tmp_path):
+        yaml_file = tmp_path / "fpa_rule_sets_config.yaml"
+        yaml_file.write_text(
+            """
+rule_sets:
+  client_a_rules:
+    extends: strict_fpa_default
+    version: "2026.05"
+""",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_rule_sets_config()["client_a_rules"]["version"] == "2026.05"
 
 
 class TestLoadFpaExternalDataRules:

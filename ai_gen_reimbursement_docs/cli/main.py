@@ -326,6 +326,7 @@ def _auto_init_config(root: str) -> None:
         (os.path.join(cfg_dir, '.env.example'), os.path.join(home_cfg, '.env')),
         (os.path.join(cfg_dir, 'system_config.yaml.example'), os.path.join(home_cfg, 'system_config.yaml')),
         (os.path.join(cfg_dir, 'fpa_user_prompts_config.yaml.example'), os.path.join(home_cfg, 'fpa_user_prompts_config.yaml')),
+        (os.path.join(cfg_dir, 'fpa_rule_sets_config.yaml.example'), os.path.join(home_cfg, 'fpa_rule_sets_config.yaml')),
     ]
     for src, dst in pairs:
         if not os.path.exists(src):
@@ -708,6 +709,7 @@ def main():
             (os.path.join(cfg_dir, '.env.example'), os.path.join(home_cfg, '.env')),
             (os.path.join(cfg_dir, 'system_config.yaml.example'), os.path.join(home_cfg, 'system_config.yaml')),
             (os.path.join(cfg_dir, 'fpa_user_prompts_config.yaml.example'), os.path.join(home_cfg, 'fpa_user_prompts_config.yaml')),
+            (os.path.join(cfg_dir, 'fpa_rule_sets_config.yaml.example'), os.path.join(home_cfg, 'fpa_rule_sets_config.yaml')),
             ]
         for src, dst in pairs:
             if os.path.exists(dst):

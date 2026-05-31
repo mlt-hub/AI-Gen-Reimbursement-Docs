@@ -169,6 +169,14 @@ def init_user_dir(username: str) -> None:
             shutil.copy2(env_example, dest)
             _log.info(f"已初始化用户环境变量: {dest}")
 
+    # 拷贝 FPA 规则集配置
+    rule_sets_example = _project_root() / "config" / "fpa_rule_sets_config.yaml.example"
+    if rule_sets_example.exists():
+        dest = user_dir / "fpa_rule_sets_config.yaml"
+        if not dest.exists():
+            shutil.copy2(rule_sets_example, dest)
+            _log.info(f"已初始化 FPA 规则集配置: {dest}")
+
     # 创建模板和任务目录
     (user_dir / "templates").mkdir(exist_ok=True)
     (user_dir / "tasks").mkdir(exist_ok=True)

@@ -75,7 +75,7 @@ strict_fpa 类型冲突规则已收紧：AI 为主，名称明确动作优先，
 
 ## 已确认的下一阶段 FPA 重构方向
 
-状态：第一阶段已实现。剩余的可配置规则文件、审核工作簿和预览审核面板继续暂缓。
+状态：第二阶段已推进 rule_set 外部配置。审核工作簿和预览审核面板继续暂缓。
 
 ```text
 profile  = FPA 方法学 / 业务口径
@@ -103,7 +103,10 @@ rules 不改 AI 已给出的合法 type；业务冲突只 warning。
 只有 type 非法、JSON 非法、结构非法时才硬处理。
 预览和正式生成已使用同一套 profile / strategy / rule_set。
 AI 缓存 key 已包含 profile、strategy、rule_set、prompt、model、输入模块内容。
-支持多套 rule_set 的配置入口已落地；规则文件、rule_set_version、extends 继承后续再实现。
+支持多套 rule_set 的配置入口已落地。
+rule_set 外部配置文件已落地。
+rule_set_version 已写入预览结果、AI cache 和正式 FPA MD。
+rule_set extends 继承已落地，当前支持继承父规则集并追加 external_data_rules。
 ```
 
 第一版 rule_set 建议支持：
@@ -146,13 +149,41 @@ web_app
   Web 正式生成和预览接口透传 fpa_strategy / fpa_rule_set。
 ```
 
+第二阶段代码落地点：
+
+```text
+config/fpa_rule_sets_config.yaml.example
+  新增独立 rule_set 示例配置文件。
+  内置 custom_rules_default、strict_fpa_default。
+  示例 strict_fpa_conservative、client_a_rules 展示 extends、version、external_data_rules。
+
+ai_gen_reimbursement_docs/fpa_profiles.py
+  新增 FpaRuleSetConfig。
+  新增 resolve_fpa_rule_set_config。
+  支持内置 rule_set 与用户配置 rule_set 合并。
+  支持 extends 继承，并检测循环继承。
+  当前 rule_set 的 external_data_rules 会参与 strict_fpa 外部数据组识别。
+
+ai_gen_reimbursement_docs/config_utils.py
+  新增 load_fpa_rule_sets_config。
+  配置自动迁移会处理 fpa_rule_sets_config.yaml。
+
+ai_gen_reimbursement_docs/cli/main.py
+  --init-config 会初始化 fpa_rule_sets_config.yaml。
+
+ai_gen_reimbursement_docs/gen_fpa.py
+  正式 FPA MD 头部写入 profile、strategy、rule_set、rule_set_version。
+  预览结果返回 rule_set_version。
+  AI cache key 和 cache entry 写入 rule_set_version。
+```
+
 本轮未做、后续继续：
 
 ```text
-J1. 将 rule_set 从“名称入口”升级为真正的外部 YAML/JSON 规则文件。
-J2. 为 rule_set 增加 version，并写入 AI cache key、正式 MD、预览结果和审核工作簿。
-J3. 支持 rule_set extends 继承和覆盖。
-J4. 将关键词规则、外部数据源规则、ILF/EIF 判定规则从代码中逐步迁移到 rule_set。
+J1. 已完成：将 rule_set 从“名称入口”升级为外部 YAML 配置文件。
+J2. 部分完成：rule_set_version 已写入 AI cache key、正式 MD、预览结果；审核工作簿待实现。
+J3. 部分完成：支持 rule_set extends 继承并追加 external_data_rules；字段级覆盖策略后续继续细化。
+J4. 部分完成：外部数据源规则可由 rule_set 配置追加；关键词规则、ILF/EIF 判定规则仍在代码中。
 J5. 细化 rules_first 中“rules 无法判定再交给 AI”的判定条件；当前 custom_rules 的内置规则可覆盖现有场景，因此 rules_first 直接使用规则生成。
 J6. 增加 UI 中的 rule_set 下拉选择；当前先提供文本输入和配置入口。
 ```

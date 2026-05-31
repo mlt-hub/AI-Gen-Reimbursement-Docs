@@ -6,6 +6,8 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     STRICT_FPA_PROFILE,
     get_fpa_profile,
     resolve_fpa_execution_config,
+    set_current_fpa_rule_set_config,
+    reset_current_fpa_rule_set_config,
 )
 
 
@@ -33,9 +35,64 @@ def test_execution_config_uses_profile_defaults():
 
 
 def test_execution_config_accepts_explicit_strategy_and_rule_set():
-    config = resolve_fpa_execution_config("strict_fpa", "ai_only", "telecom_rules")
+    config = resolve_fpa_execution_config("strict_fpa", "ai_only", "strict_fpa_default")
     assert config.strategy == "ai_only"
+    assert config.rule_set == "strict_fpa_default"
+
+
+def test_rule_set_extends_and_version_are_loaded(tmp_path):
+    yaml_file = tmp_path / "fpa_rule_sets_config.yaml"
+    yaml_file.write_text(
+        """
+rule_sets:
+  telecom_rules:
+    extends: strict_fpa_default
+    version: "2026.05"
+    external_data_rules:
+      - source_aliases: ["行业平台"]
+        data_name: "行业平台客户档案"
+        data_nouns: ["客户", "档案"]
+""",
+        encoding="utf-8",
+    )
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_rules")
+
     assert config.rule_set == "telecom_rules"
+    assert config.rule_set_version == "2026.05"
+    assert config.rule_set_config.extends == "strict_fpa_default"
+    assert config.rule_set_config.external_data_rules[0].data_name == "行业平台客户档案"
+
+
+def test_rule_set_external_data_rules_affect_strict_profile(tmp_path):
+    yaml_file = tmp_path / "fpa_rule_sets_config.yaml"
+    yaml_file.write_text(
+        """
+rule_sets:
+  telecom_rules:
+    extends: strict_fpa_default
+    version: "2026.05"
+    external_data_rules:
+      - source_aliases: ["行业平台"]
+        data_name: "行业平台客户档案"
+        data_nouns: ["客户", "档案"]
+""",
+        encoding="utf-8",
+    )
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_rules")
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            fpa_type, reason = STRICT_FPA_PROFILE.infer_type(
+                "行业平台客户档案",
+                "引用行业平台维护的客户档案，本系统不维护。",
+            )
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
+    assert fpa_type == "EIF"
+    assert "外部系统维护" in reason
 
 
 def test_custom_rules_prompt_contains_profile_rules():

@@ -477,7 +477,12 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
     )
     profile_name = execution.profile.name
     init_fpa_template_md(
-        tree_md, meta_md, fpa_md, summary_md_path=fpa_sum_md, profile_name=profile_name
+        tree_md,
+        meta_md,
+        fpa_md,
+        summary_md_path=fpa_sum_md,
+        profile_name=profile_name,
+        rule_set=execution.rule_set,
     )
 
     if execution.strategy in {"ai_first", "ai_only"}:

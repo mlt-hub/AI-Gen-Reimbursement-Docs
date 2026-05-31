@@ -270,6 +270,21 @@ def load_fpa_rule_set(default: str = "") -> str:
     return _get_system_config_value('fpa_rule_set', default).strip()
 
 
+def load_fpa_rule_sets_config() -> dict[str, object]:
+    """读取 fpa_rule_sets_config.yaml 中的 rule_sets。"""
+    yaml_path = config_dir() / "fpa_rule_sets_config.yaml"
+    if not yaml_path.exists():
+        return {}
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        rule_sets = cfg.get("rule_sets", {})
+        return rule_sets if isinstance(rule_sets, dict) else {}
+    except Exception:
+        return {}
+
+
 def load_fpa_external_data_rules() -> list[dict[str, object]]:
     """读取 strict_fpa 外部数据组扩展规则。
 
@@ -491,6 +506,7 @@ def migrate_config() -> None:
     yaml_pairs = [
         (home / "system_config.yaml", local / "system_config.yaml.example", "system_config"),
         (home / "fpa_user_prompts_config.yaml", local / "fpa_user_prompts_config.yaml.example", "fpa_user_prompts_config"),
+        (home / "fpa_rule_sets_config.yaml", local / "fpa_rule_sets_config.yaml.example", "fpa_rule_sets_config"),
     ]
     try:
         import yaml

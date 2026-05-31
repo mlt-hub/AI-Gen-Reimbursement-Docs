@@ -177,6 +177,7 @@ interface FpaPreviewResult {
   profile_version: string
   strategy: string
   rule_set: string
+  rule_set_version: string
 }
 
 interface FpaPreviewModule {

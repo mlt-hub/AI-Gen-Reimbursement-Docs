@@ -116,7 +116,40 @@ rules_only：仅规则。不调用 AI。
 ai_only：仅 AI。不使用 rules 补行，AI 失败或被配置限制跳过时直接报错。
 ```
 
-当前 rule_set 已作为配置入口透传到正式生成、预览和 AI 缓存；真正的外部规则文件、rule_set_version、extends 继承仍在后续任务中。
+当前 rule_set 已支持独立配置文件、版本号和 extends 继承。正式生成、预览和 AI 缓存都会记录 rule_set 与 rule_set_version。
+
+配置文件：
+
+```text
+~/.ai-gen-reimbursement-docs/fpa_rule_sets_config.yaml
+```
+
+模板示例：
+
+```text
+config/fpa_rule_sets_config.yaml.example
+```
+
+当前已支持：
+
+```text
+version：规则集版本。
+extends：继承另一套规则集。
+external_data_rules：为 strict_fpa 追加外部数据组识别规则。
+```
+
+示例：
+
+```yaml
+rule_sets:
+  client_a_rules:
+    extends: strict_fpa_default
+    version: "2026.05"
+    external_data_rules:
+      - source_aliases: ["供应商平台"]
+        data_name: "供应商平台供应商档案"
+        data_nouns: ["供应商", "档案", "信息"]
+```
 
 ### strict_fpa 的 AI 与规则边界
 
@@ -380,9 +413,8 @@ rules 不改 AI 已给出的合法 type；业务冲突只 warning。
 后续还会增加：
 
 ```text
-rule_set 外部规则文件。
-rule_set_version。
-rule_set extends 继承。
+rule_set 字段级覆盖策略。
+关键词规则和 ILF/EIF 判定规则配置化。
 rules_first 中“规则无法判定再交 AI”的细粒度判定。
 UI 中的 rule_set 下拉选择。
 FPA 审核工作簿 FPA工作量评估-check.xlsx。

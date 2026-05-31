@@ -313,6 +313,7 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
     assert entry["profile_version"] == "1"
     assert entry["strategy"] == "ai_first"
     assert entry["rule_set"] == "custom_rules_default"
+    assert entry["rule_set_version"] == "1"
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError("LLM should not be called on cache hit")

@@ -23,6 +23,7 @@ def test_preview_fpa_module_by_index_uses_fallback(test_excel, tmp_path):
     assert result["profile_version"] == "1"
     assert result["strategy"] == "rules_first"
     assert result["rule_set"] == "custom_rules_default"
+    assert result["rule_set_version"] == "1"
     assert all(row["generation"] == "fallback" for row in result["rows"])
     assert not list(tmp_path.glob("**/FPA工作量评估.xlsx"))
 

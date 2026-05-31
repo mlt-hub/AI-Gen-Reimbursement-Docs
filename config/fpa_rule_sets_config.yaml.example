@@ -1,0 +1,36 @@
+# FPA 规则集配置。
+#
+# rule_set 独立于 profile：
+# - profile 说明使用哪种 FPA 口径。
+# - strategy 说明 AI 与 rules 谁优先。
+# - rule_set 说明使用哪一套具体规则。
+#
+# 内置 rule_set：
+# - custom_rules_default
+# - strict_fpa_default
+
+rule_sets:
+  custom_rules_default:
+    version: "1"
+
+  strict_fpa_default:
+    version: "1"
+
+  # 示例：更保守的 strict_fpa 规则集。
+  # extends 表示继承另一套规则；本规则集只追加或覆盖自身字段。
+  strict_fpa_conservative:
+    extends: strict_fpa_default
+    version: "1"
+    external_data_rules:
+      - source_aliases: ["统一认证平台", "统一认证"]
+        data_name: "统一认证账号"
+        data_nouns: ["账号", "账户", "人员"]
+
+  # 示例：客户 A 的规则集。
+  client_a_rules:
+    extends: strict_fpa_default
+    version: "2026.05"
+    external_data_rules:
+      - source_aliases: ["供应商平台"]
+        data_name: "供应商平台供应商档案"
+        data_nouns: ["供应商", "档案", "信息"]

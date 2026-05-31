@@ -124,6 +124,7 @@ ard --init-config
 - `.env` — API Key / 端点 / 模型
 - `system_config.yaml` — Sheet 名称映射、模板路径、AI 限制
 - `business_rules.yaml` — CFP 计算公式
+- `fpa_rule_sets_config.yaml` — FPA 规则集、版本号、继承和外部数据组规则
 
 ### API Key
 
