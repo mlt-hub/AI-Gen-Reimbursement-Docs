@@ -1,6 +1,7 @@
 import logging
 import json
 
+import openpyxl
 import pytest
 
 from ai_gen_reimbursement_docs.gen_fpa import (
@@ -8,6 +9,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     _group_rows_by_l3,
     _normalize_ai_fpa_rows_for_l3,
     _plan_fpa_rows_with_ai,
+    generate_fpa_check_xlsx_from_md,
 )
 from ai_gen_reimbursement_docs.fpa_profiles import CUSTOM_RULES_PROFILE, STRICT_FPA_PROFILE
 
@@ -344,3 +346,69 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
     trace = json.loads(audit_trace_path.read_text(encoding="utf-8"))
     assert trace["modules"][0]["source"] == "ai_cache"
     assert any("缓存命中" in r.message for r in caplog.records)
+
+
+def test_fpa_check_xlsx_columns_can_be_configured(monkeypatch, tmp_path):
+    (tmp_path / "system_config.yaml").write_text(
+        """
+fpa_check_columns:
+  FPA结果: ["新增/修改功能点", "类型", "后处理警告"]
+  Warnings: ["对象", "Warning", "来源规则ID"]
+  规则命中详情: ["功能点名称", "规则ID", "是否采用"]
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: tmp_path)
+
+    fpa_md = tmp_path / "fpa.md"
+    fpa_md.write_text(
+        """# FPA 工作量评估
+
+**profile**: custom_rules
+**strategy**: rules_first
+**rule_set**: custom_rules_default
+**rule_set_version**: 1
+
+| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |
+|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|
+| 1 | 测试系统 | TEST | 查询客户-查询处理开发 | EQ |  | 查询客户。 | 新增 | 2 | 1 | ai | AI 根据功能点名称和业务说明判定。 | 查询客户 | 查询客户 classification_basis_index 越界: 99 |
+""",
+        encoding="utf-8",
+    )
+    tree_md = tmp_path / "tree.md"
+    tree_md.write_text(
+        """| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程类型 | 功能过程描述 |
+|------|---------|---------|---------|----------|----------------------|----------|--------------|--------------|
+| 后台 | 客户管理 | 客户查询 | 客户查询 | 地市后台 | 查询客户。 | 查询客户 | 查询 | 按条件查询客户。 |
+""",
+        encoding="utf-8",
+    )
+    audit_trace = tmp_path / "trace.json"
+    audit_trace.write_text(
+        json.dumps({
+            "modules": [{
+                "rule_hits": [{
+                    "fpa_seq": 1,
+                    "name": "查询客户-查询处理开发",
+                    "generation": "ai",
+                    "hit_object": "查询客户-查询处理开发",
+                    "rule_id": "postprocess.classification_basis_index",
+                    "rule_desc": "classification_basis_index 必须落在模板判定原则范围内。",
+                    "suggested_type": "EQ",
+                    "adopted": "是",
+                    "warnings": ["查询客户 classification_basis_index 越界: 99"],
+                }],
+            }],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    output = tmp_path / "check.xlsx"
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(output), str(audit_trace))
+
+    wb = openpyxl.load_workbook(output, data_only=True)
+    assert [cell.value for cell in wb["FPA结果"][1]] == ["新增/修改功能点", "类型", "后处理警告"]
+    assert [cell.value for cell in wb["Warnings"][1]] == ["对象", "Warning", "来源规则ID"]
+    assert [cell.value for cell in wb["规则命中详情"][1]] == ["功能点名称", "规则ID", "是否采用"]
+    assert wb["Warnings"].cell(2, 3).value == "postprocess.classification_basis_index"
+    wb.close()

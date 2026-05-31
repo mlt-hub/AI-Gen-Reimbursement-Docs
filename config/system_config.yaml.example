@@ -54,6 +54,14 @@ fpa_strategy: ""
 # custom_rules => custom_rules_default；strict_fpa => strict_fpa_default。
 fpa_rule_set: ""
 
+# FPA 审核副本列配置。留空或不配置时使用默认列。
+# 支持按 Sheet 名称选择列并调整顺序；未知列名会被忽略。
+# fpa_check_columns:
+#   FPA结果: ["序号", "新增/修改功能点", "类型", "生成方式", "后处理警告"]
+#   Warnings: ["级别", "对象", "Warning", "来源规则ID"]
+#   规则命中详情: ["功能点名称", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings"]
+fpa_check_columns: {}
+
 # strict_fpa 外部数据组扩展规则。
 # 这里只扩展内置规则，不覆盖内置规则；普通外部服务调用不要配置为数据组。
 # source_aliases：外部系统/平台名称或别名；data_name：生成的 EIF 数据组名称；data_nouns：识别为数据组所需的业务名词线索。

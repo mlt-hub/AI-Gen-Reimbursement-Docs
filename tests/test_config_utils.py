@@ -14,6 +14,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_profile,
     load_fpa_rule_set,
     load_fpa_strategy,
+    load_fpa_check_columns,
     load_fpa_rule_sets_config,
     load_fpa_external_data_rules,
     load_fpa_user_prompt_template,
@@ -175,6 +176,24 @@ rule_sets:
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_rule_sets_config()["client_a_rules"]["version"] == "2026.05"
+
+    def test_fpa_check_columns_are_normalized(self, tmp_path):
+        yaml_file = tmp_path / "system_config.yaml"
+        yaml_file.write_text(
+            """
+fpa_check_columns:
+  FPA结果: ["序号", "新增/修改功能点", "类型"]
+  Warnings: "Warning"
+  空列: []
+  非法列: 123
+""",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_check_columns() == {
+                "FPA结果": ["序号", "新增/修改功能点", "类型"],
+                "Warnings": ["Warning"],
+            }
 
 
 class TestLoadFpaExternalDataRules:

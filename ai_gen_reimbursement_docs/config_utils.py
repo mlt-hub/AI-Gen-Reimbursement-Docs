@@ -270,6 +270,33 @@ def load_fpa_rule_set(default: str = "") -> str:
     return _get_system_config_value('fpa_rule_set', default).strip()
 
 
+def load_fpa_check_columns() -> dict[str, list[str]]:
+    """读取 FPA 审核副本列配置。
+
+    system_config.yaml 示例：
+      fpa_check_columns:
+        FPA结果: ["序号", "新增/修改功能点", "类型"]
+
+    返回值只做基础类型规范化；未知 Sheet 或列名由写表侧按默认列过滤。
+    """
+    raw = _get_system_config_value('fpa_check_columns', {})
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, list[str]] = {}
+    for sheet_name, columns in raw.items():
+        name = str(sheet_name or "").strip()
+        if not name:
+            continue
+        if isinstance(columns, str):
+            columns = [columns]
+        if not isinstance(columns, list):
+            continue
+        values = [str(column).strip() for column in columns if str(column).strip()]
+        if values:
+            result[name] = values
+    return result
+
+
 def load_fpa_rule_sets_config() -> dict[str, object]:
     """读取 fpa_rule_sets_config.yaml 中的 rule_sets。"""
     yaml_path = config_dir() / "fpa_rule_sets_config.yaml"

@@ -1212,6 +1212,54 @@ def _warning_source_for_row(
     return "", ""
 
 
+FPA_CHECK_DEFAULT_COLUMNS: dict[str, list[str]] = {
+    "FPA结果": [
+        "序号", "子系统(模块)", "资产标识", "新增/修改功能点", "类型", "计算依据归类",
+        "计算依据说明", "变更状态", "调整值", "要素数量", "生成方式", "类型理由",
+        "源功能过程", "后处理警告", "profile", "strategy", "rule_set", "rule_set_version",
+    ],
+    "覆盖审核": [
+        "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
+        "功能过程总数", "已覆盖数", "未覆盖数", "已覆盖功能过程", "未覆盖功能过程",
+        "生成方式统计", "Warnings",
+    ],
+    "Warnings": ["级别", "FPA行序号", "模块序号", "对象", "Warning", "来源规则ID", "来源说明"],
+    "规则命中详情": [
+        "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
+        "FPA行序号", "功能点名称", "生成方式", "rule_set", "rule_set_version",
+        "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
+    ],
+    "AI原始返回": ["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"],
+}
+
+
+def _fpa_check_columns() -> dict[str, list[str]]:
+    from ai_gen_reimbursement_docs.config_utils import load_fpa_check_columns
+
+    configured = load_fpa_check_columns()
+    columns: dict[str, list[str]] = {}
+    for sheet_name, defaults in FPA_CHECK_DEFAULT_COLUMNS.items():
+        selected = configured.get(sheet_name, [])
+        if selected:
+            filtered = [column for column in selected if column in defaults]
+            columns[sheet_name] = filtered or list(defaults)
+        else:
+            columns[sheet_name] = list(defaults)
+    return columns
+
+
+def _append_audit_row(ws, columns: list[str], values: dict[str, object]) -> None:
+    ws.append([values.get(column, "") for column in columns])
+
+
+def _header_index(ws) -> dict[str, int]:
+    return {
+        str(cell.value): index
+        for index, cell in enumerate(ws[1])
+        if cell.value is not None
+    }
+
+
 def generate_fpa_check_xlsx_from_md(
     fpa_md_path: str,
     tree_md_path: str,
@@ -1226,61 +1274,52 @@ def generate_fpa_check_xlsx_from_md(
     rows_by_module = _group_rows_for_audit(fpa_rows, groups)
     audit_trace = _load_fpa_audit_trace(audit_trace_path)
     rule_hits_by_seq = _rule_hits_from_audit_trace(audit_trace)
+    sheet_columns = _fpa_check_columns()
 
     wb = openpyxl.Workbook()
     ws_result = wb.active
     ws_result.title = "FPA结果"
-    result_headers = [
-        "序号", "子系统(模块)", "资产标识", "新增/修改功能点", "类型", "计算依据归类",
-        "计算依据说明", "变更状态", "调整值", "要素数量", "生成方式", "类型理由",
-        "源功能过程", "后处理警告", "profile", "strategy", "rule_set", "rule_set_version",
-    ]
-    ws_result.append(result_headers)
-    warning_rows: list[list[object]] = []
+    ws_result.append(sheet_columns["FPA结果"])
+    warning_rows: list[dict[str, object]] = []
     for row in fpa_rows:
-        ws_result.append([
-            row.get("序号", ""),
-            row.get("子系统(模块)", ""),
-            row.get("资产标识", ""),
-            row.get("新增/修改功能点", ""),
-            row.get("类型", ""),
-            row.get("计算依据归类", ""),
-            row.get("计算依据说明", ""),
-            row.get("变更状态", ""),
-            row.get("调整值", ""),
-            row.get("要素数量", ""),
-            row.get("生成方式", ""),
-            row.get("类型理由", ""),
-            row.get("源功能过程", ""),
-            row.get("后处理警告", ""),
-            execution_meta.get("profile", ""),
-            execution_meta.get("strategy", ""),
-            execution_meta.get("rule_set", ""),
-            execution_meta.get("rule_set_version", ""),
-        ])
-        excel_row = ws_result.max_row
+        _append_audit_row(ws_result, sheet_columns["FPA结果"], {
+            "序号": row.get("序号", ""),
+            "子系统(模块)": row.get("子系统(模块)", ""),
+            "资产标识": row.get("资产标识", ""),
+            "新增/修改功能点": row.get("新增/修改功能点", ""),
+            "类型": row.get("类型", ""),
+            "计算依据归类": row.get("计算依据归类", ""),
+            "计算依据说明": row.get("计算依据说明", ""),
+            "变更状态": row.get("变更状态", ""),
+            "调整值": row.get("调整值", ""),
+            "要素数量": row.get("要素数量", ""),
+            "生成方式": row.get("生成方式", ""),
+            "类型理由": row.get("类型理由", ""),
+            "源功能过程": row.get("源功能过程", ""),
+            "后处理警告": row.get("后处理警告", ""),
+            "profile": execution_meta.get("profile", ""),
+            "strategy": execution_meta.get("strategy", ""),
+            "rule_set": execution_meta.get("rule_set", ""),
+            "rule_set_version": execution_meta.get("rule_set_version", ""),
+        })
         for warning in _warning_items(row.get("后处理警告", "")):
             source_rule_id, source_rule_desc = _warning_source_for_row(
                 rule_hits_by_seq,
                 row.get("序号", ""),
                 warning,
             )
-            warning_rows.append([
-                "row",
-                row.get("序号", ""),
-                "",
-                row.get("新增/修改功能点", ""),
-                warning,
-                source_rule_id,
-                source_rule_desc,
-            ])
+            warning_rows.append({
+                "级别": "row",
+                "FPA行序号": row.get("序号", ""),
+                "模块序号": "",
+                "对象": row.get("新增/修改功能点", ""),
+                "Warning": warning,
+                "来源规则ID": source_rule_id,
+                "来源说明": source_rule_desc,
+            })
 
     ws_coverage = wb.create_sheet("覆盖审核")
-    ws_coverage.append([
-        "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
-        "功能过程总数", "已覆盖数", "未覆盖数", "已覆盖功能过程", "未覆盖功能过程",
-        "生成方式统计", "Warnings",
-    ])
+    ws_coverage.append(sheet_columns["覆盖审核"])
     for idx, group in enumerate(groups, 1):
         process_names = _process_names_for_group(group)
         expected = set(process_names)
@@ -1297,42 +1336,38 @@ def generate_fpa_check_xlsx_from_md(
         missing_list = [name for name in process_names if name not in covered]
         if missing_list:
             module_warnings.append(f"未覆盖功能过程: {'、'.join(missing_list)}")
-        ws_coverage.append([
-            idx,
-            group.get("client_type", ""),
-            group.get("l1", ""),
-            group.get("l2", ""),
-            group.get("l3", ""),
-            len(process_names),
-            len(covered_list),
-            len(missing_list),
-            "、".join(covered_list),
-            "、".join(missing_list),
-            _json.dumps(generation_counts, ensure_ascii=False, sort_keys=True),
-            "；".join(module_warnings),
-        ])
+        _append_audit_row(ws_coverage, sheet_columns["覆盖审核"], {
+            "模块序号": idx,
+            "客户端类型": group.get("client_type", ""),
+            "一级模块": group.get("l1", ""),
+            "二级模块": group.get("l2", ""),
+            "三级模块": group.get("l3", ""),
+            "功能过程总数": len(process_names),
+            "已覆盖数": len(covered_list),
+            "未覆盖数": len(missing_list),
+            "已覆盖功能过程": "、".join(covered_list),
+            "未覆盖功能过程": "、".join(missing_list),
+            "生成方式统计": _json.dumps(generation_counts, ensure_ascii=False, sort_keys=True),
+            "Warnings": "；".join(module_warnings),
+        })
         for warning in module_warnings:
-            warning_rows.append([
-                "module",
-                "",
-                idx,
-                group.get("l3", ""),
-                warning,
-                "coverage.missing_process",
-                "功能过程未被任何 FPA 行源功能过程覆盖。",
-            ])
+            warning_rows.append({
+                "级别": "module",
+                "FPA行序号": "",
+                "模块序号": idx,
+                "对象": group.get("l3", ""),
+                "Warning": warning,
+                "来源规则ID": "coverage.missing_process",
+                "来源说明": "功能过程未被任何 FPA 行源功能过程覆盖。",
+            })
 
     ws_warnings = wb.create_sheet("Warnings")
-    ws_warnings.append(["级别", "FPA行序号", "模块序号", "对象", "Warning", "来源规则ID", "来源说明"])
+    ws_warnings.append(sheet_columns["Warnings"])
     for item in warning_rows:
-        ws_warnings.append(item)
+        _append_audit_row(ws_warnings, sheet_columns["Warnings"], item)
 
     ws_rule_hits = wb.create_sheet("规则命中详情")
-    ws_rule_hits.append([
-        "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
-        "FPA行序号", "功能点名称", "生成方式", "rule_set", "rule_set_version",
-        "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
-    ])
+    ws_rule_hits.append(sheet_columns["规则命中详情"])
     written_rule_rows: set[str] = set()
     for idx, group in enumerate(groups, 1):
         for row in rows_by_module.get(idx, []):
@@ -1356,41 +1391,43 @@ def generate_fpa_check_xlsx_from_md(
                     str(x) for x in hit.get("warnings", [])
                     if isinstance(hit.get("warnings", []), list) and str(x).strip()
                 )
-                ws_rule_hits.append([
-                    idx,
-                    group.get("client_type", ""),
-                    group.get("l1", ""),
-                    group.get("l2", ""),
-                    group.get("l3", ""),
-                    row.get("序号", ""),
-                    row.get("新增/修改功能点", ""),
-                    row.get("生成方式", ""),
-                    execution_meta.get("rule_set", ""),
-                    execution_meta.get("rule_set_version", ""),
-                    hit.get("hit_object", "") or row.get("源功能过程", "") or group.get("l3", ""),
-                    hit.get("rule_id", ""),
-                    hit.get("rule_desc", ""),
-                    hit.get("suggested_type", "") or row.get("类型", ""),
-                    hit.get("adopted", "") or "是",
-                    warnings,
-                ])
+                _append_audit_row(ws_rule_hits, sheet_columns["规则命中详情"], {
+                    "模块序号": idx,
+                    "客户端类型": group.get("client_type", ""),
+                    "一级模块": group.get("l1", ""),
+                    "二级模块": group.get("l2", ""),
+                    "三级模块": group.get("l3", ""),
+                    "FPA行序号": row.get("序号", ""),
+                    "功能点名称": row.get("新增/修改功能点", ""),
+                    "生成方式": row.get("生成方式", ""),
+                    "rule_set": execution_meta.get("rule_set", ""),
+                    "rule_set_version": execution_meta.get("rule_set_version", ""),
+                    "命中对象": hit.get("hit_object", "") or row.get("源功能过程", "") or group.get("l3", ""),
+                    "规则ID": hit.get("rule_id", ""),
+                    "规则说明": hit.get("rule_desc", ""),
+                    "建议类型": hit.get("suggested_type", "") or row.get("类型", ""),
+                    "是否采用": hit.get("adopted", "") or "是",
+                    "Warnings": warnings,
+                })
 
     ws_raw = wb.create_sheet("AI原始返回")
-    ws_raw.append(["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"])
+    ws_raw.append(sheet_columns["AI原始返回"])
     raw_modules = audit_trace.get("modules", [])
     if isinstance(raw_modules, list):
         for item in raw_modules:
             if not isinstance(item, dict):
                 continue
-            ws_raw.append([
-                item.get("module", ""),
-                item.get("l3", ""),
-                item.get("source", ""),
-                "；".join(str(x) for x in item.get("warnings", []) if str(x).strip())
-                if isinstance(item.get("warnings"), list)
-                else str(item.get("warnings", "") or ""),
-                _json.dumps(item.get("raw_rows", []), ensure_ascii=False, indent=2),
-            ])
+            _append_audit_row(ws_raw, sheet_columns["AI原始返回"], {
+                "模块": item.get("module", ""),
+                "三级模块": item.get("l3", ""),
+                "来源": item.get("source", ""),
+                "Warnings": (
+                    "；".join(str(x) for x in item.get("warnings", []) if str(x).strip())
+                    if isinstance(item.get("warnings"), list)
+                    else str(item.get("warnings", "") or "")
+                ),
+                "AI原始Rows JSON": _json.dumps(item.get("raw_rows", []), ensure_ascii=False, indent=2),
+            })
 
     header_fill = PatternFill("solid", fgColor="D9EAF7")
     warning_fill = PatternFill("solid", fgColor="FFF2CC")
@@ -1408,19 +1445,23 @@ def generate_fpa_check_xlsx_from_md(
         for row in ws.iter_rows():
             for cell in row:
                 cell.alignment = Alignment(wrap_text=True, vertical="center")
+        headers = _header_index(ws)
         if ws.title == "FPA结果":
+            warning_idx = headers.get("后处理警告")
+            generation_idx = headers.get("生成方式")
             for row in ws.iter_rows(min_row=2):
-                warning_cell = row[13]
-                generation_cell = row[10]
-                if str(warning_cell.value or "").strip():
+                warning_value = row[warning_idx].value if warning_idx is not None else ""
+                generation_value = row[generation_idx].value if generation_idx is not None else ""
+                if str(warning_value or "").strip():
                     for cell in row:
                         cell.fill = warning_fill
-                if str(generation_cell.value or "") == "rules_fallback":
+                if str(generation_value or "") == "rules_fallback":
                     for cell in row:
                         cell.fill = missing_fill
         if ws.title == "覆盖审核":
+            missing_idx = headers.get("未覆盖数")
             for row in ws.iter_rows(min_row=2):
-                missing_count = row[7].value
+                missing_count = row[missing_idx].value if missing_idx is not None else 0
                 try:
                     has_missing = int(missing_count or 0) > 0
                 except (TypeError, ValueError):
@@ -1429,13 +1470,15 @@ def generate_fpa_check_xlsx_from_md(
                     for cell in row:
                         cell.fill = missing_fill
         if ws.title == "规则命中详情":
+            generation_idx = headers.get("生成方式")
+            warning_idx = headers.get("Warnings")
             for row in ws.iter_rows(min_row=2):
-                generation_cell = row[7]
-                warning_cell = row[15]
-                if str(warning_cell.value or "").strip():
+                generation_value = row[generation_idx].value if generation_idx is not None else ""
+                warning_value = row[warning_idx].value if warning_idx is not None else ""
+                if str(warning_value or "").strip():
                     for cell in row:
                         cell.fill = warning_fill
-                if str(generation_cell.value or "") == "rules_fallback":
+                if str(generation_value or "") == "rules_fallback":
                     for cell in row:
                         cell.fill = missing_fill
 

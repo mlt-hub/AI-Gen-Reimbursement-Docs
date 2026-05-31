@@ -2214,6 +2214,28 @@ Warnings Sheet 新增“来源规则ID”“来源说明”两列，用于定位
 缺少 audit trace 时仍保留旧的兜底还原逻辑，方便单独从 MD 生成审核副本。
 ```
 
+### K5 落地：审核列可配置
+
+已完成：
+
+```text
+system_config.yaml 新增 fpa_check_columns。
+留空或不配置时，FPA工作量评估-check.xlsx 保持默认列不变。
+支持按 Sheet 名称配置列名列表，既可隐藏列，也可调整列顺序。
+当前支持 FPA结果、覆盖审核、Warnings、规则命中详情、AI原始返回 五张 Sheet。
+未知列名会被忽略；某个 Sheet 配置后若没有任何有效列，会回退到默认列。
+格式高亮改为按列名定位，不依赖固定列号，因此隐藏/调整列顺序后仍可保留 warning / rules_fallback / 未覆盖行高亮。
+```
+
+配置示例：
+
+```yaml
+fpa_check_columns:
+  FPA结果: ["序号", "新增/修改功能点", "类型", "生成方式", "后处理警告"]
+  Warnings: ["级别", "对象", "Warning", "来源规则ID"]
+  规则命中详情: ["功能点名称", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings"]
+```
+
 ### 审核 Excel Sheet 草案
 
 ```text
@@ -2517,6 +2539,18 @@ npm run build
 
 ```text
 17 passed
+```
+
+本轮针对 K5 审核列配置已执行：
+
+```powershell
+.\scripts\test.ps1 tests/test_config_utils.py tests/test_gen_fpa_ai.py tests/test_pipeline.py::TestGenFpa -vv
+```
+
+结果：
+
+```text
+50 passed
 ```
 
 ## 暂缓推进任务池
