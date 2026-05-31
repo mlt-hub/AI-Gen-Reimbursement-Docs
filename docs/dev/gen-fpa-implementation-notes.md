@@ -2553,6 +2553,43 @@ npm run build
 50 passed
 ```
 
+本轮针对 F 组无真实 API 验收已补充自动化测试：
+
+```text
+tests/test_fpa_acceptance.py
+```
+
+覆盖内容：
+
+```text
+strict_fpa / rules_only 使用 vertical_industry_management golden case 正式生成 FPA MD、summary 和 FPA工作量评估-check.xlsx。
+校验 check.xlsx 五张 Sheet 均生成。
+校验覆盖审核中功能过程总数、已覆盖数、未覆盖数。
+校验规则命中详情包含 strict_fpa.internal_data_group、strict_fpa.transaction.ei、strict_fpa.transaction.eq。
+校验 AI原始返回 Sheet 在规则路径下记录 source=rules 和“规则优先策略未调用 AI”。
+校验 summary 中 FPA 工作量汇总值为 13。
+使用 mock AI 返回 classification_basis_index 越界样例，校验 Warnings Sheet 可追溯到 postprocess.classification_basis_index，规则命中详情也记录对应 rule_id。
+```
+
+已执行：
+
+```powershell
+.\scripts\test.ps1 tests/test_fpa_acceptance.py tests/test_fpa_golden_fixture_reports.py tests/test_gen_fpa_preview.py tests/test_gen_fpa_ai.py tests/test_pipeline.py::TestGenFpa -vv
+```
+
+结果：
+
+```text
+37 passed
+```
+
+当前 F 组状态：
+
+```text
+F2. 部分完成：无真实 API 的 mock / fixture / golden cases / 本地规则路径验收已自动化；真实模型验收仍保留。
+F3. 部分完成：代表样例的拆分粒度、类型判断、覆盖情况和汇总值已自动化复核；真实业务输入复核仍保留。
+```
+
 ## 暂缓推进任务池
 
 以下事项已确认暂不推进。后续如需继续，可按本节末尾的指令模板恢复。
