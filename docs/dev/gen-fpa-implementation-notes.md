@@ -2084,7 +2084,7 @@ rule_set
 
 ## FPA 审核工作簿与预览审核面板
 
-状态：已讨论确认，尚未实现。
+状态：预览 audit JSON 与预览页审核信息第一版已实现；审核工作簿仍待实现。
 
 ### 目标
 
@@ -2111,6 +2111,33 @@ FPA工作量评估-check.xlsx
 
 ```text
 FpaAuditReport
+```
+
+当前已实现字段：
+
+```text
+profile / profile_version
+strategy
+rule_set / rule_set_version
+module
+coverage.process_total
+coverage.covered_count
+coverage.missing_count
+coverage.covered_processes
+coverage.missing_processes
+generation_counts
+warnings
+```
+
+当前预览页已展示：
+
+```text
+功能过程覆盖数。
+未覆盖数。
+规则集名称。
+规则集版本。
+生成方式统计。
+缺失功能过程列表。
 ```
 
 同一个 `FpaAuditReport` 同时服务：

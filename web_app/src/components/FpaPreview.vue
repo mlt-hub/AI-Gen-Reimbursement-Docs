@@ -126,6 +126,48 @@
           <div v-for="item in previewWarnings" :key="item" class="leading-5">{{ item }}</div>
         </div>
 
+        <div v-if="result.audit" class="border-t border-[var(--color-rule)] px-3 py-2">
+          <details open>
+            <summary class="subtle-link cursor-pointer select-none text-xs">审核信息</summary>
+            <div class="mt-3 grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
+              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="text-[var(--color-ink-soft)]">功能过程覆盖</div>
+                <div class="mt-1 text-base font-semibold text-[var(--color-ink)]">{{ result.audit.coverage.covered_count }}/{{ result.audit.coverage.process_total }}</div>
+              </div>
+              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="text-[var(--color-ink-soft)]">未覆盖</div>
+                <div class="mt-1 text-base font-semibold text-[var(--color-ink)]">{{ result.audit.coverage.missing_count }}</div>
+              </div>
+              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="text-[var(--color-ink-soft)]">规则集</div>
+                <div class="mt-1 truncate font-semibold text-[var(--color-ink)]">{{ result.audit.rule_set }}</div>
+              </div>
+              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="text-[var(--color-ink-soft)]">版本</div>
+                <div class="mt-1 truncate font-semibold text-[var(--color-ink)]">{{ result.audit.rule_set_version }}</div>
+              </div>
+            </div>
+
+            <div class="mt-3 grid gap-3 text-xs md:grid-cols-2">
+              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="font-semibold text-[var(--color-ink)]">生成方式</div>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <span v-for="item in generationCountEntries" :key="item[0]" class="rounded bg-[var(--color-surface)] px-2 py-1 text-[var(--color-ink-muted)]">
+                    {{ item[0] }}: {{ item[1] }}
+                  </span>
+                </div>
+              </div>
+              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="font-semibold text-[var(--color-ink)]">缺失功能过程</div>
+                <div v-if="result.audit.coverage.missing_processes.length" class="mt-2 space-y-1 text-[var(--color-warning)]">
+                  <div v-for="item in result.audit.coverage.missing_processes" :key="item">{{ item }}</div>
+                </div>
+                <div v-else class="mt-2 text-[var(--color-ink-muted)]">无</div>
+              </div>
+            </div>
+          </details>
+        </div>
+
         <div class="border-t border-[var(--color-rule)] px-3 py-2">
           <details>
             <summary class="subtle-link cursor-pointer select-none text-xs">说明详情</summary>
@@ -178,6 +220,24 @@ interface FpaPreviewResult {
   strategy: string
   rule_set: string
   rule_set_version: string
+  audit?: FpaAuditReport
+}
+
+interface FpaAuditReport {
+  profile: string
+  profile_version: string
+  strategy: string
+  rule_set: string
+  rule_set_version: string
+  coverage: {
+    process_total: number
+    covered_count: number
+    missing_count: number
+    covered_processes: string[]
+    missing_processes: string[]
+  }
+  generation_counts: Record<string, number>
+  warnings: string[]
 }
 
 interface FpaPreviewModule {
@@ -209,6 +269,7 @@ const error = ref('')
 const result = ref<FpaPreviewResult | null>(null)
 
 const previewWarnings = computed(() => result.value?.warnings ?? [])
+const generationCountEntries = computed(() => Object.entries(result.value?.audit?.generation_counts ?? {}))
 const canLoadModules = computed(() => config.isValid && !session.isRunning && !previewLoading.value)
 const canPreview = computed(() => config.isValid && selectedModuleIndex.value !== '' && !session.isRunning && !modulesLoading.value)
 

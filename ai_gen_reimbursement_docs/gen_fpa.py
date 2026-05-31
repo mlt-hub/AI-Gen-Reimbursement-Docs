@@ -7,6 +7,7 @@ import re
 import tempfile
 import hashlib
 from copy import copy
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -40,6 +41,42 @@ logger = logging.getLogger('ai_gen_reimbursement_docs.gen_fpa')
 
 VALID_FPA_TYPES = {"EI", "ILF", "EQ", "EO", "EIF"}
 FPA_PROFILE = CUSTOM_RULES_PROFILE
+
+
+@dataclass
+class FpaAuditReport:
+    """FPA 预览/审核的结构化信息。"""
+
+    profile: str
+    profile_version: str
+    strategy: str
+    rule_set: str
+    rule_set_version: str
+    module: dict[str, object]
+    process_total: int
+    covered_processes: list[str]
+    missing_processes: list[str]
+    generation_counts: dict[str, int]
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "profile": self.profile,
+            "profile_version": self.profile_version,
+            "strategy": self.strategy,
+            "rule_set": self.rule_set,
+            "rule_set_version": self.rule_set_version,
+            "module": self.module,
+            "coverage": {
+                "process_total": self.process_total,
+                "covered_count": len(self.covered_processes),
+                "missing_count": len(self.missing_processes),
+                "covered_processes": self.covered_processes,
+                "missing_processes": self.missing_processes,
+            },
+            "generation_counts": self.generation_counts,
+            "warnings": self.warnings,
+        }
 
 
 def parse_meta_md(meta_md_path: str) -> dict[str, str]:
@@ -355,6 +392,48 @@ def _supplement_ai_rows_with_rules(
         f"{_group_tag(group)} AI 结果未覆盖 {len(missing_processes)} 个功能过程，已追加 {len(supplemental)} 条 rules_fallback 行"
     ]
     return combined, warnings
+
+
+def _build_fpa_audit_report(
+    *,
+    group: dict[str, object],
+    module: dict[str, object],
+    fpa_rows: list[dict[str, object]],
+    warnings: list[str],
+    profile: CustomRulesProfile,
+    profile_version: str,
+    strategy: str,
+    rule_set: str,
+    rule_set_version: str,
+) -> FpaAuditReport:
+    process_names = _process_names_for_group(group)
+    expected = set(process_names)
+    covered: set[str] = set()
+    generation_counts: dict[str, int] = {}
+    for row in fpa_rows:
+        generation = str(row.get("生成方式", "") or "unknown")
+        generation_counts[generation] = generation_counts.get(generation, 0) + 1
+        covered.update(_source_process_set(row))
+
+    covered_processes = [name for name in process_names if name in covered]
+    missing_processes = [name for name in process_names if name not in covered]
+    audit_warnings = list(warnings)
+    if expected and missing_processes:
+        audit_warnings.append(f"仍有 {len(missing_processes)} 个功能过程未被 FPA 行覆盖")
+
+    return FpaAuditReport(
+        profile=profile.name,
+        profile_version=profile_version,
+        strategy=strategy,
+        rule_set=rule_set,
+        rule_set_version=rule_set_version,
+        module=module,
+        process_total=len(process_names),
+        covered_processes=covered_processes,
+        missing_processes=missing_processes,
+        generation_counts=generation_counts,
+        warnings=audit_warnings,
+    )
 
 
 def _ai_plan_fpa_rows_for_l3(
@@ -972,15 +1051,27 @@ def preview_fpa_module(
 
         processes = group.get("processes", [])
         process_count = len(processes) if isinstance(processes, list) else 0
+        module_payload = {
+            "index": idx,
+            "client_type": group.get("client_type", ""),
+            "l1": group.get("l1", ""),
+            "l2": group.get("l2", ""),
+            "l3": group.get("l3", ""),
+            "process_count": process_count,
+        }
+        audit = _build_fpa_audit_report(
+            group=group,
+            module=module_payload,
+            fpa_rows=fpa_rows,
+            warnings=warnings,
+            profile=profile,
+            profile_version=profile.version,
+            strategy=execution.strategy,
+            rule_set=execution.rule_set,
+            rule_set_version=execution.rule_set_version,
+        )
         return {
-            "module": {
-                "index": idx,
-                "client_type": group.get("client_type", ""),
-                "l1": group.get("l1", ""),
-                "l2": group.get("l2", ""),
-                "l3": group.get("l3", ""),
-                "process_count": process_count,
-            },
+            "module": module_payload,
             "rows": [_row_to_preview(row) for row in fpa_rows],
             "warnings": warnings,
             "used_ai": used_ai,
@@ -989,6 +1080,7 @@ def preview_fpa_module(
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
             "rule_set_version": execution.rule_set_version,
+            "audit": audit.to_dict(),
         }
     finally:
         if temp_ctx is not None:
