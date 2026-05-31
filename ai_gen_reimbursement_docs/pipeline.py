@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from ai_gen_reimbursement_docs.config_utils import (
     load_enable_ai_fill_meta,
+    load_fpa_excel_recalc_check,
     load_fpa_profile,
     load_fpa_rule_set,
     load_fpa_strategy,
@@ -31,6 +32,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     generate_fpa_xlsx_from_md,
     init_fpa_template_md,
     plan_fpa_md_from_tree,
+    validate_fpa_excel_recalculation,
 )
 from ai_gen_reimbursement_docs.gen_list import generate_list_xlsx_from_md
 from ai_gen_reimbursement_docs.gen_cosmic import (
@@ -541,6 +543,9 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
 
     from ai_gen_reimbursement_docs.excel_source import read_md_value
     result.fpa_reduced = read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
+    if load_fpa_excel_recalc_check():
+        for warning in validate_fpa_excel_recalculation(fpa_xlsx, float(result.fpa_reduced)):
+            logger.warning(warning)
     result.fpa_xlsx = fpa_xlsx
     result.fpa_check_xlsx = fpa_check_xlsx
     logger.info(f"FPA工作量评估已生成: {fpa_xlsx}")

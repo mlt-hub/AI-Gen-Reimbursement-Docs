@@ -2853,10 +2853,30 @@ H6 已完成：
 ### G. 可选增强
 
 ```text
-G1. 增加 Excel COM / LibreOffice 复算校验，只做 warning。
+G1. 已完成：增加 Excel COM / LibreOffice 复算校验，只做 warning。
 G2. 预览模式增加 --use-preview-cache / --keep-preview-files。
 G3. 预览模式增加纯内存解析，减少临时 MD 文件。
 G4. 如模板真实公式不是 调整值 × 要素数量，将业务公式翻译为 Python 规则并补测试。
+```
+
+G1 实现记录：
+
+```text
+新增配置：
+- system_config.yaml: fpa_excel_recalc_check，默认 false。
+
+行为：
+- 默认不执行复算校验，避免无 Excel / LibreOffice 的服务器和 CI 环境产生噪声。
+- 开启后，pipeline 在生成 FPA工作量评估.xlsx 并读取 MD 汇总值后，调用 validate_fpa_excel_recalculation(...)。
+- 校验依次尝试 Excel COM、LibreOffice/soffice。
+- 复算成功后读取 FPA功能点估算 Sheet 的 L1 缓存总工作量，与代码汇总值比较。
+- 引擎不可用、复算失败、缓存不可读或结果不一致均只记录 warning，不阻断生成。
+
+已补测试：
+- load_fpa_excel_recalc_check 默认 false。
+- validate_fpa_excel_recalculation 复算成功且缓存值一致时无 warning。
+- 缓存值与代码汇总不一致时返回 warning。
+- Excel COM / LibreOffice 均不可用时返回 warning。
 ```
 
 ### 后续恢复指令

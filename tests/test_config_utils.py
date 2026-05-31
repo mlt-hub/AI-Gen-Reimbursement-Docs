@@ -8,6 +8,7 @@ import pytest
 from ai_gen_reimbursement_docs.config_utils import (
     _get_system_config_value,
     copy_default_config_files,
+    load_fpa_excel_recalc_check,
     load_max_tokens,
     load_cfp_formula,
     load_cosmic_warn_marker,
@@ -153,6 +154,11 @@ class TestBooleanLoaders:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=Path("/nonexistent")):
             assert load_fpa_reduced_use_workload() is False
+
+    def test_load_fpa_excel_recalc_check_default(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            assert load_fpa_excel_recalc_check() is False
 
 
 class TestLoadFpaProfile:

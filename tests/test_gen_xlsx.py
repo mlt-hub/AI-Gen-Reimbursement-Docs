@@ -10,6 +10,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     calculate_fpa_row_workload,
     calculate_fpa_total,
     generate_fpa_xlsx_from_md,
+    validate_fpa_excel_recalculation,
 )
 
 
@@ -170,6 +171,58 @@ class TestFpaTotalCalculation:
         assert ws.cell(4, 12).value == "=J4*K4"
         assert ws.cell(1, 12).value == "=SUM(L3:L4)"
         wb.close()
+
+    def test_recalc_validation_passes_when_cached_total_matches(self, monkeypatch, tmp_path):
+        xlsx = tmp_path / "fpa.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "FPA功能点估算"
+        ws.cell(1, 12).value = 9
+        wb.save(xlsx)
+        wb.close()
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.gen_fpa._recalculate_with_excel_com",
+            lambda path: (True, "mock"),
+        )
+
+        assert validate_fpa_excel_recalculation(str(xlsx), 9) == []
+
+    def test_recalc_validation_warns_when_cached_total_differs(self, monkeypatch, tmp_path):
+        xlsx = tmp_path / "fpa.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "FPA功能点估算"
+        ws.cell(1, 12).value = 8
+        wb.save(xlsx)
+        wb.close()
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.gen_fpa._recalculate_with_excel_com",
+            lambda path: (True, "mock"),
+        )
+
+        warnings = validate_fpa_excel_recalculation(str(xlsx), 9)
+
+        assert len(warnings) == 1
+        assert "不一致" in warnings[0]
+
+    def test_recalc_validation_warns_when_no_engine_available(self, monkeypatch, tmp_path):
+        xlsx = tmp_path / "fpa.xlsx"
+        wb = openpyxl.Workbook()
+        wb.save(xlsx)
+        wb.close()
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.gen_fpa._recalculate_with_excel_com",
+            lambda path: (False, "no excel"),
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.gen_fpa._recalculate_with_libreoffice",
+            lambda path: (False, "no libreoffice"),
+        )
+
+        warnings = validate_fpa_excel_recalculation(str(xlsx), 9)
+
+        assert len(warnings) == 1
+        assert "未执行 FPA Excel 公式复算校验" in warnings[0]
 
 
 class TestFormatFpaExplanation:

@@ -280,6 +280,11 @@ def load_fpa_reduced_use_workload() -> bool:
     return _get_system_config_value('fpa_reduced_use_workload', False)
 
 
+def load_fpa_excel_recalc_check() -> bool:
+    """读取 fpa_excel_recalc_check，true 时尝试复算 FPA Excel 公式并仅输出 warning。"""
+    return _get_system_config_value('fpa_excel_recalc_check', False)
+
+
 def load_fpa_profile(default: str = "custom_rules") -> str:
     """读取 FPA 规划口径名称，默认 custom_rules。"""
     value = _get_system_config_value('fpa_profile', default).strip()

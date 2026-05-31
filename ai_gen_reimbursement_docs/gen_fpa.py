@@ -4,6 +4,8 @@ import json as _json
 import logging
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 import hashlib
 from copy import copy
@@ -773,6 +775,114 @@ def calculate_fpa_row_workload(row: dict[str, object]) -> float:
 def calculate_fpa_total(rows: list[dict[str, object]]) -> float:
     """按代码化业务口径计算 FPA 工作量总和。"""
     return sum(calculate_fpa_row_workload(row) for row in rows)
+
+
+def _recalculate_with_excel_com(xlsx_path: str) -> tuple[bool, str]:
+    """Use local Excel COM to recalculate and save formula caches."""
+    if os.name != "nt":
+        return False, "Excel COM 仅支持 Windows"
+    try:
+        import win32com.client  # type: ignore
+    except Exception as exc:
+        return False, f"Excel COM 不可用: {exc}"
+
+    excel = None
+    workbook = None
+    try:
+        excel = win32com.client.DispatchEx("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False
+        workbook = excel.Workbooks.Open(os.path.abspath(xlsx_path))
+        excel.CalculateFullRebuild()
+        workbook.Save()
+        return True, "Excel COM"
+    except Exception as exc:
+        return False, f"Excel COM 复算失败: {exc}"
+    finally:
+        if workbook is not None:
+            try:
+                workbook.Close(SaveChanges=True)
+            except Exception:
+                pass
+        if excel is not None:
+            try:
+                excel.Quit()
+            except Exception:
+                pass
+
+
+def _recalculate_with_libreoffice(xlsx_path: str) -> tuple[bool, str]:
+    """Use LibreOffice/soffice headless conversion to recalculate formula caches."""
+    executable = shutil.which("soffice") or shutil.which("libreoffice")
+    if not executable:
+        return False, "未找到 LibreOffice/soffice"
+    with tempfile.TemporaryDirectory(prefix="ard-fpa-recalc-") as tmp_dir:
+        completed = subprocess.run(
+            [
+                executable,
+                "--headless",
+                "--convert-to",
+                "xlsx",
+                "--outdir",
+                tmp_dir,
+                os.path.abspath(xlsx_path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            return False, f"LibreOffice 复算失败: {detail or completed.returncode}"
+        recalculated = os.path.join(tmp_dir, os.path.basename(xlsx_path))
+        if not os.path.exists(recalculated):
+            return False, "LibreOffice 未生成复算后的 xlsx"
+        shutil.copy2(recalculated, xlsx_path)
+    return True, "LibreOffice"
+
+
+def _read_fpa_excel_cached_total(xlsx_path: str) -> float | None:
+    from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
+
+    sheet_name = _get_system_config_value('fpa_sheet', 'FPA功能点估算')
+    wb = openpyxl.load_workbook(xlsx_path, data_only=True)
+    try:
+        ws = wb[sheet_name]
+        value = ws.cell(1, FPA_COL_FORMULA_WORKLOAD).value
+    finally:
+        wb.close()
+    try:
+        return None if value in (None, "") else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def validate_fpa_excel_recalculation(
+    xlsx_path: str,
+    expected_total: float,
+    tolerance: float = 0.01,
+) -> list[str]:
+    """Try to recalculate FPA Excel formulas and return non-blocking warnings."""
+    attempts: list[str] = []
+    for recalculator in (_recalculate_with_excel_com, _recalculate_with_libreoffice):
+        ok, message = recalculator(xlsx_path)
+        if not ok:
+            attempts.append(message)
+            continue
+
+        cached_total = _read_fpa_excel_cached_total(xlsx_path)
+        if cached_total is None:
+            return [f"FPA Excel 公式复算已执行（{message}），但无法读取 L1 缓存总工作量"]
+        if abs(cached_total - expected_total) > tolerance:
+            return [
+                "FPA Excel 公式复算结果与代码汇总不一致: "
+                f"Excel={cached_total}, 代码汇总={expected_total}"
+            ]
+        return []
+
+    return [f"未执行 FPA Excel 公式复算校验: {'；'.join(attempts)}"]
 
 
 def write_fpa_summary_md(summary_md_path: str, total: float) -> None:

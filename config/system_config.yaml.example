@@ -109,6 +109,10 @@ enable_ai_fill_meta: true
 # 在debug时，可以设置为true，减小交互
 fpa_reduced_use_workload: false
 
+# 是否尝试使用 Excel COM / LibreOffice 复算 FPA Excel 公式并校验总工作量
+# false=默认跳过；true=可用则复算，不可用或不一致只记录 warning，不阻断生成
+fpa_excel_recalc_check: false
+
 # debug设置 结束
 
 
