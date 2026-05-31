@@ -2835,6 +2835,21 @@ F2. 已使用真实模型跑代表性样例，检查说明质量、warning、缓
 F3. 已使用真实业务输入复核拆分粒度、类型判断、覆盖和汇总值。
 ```
 
+### H. 旧兼容逻辑清理
+
+```text
+H6 已完成：
+- 复核配置初始化和迁移逻辑后，确认全局 CLI 初始化、exe 首次运行自动初始化、Web 用户目录初始化都应使用同一份默认配置模板清单。
+- 新增 copy_default_config_files(...) 和 DEFAULT_CONFIG_TEMPLATE_FILES，统一维护 .env、system_config.yaml、fpa_user_prompts_config.yaml、fpa_rule_sets_config.yaml 的初始化来源。
+- CLI --init-config、exe _auto_init_config、auth.init_user_dir 均改为复用该统一逻辑。
+- 修复 Web 用户目录初始化漏复制 fpa_user_prompts_config.yaml 的问题。
+- migrate_config 仍保留“只追加 example 中新增顶层键，不覆盖用户配置”的当前行为；未发现 FPA 主线需要删除的旧兼容迁移分支。
+
+已补测试：
+- test_copy_default_config_files_copies_all_templates_without_overwrite
+- test_init_user_dir_copies_all_default_config_files
+```
+
 ### G. 可选增强
 
 ```text

@@ -315,25 +315,13 @@ def _run_pipeline_with_args(
 
 def _auto_init_config(root: str) -> None:
     """exe 首次运行自动初始化用户配置文件（不覆盖已有配置）。"""
-    import shutil
+    from ai_gen_reimbursement_docs.config_utils import copy_default_config_files
 
-    home_cfg = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs')
-    cfg_dir = os.path.join(root, 'config')
-    if not os.path.isdir(cfg_dir):
+    home_cfg = _Path(os.path.expanduser('~')) / '.ai-gen-reimbursement-docs'
+    cfg_dir = _Path(root) / 'config'
+    if not cfg_dir.is_dir():
         return
-    os.makedirs(home_cfg, exist_ok=True)
-    pairs = [
-        (os.path.join(cfg_dir, '.env.example'), os.path.join(home_cfg, '.env')),
-        (os.path.join(cfg_dir, 'system_config.yaml.example'), os.path.join(home_cfg, 'system_config.yaml')),
-        (os.path.join(cfg_dir, 'fpa_user_prompts_config.yaml.example'), os.path.join(home_cfg, 'fpa_user_prompts_config.yaml')),
-        (os.path.join(cfg_dir, 'fpa_rule_sets_config.yaml.example'), os.path.join(home_cfg, 'fpa_rule_sets_config.yaml')),
-    ]
-    for src, dst in pairs:
-        if not os.path.exists(src):
-            continue
-        if os.path.exists(dst):
-            continue
-        shutil.copy2(src, dst)
+    for dst in copy_default_config_files(home_cfg, cfg_dir):
         print(f"已自动创建配置文件: {dst}")
 
 
@@ -702,21 +690,19 @@ def main():
         return
 
     if args.init_config:
-        cfg_dir = os.path.join(root, 'config')
-        home_cfg = os.path.join(os.path.expanduser('~'), '.ai-gen-reimbursement-docs')
-        os.makedirs(home_cfg, exist_ok=True)
-        pairs = [
-            (os.path.join(cfg_dir, '.env.example'), os.path.join(home_cfg, '.env')),
-            (os.path.join(cfg_dir, 'system_config.yaml.example'), os.path.join(home_cfg, 'system_config.yaml')),
-            (os.path.join(cfg_dir, 'fpa_user_prompts_config.yaml.example'), os.path.join(home_cfg, 'fpa_user_prompts_config.yaml')),
-            (os.path.join(cfg_dir, 'fpa_rule_sets_config.yaml.example'), os.path.join(home_cfg, 'fpa_rule_sets_config.yaml')),
-            ]
-        for src, dst in pairs:
-            if os.path.exists(dst):
+        from ai_gen_reimbursement_docs.config_utils import (
+            DEFAULT_CONFIG_TEMPLATE_FILES,
+            copy_default_config_files,
+        )
+        cfg_dir = _Path(root) / 'config'
+        home_cfg = _Path(os.path.expanduser('~')) / '.ai-gen-reimbursement-docs'
+        created = set(copy_default_config_files(home_cfg, cfg_dir))
+        for _, target_name in DEFAULT_CONFIG_TEMPLATE_FILES:
+            dst = home_cfg / target_name
+            if dst in created:
+                logger.info(f"已创建: {dst}")
+            else:
                 logger.info(f"已存在，跳过: {dst}")
-                continue
-            shutil.copy2(src, dst)
-            logger.info(f"已创建: {dst}")
         logger.info("请编辑 ~/.ai-gen-reimbursement-docs/.env 填入你的 API Key 后使用")
         return
 

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 from ai_gen_reimbursement_docs.config_utils import (
     _get_system_config_value,
+    copy_default_config_files,
     load_max_tokens,
     load_cfp_formula,
     load_cosmic_warn_marker,
@@ -21,6 +22,33 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_model_name,
     _read_env_value,
 )
+
+
+def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_path):
+    source = tmp_path / "config"
+    target = tmp_path / "home"
+    source.mkdir()
+    for name in [
+        ".env.example",
+        "system_config.yaml.example",
+        "fpa_user_prompts_config.yaml.example",
+        "fpa_rule_sets_config.yaml.example",
+    ]:
+        (source / name).write_text(f"{name}\n", encoding="utf-8")
+    target.mkdir()
+    (target / ".env").write_text("existing\n", encoding="utf-8")
+
+    created = copy_default_config_files(target, source)
+
+    assert sorted(path.name for path in created) == [
+        "fpa_rule_sets_config.yaml",
+        "fpa_user_prompts_config.yaml",
+        "system_config.yaml",
+    ]
+    assert (target / ".env").read_text(encoding="utf-8") == "existing\n"
+    assert (target / "system_config.yaml").exists()
+    assert (target / "fpa_user_prompts_config.yaml").exists()
+    assert (target / "fpa_rule_sets_config.yaml").exists()
 
 
 class TestGetSystemConfigValue:

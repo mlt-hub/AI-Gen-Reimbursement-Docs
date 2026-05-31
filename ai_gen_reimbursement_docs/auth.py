@@ -13,7 +13,6 @@ import logging
 import os
 import secrets
 import sqlite3
-import shutil
 from pathlib import Path
 
 import yaml
@@ -150,32 +149,11 @@ def _project_root() -> Path:
 
 def init_user_dir(username: str) -> None:
     """初始化用户目录：从项目 example 模板拷贝配置。"""
+    from ai_gen_reimbursement_docs.config_utils import copy_default_config_files
+
     user_dir = user_config_dir(username)
-    user_dir.mkdir(parents=True, exist_ok=True)
-
-    # 拷贝 system_config.yaml.example → system_config.yaml
-    example = _project_root() / "config" / "system_config.yaml.example"
-    if example.exists():
-        dest = user_dir / "system_config.yaml"
-        if not dest.exists():
-            shutil.copy2(example, dest)
-            _log.info(f"已初始化用户配置: {dest}")
-
-    # 拷贝 .env.example → .env（如果存在）
-    env_example = _project_root() / "config" / ".env.example"
-    if env_example.exists():
-        dest = user_dir / ".env"
-        if not dest.exists():
-            shutil.copy2(env_example, dest)
-            _log.info(f"已初始化用户环境变量: {dest}")
-
-    # 拷贝 FPA 规则集配置
-    rule_sets_example = _project_root() / "config" / "fpa_rule_sets_config.yaml.example"
-    if rule_sets_example.exists():
-        dest = user_dir / "fpa_rule_sets_config.yaml"
-        if not dest.exists():
-            shutil.copy2(rule_sets_example, dest)
-            _log.info(f"已初始化 FPA 规则集配置: {dest}")
+    for dest in copy_default_config_files(user_dir, _project_root() / "config"):
+        _log.info(f"已初始化用户配置: {dest}")
 
     # 创建模板和任务目录
     (user_dir / "templates").mkdir(exist_ok=True)

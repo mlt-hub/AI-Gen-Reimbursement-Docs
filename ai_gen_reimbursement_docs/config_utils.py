@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import shutil
 from functools import lru_cache
 from pathlib import Path
 
@@ -11,10 +12,35 @@ DEFAULT_CFP_FORMULA = (
     'IF(L{row}="复用",1/3,0))'
 )
 
+DEFAULT_CONFIG_TEMPLATE_FILES = (
+    (".env.example", ".env"),
+    ("system_config.yaml.example", "system_config.yaml"),
+    ("fpa_user_prompts_config.yaml.example", "fpa_user_prompts_config.yaml"),
+    ("fpa_rule_sets_config.yaml.example", "fpa_rule_sets_config.yaml"),
+)
+
 
 def config_dir() -> Path:
     """Path to user config directory: ~/.ai-gen-reimbursement-docs/."""
     return Path.home() / ".ai-gen-reimbursement-docs"
+
+
+def copy_default_config_files(
+    target_dir: Path,
+    source_dir: Path | None = None,
+) -> list[Path]:
+    """Copy default user config templates into target_dir without overwriting."""
+    source_dir = source_dir or Path(__file__).parent.parent / "config"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    created: list[Path] = []
+    for example_name, target_name in DEFAULT_CONFIG_TEMPLATE_FILES:
+        src = source_dir / example_name
+        dst = target_dir / target_name
+        if not src.exists() or dst.exists():
+            continue
+        shutil.copy2(src, dst)
+        created.append(dst)
+    return created
 
 
 def _read_env_value(key: str, env_path: Path) -> str:
