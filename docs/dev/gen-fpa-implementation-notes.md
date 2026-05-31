@@ -2084,7 +2084,7 @@ rule_set
 
 ## FPA 审核工作簿与预览审核面板
 
-状态：预览 audit JSON 与预览页审核信息第一版已实现；审核工作簿仍待实现。
+状态：预览 audit JSON、预览页审核信息、正式审核副本第一版已实现。
 
 ### 目标
 
@@ -2138,6 +2138,24 @@ warnings
 规则集版本。
 生成方式统计。
 缺失功能过程列表。
+```
+
+正式生成已额外产出：
+
+```text
+FPA工作量评估-check.xlsx
+```
+
+当前审核副本包含：
+
+```text
+Sheet: FPA结果
+  正式 FPA 行结果。
+  额外包含 generation、type_reason、source_processes、warnings、profile、strategy、rule_set、rule_set_version。
+
+Sheet: 覆盖审核
+  按三级模块展示功能过程覆盖情况。
+  包含功能过程总数、已覆盖数、未覆盖数、已覆盖功能过程、未覆盖功能过程、生成方式统计和 warnings。
 ```
 
 同一个 `FpaAuditReport` 同时服务：
@@ -2413,6 +2431,18 @@ npm run build
 
 ```text
 59 passed
+```
+
+本轮针对 FPA 审核副本已执行：
+
+```powershell
+.\scripts\test.ps1 tests/test_pipeline.py::TestGenFpa -vv
+```
+
+结果：
+
+```text
+5 passed
 ```
 
 ## 暂缓推进任务池

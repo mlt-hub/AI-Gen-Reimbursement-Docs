@@ -27,7 +27,10 @@ from ai_gen_reimbursement_docs.gen_spec import (
     generate_spec_docx_from_md, ai_fill_spec_md, init_spec_template_md, parse_meta_md
 )
 from ai_gen_reimbursement_docs.gen_fpa import (
-    generate_fpa_xlsx_from_md, init_fpa_template_md, plan_fpa_md_from_tree,
+    generate_fpa_check_xlsx_from_md,
+    generate_fpa_xlsx_from_md,
+    init_fpa_template_md,
+    plan_fpa_md_from_tree,
 )
 from ai_gen_reimbursement_docs.gen_list import generate_list_xlsx_from_md
 from ai_gen_reimbursement_docs.gen_cosmic import (
@@ -96,6 +99,7 @@ class PipelineResult:
     tree_md: str = ""
     meta_md: str = ""
     fpa_xlsx: str = ""
+    fpa_check_xlsx: str = ""
     cosmic_xlsx: str = ""
     require_xlsx: str = ""
     spec_docx: str = ""
@@ -503,10 +507,13 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
         fpa_filled_md = fpa_md
 
     fpa_xlsx = generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src, fpa_xlsx)
+    fpa_check_xlsx = os.path.splitext(fpa_xlsx)[0] + "-check.xlsx"
+    fpa_check_xlsx = generate_fpa_check_xlsx_from_md(fpa_filled_md, tree_md, fpa_check_xlsx)
 
     from ai_gen_reimbursement_docs.excel_source import read_md_value
     result.fpa_reduced = read_md_value(fpa_sum_md, r'FPA工作量（人/天）[：:]\s*([\d.]+)') or 0.0
     result.fpa_xlsx = fpa_xlsx
+    result.fpa_check_xlsx = fpa_check_xlsx
     logger.info(f"FPA工作量评估已生成: {fpa_xlsx}")
     return result
 

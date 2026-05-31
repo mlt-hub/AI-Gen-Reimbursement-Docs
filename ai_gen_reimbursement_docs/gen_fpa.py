@@ -789,6 +789,146 @@ def _write_fpa_rows_md(
     return calculate_fpa_total(fpa_rows)
 
 
+def _read_fpa_rows_md_for_audit(fpa_md_path: str) -> tuple[dict[str, str], list[dict[str, object]]]:
+    execution_meta: dict[str, str] = {}
+    fpa_rows: list[dict[str, object]] = []
+    with open(fpa_md_path, encoding="utf-8") as f:
+        in_table = False
+        for line in f:
+            line = line.rstrip()
+            meta_match = re.match(r"^\*\*(profile|strategy|rule_set|rule_set_version)\*\*:\s*(.*)$", line)
+            if meta_match:
+                key, value = meta_match.group(1), meta_match.group(2)
+                if key in {"profile", "strategy", "rule_set", "rule_set_version"}:
+                    execution_meta[key] = value.strip()
+            if "| 序号 | 子系统" in line:
+                in_table = True
+                continue
+            if "|------|" in line and in_table:
+                continue
+            if in_table:
+                cells = parse_md_table_row(line, min_cols=14)
+                if cells is not None:
+                    fpa_rows.append({
+                        "序号": cells[0],
+                        "子系统(模块)": cells[1],
+                        "资产标识": cells[2],
+                        "新增/修改功能点": cells[3],
+                        "类型": cells[4],
+                        "计算依据归类": cells[5],
+                        "计算依据说明": cells[6],
+                        "变更状态": cells[7],
+                        "调整值": cells[8],
+                        "要素数量": cells[9],
+                        "生成方式": cells[10],
+                        "类型理由": cells[11],
+                        "源功能过程": cells[12],
+                        "后处理警告": cells[13],
+                    })
+    return execution_meta, fpa_rows
+
+
+def generate_fpa_check_xlsx_from_md(
+    fpa_md_path: str,
+    tree_md_path: str,
+    output_path: str,
+) -> str:
+    """生成 FPA 审核副本，不影响正式交付 Excel。"""
+    logger.info("第1.5步：生成 FPA 审核副本...")
+    execution_meta, fpa_rows = _read_fpa_rows_md_for_audit(fpa_md_path)
+    tree_rows = parse_module_tree_md(tree_md_path)
+    groups = _group_rows_by_l3(tree_rows)
+
+    wb = openpyxl.Workbook()
+    ws_result = wb.active
+    ws_result.title = "FPA结果"
+    result_headers = [
+        "序号", "子系统(模块)", "资产标识", "新增/修改功能点", "类型", "计算依据归类",
+        "计算依据说明", "变更状态", "调整值", "要素数量", "生成方式", "类型理由",
+        "源功能过程", "后处理警告", "profile", "strategy", "rule_set", "rule_set_version",
+    ]
+    ws_result.append(result_headers)
+    for row in fpa_rows:
+        ws_result.append([
+            row.get("序号", ""),
+            row.get("子系统(模块)", ""),
+            row.get("资产标识", ""),
+            row.get("新增/修改功能点", ""),
+            row.get("类型", ""),
+            row.get("计算依据归类", ""),
+            row.get("计算依据说明", ""),
+            row.get("变更状态", ""),
+            row.get("调整值", ""),
+            row.get("要素数量", ""),
+            row.get("生成方式", ""),
+            row.get("类型理由", ""),
+            row.get("源功能过程", ""),
+            row.get("后处理警告", ""),
+            execution_meta.get("profile", ""),
+            execution_meta.get("strategy", ""),
+            execution_meta.get("rule_set", ""),
+            execution_meta.get("rule_set_version", ""),
+        ])
+
+    ws_coverage = wb.create_sheet("覆盖审核")
+    ws_coverage.append([
+        "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
+        "功能过程总数", "已覆盖数", "未覆盖数", "已覆盖功能过程", "未覆盖功能过程",
+        "生成方式统计", "Warnings",
+    ])
+    all_warnings = [
+        str(row.get("后处理警告", "") or "")
+        for row in fpa_rows
+        if str(row.get("后处理警告", "") or "").strip()
+    ]
+    for idx, group in enumerate(groups, 1):
+        process_names = _process_names_for_group(group)
+        expected = set(process_names)
+        related_rows = [
+            row for row in fpa_rows
+            if _source_process_set(row) & expected or (
+                expected and _source_process_set(row) == expected
+            )
+        ]
+        covered: set[str] = set()
+        generation_counts: dict[str, int] = {}
+        for row in related_rows:
+            covered.update(_source_process_set(row))
+            generation = str(row.get("生成方式", "") or "unknown")
+            generation_counts[generation] = generation_counts.get(generation, 0) + 1
+        covered_list = [name for name in process_names if name in covered]
+        missing_list = [name for name in process_names if name not in covered]
+        ws_coverage.append([
+            idx,
+            group.get("client_type", ""),
+            group.get("l1", ""),
+            group.get("l2", ""),
+            group.get("l3", ""),
+            len(process_names),
+            len(covered_list),
+            len(missing_list),
+            "、".join(covered_list),
+            "、".join(missing_list),
+            _json.dumps(generation_counts, ensure_ascii=False, sort_keys=True),
+            "；".join(all_warnings),
+        ])
+
+    for ws in (ws_result, ws_coverage):
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for column_cells in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in column_cells)
+            ws.column_dimensions[column_cells[0].column_letter].width = min(max(max_len + 2, 10), 48)
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(wrap_text=True, vertical="center")
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    wb.save(output_path)
+    logger.info("FPA 审核副本已生成: %s", output_path)
+    return output_path
+
+
 def init_fpa_template_md(
     tree_md_path: str,
     meta_md_path: str,

@@ -65,6 +65,7 @@ def build_file_summary(result) -> list[dict]:
     files = []
     labels = [
         ("FPA 工作量评估", getattr(result, "fpa_xlsx", "")),
+        ("FPA 审核副本", getattr(result, "fpa_check_xlsx", "")),
         ("项目功能点拆分表", getattr(result, "cosmic_xlsx", "")),
         ("项目需求清单", getattr(result, "require_xlsx", "")),
         ("项目需求说明书", getattr(result, "spec_docx", "")),

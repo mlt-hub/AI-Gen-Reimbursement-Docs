@@ -92,6 +92,8 @@ ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa --fpa-stra
 
 Web UI 可在高级选项中选择 FPA 方案、执行策略和规则集。详细说明见 [FPA 方案选择说明](docs/fpa-profiles.md)。
 
+生成 FPA 时会额外产出 `FPA工作量评估-check.xlsx` 审核副本，用于检查每行来源、规则集版本、功能过程覆盖和 warnings；正式交付 Excel 保持原模板结构。
+
 ---
 
 ## Web UI

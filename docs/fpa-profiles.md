@@ -329,6 +329,14 @@ AI / fallback / rules_fallback 等生成方式统计。
 缺失功能过程列表。
 ```
 
+正式生成 FPA 时，系统会额外生成审核副本：
+
+```text
+FPA工作量评估-check.xlsx
+```
+
+该文件不替代正式 `FPA工作量评估.xlsx`，只用于检查每行来源、规则集版本、功能过程覆盖和 warnings。
+
 建议优先检查：
 
 ```text

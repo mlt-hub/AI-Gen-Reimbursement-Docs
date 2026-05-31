@@ -75,6 +75,25 @@ class TestGenFpa:
                              api_key="sk-test")
         assert os.path.exists(result.fpa_xlsx)
         assert os.path.getsize(result.fpa_xlsx) > 0
+        assert os.path.exists(result.fpa_check_xlsx)
+        assert os.path.getsize(result.fpa_check_xlsx) > 0
+
+    def test_generates_fpa_check_xlsx(self, output_dir, test_excel, mock_ai):
+        result = run_pipeline(mode="gen-fpa", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        wb = openpyxl.load_workbook(result.fpa_check_xlsx, data_only=True)
+        assert "FPA结果" in wb.sheetnames
+        assert "覆盖审核" in wb.sheetnames
+        ws_result = wb["FPA结果"]
+        headers = [cell.value for cell in ws_result[1]]
+        assert "生成方式" in headers
+        assert "rule_set_version" in headers
+        ws_coverage = wb["覆盖审核"]
+        coverage_headers = [cell.value for cell in ws_coverage[1]]
+        assert "未覆盖功能过程" in coverage_headers
+        wb.close()
 
     def test_fpa_reduced_read_from_md(self, output_dir, test_excel, mock_ai):
         """gen-fpa 不直接使用 fpa_reduced 参数——它从生成的 MD 读取。"""
