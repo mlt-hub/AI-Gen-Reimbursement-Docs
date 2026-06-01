@@ -377,8 +377,6 @@ issued_licenses.jsonl
 license.ard.json
 licenses/
 .cache/
-.tmp_license_e2e*/
-.tmp_release_check*/
 web_app/tsconfig.tsbuildinfo
 ```
 
@@ -543,7 +541,7 @@ vue-tsc -b && vite build 通过
 
 ```powershell
 .\scripts\check_release_data_protection.ps1 `
-  -ArtifactDir .tmp_release_check_artifact `
+  -ArtifactDir .cache/tmp/release_check_artifact `
   -RequireProtectedData
 ```
 
