@@ -56,9 +56,11 @@
           </div>
           <div>
             <label class="field-label text-xs">ANTHROPIC_API_KEY</label>
-            <input v-model="envFields.apiKey" :type="showApiKey ? 'text' : 'password'"
-              placeholder="留空使用全局默认配置"
-              autocomplete="off"
+            <input ref="envApiKeyInput" v-model="envFields.apiKey" :type="showApiKey ? 'text' : 'password'"
+              placeholder="留空使用全局默认配置" autocomplete="new-password" autocapitalize="off"
+              autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true"
+              :name="envApiKeyInputName" :readonly="envApiKeyReadonly"
+              @focus="activateEnvApiKeyInput" @pointerdown="activateEnvApiKeyInput"
               class="field-control" />
           </div>
           <div>
@@ -178,6 +180,7 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useAuthStore } from '@/stores/auth.ts'
 import { normalizeApiKeyInput, useConfigStore } from '@/stores/config.ts'
+import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 // ── 类型 ──────────────────────────────────────────────────
@@ -251,6 +254,16 @@ const globalSystemConfig = ref('')
 // ── 可编辑字段 ────────────────────────────────────────────
 
 const envFields = reactive({ apiKey: '', baseUrl: '', model: '' })
+const envApiKeyInput = ref<HTMLInputElement | null>(null)
+const {
+  inputName: envApiKeyInputName,
+  readonly: envApiKeyReadonly,
+  activateSensitiveInput: activateEnvApiKeyInput,
+} = useSensitiveInputGuard('env-api-key', {
+  inputRef: envApiKeyInput,
+  getValue: () => envFields.apiKey,
+  setValue: value => { envFields.apiKey = value },
+})
 const boolFields = ref<ScalarField[]>([])
 const scalarFields = ref<ScalarField[]>([])
 const nestedFields = ref<NestedField[]>([])

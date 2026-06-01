@@ -70,6 +70,12 @@ API Key [fpa_preview]: missing, source=missing
 
 实现位置：`config_utils.resolve_api_key()` 返回 Key 值、来源和不可逆指纹；`log_api_key_resolution()` 负责输出安全日志。
 
+### 7. 浏览器自动填充
+
+API Key 输入框如果使用普通 `type="password"`，浏览器或密码管理器可能把历史保存的值自动填入 DOM。该值不来自应用状态或接口响应，但用户看到的输入框仍会“默认有值”。
+
+已实施：API Key 输入框使用随机 `name`、`autocomplete="new-password"`、密码管理器忽略标记、初始 `readonly`，并在组件挂载后清理非用户触发的自动填充值。
+
 ---
 
 ## 改进方案
@@ -133,6 +139,7 @@ API Key [fpa_preview]: missing, source=missing
 - 导入旧配置时如存在 `apiKey`，只写入当前会话状态，不重新持久化到 `localStorage`
 - 后端任务、FPA 预览和 Prompt Debug 入口会记录 Key 来源及不可逆指纹，不记录 Key 原文片段
 - 配置读取接口只返回敏感值占位符 `***`，前端不会把占位符填入 API Key 输入框
+- API Key 输入框增加浏览器自动填充防护，默认打开时保持为空
 
 ---
 

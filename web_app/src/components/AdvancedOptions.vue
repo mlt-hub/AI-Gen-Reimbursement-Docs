@@ -4,7 +4,10 @@
     <div class="mt-3 flex flex-col gap-3 border-t border-[var(--color-rule)] pt-3">
       <div>
         <label for="api-key" class="field-label text-xs">API Key（留空使用系统配置）</label>
-        <input id="api-key" type="password" v-model.trim="config.apiKey" placeholder="留空使用系统配置" autocomplete="off"
+        <input id="api-key" ref="apiKeyInput" type="password" v-model.trim="config.apiKey"
+          placeholder="留空使用系统配置" autocomplete="new-password" autocapitalize="off" autocorrect="off"
+          spellcheck="false" data-lpignore="true" data-1p-ignore="true" :name="apiKeyInputName"
+          :readonly="apiKeyReadonly" @focus="activateApiKeyInput" @pointerdown="activateApiKeyInput"
           class="field-control" />
       </div>
       <div>
@@ -60,6 +63,19 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useConfigStore } from '@/stores/config.ts'
+import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
+
 const config = useConfigStore()
+const apiKeyInput = ref<HTMLInputElement | null>(null)
+const {
+  inputName: apiKeyInputName,
+  readonly: apiKeyReadonly,
+  activateSensitiveInput: activateApiKeyInput,
+} = useSensitiveInputGuard('api-key', {
+  inputRef: apiKeyInput,
+  getValue: () => config.apiKey,
+  setValue: value => { config.apiKey = value },
+})
 </script>

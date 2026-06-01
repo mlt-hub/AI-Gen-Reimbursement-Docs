@@ -34,7 +34,11 @@
       <details class="mt-4">
         <summary class="subtle-link cursor-pointer select-none text-sm">高级选项</summary>
         <div class="mt-3 flex gap-3 border-t border-[var(--color-rule)] pt-3">
-          <input type="password" v-model.trim="apiKey" placeholder="API Key（留空使用系统配置）" autocomplete="off"
+          <input ref="apiKeyInput" type="password" v-model.trim="apiKey"
+            placeholder="API Key（留空使用系统配置）" autocomplete="new-password" autocapitalize="off"
+            autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true"
+            :name="apiKeyInputName" :readonly="apiKeyReadonly" @focus="activateApiKeyInput"
+            @pointerdown="activateApiKeyInput"
             class="field-control flex-1" />
           <input type="text" v-model="model" placeholder="模型（默认 deepseek-v4-flash）"
             class="field-control flex-1" />
@@ -131,6 +135,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
 import { normalizeApiKeyInput } from '@/stores/config.ts'
 
 interface PromptTestResponse {
@@ -151,6 +156,16 @@ const userPrompt = ref('')
 const apiKey = ref('')
 const model = ref('')
 const baseUrl = ref('')
+const apiKeyInput = ref<HTMLInputElement | null>(null)
+const {
+  inputName: apiKeyInputName,
+  readonly: apiKeyReadonly,
+  activateSensitiveInput: activateApiKeyInput,
+} = useSensitiveInputGuard('prompt-api-key', {
+  inputRef: apiKeyInput,
+  getValue: () => apiKey.value,
+  setValue: value => { apiKey.value = value },
+})
 const running = ref(false)
 const runState = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 
