@@ -35,6 +35,69 @@ J. profile / strategy / rule_set 三层模型
 K. FPA 审核工作簿与预览审核面板
 ```
 
+## 下一步建议：FPA 配置校验
+
+建议下一轮优先推进 `fpa_config.yaml` 配置校验。目标不是新增业务规则，而是让用户在 CLI、Web 预览和正式生成中尽早看到一致、可理解的配置错误。
+
+### 目标行为
+
+```text
+同一套 fpa_config.yaml 解析与校验逻辑服务于 CLI、Web 预览、正式生成和测试。
+配置错误在调用 AI 或生成交付物前暴露。
+错误信息直接指向配置路径和键路径，例如 profiles.strict_fpa.rule_set。
+不恢复旧拆分配置文件兼容路径。
+```
+
+### 校验范围
+
+```text
+profile：
+  必须是 custom_rules 或 strict_fpa。
+  必须能在 profiles 中找到对应配置。
+
+profiles.<name>：
+  仅允许 custom_rules / strict_fpa 两个 profile 名称。
+  strategy 必填，且必须是 rules_first / ai_first / rules_only / ai_only。
+  rule_set 必填，且必须能在 rule_sets 中找到。
+  system_prompt 必填，且必须能在 prompt_sets 中找到 system。
+  user_prompt 必填，且必须能在 prompt_sets 中找到 user。
+
+prompt_sets.<name>：
+  system 必须是非空字符串。
+  user 必须是非空字符串。
+  user 建议包含 ${core_rules}、${judgement_rules}、${payload_json}，缺失时至少给出 warning 或明确提示。
+
+rule_sets.<name>：
+  允许任意新增名称。
+  extends 如配置，必须指向已存在 rule_set。
+  extends 继承链必须检测循环。
+  不支持 version；出现 version 时应提示该字段已废弃。
+
+rule_sets.<name>.external_data_rules：
+  source_aliases 必须是非空字符串列表。
+  data_name 必须是非空字符串。
+  data_nouns 可选；如配置，必须是字符串列表。
+  普通外部服务被配置为数据组时，后续可记录 warning。
+```
+
+### 验收方式
+
+```text
+补充 tests/test_config_utils.py 覆盖 fpa_config.yaml 结构错误。
+补充 tests/test_fpa_profiles.py 覆盖 rule_set extends 不存在和循环。
+补充 tests/test_fpa_external_data_rules.py 覆盖 external_data_rules 非法结构。
+补充 Web/CLI 入口测试，确认错误信息不丢失。
+继续保持 pytest -q 通过。
+```
+
+### 实施边界
+
+```text
+本轮只做配置校验和错误信息，不做 rule_set 下拉 UI。
+不新增旧配置迁移逻辑。
+不把 warning 写入正式 FPA 审核副本，除非该 warning 来自生成过程本身。
+```
+
 ## 旧兼容逻辑清理清单
 
 基于 `AGENTS.md` 的项目约束：本系统尚未上线，不需要保留旧版本兼容路径。

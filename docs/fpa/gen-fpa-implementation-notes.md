@@ -2862,11 +2862,20 @@ C5. 对比不同类型策略下的 Excel 公式结果。
 ### D. 配置校验
 
 ```text
-D1. 补充 OA、统一认证平台、供应商平台、主数据平台、财务平台的 rule_sets.<name>.external_data_rules 示例。
-D2. 增加配置重复规则检测。
-D3. 增加别名冲突检测。
-D4. 增加 data_nouns 为空时的提示。
-D5. 普通外部服务被配置为数据组时记录 warning。
+D1. 待推进：为 fpa_config.yaml 增加统一结构校验入口。
+D2. 待推进：校验 profile / profiles / prompt_sets / rule_sets 的必填项和引用关系。
+D3. 待推进：校验 rule_set extends 不存在和循环继承，并给出明确错误。
+D4. 待推进：校验 external_data_rules 的 source_aliases / data_name / data_nouns 结构。
+D5. 待推进：出现已废弃字段 version 时提示用户删除，不再把它当作规则集版本。
+D6. 待推进：普通外部服务被配置为数据组时记录 warning。
+```
+
+下一步实施建议：
+
+```text
+先补文档和测试用例，明确所有错误信息。
+再在 config_utils.py 中新增 fpa_config 校验函数，供 CLI / Web / pipeline 复用。
+最后接入 Web 预览和正式生成入口，保证错误在调用 AI 前返回。
 ```
 
 ### E. 领域上下文
