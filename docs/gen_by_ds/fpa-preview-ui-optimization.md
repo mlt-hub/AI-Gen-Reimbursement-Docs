@@ -8,6 +8,8 @@ FPA 预览页用于在生成完整文档前，按三级模块查看生成出的 
 
 术语以《生成结果审阅术语规范》为准：[`result-review-terminology.md`](./result-review-terminology.md)。
 
+FPA Prompt 来源、配置缺失处理和代码内置 Prompt 兜底策略以 [`fpa-prompt-configuration.md`](./fpa-prompt-configuration.md) 为准。
+
 ---
 
 ## 当前问题
