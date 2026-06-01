@@ -2068,7 +2068,7 @@ row_tag
 后续增强事项当前暂缓推进。完整任务池和恢复推进指令统一记录在：
 
 ```text
-docs/dev/gen-fpa-implementation-notes.md
+docs/fpa/gen-fpa-implementation-notes.md
 ```
 
 对应章节：

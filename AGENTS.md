@@ -18,7 +18,7 @@
 
 ## Result Review Terminology
 
-涉及 FPA、COSMIC 或其他生成结果的预览、审阅、修改页面时，必须先查阅并遵循 [`docs/gen_by_ds/result-review-terminology.md`](docs/gen_by_ds/result-review-terminology.md)。
+涉及 FPA、COSMIC 或其他生成结果的预览、审阅、修改页面时，必须先查阅并遵循 [`docs/fpa/result-review-terminology.md`](docs/fpa/result-review-terminology.md)。
 
 - 用户可见文案必须优先使用该文档中的业务域术语映射。
 - FPA 相关页面固定使用 `新增/修改功能点`、`类型`、`计算依据归类`、`计算依据说明`、`生成方式`。
