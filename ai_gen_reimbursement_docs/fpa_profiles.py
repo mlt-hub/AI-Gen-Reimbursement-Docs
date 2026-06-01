@@ -1,6 +1,6 @@
 """FPA 规划口径策略。
 
-每套 profile 自己提供 prompt、兜底拆分、类型推断和冲突判断，
+每套 profile 自己提供兜底拆分、类型推断和冲突判断，
 避免把多套口径分支散落到 gen_fpa.py 主流程中。
 """
 
@@ -179,20 +179,15 @@ def _render_configured_fpa_prompt(
     judgement_rules: list[str],
     domain_context: dict[str, object] | None = None,
 ) -> str:
-    try:
-        import json
-        from ai_gen_reimbursement_docs.config_utils import load_fpa_user_prompt_template
+    import json
+    from ai_gen_reimbursement_docs.config_utils import load_fpa_user_prompt_template
 
-        template = load_fpa_user_prompt_template(profile_name)
-        if not template:
-            return ""
-        return Template(template).safe_substitute({
-            "core_rules": core_rules,
-            "judgement_rules": _numbered_judgement_rules(judgement_rules),
-            "payload_json": json.dumps(_prompt_payload(group, domain_context), ensure_ascii=False, indent=2),
-        })
-    except Exception:
-        return ""
+    template = load_fpa_user_prompt_template(profile_name)
+    return Template(template).safe_substitute({
+        "core_rules": core_rules,
+        "judgement_rules": _numbered_judgement_rules(judgement_rules),
+        "payload_json": json.dumps(_prompt_payload(group, domain_context), ensure_ascii=False, indent=2),
+    })
 
 
 def _external_rule_from_dict(item: dict[str, object]) -> ExternalDataGroupRule | None:
@@ -426,27 +421,7 @@ class CustomRulesProfile:
         judgement_rules: list[str],
         domain_context: dict[str, object] | None = None,
     ) -> str:
-        import json
-
-        configured_prompt = _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
-        if configured_prompt:
-            return configured_prompt
-        numbered_rules = _numbered_judgement_rules(judgement_rules)
-        payload = _prompt_payload(group, domain_context)
-        return (
-            f"{self.core_rules}\n\n"
-            f"计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：\n{numbered_rules}\n\n"
-            "请以三级模块为单位规划 FPA 行：\n"
-            "1. 默认生成 1 条三级模块级界面开发行，覆盖同一页面内的列表、查询条件、按钮、弹窗和状态组件。\n"
-            "2. 非界面逻辑按功能动作拆分，一行一个动作。\n"
-            "3. 不要为数据库表、字段、保存表动作单独生成行。\n"
-            "4. 如果确实需要多条界面开发行，每条都必须给出 split_reason。\n\n"
-            f"模块输入 JSON：\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n\n"
-            "请直接输出 JSON，不要输出其他内容。格式：\n"
-            '{"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>",'
-            '"classification_basis_index":1,"explanation":"<计算依据说明>",'
-            '"source_processes":["<功能过程名称>"],"split_reason":"<多界面拆分理由，可空>"}]}'
-        )
+        return _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
 
 
 @dataclass(frozen=True)
@@ -575,27 +550,7 @@ class StrictFpaProfile(CustomRulesProfile):
         judgement_rules: list[str],
         domain_context: dict[str, object] | None = None,
     ) -> str:
-        import json
-
-        configured_prompt = _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
-        if configured_prompt:
-            return configured_prompt
-        numbered_rules = _numbered_judgement_rules(judgement_rules)
-        payload = _prompt_payload(group, domain_context)
-        return (
-            f"{self.core_rules}\n\n"
-            f"计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：\n{numbered_rules}\n\n"
-            "请以严格 FPA 口径规划本三级模块的 FPA 行：\n"
-            "1. 先识别数据功能：本系统维护的数据组为 ILF，外部维护且本系统引用的数据组为 EIF。\n"
-            "2. 再识别事务功能：新增/修改/删除/保存/提交/审批/导入为 EI，查询/查看/详情为 EQ，导出/报表/下载文件为 EO。\n"
-            "3. 禁止输出界面开发、接口开发、逻辑处理开发、按钮、弹窗、数据库表或字段行。\n"
-            "4. 普通外部服务调用不要直接输出 EIF，除非明确引用外部维护的数据组。\n\n"
-            f"模块输入 JSON：\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n\n"
-            "请直接输出 JSON，不要输出其他内容。格式：\n"
-            '{"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>",'
-            '"classification_basis_index":1,"explanation":"<计算依据说明>",'
-            '"source_processes":["<功能过程名称>"],"split_reason":""}]}'
-        )
+        return _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
 
     def _is_external_data_group(self, text: str) -> bool:
         if any(k in text for k in EXTERNAL_DATA_NEGATION_HINTS):

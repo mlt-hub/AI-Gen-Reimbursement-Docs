@@ -185,11 +185,17 @@
                 {{ result.debug.error }}
               </div>
               <div v-if="result.debug.system_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="font-semibold text-[var(--color-ink)]">系统提示词</div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-semibold text-[var(--color-ink)]">系统提示词</span>
+                  <span class="text-[var(--color-ink-soft)]">{{ result.debug.system_prompt_source || '未配置' }}</span>
+                </div>
                 <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.system_prompt }}</pre>
               </div>
               <div v-if="result.debug.user_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="font-semibold text-[var(--color-ink)]">用户提示词</div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-semibold text-[var(--color-ink)]">用户提示词</span>
+                  <span class="text-[var(--color-ink-soft)]">{{ result.debug.user_prompt_source || '未配置' }}</span>
+                </div>
                 <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.user_prompt }}</pre>
               </div>
               <div v-if="result.debug.ai_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
@@ -242,7 +248,9 @@ interface FpaPreviewDebug {
   reason?: string
   model?: string
   system_prompt: string
+  system_prompt_source: string
   user_prompt: string
+  user_prompt_source: string
   ai_prompt: string
   raw_response: string
   thinking: string

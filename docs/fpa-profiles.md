@@ -258,25 +258,25 @@ config/fpa_user_prompts_config.yaml.example
 可分别配置：
 
 ```text
-fpa_eval.user_templates.custom_rules
-fpa_eval.user_templates.strict_fpa
+custom_rules.fpa_eval
+strict_fpa.fpa_eval
 ```
 
-如果未配置，系统会使用 `fpa_profiles.py` 中的内置模板兜底。
+如果未配置，FPA AI 预览和正式生成都会直接报错，不使用 `fpa_profiles.py` 中的内置模板兜底。
 
 ### 配置结构
 
 ```yaml
-fpa_eval:
-  user_templates:
-    custom_rules: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
-    strict_fpa: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
+custom_rules:
+  fpa_eval: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
+strict_fpa:
+  fpa_eval: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
 ```
 
 ### 占位符
@@ -299,7 +299,7 @@ custom_rules 和 strict_fpa 是两套不同口径，建议分别维护模板。
 修改提示词后，先通过 `/preview/fpa` 检查 1 到 3 个典型三级模块。
 建议保留三个核心占位符，否则 AI 可能缺少规则、判定依据或业务输入。
 不要随意修改输出 JSON 字段结构；如确需修改，需要同步修改解析逻辑和测试。
-独立配置文件缺失、读取失败或 profile 未配置模板时，系统会自动回退到内置模板。
+独立配置文件缺失、读取失败或 profile 未配置模板时，系统会直接报错，不降级。
 ```
 
 ## 预览建议

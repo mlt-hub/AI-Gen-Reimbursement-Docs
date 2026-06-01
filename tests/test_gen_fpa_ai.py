@@ -4,6 +4,7 @@ import json
 import openpyxl
 import pytest
 
+from ai_gen_reimbursement_docs.config_utils import FpaPromptConfigError
 from ai_gen_reimbursement_docs.gen_fpa import (
     _extract_json_obj,
     _group_rows_for_audit,
@@ -43,6 +44,37 @@ def _rows():
             "功能过程描述": "按行业名称查询垂直行业列表。",
         },
     ]
+
+
+def _write_fpa_prompt_config(tmp_path, monkeypatch):
+    (tmp_path / "ai_system_prompts_config.yaml").write_text(
+        """
+ai_prompts:
+  fpa_eval:
+    system: 系统提示词
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "fpa_user_prompts_config.yaml").write_text(
+        """
+custom_rules:
+  fpa_eval: |-
+    ${core_rules}
+    模块输入 JSON：
+    ${payload_json}
+    判定原则：
+    ${judgement_rules}
+strict_fpa:
+  fpa_eval: |-
+    ${core_rules}
+    模块输入 JSON：
+    ${payload_json}
+    判定原则：
+    ${judgement_rules}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: tmp_path)
 
 
 def test_fpa_audit_grouping_prefers_source_process_over_l3_substring():
@@ -287,7 +319,8 @@ def test_keyword_type_fallbacks():
     assert CUSTOM_RULES_PROFILE.infer_type("引用统一用户中心账号-外部接口处理开发")[0] == "EIF"
 
 
-def test_ai_parse_failure_falls_back(monkeypatch, caplog):
+def test_ai_parse_failure_falls_back(monkeypatch, tmp_path, caplog):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
     monkeypatch.setattr(
         "ai_gen_reimbursement_docs.gen_fpa._call_llm",
         lambda *args, **kwargs: "这里不是 JSON",
@@ -306,6 +339,25 @@ def test_ai_parse_failure_falls_back(monkeypatch, caplog):
     assert any("FPA AI 响应解析失败" in r.message for r in caplog.records)
 
 
+def test_missing_fpa_prompt_config_does_not_fall_back(monkeypatch, tmp_path):
+    monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: pytest.fail("missing prompt config must stop before LLM call"),
+    )
+
+    with pytest.raises(FpaPromptConfigError, match="未找到 FPA 系统提示词配置"):
+        _plan_fpa_rows_with_ai(
+            _rows(),
+            _meta(),
+            ["规则一"],
+            api_key="sk-test",
+            model="test",
+            base_url="",
+            strategy="ai_first",
+        )
+
+
 def test_ai_first_requires_api_key():
     with pytest.raises(ValueError, match="需要 API Key"):
         _plan_fpa_rows_with_ai(
@@ -321,6 +373,7 @@ def test_ai_first_requires_api_key():
 
 
 def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
     xlsx = tmp_path / "功能清单.xlsx"
     xlsx.write_bytes(b"placeholder")
     response = {
@@ -339,11 +392,6 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
         "ai_gen_reimbursement_docs.gen_fpa.read_base_data_from_excel",
         lambda path: {"tree_rows": _rows(), "meta": _meta()},
     )
-    monkeypatch.setattr(
-        "ai_gen_reimbursement_docs.config_utils.load_ai_system_prompt",
-        lambda name: "系统提示词",
-    )
-
     def fake_call_llm(*args, **kwargs):
         assert kwargs.get("return_thinking") is True
         return json.dumps(response, ensure_ascii=False), "思考过程"
@@ -363,6 +411,8 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["ai_called"] is True
     assert debug["model"] == "test-model"
     assert debug["system_prompt"] == "系统提示词"
+    assert debug["system_prompt_source"] == "用户配置（配置目录/ai_system_prompts_config.yaml）"
+    assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_user_prompts_config.yaml）"
     assert "垂直行业管理" in debug["user_prompt"]
     assert "[system]" in debug["ai_prompt"]
     assert "垂直行业数据维护" in debug["raw_response"]
@@ -372,6 +422,7 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
 
 
 def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
     cache_path = tmp_path / "fpa_ai_cache.json"
     audit_trace_path = tmp_path / "fpa_audit_trace.json"
     response = {

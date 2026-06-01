@@ -21,6 +21,9 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_check_columns,
     load_fpa_rule_sets_config,
     load_fpa_external_data_rules,
+    FpaPromptConfigError,
+    load_fpa_system_prompt_config,
+    load_fpa_user_prompt_config,
     load_fpa_user_prompt_template,
     load_model_name,
     log_api_key_resolution,
@@ -285,24 +288,54 @@ fpa_external_data_rules:
 
 
 class TestLoadFpaUserPromptTemplate:
-    def test_default_template_empty_when_not_configured(self):
+    def test_missing_template_raises_when_not_configured(self):
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=Path("/nonexistent")):
-            assert load_fpa_user_prompt_template("strict_fpa") == ""
+            with pytest.raises(FpaPromptConfigError, match="未找到 FPA 用户提示词配置"):
+                load_fpa_user_prompt_template("strict_fpa")
 
     def test_configured_template(self, tmp_path):
         yaml_file = tmp_path / "fpa_user_prompts_config.yaml"
         yaml_file.write_text(
             """
-fpa_eval:
-  user_templates:
-    strict_fpa: |-
-      STRICT ${core_rules}
+strict_fpa:
+  fpa_eval: |-
+    STRICT ${core_rules}
 """,
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_user_prompt_template("strict_fpa") == "STRICT ${core_rules}"
+
+    def test_configured_template_exposes_safe_source_label(self, tmp_path):
+        (tmp_path / "fpa_user_prompts_config.yaml").write_text(
+            """
+strict_fpa:
+  fpa_eval: |-
+    STRICT ${core_rules}
+""",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            result = load_fpa_user_prompt_config("strict_fpa")
+
+        assert result.text == "STRICT ${core_rules}"
+        assert result.source_label == "用户配置（配置目录/fpa_user_prompts_config.yaml）"
+
+    def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
+        (tmp_path / "ai_system_prompts_config.yaml").write_text(
+            """
+ai_prompts:
+  fpa_eval:
+    system: 系统提示词
+""",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            result = load_fpa_system_prompt_config("fpa_eval")
+
+        assert result.text == "系统提示词"
+        assert result.source_label == "用户配置（配置目录/ai_system_prompts_config.yaml）"
 
 
 class TestLoadModelName:

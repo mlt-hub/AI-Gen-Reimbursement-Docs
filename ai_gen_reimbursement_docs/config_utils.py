@@ -102,6 +102,18 @@ class ApiKeyResolution:
         return f"configured, source={self.source}, fingerprint={self.fingerprint}"
 
 
+@dataclass(frozen=True)
+class PromptConfig:
+    """Prompt text plus user-safe source metadata."""
+
+    text: str
+    source_label: str
+
+
+class FpaPromptConfigError(ValueError):
+    """Raised when required FPA prompt configuration is missing or invalid."""
+
+
 def api_key_fingerprint(api_key: str, length: int = 12) -> str:
     """Return a short irreversible fingerprint for log correlation."""
     key = api_key.strip()
@@ -586,20 +598,58 @@ def load_ai_examples(name: str) -> str:
         return ""
 
 
+def _user_config_source_label(filename: str) -> str:
+    return f"用户配置（配置目录/{filename}）"
+
+
+def _load_yaml_file(yaml_path: Path) -> dict:
+    import yaml
+
+    with open(yaml_path, 'r', encoding='utf-8') as f:
+        cfg = yaml.safe_load(f) or {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def load_fpa_system_prompt_config(scene: str = "fpa_eval") -> PromptConfig:
+    """严格读取 FPA system prompt 配置，缺失时直接报错。"""
+    filename = "ai_system_prompts_config.yaml"
+    yaml_path = config_dir() / filename
+    key_path = f"ai_prompts.{scene}.system"
+    if not yaml_path.exists():
+        raise FpaPromptConfigError(f"未找到 FPA 系统提示词配置：配置目录/{filename} 中的 {key_path}")
+    try:
+        cfg = _load_yaml_file(yaml_path)
+    except Exception as exc:
+        raise FpaPromptConfigError(f"读取 FPA 系统提示词配置失败：配置目录/{filename}") from exc
+    prompts = cfg.get("ai_prompts", {})
+    scene_config = prompts.get(scene, {}) if isinstance(prompts, dict) else {}
+    val = scene_config.get("system", "") if isinstance(scene_config, dict) else ""
+    if not isinstance(val, str) or not val.strip():
+        raise FpaPromptConfigError(f"未找到 FPA 系统提示词配置：配置目录/{filename} 中的 {key_path}")
+    return PromptConfig(text=val, source_label=_user_config_source_label(filename))
+
+
+def load_fpa_user_prompt_config(profile_name: str, scene: str = "fpa_eval") -> PromptConfig:
+    """严格读取 FPA user prompt 模板配置，缺失时直接报错。"""
+    filename = "fpa_user_prompts_config.yaml"
+    yaml_path = config_dir() / filename
+    key_path = f"{profile_name}.{scene}"
+    if not yaml_path.exists():
+        raise FpaPromptConfigError(f"未找到 FPA 用户提示词配置：配置目录/{filename} 中的 {key_path}")
+    try:
+        cfg = _load_yaml_file(yaml_path)
+    except Exception as exc:
+        raise FpaPromptConfigError(f"读取 FPA 用户提示词配置失败：配置目录/{filename}") from exc
+    profile_config = cfg.get(profile_name, {})
+    val = profile_config.get(scene, "") if isinstance(profile_config, dict) else ""
+    if not isinstance(val, str) or not val.strip():
+        raise FpaPromptConfigError(f"未找到 FPA 用户提示词配置：配置目录/{filename} 中的 {key_path}")
+    return PromptConfig(text=val, source_label=_user_config_source_label(filename))
+
+
 def load_fpa_user_prompt_template(profile_name: str, scene: str = "fpa_eval") -> str:
     """从 fpa_user_prompts_config.yaml 读取 FPA 用户提示词模板。"""
-    yaml_path = config_dir() / "fpa_user_prompts_config.yaml"
-    if not yaml_path.exists():
-        return ""
-    try:
-        import yaml
-        with open(yaml_path, 'r', encoding='utf-8') as f:
-            cfg = yaml.safe_load(f) or {}
-        templates = cfg.get(scene, {}).get("user_templates", {})
-        val = templates.get(profile_name, "")
-        return val if isinstance(val, str) else ""
-    except Exception:
-        return ""
+    return load_fpa_user_prompt_config(profile_name, scene).text
 
 
 def migrate_config() -> None:

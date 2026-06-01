@@ -295,7 +295,7 @@ AI 输出要求为 JSON：
 | 内容 | 当前来源 | 维护方式 |
 |---|---|---|
 | 系统提示词 | `~/.ai-gen-reimbursement-docs/ai_system_prompts_config.yaml` 中的 `ai_prompts.fpa_eval.system` | 配置文件 |
-| 用户提示词模板 | `~/.ai-gen-reimbursement-docs/fpa_user_prompts_config.yaml` 中的 `fpa_eval.user_templates.<profile>` | 独立配置文件；缺失时使用 profile 内置模板 |
+| 用户提示词模板 | `~/.ai-gen-reimbursement-docs/fpa_user_prompts_config.yaml` 中的 `<profile>.fpa_eval` | 独立配置文件；缺失时报错 |
 | FPA 核心规则 | `fpa_profiles.py` 中的 `CUSTOM_RULES_CORE_RULES` / `STRICT_FPA_CORE_RULES` | 代码 |
 | 领域上下文 | `gen_fpa.py` 的 `_build_domain_context(meta)` 从元数据 MD 提取 | 代码 + Excel/MD 数据 |
 | 功能过程上下文 | `parse_module_tree_md()` 读取模块树 MD 后按三级模块聚合 | Excel -> MD -> 代码 |
@@ -309,7 +309,7 @@ AI 输出要求为 JSON：
 读取方式：
 
 ```python
-load_ai_system_prompt("fpa_eval")
+load_fpa_system_prompt_config("fpa_eval")
 ```
 
 配置文件：
@@ -318,7 +318,7 @@ load_ai_system_prompt("fpa_eval")
 ~/.ai-gen-reimbursement-docs/ai_system_prompts_config.yaml
 ```
 
-如果配置文件中没有 `fpa_eval.system`，代码会使用内置默认系统提示词。
+如果配置文件中没有 `ai_prompts.fpa_eval.system`，FPA AI 预览和正式生成都会直接报错。
 
 ### 用户提示词
 
@@ -337,16 +337,16 @@ config/fpa_user_prompts_config.yaml.example
 当前支持按 profile 配置：
 
 ```yaml
-fpa_eval:
-  user_templates:
-    custom_rules: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
-    strict_fpa: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
+custom_rules:
+  fpa_eval: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
+strict_fpa:
+  fpa_eval: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
 ```
 
 可用占位符：
@@ -357,34 +357,34 @@ ${judgement_rules}
 ${payload_json}
 ```
 
-如果独立配置文件不存在、profile 未配置模板或读取失败，代码会回退到 `fpa_profiles.py` 中的内置模板。
+如果独立配置文件不存在、profile 未配置模板或读取失败，FPA AI 预览和正式生成都会直接报错。
 
 #### 独立配置文件结构
 
 ```yaml
-fpa_eval:
-  user_templates:
-    custom_rules: |-
-      ${core_rules}
+custom_rules:
+  fpa_eval: |-
+    ${core_rules}
 
-      计算依据归类判定原则列表：
-      ${judgement_rules}
+    计算依据归类判定原则列表：
+    ${judgement_rules}
 
-      模块输入 JSON：
-      ${payload_json}
+    模块输入 JSON：
+    ${payload_json}
 
-      请直接输出 JSON，不要输出其他内容。
+    请直接输出 JSON，不要输出其他内容。
 
-    strict_fpa: |-
-      ${core_rules}
+strict_fpa:
+  fpa_eval: |-
+    ${core_rules}
 
-      计算依据归类判定原则列表：
-      ${judgement_rules}
+    计算依据归类判定原则列表：
+    ${judgement_rules}
 
-      模块输入 JSON：
-      ${payload_json}
+    模块输入 JSON：
+    ${payload_json}
 
-      请直接输出 JSON，不要输出其他内容。
+    请直接输出 JSON，不要输出其他内容。
 ```
 
 #### 占位符含义
@@ -403,9 +403,9 @@ ${payload_json}
 #### 兜底与风险边界
 
 ```text
-fpa_user_prompts_config.yaml 不存在 -> 使用 profile 内置模板。
-profile 未配置模板 -> 使用 profile 内置模板。
-配置文件读取失败 -> 使用 profile 内置模板。
+fpa_user_prompts_config.yaml 不存在 -> 报错。
+profile 未配置模板 -> 报错。
+配置文件读取失败 -> 报错。
 未知占位符 -> 原样保留，不中断任务。
 ```
 

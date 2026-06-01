@@ -47,6 +47,16 @@ FPA_PROFILE = CUSTOM_RULES_PROFILE
 RULE_HITS_KEY = "_规则命中详情"
 
 
+@dataclass(frozen=True)
+class FpaPromptContext:
+    """Rendered FPA prompts plus user-safe source labels."""
+
+    system_prompt: str
+    user_prompt: str
+    system_prompt_source: str
+    user_prompt_source: str
+
+
 @dataclass
 class FpaAuditReport:
     """FPA 预览/审核的结构化信息。"""
@@ -659,15 +669,18 @@ def _build_fpa_ai_prompt_context(
     judgement_rules: list[str],
     domain_context: dict[str, object] | None,
     profile: CustomRulesProfile = FPA_PROFILE,
-) -> tuple[str, str]:
-    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
+) -> FpaPromptContext:
+    from ai_gen_reimbursement_docs.config_utils import load_fpa_system_prompt_config, load_fpa_user_prompt_config
 
-    system_prompt = load_ai_system_prompt("fpa_eval") or (
-        "你是一个严谨的 FPA 功能点评估助手。必须按用户给定的项目 FPA 核心口径规划行，"
-        "只输出合法 JSON。"
-    )
+    system_config = load_fpa_system_prompt_config("fpa_eval")
+    user_config = load_fpa_user_prompt_config(profile.name, "fpa_eval")
     prompt = profile.build_prompt(group, judgement_rules, domain_context)
-    return system_prompt, prompt
+    return FpaPromptContext(
+        system_prompt=system_config.text,
+        user_prompt=prompt,
+        system_prompt_source=system_config.source_label,
+        user_prompt_source=user_config.source_label,
+    )
 
 
 def _ai_plan_fpa_rows_for_l3_debug(
@@ -680,22 +693,24 @@ def _ai_plan_fpa_rows_for_l3_debug(
     profile: CustomRulesProfile = FPA_PROFILE,
 ) -> tuple[list[dict[str, object]], dict[str, object]]:
     """调用 AI 规划一个三级模块的 FPA 行，并返回 Web 预览调试信息。"""
-    system_prompt, prompt = _build_fpa_ai_prompt_context(
+    prompt_context = _build_fpa_ai_prompt_context(
         group, judgement_rules, domain_context, profile
     )
     debug: dict[str, object] = {
         "ai_called": True,
         "model": model,
-        "system_prompt": system_prompt,
-        "user_prompt": prompt,
-        "ai_prompt": f"[system]\n{system_prompt}\n\n[user]\n{prompt}",
+        "system_prompt": prompt_context.system_prompt,
+        "system_prompt_source": prompt_context.system_prompt_source,
+        "user_prompt": prompt_context.user_prompt,
+        "user_prompt_source": prompt_context.user_prompt_source,
+        "ai_prompt": f"[system]\n{prompt_context.system_prompt}\n\n[user]\n{prompt_context.user_prompt}",
         "raw_response": "",
         "thinking": "",
         "parsed_rows": [],
     }
     resp, thinking = _call_llm(
-        prompt,
-        system_prompt,
+        prompt_context.user_prompt,
+        prompt_context.system_prompt,
         api_key,
         model,
         base_url,
@@ -727,12 +742,12 @@ def _ai_plan_fpa_rows_for_l3(
     profile: CustomRulesProfile = FPA_PROFILE,
 ) -> list[dict[str, object]]:
     """调用 AI 规划一个三级模块的 FPA 行，返回原始 AI rows。"""
-    system_prompt, prompt = _build_fpa_ai_prompt_context(
+    prompt_context = _build_fpa_ai_prompt_context(
         group, judgement_rules, domain_context, profile
     )
     resp = _call_llm(
-        prompt,
-        system_prompt,
+        prompt_context.user_prompt,
+        prompt_context.system_prompt,
         api_key,
         model,
         base_url,
@@ -766,6 +781,8 @@ def _fpa_ai_cache_key(
     strategy: str = "",
     rule_set: str = "",
     rule_set_version: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
 ) -> str:
     payload = {
         "profile": profile.name,
@@ -774,6 +791,8 @@ def _fpa_ai_cache_key(
         "rule_set": rule_set,
         "rule_set_version": rule_set_version,
         "core_rules": profile.core_rules,
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
         "domain_context": domain_context,
         "group": group,
         "judgement_rules": judgement_rules,
@@ -1051,7 +1070,7 @@ def _plan_fpa_rows_with_execution(
     if not api_key:
         raise ValueError(f"FPA strategy={strategy} 需要 API Key，当前未配置")
 
-    from ai_gen_reimbursement_docs.config_utils import load_flow_max_ai, load_gen_fpa_ai_limit
+    from ai_gen_reimbursement_docs.config_utils import FpaPromptConfigError, load_flow_max_ai, load_gen_fpa_ai_limit
 
     max_ai = load_flow_max_ai("gen_fpa")
     module_limit = load_gen_fpa_ai_limit()
@@ -1087,12 +1106,17 @@ def _plan_fpa_rows_with_execution(
             })
             continue
 
+        prompt_context = _build_fpa_ai_prompt_context(
+            group, judgement_rules, domain_context, profile
+        )
         cache_key = _fpa_ai_cache_key(
             group, judgement_rules, domain_context, model,
             profile=profile,
             strategy=strategy,
             rule_set=rule_set,
             rule_set_version=rule_set_version,
+            system_prompt=prompt_context.system_prompt,
+            user_prompt=prompt_context.user_prompt,
         )
         cached = cache_entries.get(cache_key) if cache_path else None
         if isinstance(cached, dict) and isinstance(cached.get("rows"), list):
@@ -1184,6 +1208,8 @@ def _plan_fpa_rows_with_execution(
                 "warnings": warnings,
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
+        except FpaPromptConfigError:
+            raise
         except Exception as exc:
             if strategy == "ai_only":
                 raise
@@ -2006,7 +2032,9 @@ def preview_fpa_module(
             "reason": execution.strategy,
             "model": model,
             "system_prompt": "",
+            "system_prompt_source": "未配置",
             "user_prompt": "",
+            "user_prompt_source": "未配置",
             "ai_prompt": "",
             "raw_response": "",
             "thinking": "",
@@ -2047,9 +2075,13 @@ def preview_fpa_module(
                 if not fpa_rows:
                     raise ValueError("AI 规划未生成有效 FPA 行")
         except Exception as exc:
+            from ai_gen_reimbursement_docs.config_utils import FpaPromptConfigError
+
             if isinstance(exc, FpaAiDebugError):
                 debug = exc.debug
             debug["error"] = str(exc)
+            if isinstance(exc, FpaPromptConfigError):
+                raise
             if execution.strategy == "ai_only" or not api_key:
                 raise
             used_ai = False

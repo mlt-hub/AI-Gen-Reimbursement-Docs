@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch
 
+from ai_gen_reimbursement_docs.config_utils import FpaPromptConfigError
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
@@ -9,6 +10,32 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     set_current_fpa_rule_set_config,
     reset_current_fpa_rule_set_config,
 )
+
+
+def _write_fpa_user_prompts(tmp_path):
+    (tmp_path / "fpa_user_prompts_config.yaml").write_text(
+        """
+custom_rules:
+  fpa_eval: |-
+    自定义 custom 模板
+    ${core_rules}
+    CUSTOM_RULES:
+    ${judgement_rules}
+    PAYLOAD:
+    ${payload_json}
+strict_fpa:
+  fpa_eval: |-
+    自定义 strict 模板
+    ${core_rules}
+    RULES:
+    ${judgement_rules}
+    PAYLOAD:
+    ${payload_json}
+    UNKNOWN:
+    ${unknown_placeholder}
+""",
+        encoding="utf-8",
+    )
 
 
 def test_default_profile_is_custom_rules():
@@ -95,56 +122,42 @@ rule_sets:
     assert "外部系统维护" in reason
 
 
-def test_custom_rules_prompt_contains_profile_rules():
-    prompt = CUSTOM_RULES_PROFILE.build_prompt(
-        {
-            "client_type": "后台",
-            "l1": "业务",
-            "l2": "管理",
-            "l3": "客户管理",
-            "processes": [],
-        },
-        ["规则一"],
-    )
+def test_custom_rules_prompt_is_rendered_from_config(tmp_path):
+    _write_fpa_user_prompts(tmp_path)
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        prompt = CUSTOM_RULES_PROFILE.build_prompt(
+            {
+                "client_type": "后台",
+                "l1": "业务",
+                "l2": "管理",
+                "l3": "客户管理",
+                "processes": [],
+            },
+            ["规则一"],
+        )
 
     assert CUSTOM_RULES_PROFILE.core_rules in prompt
-    assert "默认生成 1 条三级模块级界面开发行" in prompt
+    assert "自定义 custom 模板" in prompt
+    assert "1) 规则一" in prompt
 
 
-def test_strict_prompt_forbids_development_work_items():
-    prompt = STRICT_FPA_PROFILE.build_prompt(
-        {
-            "client_type": "后台",
-            "l1": "业务",
-            "l2": "管理",
-            "l3": "客户管理",
-            "processes": [],
-        },
-        ["规则一"],
-    )
-
-    assert STRICT_FPA_PROFILE.core_rules in prompt
-    assert "禁止输出界面开发、接口开发、逻辑处理开发" in prompt
+def test_missing_fpa_user_prompt_config_raises(tmp_path):
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        with pytest.raises(FpaPromptConfigError, match="未找到 FPA 用户提示词配置"):
+            STRICT_FPA_PROFILE.build_prompt(
+                {
+                    "client_type": "后台",
+                    "l1": "业务",
+                    "l2": "管理",
+                    "l3": "客户管理",
+                    "processes": [],
+                },
+                ["规则一"],
+            )
 
 
 def test_fpa_user_prompt_template_can_be_loaded_from_separate_config(tmp_path):
-    yaml_file = tmp_path / "fpa_user_prompts_config.yaml"
-    yaml_file.write_text(
-        """
-fpa_eval:
-  user_templates:
-    strict_fpa: |-
-      自定义 strict 模板
-      ${core_rules}
-      RULES:
-      ${judgement_rules}
-      PAYLOAD:
-      ${payload_json}
-      UNKNOWN:
-      ${unknown_placeholder}
-""",
-        encoding="utf-8",
-    )
+    _write_fpa_user_prompts(tmp_path)
 
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         prompt = STRICT_FPA_PROFILE.build_prompt(
