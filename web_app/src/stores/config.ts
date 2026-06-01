@@ -7,7 +7,7 @@ export type PipelineMode = 'from-excel-gen-all' | 'from-excel-gen-basedata' |
   'from-excel-gen-fpa' | 'from-excel-gen-cosmic' |
   'from-excel-gen-list' | 'from-excel-gen-spec'
 
-// ── localStorage 持久化 ───────────────────────────────────
+// ── 浏览器端配置持久化 ───────────────────────────────────
 
 function loadStr(key: string, fallback: string): string {
   try { return localStorage.getItem(key) ?? fallback } catch { return fallback }
@@ -26,6 +26,21 @@ function loadBool(key: string, fallback: boolean): boolean {
 
 function saveBool(key: string, val: boolean) {
   try { localStorage.setItem(key, String(val)) } catch { /* 忽略 */ }
+}
+
+function loadSessionStr(key: string, fallback: string): string {
+  try { return sessionStorage.getItem(key) ?? fallback } catch { return fallback }
+}
+
+function saveSessionStr(key: string, val: string) {
+  try {
+    if (val) sessionStorage.setItem(key, val)
+    else sessionStorage.removeItem(key)
+  } catch { /* 忽略 */ }
+}
+
+function removeLocalStr(key: string) {
+  try { localStorage.removeItem(key) } catch { /* 忽略 */ }
 }
 
 const API_KEY_PLACEHOLDERS = new Set([
@@ -49,7 +64,6 @@ export function normalizeApiKeyInput(value: string): string {
 // ── 导出/导入 ─────────────────────────────────────────────
 
 export interface UserSettings {
-  apiKey: string
   model: string
   baseUrl: string
   maxTokens: string
@@ -61,13 +75,19 @@ export interface UserSettings {
   clean: boolean
 }
 
+interface ImportedUserSettings extends Partial<UserSettings> {
+  apiKey?: string
+}
+
 export const useConfigStore = defineStore('config', () => {
+  removeLocalStr('apiKey')
+
   const workMode = ref<WorkMode>('local')
   const backendStatus = ref<BackendStatus>('checking')
   const pipelineMode = ref<PipelineMode>(loadStr('pipelineMode', 'from-excel-gen-all') as PipelineMode)
   const xlsxPath = ref('')
   const outputDir = ref('')
-  const apiKey = ref(normalizeApiKeyInput(loadStr('apiKey', '')))
+  const apiKey = ref(normalizeApiKeyInput(loadSessionStr('apiKey', '')))
   const model = ref(loadStr('model', ''))
   const baseUrl = ref(loadStr('baseUrl', ''))
   const maxTokens = ref(loadStr('maxTokens', ''))
@@ -79,7 +99,7 @@ export const useConfigStore = defineStore('config', () => {
   const selectedFile = ref<File | null>(null)
 
   // ── 自动持久化 ──
-  watch(apiKey, v => saveStr('apiKey', normalizeApiKeyInput(v)))
+  watch(apiKey, v => saveSessionStr('apiKey', normalizeApiKeyInput(v)))
   watch(model, v => saveStr('model', v))
   watch(baseUrl, v => saveStr('baseUrl', v))
   watch(maxTokens, v => saveStr('maxTokens', v))
@@ -113,7 +133,6 @@ export const useConfigStore = defineStore('config', () => {
   /** 导出用户设置为 JSON 字符串。 */
   function exportSettings(): string {
     const data: UserSettings = {
-      apiKey: normalizeApiKeyInput(apiKey.value),
       model: model.value,
       baseUrl: baseUrl.value,
       maxTokens: maxTokens.value,
@@ -130,7 +149,7 @@ export const useConfigStore = defineStore('config', () => {
   /** 从 JSON 字符串导入用户设置。 */
   function importSettings(json: string) {
     try {
-      const data = JSON.parse(json) as Partial<UserSettings>
+      const data = JSON.parse(json) as ImportedUserSettings
       if (data.apiKey !== undefined) apiKey.value = normalizeApiKeyInput(data.apiKey)
       if (data.model !== undefined) model.value = data.model
       if (data.baseUrl !== undefined) baseUrl.value = data.baseUrl

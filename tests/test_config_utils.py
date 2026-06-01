@@ -1,5 +1,6 @@
 """配置加载单元测试 —— _get_system_config_value, load_max_tokens 等。"""
 import os
+import logging
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -8,6 +9,7 @@ import pytest
 from ai_gen_reimbursement_docs.config_utils import (
     _get_system_config_value,
     copy_default_config_files,
+    api_key_fingerprint,
     load_fpa_excel_recalc_check,
     load_max_tokens,
     load_cfp_formula,
@@ -21,6 +23,8 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_external_data_rules,
     load_fpa_user_prompt_template,
     load_model_name,
+    log_api_key_resolution,
+    resolve_api_key,
     _read_env_value,
 )
 
@@ -335,3 +339,78 @@ class TestReadEnvValue:
     def test_file_not_exists(self, tmp_path):
         result = _read_env_value("KEY", tmp_path / "nonexistent.env")
         assert result == ""
+
+
+class TestResolveApiKey:
+    def test_prefers_provided_key_and_uses_safe_fingerprint(self, caplog):
+        caplog.set_level(logging.INFO)
+        result = resolve_api_key(
+            " sk-session ",
+            provided_source="session_override",
+        )
+
+        assert result.value == "sk-session"
+        assert result.source == "session_override"
+        assert result.fingerprint == api_key_fingerprint("sk-session")
+        assert result.fingerprint.startswith("sha256:")
+        assert "sk-session" not in result.log_summary()
+
+        log_api_key_resolution(
+            logging.getLogger("ai_gen_reimbursement_docs.test"),
+            result,
+            context="unit",
+        )
+
+        assert "source=session_override" in caplog.text
+        assert result.fingerprint in caplog.text
+        assert "sk-session" not in caplog.text
+
+    def test_resolves_user_env_file_before_system_env_by_default(self, tmp_path):
+        (tmp_path / ".env").write_text(
+            "ANTHROPIC_API_KEY=sk-file\n",
+            encoding="utf-8",
+        )
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-env"}, clear=True):
+                result = resolve_api_key()
+
+        assert result.value == "sk-file"
+        assert result.source == "user_env_file"
+
+    def test_can_resolve_system_env_before_user_env(self, tmp_path):
+        (tmp_path / ".env").write_text(
+            "ANTHROPIC_API_KEY=sk-file\n",
+            encoding="utf-8",
+        )
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-env"}, clear=True):
+                result = resolve_api_key(override=False)
+
+        assert result.value == "sk-env"
+        assert result.source == "system_env"
+
+    def test_falls_back_to_config_json_source(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            with patch.dict(os.environ, {}, clear=True):
+                with patch("ai_gen_reimbursement_docs.config_utils._read_json_value",
+                           return_value="sk-json"):
+                    result = resolve_api_key()
+
+        assert result.value == "sk-json"
+        assert result.source == "config_json"
+
+    def test_missing_source_has_no_fingerprint(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            with patch.dict(os.environ, {}, clear=True):
+                with patch("ai_gen_reimbursement_docs.config_utils._read_json_value",
+                           return_value=""):
+                    result = resolve_api_key()
+
+        assert result.value == ""
+        assert result.source == "missing"
+        assert result.fingerprint == ""
+        assert result.log_summary() == "missing, source=missing"

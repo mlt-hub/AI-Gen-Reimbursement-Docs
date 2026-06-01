@@ -1,4 +1,5 @@
 import os
+import logging
 
 from fastapi import APIRouter, Form, HTTPException
 
@@ -15,13 +16,23 @@ async def test_prompt(data: dict):
         raise HTTPException(400, "系统提示词和用户提示词不能同时为空")
 
     from ai_gen_reimbursement_docs.config_utils import (
-        load_api_key,
         load_base_url,
         load_model_name,
+        log_api_key_resolution,
+        resolve_api_key,
     )
     from ai_gen_reimbursement_docs.llm_client import call_llm
 
-    api_key = data.get("api_key", "").strip() or load_api_key()
+    api_key_resolution = resolve_api_key(
+        data.get("api_key", ""),
+        provided_source="session_override",
+    )
+    log_api_key_resolution(
+        logging.getLogger("ai_gen_reimbursement_docs"),
+        api_key_resolution,
+        context="prompt_debug",
+    )
+    api_key = api_key_resolution.value
     model = data.get("model", "").strip() or load_model_name()
     base_url = data.get("base_url", "").strip() or load_base_url()
 
@@ -72,11 +83,18 @@ async def test_reliability_desc(xlsx_path: str = Form("")):
 
     from ai_gen_reimbursement_docs.config_utils import (
         load_ai_system_prompt,
-        load_api_key,
         load_sheet_names,
+        log_api_key_resolution,
+        resolve_api_key,
     )
 
-    api_key = load_api_key()
+    api_key_resolution = resolve_api_key()
+    log_api_key_resolution(
+        logging.getLogger("ai_gen_reimbursement_docs"),
+        api_key_resolution,
+        context="web_reliability_desc",
+    )
+    api_key = api_key_resolution.value
     if not api_key:
         raise HTTPException(400, "未配置 API Key，请先在配置页设置")
 
@@ -139,12 +157,19 @@ async def test_metadata(xlsx_path: str = Form(""), field_key: str = Form("")):
 
     from ai_gen_reimbursement_docs.config_utils import (
         load_ai_system_prompt,
-        load_api_key,
         load_sheet_names,
+        log_api_key_resolution,
+        resolve_api_key,
     )
     from ai_gen_reimbursement_docs.excel_source import strip_ai_marker
 
-    api_key = load_api_key()
+    api_key_resolution = resolve_api_key()
+    log_api_key_resolution(
+        logging.getLogger("ai_gen_reimbursement_docs"),
+        api_key_resolution,
+        context="web_metadata_test",
+    )
+    api_key = api_key_resolution.value
     if not api_key:
         raise HTTPException(400, "未配置 API Key")
 

@@ -1,9 +1,11 @@
 """Configuration utilities for loading API keys and settings."""
 
+import hashlib
 import json
 import logging
 import os
 import shutil
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -82,24 +84,104 @@ def _from_env_override(key: str, alt_path: Path, default: str = "") -> str:
     return os.environ.get(key, "")
 
 
+@dataclass(frozen=True)
+class ApiKeyResolution:
+    """Resolved API Key plus non-sensitive observability metadata."""
+
+    value: str
+    source: str
+    fingerprint: str
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.value)
+
+    def log_summary(self) -> str:
+        if not self.configured:
+            return "missing, source=missing"
+        return f"configured, source={self.source}, fingerprint={self.fingerprint}"
+
+
+def api_key_fingerprint(api_key: str, length: int = 12) -> str:
+    """Return a short irreversible fingerprint for log correlation."""
+    key = api_key.strip()
+    if not key:
+        return ""
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return f"sha256:{digest[:length]}"
+
+
+def resolve_api_key(
+    provided: str | None = "",
+    *,
+    provided_source: str = "explicit_argument",
+    override: bool = True,
+) -> ApiKeyResolution:
+    """Resolve ANTHROPIC_API_KEY and keep track of where it came from.
+
+    override=True: provided > config/.env > system env var > config.json
+    override=False: provided > system env var > config/.env > config.json
+    """
+    key = provided.strip() if isinstance(provided, str) else ""
+    if key:
+        return ApiKeyResolution(
+            value=key,
+            source=provided_source,
+            fingerprint=api_key_fingerprint(key),
+        )
+
+    env_path = config_dir() / ".env"
+    config_path = Path(__file__).parent / "config.json"
+    candidates = (
+        (
+            ("user_env_file", _read_env_value("ANTHROPIC_API_KEY", env_path)),
+            ("system_env", os.environ.get("ANTHROPIC_API_KEY", "")),
+        )
+        if override
+        else (
+            ("system_env", os.environ.get("ANTHROPIC_API_KEY", "")),
+            ("user_env_file", _read_env_value("ANTHROPIC_API_KEY", env_path)),
+        )
+    )
+    for source, candidate in candidates:
+        key = candidate.strip()
+        if key:
+            return ApiKeyResolution(
+                value=key,
+                source=source,
+                fingerprint=api_key_fingerprint(key),
+            )
+
+    json_value = _read_json_value("anthropic_api_key", config_path)
+    key = json_value.strip() if isinstance(json_value, str) else ""
+    if key:
+        return ApiKeyResolution(
+            value=key,
+            source="config_json",
+            fingerprint=api_key_fingerprint(key),
+        )
+
+    return ApiKeyResolution(value="", source="missing", fingerprint="")
+
+
+def log_api_key_resolution(
+    logger: logging.Logger,
+    resolution: ApiKeyResolution,
+    *,
+    context: str,
+    level: int = logging.INFO,
+) -> None:
+    """Log API Key source metadata without exposing original key fragments."""
+    logger.log(level, "API Key [%s]: %s", context, resolution.log_summary())
+
+
 def load_api_key(override: bool = True) -> str:
     """Load ANTHROPIC_API_KEY.
 
     override=True: config/.env > system env var > config.json
     override=False: system env var > config/.env > config.json
     """
-    env_path = config_dir() / ".env"
-    loader = _from_env_override if override else _from_env
-    key = loader("ANTHROPIC_API_KEY", env_path)
-    if key:
-        return key
-
-    # config.json fallback
-    config_path = Path(__file__).parent / "config.json"
-    key = _read_json_value("anthropic_api_key", config_path)
-    if key:
-        return key
-    return ""
+    return resolve_api_key(override=override).value
 
 
 def load_base_url(override: bool = True) -> str:

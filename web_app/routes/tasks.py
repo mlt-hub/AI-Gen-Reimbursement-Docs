@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import queue
 import shutil
@@ -385,12 +386,13 @@ def create_router(
     ):
         """预览单个三级模块的 FPA 规划结果，不创建任务和交付物。"""
         from ai_gen_reimbursement_docs.config_utils import (
-            load_api_key,
             load_base_url,
             load_fpa_profile,
             load_fpa_rule_set,
             load_fpa_strategy,
             load_model_name,
+            log_api_key_resolution,
+            resolve_api_key,
         )
         from ai_gen_reimbursement_docs.pipeline import _resolve_templates
 
@@ -417,7 +419,15 @@ def create_router(
                 work_dir = str(Path(temp_ctx.name) / "work")
                 Path(work_dir).mkdir(parents=True, exist_ok=True)
 
-            api_key_value = api_key or load_api_key()
+            api_key_resolution = resolve_api_key(
+                api_key,
+                provided_source="session_override",
+            )
+            log_api_key_resolution(
+                logging.getLogger("ai_gen_reimbursement_docs"),
+                api_key_resolution,
+                context="fpa_preview",
+            )
             model_value = model or load_model_name()
             base_url_value = base_url or load_base_url()
             templates = _resolve_templates(str(file_path), None)
@@ -425,7 +435,7 @@ def create_router(
                 file_path=str(file_path),
                 module_name=module_name.strip(),
                 module_index=module_index,
-                api_key=api_key_value,
+                api_key=api_key_resolution.value,
                 model=model_value,
                 base_url=base_url_value,
                 template_path=templates.get("fpa", ""),

@@ -119,6 +119,10 @@ def execute_mode(
     callbacks: PipelineCallbacks | None = None,
 ):
     """一站式管道入口，CLI / Web UI 共享。"""
+    from ai_gen_reimbursement_docs.config_utils import (
+        log_api_key_resolution,
+        resolve_api_key,
+    )
     from ai_gen_reimbursement_docs.pipeline import run_pipeline_simple
 
     if max_tokens:
@@ -134,6 +138,11 @@ def execute_mode(
 
     logger = logging.getLogger("ai_gen_reimbursement_docs")
     logger.info(f"操作模式: {mode_info.get(mode, {}).get('label', mode)}")
+    api_key_resolution = resolve_api_key(
+        api_key,
+        provided_source="session_override",
+    )
+    log_api_key_resolution(logger, api_key_resolution, context="web_task")
 
     pipeline_mode = mode_map[mode]
     templates = build_templates_dict(custom_t_dir)
@@ -142,7 +151,7 @@ def execute_mode(
         mode=pipeline_mode,
         file_path=file_path,
         output_dir=output_dir,
-        api_key=api_key,
+        api_key=api_key_resolution.value,
         model=model,
         base_url=base_url,
         project_name=project_name,
