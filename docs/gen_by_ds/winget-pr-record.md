@@ -1,6 +1,6 @@
 # Winget 上架记录 — mlt-hub.ard
 
-> 最后更新：2026-05-31
+> 最后更新：2026-06-01
 
 ## 仓库信息
 
@@ -17,7 +17,7 @@
 | # | PR | 状态 | 说明 |
 |---|-----|------|------|
 | 1 | [#378910](https://github.com/microsoft/winget-pkgs/pull/378910) | ❌ 已关闭 | 初版，v1.0.0-alpha，Release 不存在导致 URL 404 |
-| 2 | [#381470](https://github.com/microsoft/winget-pkgs/pull/381470) | 🟡 审核中 | v1.0.1-alpha，验证已通过，等人工审核 |
+| 2 | [#381470](https://github.com/microsoft/winget-pkgs/pull/381470) | 🟡 审核中 | v1.0.1-alpha，验证已通过，等人工审核（已等待 7 天） |
 
 ## 关键问题与处理
 
@@ -33,11 +33,24 @@
 - 首次验证 404 触发 `Validation-Guide` 标签
 - URL 修复后验证流水线通过，标签需审核员手动清除
 
-## 当前状态
+### 4. 5/30 验证重新触发
+- wingetbot 自动验证时 URL 检查报错（疑似检查了旧路径 `v1.0.0-alpha`，实际清单已改为 `v1.0.1-alpha`）
+- mlt-hub 解释项目背景：开源报账文档工具，SmartScreen 误报属于新未签名二进制常态
+- 重新触发 `@wingetbot run` 后验证全部通过
+- 重申 CLA 协议
+
+### 5. 等待时间
+- PR 创建于 2026-05-26，至今已 7 天无人类审核员介入
+- Winget 社区审核队列通常需 1-2 周，仍在正常范围内
+
+## 当前状态 (2026-06-01)
 
 - ✅ 自动验证全部通过（Azure-Pipeline-Passed, Validation-Completed）
-- ⏳ 等待社区审核员人工审核
+- ⏳ 等待社区审核员人工审核（PR 创建于 5/26，已 7 天）
 - 📋 标签：`Azure-Pipeline-Passed` `Validation-Completed` `New-Package` `Validation-Guide`
+- 🔄 5/30 验证流水线重跑 3 次，最终全部通过
+- 📝 已在评论区补充项目说明、SmartScreen 误报解释
+- ⚠️ `Validation-Guide` 标签仍在，需审核员手动清除
 
 ## 操作备忘
 
