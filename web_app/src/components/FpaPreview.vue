@@ -174,6 +174,45 @@
           </details>
         </div>
 
+        <div v-if="result.debug" class="border-t border-[var(--color-rule)] px-3 py-2">
+          <details>
+            <summary class="subtle-link cursor-pointer select-none text-xs">
+              AI 调试信息
+              <span class="ml-2 text-[var(--color-ink-soft)]">{{ result.debug.ai_called ? '已调用 AI' : debugReasonLabel(result.debug.reason) }}</span>
+            </summary>
+            <div class="mt-3 space-y-3 text-xs">
+              <div v-if="result.debug.error" class="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-[var(--color-warning)]">
+                {{ result.debug.error }}
+              </div>
+              <div v-if="result.debug.system_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="font-semibold text-[var(--color-ink)]">系统提示词</div>
+                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.system_prompt }}</pre>
+              </div>
+              <div v-if="result.debug.user_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="font-semibold text-[var(--color-ink)]">用户提示词</div>
+                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.user_prompt }}</pre>
+              </div>
+              <div v-if="result.debug.ai_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="font-semibold text-[var(--color-ink)]">AI Prompts</div>
+                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.ai_prompt }}</pre>
+              </div>
+              <div v-if="result.debug.raw_response" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="font-semibold text-[var(--color-ink)]">AI Responses</div>
+                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.raw_response }}</pre>
+              </div>
+              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="font-semibold text-[var(--color-ink)]">AI Thinking</div>
+                <pre v-if="result.debug.thinking" class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.thinking }}</pre>
+                <div v-else class="mt-2 text-[var(--color-ink-soft)]">当前模型未返回思考过程</div>
+              </div>
+              <div v-if="result.debug.parsed_rows.length" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                <div class="font-semibold text-[var(--color-ink)]">解析结果</div>
+                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ stringifyDebug(result.debug.parsed_rows) }}</pre>
+              </div>
+            </div>
+          </details>
+        </div>
+
       </div>
     </div>
   </div>
@@ -198,6 +237,20 @@ interface FpaPreviewRow {
   generation: string
 }
 
+interface FpaPreviewDebug {
+  ai_called: boolean
+  reason?: string
+  model?: string
+  system_prompt: string
+  user_prompt: string
+  ai_prompt: string
+  raw_response: string
+  thinking: string
+  parsed_rows: unknown[]
+  final_rows: FpaPreviewRow[]
+  error?: string
+}
+
 interface FpaPreviewResult {
   module: {
     index: number
@@ -216,6 +269,7 @@ interface FpaPreviewResult {
   rule_set: string
   rule_set_version: string
   audit?: FpaAuditReport
+  debug?: FpaPreviewDebug
 }
 
 interface FpaAuditReport {
@@ -357,5 +411,19 @@ function strategyLabel(strategy: string) {
     ai_only: '仅 AI',
   }
   return labels[strategy] ?? strategy
+}
+
+function debugReasonLabel(reason?: string) {
+  const labels: Record<string, string> = {
+    rules_first: '规则优先',
+    rules_only: '仅规则',
+    missing_api_key: '缺少 API Key',
+    ai_failed_fallback: 'AI 失败后兜底',
+  }
+  return labels[reason || ''] ?? '未调用 AI'
+}
+
+function stringifyDebug(value: unknown) {
+  return JSON.stringify(value, null, 2)
 }
 </script>

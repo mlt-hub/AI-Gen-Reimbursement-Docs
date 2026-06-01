@@ -142,8 +142,15 @@ def _group_rows_by_l3(rows: list[dict[str, str]]) -> list[dict[str, object]]:
     return groups
 
 
-def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
-              base_url: str, tag: str = "") -> str:
+def _call_llm(
+    prompt: str,
+    system_prompt: str,
+    api_key: str,
+    model: str,
+    base_url: str,
+    tag: str = "",
+    return_thinking: bool = False,
+) -> str | tuple[str, str]:
     """调用 LLM（委托至 llm_client 公共模块）。"""
     from ai_gen_reimbursement_docs.llm_client import call_llm
 
@@ -151,9 +158,12 @@ def _call_llm(prompt: str, system_prompt: str, api_key: str, model: str,
         return call_llm(
             prompt=prompt, system=system_prompt,
             api_key=api_key, model=model, base_url=base_url, tag=tag,
+            return_thinking=return_thinking,
         )
     except Exception as e:
         logger.warning("LLM 调用失败 [%s]: %s", tag, e)
+        if return_thinking:
+            return "", ""
         return ""
 
 
@@ -636,6 +646,77 @@ def _build_fpa_audit_report(
     )
 
 
+class FpaAiDebugError(ValueError):
+    """FPA 预览 AI 调试信息异常。"""
+
+    def __init__(self, message: str, debug: dict[str, object]):
+        super().__init__(message)
+        self.debug = debug
+
+
+def _build_fpa_ai_prompt_context(
+    group: dict[str, object],
+    judgement_rules: list[str],
+    domain_context: dict[str, object] | None,
+    profile: CustomRulesProfile = FPA_PROFILE,
+) -> tuple[str, str]:
+    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
+
+    system_prompt = load_ai_system_prompt("fpa_eval") or (
+        "你是一个严谨的 FPA 功能点评估助手。必须按用户给定的项目 FPA 核心口径规划行，"
+        "只输出合法 JSON。"
+    )
+    prompt = profile.build_prompt(group, judgement_rules, domain_context)
+    return system_prompt, prompt
+
+
+def _ai_plan_fpa_rows_for_l3_debug(
+    group: dict[str, object],
+    judgement_rules: list[str],
+    domain_context: dict[str, object] | None,
+    api_key: str,
+    model: str,
+    base_url: str,
+    profile: CustomRulesProfile = FPA_PROFILE,
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """调用 AI 规划一个三级模块的 FPA 行，并返回 Web 预览调试信息。"""
+    system_prompt, prompt = _build_fpa_ai_prompt_context(
+        group, judgement_rules, domain_context, profile
+    )
+    debug: dict[str, object] = {
+        "ai_called": True,
+        "model": model,
+        "system_prompt": system_prompt,
+        "user_prompt": prompt,
+        "ai_prompt": f"[system]\n{system_prompt}\n\n[user]\n{prompt}",
+        "raw_response": "",
+        "thinking": "",
+        "parsed_rows": [],
+    }
+    resp, thinking = _call_llm(
+        prompt,
+        system_prompt,
+        api_key,
+        model,
+        base_url,
+        tag=f"fpa_l3_{group.get('l3', '')}",
+        return_thinking=True,
+    )
+    debug["raw_response"] = resp
+    debug["thinking"] = thinking
+    if not resp:
+        raise FpaAiDebugError("LLM 返回空响应", debug)
+    try:
+        data = _extract_json_obj(resp)
+    except Exception as exc:
+        raise FpaAiDebugError(str(exc), debug) from exc
+    rows = data.get("rows")
+    if not isinstance(rows, list):
+        raise FpaAiDebugError("AI 响应缺少 rows 列表", debug)
+    debug["parsed_rows"] = rows
+    return rows, debug
+
+
 def _ai_plan_fpa_rows_for_l3(
     group: dict[str, object],
     judgement_rules: list[str],
@@ -646,13 +727,9 @@ def _ai_plan_fpa_rows_for_l3(
     profile: CustomRulesProfile = FPA_PROFILE,
 ) -> list[dict[str, object]]:
     """调用 AI 规划一个三级模块的 FPA 行，返回原始 AI rows。"""
-    from ai_gen_reimbursement_docs.config_utils import load_ai_system_prompt
-
-    system_prompt = load_ai_system_prompt("fpa_eval") or (
-        "你是一个严谨的 FPA 功能点评估助手。必须按用户给定的项目 FPA 核心口径规划行，"
-        "只输出合法 JSON。"
+    system_prompt, prompt = _build_fpa_ai_prompt_context(
+        group, judgement_rules, domain_context, profile
     )
-    prompt = profile.build_prompt(group, judgement_rules, domain_context)
     resp = _call_llm(
         prompt,
         system_prompt,
@@ -1924,15 +2001,29 @@ def preview_fpa_module(
         judgement_rules = _read_fpa_judgement_rules(template_path)
         warnings: list[str] = []
         used_ai = execution.strategy in {"ai_first", "ai_only"}
+        debug: dict[str, object] = {
+            "ai_called": False,
+            "reason": execution.strategy,
+            "model": model,
+            "system_prompt": "",
+            "user_prompt": "",
+            "ai_prompt": "",
+            "raw_response": "",
+            "thinking": "",
+            "parsed_rows": [],
+            "final_rows": [],
+        }
         rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
         try:
             if execution.strategy in {"rules_first", "rules_only"}:
                 used_ai = False
+                debug["reason"] = execution.strategy
                 fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
             elif not api_key:
+                debug["reason"] = "missing_api_key"
                 raise ValueError(f"FPA strategy={execution.strategy} 需要 API Key，当前未配置")
             else:
-                raw_rows = _ai_plan_fpa_rows_for_l3(
+                raw_rows, debug = _ai_plan_fpa_rows_for_l3_debug(
                     group, judgement_rules, _build_domain_context(meta), api_key, model, base_url,
                     profile=profile,
                 )
@@ -1956,9 +2047,13 @@ def preview_fpa_module(
                 if not fpa_rows:
                     raise ValueError("AI 规划未生成有效 FPA 行")
         except Exception as exc:
+            if isinstance(exc, FpaAiDebugError):
+                debug = exc.debug
+            debug["error"] = str(exc)
             if execution.strategy == "ai_only" or not api_key:
                 raise
             used_ai = False
+            debug["reason"] = "ai_failed_fallback"
             warnings.append(f"AI 调用或解析失败，已使用兜底生成: {exc}")
             logger.warning("FPA 预览 AI 失败 [%s]: %s", _group_tag(group), exc)
             fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
@@ -1981,6 +2076,8 @@ def preview_fpa_module(
                 "generation": row.get("生成方式", "ai" if used_ai else "fallback"),
             }
 
+        preview_rows = [_row_to_preview(row) for row in fpa_rows]
+        debug["final_rows"] = preview_rows
         processes = group.get("processes", [])
         process_count = len(processes) if isinstance(processes, list) else 0
         module_payload = {
@@ -2004,7 +2101,7 @@ def preview_fpa_module(
         )
         return {
             "module": module_payload,
-            "rows": [_row_to_preview(row) for row in fpa_rows],
+            "rows": preview_rows,
             "warnings": warnings,
             "used_ai": used_ai,
             "profile": profile.name,
@@ -2015,6 +2112,7 @@ def preview_fpa_module(
             "audit": audit.to_dict(),
             "preview_md_dir": md_dir,
             "preview_cache_used": cache_used,
+            "debug": debug,
         }
     finally:
         if temp_ctx is not None:

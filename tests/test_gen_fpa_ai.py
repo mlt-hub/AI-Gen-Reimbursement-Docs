@@ -11,6 +11,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     _normalize_ai_fpa_rows_for_l3,
     _plan_fpa_rows_with_ai,
     generate_fpa_check_xlsx_from_md,
+    preview_fpa_module,
 )
 from ai_gen_reimbursement_docs.fpa_profiles import CUSTOM_RULES_PROFILE, STRICT_FPA_PROFILE
 
@@ -317,6 +318,57 @@ def test_ai_first_requires_api_key():
             profile=STRICT_FPA_PROFILE,
             strategy="ai_first",
         )
+
+
+def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
+    xlsx = tmp_path / "功能清单.xlsx"
+    xlsx.write_bytes(b"placeholder")
+    response = {
+        "rows": [
+            {
+                "name": "垂直行业数据维护",
+                "type": "ILF",
+                "type_reason": "内部逻辑文件",
+                "classification_basis_index": 1,
+                "explanation": "垂直行业数据维护，具体如下：触发事件：管理员维护数据；事件流：系统保存数据。",
+            }
+        ]
+    }
+
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa.read_base_data_from_excel",
+        lambda path: {"tree_rows": _rows(), "meta": _meta()},
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.config_utils.load_ai_system_prompt",
+        lambda name: "系统提示词",
+    )
+
+    def fake_call_llm(*args, **kwargs):
+        assert kwargs.get("return_thinking") is True
+        return json.dumps(response, ensure_ascii=False), "思考过程"
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+
+    result = preview_fpa_module(
+        file_path=str(xlsx),
+        module_name="垂直行业管理",
+        api_key="sk-test",
+        model="test-model",
+        base_url="",
+        strategy="ai_only",
+    )
+
+    debug = result["debug"]
+    assert debug["ai_called"] is True
+    assert debug["model"] == "test-model"
+    assert debug["system_prompt"] == "系统提示词"
+    assert "垂直行业管理" in debug["user_prompt"]
+    assert "[system]" in debug["ai_prompt"]
+    assert "垂直行业数据维护" in debug["raw_response"]
+    assert debug["thinking"] == "思考过程"
+    assert debug["parsed_rows"] == response["rows"]
+    assert debug["final_rows"][0]["name"] == "垂直行业数据维护"
 
 
 def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
