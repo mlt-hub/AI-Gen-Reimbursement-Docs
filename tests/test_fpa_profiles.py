@@ -53,17 +53,41 @@ rule_sets:
   telecom_rules:
     extends: strict_fpa_default
     keyword_rules:
-      - type: EO
-        keywords: ["打印客户清单"]
-        reason: "客户清单打印属于格式化输出，按 EO。"
+      merge: append
+      items:
+        - type: EO
+          keywords: ["打印客户清单"]
+          reason: "客户清单打印属于格式化输出，按 EO。"
     internal_data_rules:
-      - keywords: ["认证授权关系"]
-        data_name: "认证授权关系"
-        reason: "本系统维护认证授权关系，按 ILF。"
+      merge: append
+      items:
+        - keywords: ["认证授权关系"]
+          data_name: "认证授权关系"
+          reason: "本系统维护认证授权关系，按 ILF。"
     external_data_rules:
-      - source_aliases: ["行业平台"]
-        data_name: "行业平台客户档案"
-        data_nouns: ["客户", "档案"]
+      merge: append
+      items:
+        - source_aliases: ["行业平台"]
+          data_name: "行业平台客户档案"
+          data_nouns: ["客户", "档案"]
+  telecom_replace_rules:
+    extends: telecom_rules
+    keyword_rules:
+      merge: replace
+      items:
+        - type: EQ
+          keywords: ["浏览客户清单"]
+    internal_data_rules:
+      merge: replace
+      items:
+        - keywords: ["客户标签关系"]
+          data_name: "客户标签关系"
+    external_data_rules:
+      merge: replace
+      items:
+        - source_aliases: ["标签平台"]
+          data_name: "标签平台客户标签"
+          data_nouns: ["客户", "标签"]
 """,
         encoding="utf-8",
     )
@@ -129,6 +153,16 @@ def test_rule_set_external_data_rules_affect_strict_profile(tmp_path):
 
     assert fpa_type == "EIF"
     assert "外部系统维护" in reason
+
+
+def test_rule_set_replace_discards_parent_rule_sections(tmp_path):
+    _write_fpa_config(tmp_path)
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_replace_rules")
+
+    assert [rule.keywords for rule in config.rule_set_config.keyword_rules] == [("浏览客户清单",)]
+    assert [rule.data_name for rule in config.rule_set_config.internal_data_rules] == ["客户标签关系"]
+    assert [rule.data_name for rule in config.rule_set_config.external_data_rules] == ["标签平台客户标签"]
 
 
 def test_rule_set_keyword_rules_affect_strict_profile(tmp_path):

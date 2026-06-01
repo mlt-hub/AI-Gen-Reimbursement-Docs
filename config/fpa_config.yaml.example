@@ -87,22 +87,30 @@ rule_sets:
   strict_fpa_conservative:
     extends: strict_fpa_default
     keyword_rules:
-      - type: EO
-        keywords: ["打印清单", "打印报表"]
-        reason: "打印清单或报表属于格式化输出，按 EO。"
+      merge: append
+      items:
+        - type: EO
+          keywords: ["打印清单", "打印报表"]
+          reason: "打印清单或报表属于格式化输出，按 EO。"
     internal_data_rules:
-      - keywords: ["认证授权关系", "角色授权关系"]
-        data_name: "认证授权关系"
-        reason: "本系统维护认证授权关系，按 ILF。"
+      merge: append
+      items:
+        - keywords: ["认证授权关系", "角色授权关系"]
+          data_name: "认证授权关系"
+          reason: "本系统维护认证授权关系，按 ILF。"
     external_data_rules:
-      - source_aliases: ["统一认证平台", "统一认证"]
-        data_name: "统一认证账号"
-        data_nouns: ["账号", "账户", "人员"]
+      merge: append
+      items:
+        - source_aliases: ["统一认证平台", "统一认证"]
+          data_name: "统一认证账号"
+          data_nouns: ["账号", "账户", "人员"]
 
   # 示例：客户 A 的规则集。
   client_a_rules:
     extends: strict_fpa_default
     external_data_rules:
-      - source_aliases: ["供应商平台"]
-        data_name: "供应商平台供应商档案"
-        data_nouns: ["供应商", "档案", "信息"]
+      merge: append
+      items:
+        - source_aliases: ["供应商平台"]
+          data_name: "供应商平台供应商档案"
+          data_nouns: ["供应商", "档案", "信息"]

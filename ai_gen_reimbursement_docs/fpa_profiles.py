@@ -12,6 +12,7 @@ from string import Template
 
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_TRANSACTION_FPA_TYPES = {"EI", "EQ", "EO"}
+VALID_RULE_MERGE_MODES = {"append", "replace"}
 
 CUSTOM_RULES_CORE_RULES = """
 FPA 核心口径：
@@ -114,8 +115,11 @@ class FpaRuleSetConfig:
     name: str
     extends: str = ""
     external_data_rules: tuple[ExternalDataGroupRule, ...] = field(default_factory=tuple)
+    external_data_rules_merge: str = "append"
     keyword_rules: tuple[KeywordTypeRule, ...] = field(default_factory=tuple)
+    keyword_rules_merge: str = "append"
     internal_data_rules: tuple[InternalDataGroupRule, ...] = field(default_factory=tuple)
+    internal_data_rules_merge: str = "append"
     raw: dict[str, object] = field(default_factory=dict)
 
 
@@ -242,37 +246,46 @@ def _internal_data_rule_from_dict(item: dict[str, object]) -> InternalDataGroupR
     return InternalDataGroupRule(keyword_values, data_name, reason)
 
 
+def _rule_section_from_dict(data: dict[str, object], key: str) -> tuple[str, list[object]]:
+    section = data.get(key)
+    if not isinstance(section, dict):
+        return "append", []
+    merge = str(section.get("merge") or "append").strip()
+    items = section.get("items", [])
+    return (merge if merge in VALID_RULE_MERGE_MODES else "append"), (items if isinstance(items, list) else [])
+
+
 def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
     external_rules: list[ExternalDataGroupRule] = []
-    raw_rules = data.get("external_data_rules", [])
-    if isinstance(raw_rules, list):
-        for item in raw_rules:
-            if isinstance(item, dict):
-                rule = _external_rule_from_dict(item)
-                if rule is not None:
-                    external_rules.append(rule)
+    external_merge, raw_external_rules = _rule_section_from_dict(data, "external_data_rules")
+    for item in raw_external_rules:
+        if isinstance(item, dict):
+            rule = _external_rule_from_dict(item)
+            if rule is not None:
+                external_rules.append(rule)
     keyword_rules: list[KeywordTypeRule] = []
-    raw_keyword_rules = data.get("keyword_rules", [])
-    if isinstance(raw_keyword_rules, list):
-        for item in raw_keyword_rules:
-            if isinstance(item, dict):
-                rule = _keyword_rule_from_dict(item)
-                if rule is not None:
-                    keyword_rules.append(rule)
+    keyword_merge, raw_keyword_rules = _rule_section_from_dict(data, "keyword_rules")
+    for item in raw_keyword_rules:
+        if isinstance(item, dict):
+            rule = _keyword_rule_from_dict(item)
+            if rule is not None:
+                keyword_rules.append(rule)
     internal_rules: list[InternalDataGroupRule] = []
-    raw_internal_rules = data.get("internal_data_rules", [])
-    if isinstance(raw_internal_rules, list):
-        for item in raw_internal_rules:
-            if isinstance(item, dict):
-                rule = _internal_data_rule_from_dict(item)
-                if rule is not None:
-                    internal_rules.append(rule)
+    internal_merge, raw_internal_rules = _rule_section_from_dict(data, "internal_data_rules")
+    for item in raw_internal_rules:
+        if isinstance(item, dict):
+            rule = _internal_data_rule_from_dict(item)
+            if rule is not None:
+                internal_rules.append(rule)
     return FpaRuleSetConfig(
         name=name,
         extends=str(data.get("extends") or "").strip(),
         external_data_rules=tuple(external_rules),
+        external_data_rules_merge=external_merge,
         keyword_rules=tuple(keyword_rules),
+        keyword_rules_merge=keyword_merge,
         internal_data_rules=tuple(internal_rules),
+        internal_data_rules_merge=internal_merge,
         raw=dict(data),
     )
 
@@ -283,11 +296,26 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
     return FpaRuleSetConfig(
         name=child.name,
         extends=child.extends,
-        external_data_rules=(*parent.external_data_rules, *child.external_data_rules),
-        keyword_rules=(*parent.keyword_rules, *child.keyword_rules),
-        internal_data_rules=(*parent.internal_data_rules, *child.internal_data_rules),
+        external_data_rules=_merge_rule_section(
+            parent.external_data_rules,
+            child.external_data_rules,
+            child.external_data_rules_merge,
+        ),
+        external_data_rules_merge=child.external_data_rules_merge,
+        keyword_rules=_merge_rule_section(parent.keyword_rules, child.keyword_rules, child.keyword_rules_merge),
+        keyword_rules_merge=child.keyword_rules_merge,
+        internal_data_rules=_merge_rule_section(
+            parent.internal_data_rules,
+            child.internal_data_rules,
+            child.internal_data_rules_merge,
+        ),
+        internal_data_rules_merge=child.internal_data_rules_merge,
         raw=raw,
     )
+
+
+def _merge_rule_section(parent: tuple[object, ...], child: tuple[object, ...], merge: str) -> tuple[object, ...]:
+    return child if merge == "replace" else (*parent, *child)
 
 
 def load_configured_fpa_rule_sets() -> dict[str, FpaRuleSetConfig]:

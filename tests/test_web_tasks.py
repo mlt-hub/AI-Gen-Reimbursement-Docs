@@ -119,9 +119,11 @@ rule_sets:
   client_a_rules:
     extends: strict_fpa_default
     external_data_rules:
-      - source_aliases: ["供应商平台"]
-        data_name: "供应商平台供应商档案"
-        data_nouns: ["供应商"]
+      merge: append
+      items:
+        - source_aliases: ["供应商平台"]
+          data_name: "供应商平台供应商档案"
+          data_nouns: ["供应商"]
 """.lstrip(),
         encoding="utf-8",
     )

@@ -70,9 +70,11 @@ rule_sets:
   strict_fpa_auth:
     extends: strict_fpa_default
     external_data_rules:
-      - source_aliases: ["统一认证平台", "统一认证"]
-        data_name: "统一认证账号"
-        data_nouns: ["账号", "账户", "人员"]
+      merge: append
+      items:
+        - source_aliases: ["统一认证平台", "统一认证"]
+          data_name: "统一认证账号"
+          data_nouns: ["账号", "账户", "人员"]
 """,
         encoding="utf-8",
     )

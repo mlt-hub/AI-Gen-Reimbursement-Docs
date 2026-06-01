@@ -396,6 +396,7 @@ FPA_CONFIG_FILENAME = "fpa_config.yaml"
 VALID_FPA_PROFILE_NAMES = {"custom_rules", "strict_fpa"}
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_FPA_TRANSACTION_TYPES = {"EI", "EQ", "EO"}
+VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
 
 
 def _fpa_key_path(*parts: object) -> str:
@@ -414,13 +415,28 @@ def _require_non_empty_string(value: object, key_path: str) -> str:
     return value.strip()
 
 
-def _validate_external_data_rules(value: object, key_path: str) -> None:
+def _validate_rule_section(value: object, key_path: str) -> list[object] | None:
     if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是对象")
+    merge = str(value.get("merge") or "append").strip()
+    if merge not in VALID_FPA_RULE_MERGE_MODES:
+        raise FpaConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}.merge 必须是 append 或 replace"
+        )
+    items = value.get("items")
+    if not isinstance(items, list):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}.items 必须是列表")
+    return items
+
+
+def _validate_external_data_rules(value: object, key_path: str) -> None:
+    items = _validate_rule_section(value, key_path)
+    if items is None:
         return
-    if not isinstance(value, list):
-        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是列表")
-    for index, item in enumerate(value):
-        item_path = f"{key_path}[{index}]"
+    for index, item in enumerate(items):
+        item_path = f"{key_path}.items[{index}]"
         if not isinstance(item, dict):
             raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path} 必须是对象")
         aliases = item.get("source_aliases")
@@ -459,12 +475,11 @@ def _validate_non_empty_string_list(value: object, key_path: str) -> None:
 
 
 def _validate_keyword_rules(value: object, key_path: str) -> None:
-    if value is None:
+    items = _validate_rule_section(value, key_path)
+    if items is None:
         return
-    if not isinstance(value, list):
-        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是列表")
-    for index, item in enumerate(value):
-        item_path = f"{key_path}[{index}]"
+    for index, item in enumerate(items):
+        item_path = f"{key_path}.items[{index}]"
         if not isinstance(item, dict):
             raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path} 必须是对象")
         fpa_type = _require_non_empty_string(item.get("type"), f"{item_path}.type").upper()
@@ -478,12 +493,11 @@ def _validate_keyword_rules(value: object, key_path: str) -> None:
 
 
 def _validate_internal_data_rules(value: object, key_path: str) -> None:
-    if value is None:
+    items = _validate_rule_section(value, key_path)
+    if items is None:
         return
-    if not isinstance(value, list):
-        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是列表")
-    for index, item in enumerate(value):
-        item_path = f"{key_path}[{index}]"
+    for index, item in enumerate(items):
+        item_path = f"{key_path}.items[{index}]"
         if not isinstance(item, dict):
             raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path} 必须是对象")
         _validate_non_empty_string_list(item.get("keywords"), f"{item_path}.keywords")
