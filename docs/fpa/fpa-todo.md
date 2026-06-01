@@ -208,7 +208,7 @@ ai_gen_reimbursement_docs/cli/main.py
   增加 --fpa-strategy、--fpa-rule-set。
 
 web_app
-  高级选项和 FPA 预览页增加 FPA 执行策略。
+  高级选项和 FPA 预览页增加配置驱动的 profile / strategy / rule_set 下拉选择。
   Store 持久化 fpaStrategy / fpaRuleSet。
   Web 正式生成和预览接口透传 fpa_strategy / fpa_rule_set。
 ```
@@ -250,7 +250,7 @@ J2. 已完成：移除 rule_set_version；AI cache key 改为纳入 rule_set 实
 J3. 部分完成：支持 rule_set extends 继承并追加 external_data_rules；字段级覆盖策略后续继续细化。
 J4. 部分完成：外部数据源规则可由 rule_set 配置追加；关键词规则、ILF/EIF 判定规则仍在代码中。
 J5. 细化 rules_first 中“rules 无法判定再交给 AI”的判定条件；当前 custom_rules 的内置规则可覆盖现有场景，因此 rules_first 直接使用规则生成。
-J6. 增加 UI 中的 rule_set 下拉选择；当前先提供文本输入和配置入口。
+J6. 已完成：Web 高级选项和 FPA 预览页已使用配置驱动的 rule_set 下拉选择，不再是文本输入。
 ```
 
 ## FPA 审核工作簿与预览审核面板

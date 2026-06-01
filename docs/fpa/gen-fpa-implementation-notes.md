@@ -2384,6 +2384,7 @@ current_project 已改名为 custom_rules。
 custom_rules 默认 rules_first + custom_rules_default。
 strict_fpa 默认 ai_first + strict_fpa_default。
 正式生成、预览、CLI、Web UI、配置文件都已透传 fpa_strategy / fpa_rule_set。
+Web 高级选项和 FPA 预览页已支持配置驱动的 profile / strategy / rule_set 下拉选择。
 strict_fpa 无 API Key 时会提示需要 API Key，不再静默使用规则生成。
 ai_first 保留 AI 合法 type；与 rules 冲突时只记录 warning。
 ai_first 在 AI 覆盖不完整时追加 rules_fallback 行。
@@ -2403,7 +2404,6 @@ rule_set external_data_rules 会参与 strict_fpa 外部数据组识别。
 rule_set 字段级覆盖策略。
 关键词规则配置化。
 ILF / EIF 判定规则配置化。
-UI 中的 rule_set 下拉选择。
 预览页审核面板。
 ```
 

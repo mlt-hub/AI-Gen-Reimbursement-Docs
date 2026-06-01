@@ -467,15 +467,21 @@ rules 不改 AI 已给出的合法 type；业务冲突只 warning。
 只有 type 非法、JSON 非法、结构非法时才硬处理。
 ```
 
+已完成：
+
+```text
+Web 高级选项和 FPA 预览页已使用配置驱动的 rule_set 下拉选择。
+FPA 审核工作簿 FPA工作量评估-check.xlsx 已生成。
+预览页审核面板基础版已展示覆盖情况、生成方式统计和缺失功能过程列表。
+```
+
 后续还会增加：
 
 ```text
 rule_set 字段级覆盖策略。
 关键词规则和 ILF/EIF 判定规则配置化。
 rules_first 中“规则无法判定再交 AI”的细粒度判定。
-UI 中的 rule_set 下拉选择。
-FPA 审核工作簿 FPA工作量评估-check.xlsx。
-预览页审核面板，展示覆盖情况、AI 原文、规则命中和 warnings。
+预览页审核面板继续扩展 AI 原文、规则命中和 warnings 展示。
 ```
 
 详细设计见：
