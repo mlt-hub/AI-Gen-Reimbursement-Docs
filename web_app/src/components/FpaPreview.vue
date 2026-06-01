@@ -97,9 +97,9 @@
           </span>
         </div>
 
-        <div class="max-h-[50vh] overflow-auto">
+        <div class="overflow-x-auto">
           <table class="w-full min-w-[760px] text-left text-xs">
-            <thead class="sticky top-0 bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]">
+            <thead class="bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]">
               <tr>
                 <th class="w-12 px-3 py-2 font-semibold">#</th>
                 <th class="px-3 py-2 font-semibold">新增/修改功能点</th>
