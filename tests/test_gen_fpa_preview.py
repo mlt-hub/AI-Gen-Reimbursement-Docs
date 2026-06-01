@@ -24,9 +24,7 @@ def test_preview_fpa_module_by_index_uses_fallback(test_excel, tmp_path):
     assert result["profile_version"] == "1"
     assert result["strategy"] == "rules_first"
     assert result["rule_set"] == "custom_rules_default"
-    assert result["rule_set_version"] == "1"
     assert result["audit"]["profile"] == "custom_rules"
-    assert result["audit"]["rule_set_version"] == "1"
     assert result["audit"]["coverage"]["process_total"] == result["module"]["process_count"]
     assert result["audit"]["coverage"]["covered_count"] > 0
     assert "fallback" in result["audit"]["generation_counts"]

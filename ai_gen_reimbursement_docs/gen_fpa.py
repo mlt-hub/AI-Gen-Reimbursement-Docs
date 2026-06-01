@@ -65,7 +65,6 @@ class FpaAuditReport:
     profile_version: str
     strategy: str
     rule_set: str
-    rule_set_version: str
     module: dict[str, object]
     process_total: int
     covered_processes: list[str]
@@ -79,7 +78,6 @@ class FpaAuditReport:
             "profile_version": self.profile_version,
             "strategy": self.strategy,
             "rule_set": self.rule_set,
-            "rule_set_version": self.rule_set_version,
             "module": self.module,
             "coverage": {
                 "process_total": self.process_total,
@@ -624,7 +622,6 @@ def _build_fpa_audit_report(
     profile_version: str,
     strategy: str,
     rule_set: str,
-    rule_set_version: str,
 ) -> FpaAuditReport:
     process_names = _process_names_for_group(group)
     expected = set(process_names)
@@ -646,7 +643,6 @@ def _build_fpa_audit_report(
         profile_version=profile_version,
         strategy=strategy,
         rule_set=rule_set,
-        rule_set_version=rule_set_version,
         module=module,
         process_total=len(process_names),
         covered_processes=covered_processes,
@@ -672,8 +668,8 @@ def _build_fpa_ai_prompt_context(
 ) -> FpaPromptContext:
     from ai_gen_reimbursement_docs.config_utils import load_fpa_system_prompt_config, load_fpa_user_prompt_config
 
-    system_config = load_fpa_system_prompt_config("fpa_eval")
-    user_config = load_fpa_user_prompt_config(profile.name, "fpa_eval")
+    system_config = load_fpa_system_prompt_config(profile.name)
+    user_config = load_fpa_user_prompt_config(profile.name)
     prompt = profile.build_prompt(group, judgement_rules, domain_context)
     return FpaPromptContext(
         system_prompt=system_config.text,
@@ -780,7 +776,7 @@ def _fpa_ai_cache_key(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
-    rule_set_version: str = "",
+    rule_set_config: dict[str, object] | None = None,
     system_prompt: str = "",
     user_prompt: str = "",
 ) -> str:
@@ -789,7 +785,7 @@ def _fpa_ai_cache_key(
         "profile_version": profile.version,
         "strategy": strategy,
         "rule_set": rule_set,
-        "rule_set_version": rule_set_version,
+        "rule_set_config": rule_set_config or {},
         "core_rules": profile.core_rules,
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
@@ -1018,7 +1014,7 @@ def _plan_fpa_rows_with_ai(
             profile=profile,
             strategy=strategy,
             rule_set=rule_set,
-            rule_set_version=execution.rule_set_version,
+            rule_set_config=execution.rule_set_config.raw,
             audit_trace_path=audit_trace_path,
         )
     finally:
@@ -1036,7 +1032,7 @@ def _plan_fpa_rows_with_execution(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
-    rule_set_version: str = "",
+    rule_set_config: dict[str, object] | None = None,
     audit_trace_path: str = "",
 ) -> list[dict[str, object]]:
     groups = _group_rows_by_l3(rows)
@@ -1063,7 +1059,6 @@ def _plan_fpa_rows_with_execution(
             "profile": profile.name,
             "strategy": strategy,
             "rule_set": rule_set,
-            "rule_set_version": rule_set_version,
             "modules": audit_modules,
         })
         return all_rows
@@ -1114,7 +1109,7 @@ def _plan_fpa_rows_with_execution(
             profile=profile,
             strategy=strategy,
             rule_set=rule_set,
-            rule_set_version=rule_set_version,
+            rule_set_config=rule_set_config or {},
             system_prompt=prompt_context.system_prompt,
             user_prompt=prompt_context.user_prompt,
         )
@@ -1197,7 +1192,6 @@ def _plan_fpa_rows_with_execution(
                     "profile_version": profile.version,
                     "strategy": strategy,
                     "rule_set": rule_set,
-                    "rule_set_version": rule_set_version,
                     "rows": raw_rows,
                 }
             audit_modules.append({
@@ -1249,7 +1243,6 @@ def _plan_fpa_rows_with_execution(
         "profile": profile.name,
         "strategy": strategy,
         "rule_set": rule_set,
-        "rule_set_version": rule_set_version,
         "modules": audit_modules,
     })
     return all_rows
@@ -1267,7 +1260,7 @@ def _write_fpa_rows_md(
         if ai_filled:
             f.write(f"**AI 规划**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         if execution_meta:
-            for key in ("profile", "strategy", "rule_set", "rule_set_version"):
+            for key in ("profile", "strategy", "rule_set"):
                 val = execution_meta.get(key, "")
                 if val:
                     f.write(f"**{key}**: {val}\n")
@@ -1302,10 +1295,10 @@ def _read_fpa_rows_md_for_audit(fpa_md_path: str) -> tuple[dict[str, str], list[
         in_table = False
         for line in f:
             line = line.rstrip()
-            meta_match = re.match(r"^\*\*(profile|strategy|rule_set|rule_set_version)\*\*:\s*(.*)$", line)
+            meta_match = re.match(r"^\*\*(profile|strategy|rule_set)\*\*:\s*(.*)$", line)
             if meta_match:
                 key, value = meta_match.group(1), meta_match.group(2)
-                if key in {"profile", "strategy", "rule_set", "rule_set_version"}:
+                if key in {"profile", "strategy", "rule_set"}:
                     execution_meta[key] = value.strip()
             if "| 序号 | 子系统" in line:
                 in_table = True
@@ -1474,7 +1467,7 @@ FPA_CHECK_DEFAULT_COLUMNS: dict[str, list[str]] = {
     "FPA结果": [
         "序号", "子系统(模块)", "资产标识", "新增/修改功能点", "类型", "计算依据归类",
         "计算依据说明", "变更状态", "调整值", "要素数量", "生成方式", "类型理由",
-        "源功能过程", "后处理警告", "profile", "strategy", "rule_set", "rule_set_version",
+        "源功能过程", "后处理警告", "profile", "strategy", "rule_set",
     ],
     "覆盖审核": [
         "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
@@ -1484,7 +1477,7 @@ FPA_CHECK_DEFAULT_COLUMNS: dict[str, list[str]] = {
     "Warnings": ["级别", "FPA行序号", "模块序号", "对象", "Warning", "来源规则ID", "来源说明"],
     "规则命中详情": [
         "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
-        "FPA行序号", "功能点名称", "生成方式", "rule_set", "rule_set_version",
+        "FPA行序号", "功能点名称", "生成方式", "rule_set",
         "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
     ],
     "AI原始返回": ["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"],
@@ -1558,7 +1551,6 @@ def generate_fpa_check_xlsx_from_md(
             "profile": execution_meta.get("profile", ""),
             "strategy": execution_meta.get("strategy", ""),
             "rule_set": execution_meta.get("rule_set", ""),
-            "rule_set_version": execution_meta.get("rule_set_version", ""),
         })
         for warning in _warning_items(row.get("后处理警告", "")):
             source_rule_id, source_rule_desc = _warning_source_for_row(
@@ -1661,7 +1653,6 @@ def generate_fpa_check_xlsx_from_md(
                     "功能点名称": row.get("新增/修改功能点", ""),
                     "生成方式": row.get("生成方式", ""),
                     "rule_set": execution_meta.get("rule_set", ""),
-                    "rule_set_version": execution_meta.get("rule_set_version", ""),
                     "命中对象": hit.get("hit_object", "") or row.get("源功能过程", "") or group.get("l3", ""),
                     "规则ID": hit.get("rule_id", ""),
                     "规则说明": hit.get("rule_desc", ""),
@@ -1779,7 +1770,6 @@ def init_fpa_template_md(
             "profile": execution.profile.name,
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
-            "rule_set_version": execution.rule_set_version,
         },
     )
 
@@ -1838,7 +1828,6 @@ def plan_fpa_md_from_tree(
             "profile": execution.profile.name,
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
-            "rule_set_version": execution.rule_set_version,
         },
     )
     if summary_md_path:
@@ -2129,7 +2118,6 @@ def preview_fpa_module(
             profile_version=profile.version,
             strategy=execution.strategy,
             rule_set=execution.rule_set,
-            rule_set_version=execution.rule_set_version,
         )
         return {
             "module": module_payload,
@@ -2140,7 +2128,6 @@ def preview_fpa_module(
             "profile_version": profile.version,
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
-            "rule_set_version": execution.rule_set_version,
             "audit": audit.to_dict(),
             "preview_md_dir": md_dir,
             "preview_cache_used": cache_used,

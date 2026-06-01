@@ -42,18 +42,6 @@ log_level: INFO
 # 如果AI response数据被截断，增大max_tokens
 max_tokens: 6000
 
-# FPA 规划口径。可用：custom_rules（用户自定义规则口径）、strict_fpa（严格FPA口径）
-fpa_profile: custom_rules
-
-# FPA 执行策略。留空时跟随 profile 默认：
-# custom_rules => rules_first；strict_fpa => ai_first。
-# 可用：rules_first（规则优先）、ai_first（AI优先）、rules_only（仅规则）、ai_only（仅AI）。
-fpa_strategy: ""
-
-# FPA 规则集名称。留空时跟随 profile 默认：
-# custom_rules => custom_rules_default；strict_fpa => strict_fpa_default。
-fpa_rule_set: ""
-
 # FPA 审核副本列配置。留空或不配置时使用默认列。
 # 支持按 Sheet 名称选择列并调整顺序；未知列名会被忽略。
 # fpa_check_columns:
@@ -61,14 +49,6 @@ fpa_rule_set: ""
 #   Warnings: ["级别", "对象", "Warning", "来源规则ID"]
 #   规则命中详情: ["功能点名称", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings"]
 fpa_check_columns: {}
-
-# strict_fpa 外部数据组扩展规则。
-# 这里只扩展内置规则，不覆盖内置规则；普通外部服务调用不要配置为数据组。
-# source_aliases：外部系统/平台名称或别名；data_name：生成的 EIF 数据组名称；data_nouns：识别为数据组所需的业务名词线索。
-fpa_external_data_rules:
-  - source_aliases: ["统一认证平台", "统一认证"]
-    data_name: "统一认证账号"
-    data_nouns: ["账号", "账户", "人员"]
 
 # LLM API 单次调用超时时间（秒，默认120）
 # 点击"停止"后，系统需等当前API调用结束才能退出

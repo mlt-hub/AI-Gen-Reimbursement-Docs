@@ -733,7 +733,7 @@ def main():
         if not template_path:
             from ai_gen_reimbursement_docs.pipeline import _resolve_templates
             template_path = _resolve_templates(excel_path, None).get("fpa", "")
-        from ai_gen_reimbursement_docs.config_utils import load_fpa_profile, load_fpa_rule_set, load_fpa_strategy
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_profile
         from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module
         preview_work_dir = args.output_dir or ""
         result = preview_fpa_module(
@@ -745,8 +745,8 @@ def main():
             base_url=base_url,
             template_path=template_path,
             profile_name=args.fpa_profile or load_fpa_profile(),
-            strategy=args.fpa_strategy or load_fpa_strategy(),
-            rule_set=args.fpa_rule_set or load_fpa_rule_set(),
+            strategy=args.fpa_strategy,
+            rule_set=args.fpa_rule_set,
             work_dir=preview_work_dir,
             use_preview_cache=args.use_preview_cache,
             keep_preview_files=args.keep_preview_files,

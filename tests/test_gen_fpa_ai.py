@@ -4,7 +4,7 @@ import json
 import openpyxl
 import pytest
 
-from ai_gen_reimbursement_docs.config_utils import FpaPromptConfigError
+from ai_gen_reimbursement_docs.config_utils import FpaConfigError, FpaPromptConfigError
 from ai_gen_reimbursement_docs.gen_fpa import (
     _extract_json_obj,
     _group_rows_for_audit,
@@ -47,29 +47,40 @@ def _rows():
 
 
 def _write_fpa_prompt_config(tmp_path, monkeypatch):
-    (tmp_path / "fpa_system_prompts_config.yaml").write_text(
+    (tmp_path / "fpa_config.yaml").write_text(
         """
-fpa_eval:
-  system: 系统提示词
-""",
-        encoding="utf-8",
-    )
-    (tmp_path / "fpa_user_prompts_config.yaml").write_text(
-        """
-custom_rules:
-  fpa_eval: |-
-    ${core_rules}
-    模块输入 JSON：
-    ${payload_json}
-    判定原则：
-    ${judgement_rules}
-strict_fpa:
-  fpa_eval: |-
-    ${core_rules}
-    模块输入 JSON：
-    ${payload_json}
-    判定原则：
-    ${judgement_rules}
+profile: custom_rules
+profiles:
+  custom_rules:
+    strategy: rules_first
+    rule_set: custom_rules_default
+    system_prompt: custom_rules
+    user_prompt: custom_rules
+  strict_fpa:
+    strategy: ai_first
+    rule_set: strict_fpa_default
+    system_prompt: strict_fpa
+    user_prompt: strict_fpa
+prompt_sets:
+  custom_rules:
+    system: 系统提示词
+    user: |-
+      ${core_rules}
+      模块输入 JSON：
+      ${payload_json}
+      判定原则：
+      ${judgement_rules}
+  strict_fpa:
+    system: 严格系统提示词
+    user: |-
+      ${core_rules}
+      模块输入 JSON：
+      ${payload_json}
+      判定原则：
+      ${judgement_rules}
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
 """,
         encoding="utf-8",
     )
@@ -338,14 +349,14 @@ def test_ai_parse_failure_falls_back(monkeypatch, tmp_path, caplog):
     assert any("FPA AI 响应解析失败" in r.message for r in caplog.records)
 
 
-def test_missing_fpa_prompt_config_does_not_fall_back(monkeypatch, tmp_path):
+def test_missing_fpa_config_does_not_fall_back(monkeypatch, tmp_path):
     monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: tmp_path)
     monkeypatch.setattr(
         "ai_gen_reimbursement_docs.gen_fpa._call_llm",
         lambda *args, **kwargs: pytest.fail("missing prompt config must stop before LLM call"),
     )
 
-    with pytest.raises(FpaPromptConfigError, match="未找到 FPA 系统提示词配置"):
+    with pytest.raises(FpaConfigError, match="未找到 FPA 配置文件"):
         _plan_fpa_rows_with_ai(
             _rows(),
             _meta(),
@@ -410,8 +421,8 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["ai_called"] is True
     assert debug["model"] == "test-model"
     assert debug["system_prompt"] == "系统提示词"
-    assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_system_prompts_config.yaml）"
-    assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_user_prompts_config.yaml）"
+    assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: prompt_sets.custom_rules.system）"
+    assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: prompt_sets.custom_rules.user）"
     assert "垂直行业管理" in debug["user_prompt"]
     assert "[system]" in debug["ai_prompt"]
     assert "垂直行业数据维护" in debug["raw_response"]
@@ -461,7 +472,6 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
     assert entry["profile_version"] == "1"
     assert entry["strategy"] == "ai_first"
     assert entry["rule_set"] == "custom_rules_default"
-    assert entry["rule_set_version"] == "1"
     trace = json.loads(audit_trace_path.read_text(encoding="utf-8"))
     assert trace["modules"][0]["source"] == "ai"
     assert trace["modules"][0]["raw_rows"] == response["rows"]
@@ -508,7 +518,6 @@ fpa_check_columns:
 **profile**: custom_rules
 **strategy**: rules_first
 **rule_set**: custom_rules_default
-**rule_set_version**: 1
 
 | 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |
 |------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|

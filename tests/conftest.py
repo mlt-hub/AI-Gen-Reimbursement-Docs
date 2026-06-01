@@ -22,6 +22,20 @@ def test_excel():
 
 
 @pytest.fixture
+def default_fpa_config(tmp_path, monkeypatch):
+    cfg_dir = tmp_path / "default-config"
+    cfg_dir.mkdir()
+    shutil.copy2(Path(__file__).parent.parent / "config" / "fpa_config.yaml.example", cfg_dir / "fpa_config.yaml")
+    monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: cfg_dir)
+    return cfg_dir
+
+
+@pytest.fixture(autouse=True)
+def _default_fpa_config(default_fpa_config):
+    yield
+
+
+@pytest.fixture
 def output_dir(tmp_path):
     """临时交付物输出目录，测试后自动清理。"""
     d = tmp_path / "output"
@@ -43,9 +57,15 @@ def mock_ai():
             shutil.copy2(src, output_md)
         return output_md
 
+    def _copy_spec_template(template_md, output_md, *args, **kwargs):
+        import shutil
+        shutil.copy2(template_md, output_md)
+        return output_md
+
     with patch("ai_gen_reimbursement_docs.pipeline.plan_fpa_md_from_tree",
                side_effect=_copy_fpa_template) as m1b, \
-         patch("ai_gen_reimbursement_docs.gen_spec.ai_fill_spec_md") as m2, \
+         patch("ai_gen_reimbursement_docs.pipeline.ai_fill_spec_md",
+               side_effect=_copy_spec_template) as m2, \
          patch("ai_gen_reimbursement_docs.excel_source.ai_fill_meta_md",
                return_value="/fake/meta.md") as m3, \
          patch("ai_gen_reimbursement_docs.excel_source._call_llm_once",

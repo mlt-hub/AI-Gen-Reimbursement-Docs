@@ -92,7 +92,7 @@ class TestGenFpa:
         ws_result = wb["FPA结果"]
         headers = [cell.value for cell in ws_result[1]]
         assert "生成方式" in headers
-        assert "rule_set_version" in headers
+        assert "rule_set_version" not in headers
         assert ws_result.freeze_panes == "A2"
         assert ws_result.auto_filter.ref is not None
         ws_coverage = wb["覆盖审核"]
@@ -106,11 +106,11 @@ class TestGenFpa:
         rule_hit_headers = [cell.value for cell in ws_rule_hits[1]]
         assert rule_hit_headers == [
             "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
-            "FPA行序号", "功能点名称", "生成方式", "rule_set", "rule_set_version",
+            "FPA行序号", "功能点名称", "生成方式", "rule_set",
             "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
         ]
         assert ws_rule_hits.max_row > 1
-        rule_ids = [ws_rule_hits.cell(row=row, column=12).value for row in range(2, ws_rule_hits.max_row + 1)]
+        rule_ids = [ws_rule_hits.cell(row=row, column=11).value for row in range(2, ws_rule_hits.max_row + 1)]
         assert any(rule_id for rule_id in rule_ids)
         assert ws_rule_hits.freeze_panes == "A2"
         assert ws_rule_hits.auto_filter.ref is not None

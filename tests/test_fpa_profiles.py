@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import patch
 
-from ai_gen_reimbursement_docs.config_utils import FpaPromptConfigError
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
@@ -12,27 +11,51 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
 )
 
 
-def _write_fpa_user_prompts(tmp_path):
-    (tmp_path / "fpa_user_prompts_config.yaml").write_text(
+def _write_fpa_config(tmp_path):
+    (tmp_path / "fpa_config.yaml").write_text(
         """
-custom_rules:
-  fpa_eval: |-
-    自定义 custom 模板
-    ${core_rules}
-    CUSTOM_RULES:
-    ${judgement_rules}
-    PAYLOAD:
-    ${payload_json}
-strict_fpa:
-  fpa_eval: |-
-    自定义 strict 模板
-    ${core_rules}
-    RULES:
-    ${judgement_rules}
-    PAYLOAD:
-    ${payload_json}
-    UNKNOWN:
-    ${unknown_placeholder}
+profile: custom_rules
+profiles:
+  custom_rules:
+    strategy: rules_first
+    rule_set: custom_rules_default
+    system_prompt: custom_rules
+    user_prompt: custom_rules
+  strict_fpa:
+    strategy: ai_first
+    rule_set: strict_fpa_default
+    system_prompt: strict_fpa
+    user_prompt: strict_fpa
+prompt_sets:
+  custom_rules:
+    system: CUSTOM SYSTEM
+    user: |-
+      自定义 custom 模板
+      ${core_rules}
+      CUSTOM_RULES:
+      ${judgement_rules}
+      PAYLOAD:
+      ${payload_json}
+  strict_fpa:
+    system: STRICT SYSTEM
+    user: |-
+      自定义 strict 模板
+      ${core_rules}
+      RULES:
+      ${judgement_rules}
+      PAYLOAD:
+      ${payload_json}
+      UNKNOWN:
+      ${unknown_placeholder}
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
+  telecom_rules:
+    extends: strict_fpa_default
+    external_data_rules:
+      - source_aliases: ["行业平台"]
+        data_name: "行业平台客户档案"
+        data_nouns: ["客户", "档案"]
 """,
         encoding="utf-8",
     )
@@ -49,64 +72,40 @@ def test_unknown_profile_is_rejected():
         get_fpa_profile("unknown_profile")
 
 
-def test_execution_config_uses_profile_defaults():
-    custom = resolve_fpa_execution_config("custom_rules")
-    assert custom.profile is CUSTOM_RULES_PROFILE
-    assert custom.strategy == "rules_first"
-    assert custom.rule_set == "custom_rules_default"
+def test_execution_config_uses_profile_defaults(tmp_path):
+    _write_fpa_config(tmp_path)
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        custom = resolve_fpa_execution_config("custom_rules")
+        assert custom.profile is CUSTOM_RULES_PROFILE
+        assert custom.strategy == "rules_first"
+        assert custom.rule_set == "custom_rules_default"
 
-    strict = resolve_fpa_execution_config("strict_fpa")
-    assert strict.profile is STRICT_FPA_PROFILE
-    assert strict.strategy == "ai_first"
-    assert strict.rule_set == "strict_fpa_default"
-
-
-def test_execution_config_accepts_explicit_strategy_and_rule_set():
-    config = resolve_fpa_execution_config("strict_fpa", "ai_only", "strict_fpa_default")
-    assert config.strategy == "ai_only"
-    assert config.rule_set == "strict_fpa_default"
+        strict = resolve_fpa_execution_config("strict_fpa")
+        assert strict.profile is STRICT_FPA_PROFILE
+        assert strict.strategy == "ai_first"
+        assert strict.rule_set == "strict_fpa_default"
 
 
-def test_rule_set_extends_and_version_are_loaded(tmp_path):
-    yaml_file = tmp_path / "fpa_rule_sets_config.yaml"
-    yaml_file.write_text(
-        """
-rule_sets:
-  telecom_rules:
-    extends: strict_fpa_default
-    version: "2026.05"
-    external_data_rules:
-      - source_aliases: ["行业平台"]
-        data_name: "行业平台客户档案"
-        data_nouns: ["客户", "档案"]
-""",
-        encoding="utf-8",
-    )
+def test_execution_config_accepts_explicit_strategy_and_rule_set(tmp_path):
+    _write_fpa_config(tmp_path)
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("strict_fpa", "ai_only", "strict_fpa_default")
+        assert config.strategy == "ai_only"
+        assert config.rule_set == "strict_fpa_default"
 
+
+def test_rule_set_extends_are_loaded(tmp_path):
+    _write_fpa_config(tmp_path)
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_rules")
 
     assert config.rule_set == "telecom_rules"
-    assert config.rule_set_version == "2026.05"
     assert config.rule_set_config.extends == "strict_fpa_default"
     assert config.rule_set_config.external_data_rules[0].data_name == "行业平台客户档案"
 
 
 def test_rule_set_external_data_rules_affect_strict_profile(tmp_path):
-    yaml_file = tmp_path / "fpa_rule_sets_config.yaml"
-    yaml_file.write_text(
-        """
-rule_sets:
-  telecom_rules:
-    extends: strict_fpa_default
-    version: "2026.05"
-    external_data_rules:
-      - source_aliases: ["行业平台"]
-        data_name: "行业平台客户档案"
-        data_nouns: ["客户", "档案"]
-""",
-        encoding="utf-8",
-    )
+    _write_fpa_config(tmp_path)
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_rules")
         token = set_current_fpa_rule_set_config(config.rule_set_config)
@@ -123,7 +122,7 @@ rule_sets:
 
 
 def test_custom_rules_prompt_is_rendered_from_config(tmp_path):
-    _write_fpa_user_prompts(tmp_path)
+    _write_fpa_config(tmp_path)
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         prompt = CUSTOM_RULES_PROFILE.build_prompt(
             {
@@ -143,7 +142,7 @@ def test_custom_rules_prompt_is_rendered_from_config(tmp_path):
 
 def test_missing_fpa_user_prompt_config_raises(tmp_path):
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        with pytest.raises(FpaPromptConfigError, match="未找到 FPA 用户提示词配置"):
+        with pytest.raises(ValueError, match="未找到 FPA 配置文件"):
             STRICT_FPA_PROFILE.build_prompt(
                 {
                     "client_type": "后台",
@@ -157,7 +156,7 @@ def test_missing_fpa_user_prompt_config_raises(tmp_path):
 
 
 def test_fpa_user_prompt_template_can_be_loaded_from_separate_config(tmp_path):
-    _write_fpa_user_prompts(tmp_path)
+    _write_fpa_config(tmp_path)
 
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         prompt = STRICT_FPA_PROFILE.build_prompt(

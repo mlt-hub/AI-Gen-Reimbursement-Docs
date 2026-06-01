@@ -13,8 +13,6 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_enable_ai_fill_meta,
     load_fpa_excel_recalc_check,
     load_fpa_profile,
-    load_fpa_rule_set,
-    load_fpa_strategy,
     load_spec_remind_update_toc, load_spec_auto_update_toc,
     load_out_templates,
 )
@@ -353,6 +351,12 @@ def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
                 templates[key] = cfg_path
                 continue
 
+        # 3. 内置模板（未初始化 system_config.yaml 时的默认回退）
+        default_path = os.path.join(project_root(), "data", "out_templates", default_filename)
+        if os.path.exists(default_path):
+            templates[key] = default_path
+            continue
+
     # 检查缺失的模板，给出明确提示
     missing = [k for k in ['fpa', 'cosmic', 'list', 'spec'] if not templates.get(k)]
     if missing:
@@ -479,8 +483,8 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
     fpa_audit_trace = os.path.join(md_dir, '1.5.gen-fpa-audit-trace.json')
     execution = resolve_fpa_execution_config(
         fpa_profile or load_fpa_profile(),
-        fpa_strategy or load_fpa_strategy(),
-        fpa_rule_set or load_fpa_rule_set(),
+        fpa_strategy,
+        fpa_rule_set,
     )
     profile_name = execution.profile.name
     init_fpa_template_md(
@@ -519,7 +523,6 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
             "profile": execution.profile.name,
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
-            "rule_set_version": execution.rule_set_version,
             "modules": [
                 {
                     "module": _group_tag(group),
@@ -824,7 +827,7 @@ def run_pipeline_simple(
         project_name=project_name,
         templates=templates,
         fpa_profile=fpa_profile or load_fpa_profile(),
-        fpa_strategy=fpa_strategy or load_fpa_strategy(),
-        fpa_rule_set=fpa_rule_set or load_fpa_rule_set(),
+        fpa_strategy=fpa_strategy,
+        fpa_rule_set=fpa_rule_set,
         callbacks=callbacks,
     )

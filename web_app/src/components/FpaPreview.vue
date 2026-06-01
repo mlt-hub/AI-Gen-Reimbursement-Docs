@@ -135,7 +135,7 @@
         <div v-if="result.audit" class="border-t border-[var(--color-rule)] px-3 py-2">
           <details open>
             <summary class="subtle-link cursor-pointer select-none text-xs">审核信息</summary>
-            <div class="mt-3 grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
+            <div class="mt-3 grid grid-cols-2 gap-3 text-xs md:grid-cols-3">
               <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
                 <div class="text-[var(--color-ink-soft)]">功能过程覆盖</div>
                 <div class="mt-1 text-base font-semibold text-[var(--color-ink)]">{{ result.audit.coverage.covered_count }}/{{ result.audit.coverage.process_total }}</div>
@@ -147,10 +147,6 @@
               <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
                 <div class="text-[var(--color-ink-soft)]">规则集</div>
                 <div class="mt-1 truncate font-semibold text-[var(--color-ink)]">{{ result.audit.rule_set }}</div>
-              </div>
-              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="text-[var(--color-ink-soft)]">版本</div>
-                <div class="mt-1 truncate font-semibold text-[var(--color-ink)]">{{ result.audit.rule_set_version }}</div>
               </div>
             </div>
 
@@ -275,7 +271,6 @@ interface FpaPreviewResult {
   profile_version: string
   strategy: string
   rule_set: string
-  rule_set_version: string
   audit?: FpaAuditReport
   debug?: FpaPreviewDebug
 }
@@ -285,7 +280,6 @@ interface FpaAuditReport {
   profile_version: string
   strategy: string
   rule_set: string
-  rule_set_version: string
   coverage: {
     process_total: number
     covered_count: number

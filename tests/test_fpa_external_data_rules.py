@@ -1,7 +1,12 @@
 import pytest
 from unittest.mock import patch
 
-from ai_gen_reimbursement_docs.fpa_profiles import STRICT_FPA_PROFILE
+from ai_gen_reimbursement_docs.fpa_profiles import (
+    STRICT_FPA_PROFILE,
+    resolve_fpa_execution_config,
+    reset_current_fpa_rule_set_config,
+    set_current_fpa_rule_set_config,
+)
 
 
 @pytest.mark.parametrize(
@@ -37,18 +42,47 @@ def test_strict_fpa_external_service_calls_are_not_data_groups(text):
 
 
 def test_strict_fpa_external_data_rules_can_be_extended_from_config(tmp_path):
-    yaml_file = tmp_path / "system_config.yaml"
+    yaml_file = tmp_path / "fpa_config.yaml"
     yaml_file.write_text(
         """
-fpa_external_data_rules:
-  - source_aliases: ["统一认证平台", "统一认证"]
-    data_name: "统一认证账号"
-    data_nouns: ["账号", "账户", "人员"]
+profile: strict_fpa
+profiles:
+  custom_rules:
+    strategy: rules_first
+    rule_set: custom_rules_default
+    system_prompt: custom_rules
+    user_prompt: custom_rules
+  strict_fpa:
+    strategy: ai_first
+    rule_set: strict_fpa_auth
+    system_prompt: strict_fpa
+    user_prompt: strict_fpa
+prompt_sets:
+  custom_rules:
+    system: ""
+    user: ""
+  strict_fpa:
+    system: ""
+    user: ""
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
+  strict_fpa_auth:
+    extends: strict_fpa_default
+    external_data_rules:
+      - source_aliases: ["统一认证平台", "统一认证"]
+        data_name: "统一认证账号"
+        data_nouns: ["账号", "账户", "人员"]
 """,
         encoding="utf-8",
     )
 
     text = "系统引用统一认证平台维护的人员账号，本系统不维护账号主数据。"
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        assert STRICT_FPA_PROFILE._is_external_data_group(text)
-        assert STRICT_FPA_PROFILE._external_data_name(text, "认证引用") == "统一认证账号"
+        execution = resolve_fpa_execution_config("strict_fpa")
+        token = set_current_fpa_rule_set_config(execution.rule_set_config)
+        try:
+            assert STRICT_FPA_PROFILE._is_external_data_group(text)
+            assert STRICT_FPA_PROFILE._external_data_name(text, "认证引用") == "统一认证账号"
+        finally:
+            reset_current_fpa_rule_set_config(token)

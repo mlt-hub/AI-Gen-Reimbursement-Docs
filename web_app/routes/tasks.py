@@ -388,8 +388,6 @@ def create_router(
         from ai_gen_reimbursement_docs.config_utils import (
             load_base_url,
             load_fpa_profile,
-            load_fpa_rule_set,
-            load_fpa_strategy,
             load_model_name,
             log_api_key_resolution,
             resolve_api_key,
@@ -441,8 +439,8 @@ def create_router(
                 template_path=templates.get("fpa", ""),
                 work_dir=work_dir,
                 profile_name=fpa_profile.strip() or load_fpa_profile(),
-                strategy=fpa_strategy.strip() or load_fpa_strategy(),
-                rule_set=fpa_rule_set.strip() or load_fpa_rule_set(),
+                strategy=fpa_strategy.strip(),
+                rule_set=fpa_rule_set.strip(),
             )
             return result
         except HTTPException:

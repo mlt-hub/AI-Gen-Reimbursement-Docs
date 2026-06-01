@@ -20,8 +20,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_strategy,
     load_fpa_check_columns,
     load_fpa_rule_sets_config,
-    load_fpa_external_data_rules,
-    FpaPromptConfigError,
+    FpaConfigError,
     load_fpa_system_prompt_config,
     load_fpa_user_prompt_config,
     load_fpa_user_prompt_template,
@@ -39,9 +38,7 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
     for name in [
         ".env.example",
         "system_config.yaml.example",
-        "fpa_system_prompts_config.yaml.example",
-        "fpa_user_prompts_config.yaml.example",
-        "fpa_rule_sets_config.yaml.example",
+        "fpa_config.yaml.example",
     ]:
         (source / name).write_text(f"{name}\n", encoding="utf-8")
     target.mkdir()
@@ -50,16 +47,48 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
     created = copy_default_config_files(target, source)
 
     assert sorted(path.name for path in created) == [
-        "fpa_rule_sets_config.yaml",
-        "fpa_system_prompts_config.yaml",
-        "fpa_user_prompts_config.yaml",
+        "fpa_config.yaml",
         "system_config.yaml",
     ]
     assert (target / ".env").read_text(encoding="utf-8") == "existing\n"
     assert (target / "system_config.yaml").exists()
-    assert (target / "fpa_system_prompts_config.yaml").exists()
-    assert (target / "fpa_user_prompts_config.yaml").exists()
-    assert (target / "fpa_rule_sets_config.yaml").exists()
+    assert (target / "fpa_config.yaml").exists()
+
+
+def _write_fpa_config(tmp_path):
+    (tmp_path / "fpa_config.yaml").write_text(
+        """
+profile: custom_rules
+profiles:
+  custom_rules:
+    strategy: rules_first
+    rule_set: custom_rules_default
+    system_prompt: custom_rules
+    user_prompt: custom_rules
+  strict_fpa:
+    strategy: ai_first
+    rule_set: strict_fpa_default
+    system_prompt: strict_fpa
+    user_prompt: strict_fpa
+prompt_sets:
+  custom_rules:
+    system: CUSTOM SYSTEM
+    user: CUSTOM ${core_rules}
+  strict_fpa:
+    system: STRICT SYSTEM
+    user: STRICT ${core_rules}
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
+  client_a_rules:
+    extends: strict_fpa_default
+    external_data_rules:
+      - source_aliases: ["供应商平台"]
+        data_name: "供应商档案"
+        data_nouns: ["供应商"]
+""",
+        encoding="utf-8",
+    )
 
 
 class TestGetSystemConfigValue:
@@ -172,54 +201,43 @@ class TestBooleanLoaders:
 
 
 class TestLoadFpaProfile:
-    def test_default_profile(self):
+    def test_missing_config_raises(self):
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=Path("/nonexistent")):
-            assert load_fpa_profile() == "custom_rules"
+            with pytest.raises(FpaConfigError, match="未找到 FPA 配置文件"):
+                load_fpa_profile()
 
     def test_configured_profile(self, tmp_path):
-        yaml_file = tmp_path / "system_config.yaml"
-        yaml_file.write_text("fpa_profile: strict_fpa\n", encoding="utf-8")
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace("profile: custom_rules", "profile: strict_fpa"),
+            encoding="utf-8",
+        )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_profile() == "strict_fpa"
 
-    def test_invalid_configured_profile_uses_default(self, tmp_path):
-        yaml_file = tmp_path / "system_config.yaml"
-        yaml_file.write_text("fpa_profile: fpa_profile\n", encoding="utf-8")
+    def test_invalid_configured_profile_raises(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace("profile: custom_rules", "profile: fpa_profile"),
+            encoding="utf-8",
+        )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            assert load_fpa_profile() == "custom_rules"
+            with pytest.raises(FpaConfigError, match="未知 FPA profile"):
+                load_fpa_profile()
 
 
 class TestLoadFpaExecutionOptions:
-    def test_strategy_and_rule_set_default_to_empty(self):
-        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
-                   return_value=Path("/nonexistent")):
-            assert load_fpa_strategy() == ""
-            assert load_fpa_rule_set() == ""
-
-    def test_strategy_and_rule_set_from_config(self, tmp_path):
-        yaml_file = tmp_path / "system_config.yaml"
-        yaml_file.write_text(
-            "fpa_strategy: ai_first\nfpa_rule_set: strict_fpa_default\n",
-            encoding="utf-8",
-        )
+    def test_strategy_and_rule_set_from_profile_config(self, tmp_path):
+        _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            assert load_fpa_strategy() == "ai_first"
-            assert load_fpa_rule_set() == "strict_fpa_default"
+            assert load_fpa_strategy("strict_fpa") == "ai_first"
+            assert load_fpa_rule_set("strict_fpa") == "strict_fpa_default"
 
-    def test_rule_sets_config_from_separate_file(self, tmp_path):
-        yaml_file = tmp_path / "fpa_rule_sets_config.yaml"
-        yaml_file.write_text(
-            """
-rule_sets:
-  client_a_rules:
-    extends: strict_fpa_default
-    version: "2026.05"
-""",
-            encoding="utf-8",
-        )
+    def test_rule_sets_config_from_fpa_config(self, tmp_path):
+        _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            assert load_fpa_rule_sets_config()["client_a_rules"]["version"] == "2026.05"
+            assert load_fpa_rule_sets_config()["client_a_rules"]["extends"] == "strict_fpa_default"
 
     def test_fpa_check_columns_are_normalized(self, tmp_path):
         yaml_file = tmp_path / "system_config.yaml"
@@ -240,104 +258,33 @@ fpa_check_columns:
             }
 
 
-class TestLoadFpaExternalDataRules:
-    def test_default_rules_empty_when_not_configured(self):
-        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
-                   return_value=Path("/nonexistent")):
-            assert load_fpa_external_data_rules() == []
-
-    def test_configured_rules_are_normalized(self, tmp_path):
-        yaml_file = tmp_path / "system_config.yaml"
-        yaml_file.write_text(
-            """
-fpa_external_data_rules:
-  - source_aliases: ["统一认证平台", "统一认证"]
-    data_name: "统一认证账号"
-    data_nouns: ["账号", "账户"]
-  - source_aliases: "供应商平台"
-    data_name: "供应商档案"
-    data_nouns: "供应商"
-""",
-            encoding="utf-8",
-        )
-        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            assert load_fpa_external_data_rules() == [
-                {
-                    "source_aliases": ["统一认证平台", "统一认证"],
-                    "data_name": "统一认证账号",
-                    "data_nouns": ["账号", "账户"],
-                },
-                {
-                    "source_aliases": ["供应商平台"],
-                    "data_name": "供应商档案",
-                    "data_nouns": ["供应商"],
-                },
-            ]
-
-    def test_invalid_rules_are_ignored(self, tmp_path):
-        yaml_file = tmp_path / "system_config.yaml"
-        yaml_file.write_text(
-            """
-fpa_external_data_rules:
-  - source_aliases: []
-    data_name: "空来源"
-  - source_aliases: ["缺名称"]
-  - "not a dict"
-""",
-            encoding="utf-8",
-        )
-        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            assert load_fpa_external_data_rules() == []
-
-
 class TestLoadFpaUserPromptTemplate:
     def test_missing_template_raises_when_not_configured(self):
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=Path("/nonexistent")):
-            with pytest.raises(FpaPromptConfigError, match="未找到 FPA 用户提示词配置"):
+            with pytest.raises(FpaConfigError, match="未找到 FPA 配置文件"):
                 load_fpa_user_prompt_template("strict_fpa")
 
     def test_configured_template(self, tmp_path):
-        yaml_file = tmp_path / "fpa_user_prompts_config.yaml"
-        yaml_file.write_text(
-            """
-strict_fpa:
-  fpa_eval: |-
-    STRICT ${core_rules}
-""",
-            encoding="utf-8",
-        )
+        _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_user_prompt_template("strict_fpa") == "STRICT ${core_rules}"
 
     def test_configured_template_exposes_safe_source_label(self, tmp_path):
-        (tmp_path / "fpa_user_prompts_config.yaml").write_text(
-            """
-strict_fpa:
-  fpa_eval: |-
-    STRICT ${core_rules}
-""",
-            encoding="utf-8",
-        )
+        _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             result = load_fpa_user_prompt_config("strict_fpa")
 
         assert result.text == "STRICT ${core_rules}"
-        assert result.source_label == "用户配置（配置目录/fpa_user_prompts_config.yaml）"
+        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: prompt_sets.strict_fpa.user）"
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
-        (tmp_path / "fpa_system_prompts_config.yaml").write_text(
-            """
-fpa_eval:
-  system: 系统提示词
-""",
-            encoding="utf-8",
-        )
+        _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            result = load_fpa_system_prompt_config("fpa_eval")
+            result = load_fpa_system_prompt_config("strict_fpa")
 
-        assert result.text == "系统提示词"
-        assert result.source_label == "用户配置（配置目录/fpa_system_prompts_config.yaml）"
+        assert result.text == "STRICT SYSTEM"
+        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: prompt_sets.strict_fpa.system）"
 
 
 class TestLoadModelName:

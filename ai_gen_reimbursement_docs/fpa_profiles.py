@@ -11,20 +11,6 @@ from string import Template
 
 
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
-DEFAULT_FPA_STRATEGIES = {
-    "custom_rules": "rules_first",
-    "strict_fpa": "ai_first",
-}
-DEFAULT_FPA_RULE_SETS = {
-    "custom_rules": "custom_rules_default",
-    "strict_fpa": "strict_fpa_default",
-}
-
-BUILTIN_FPA_RULE_SET_VERSIONS = {
-    "custom_rules_default": "1",
-    "strict_fpa_default": "1",
-}
-
 
 CUSTOM_RULES_CORE_RULES = """
 FPA 核心口径：
@@ -93,7 +79,6 @@ class FpaExecutionConfig:
     profile: "CustomRulesProfile"
     strategy: str
     rule_set: str
-    rule_set_version: str
     rule_set_config: "FpaRuleSetConfig"
 
 
@@ -102,7 +87,6 @@ class FpaRuleSetConfig:
     """一套可配置 FPA 规则集。"""
 
     name: str
-    version: str = "1"
     extends: str = ""
     external_data_rules: tuple[ExternalDataGroupRule, ...] = field(default_factory=tuple)
     raw: dict[str, object] = field(default_factory=dict)
@@ -218,20 +202,9 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
                     external_rules.append(rule)
     return FpaRuleSetConfig(
         name=name,
-        version=str(data.get("version") or BUILTIN_FPA_RULE_SET_VERSIONS.get(name, "1")).strip() or "1",
         extends=str(data.get("extends") or "").strip(),
         external_data_rules=tuple(external_rules),
         raw=dict(data),
-    )
-
-
-def _builtin_rule_set(name: str) -> FpaRuleSetConfig:
-    if name not in BUILTIN_FPA_RULE_SET_VERSIONS:
-        raise ValueError(f"未知 FPA rule_set: {name}")
-    return FpaRuleSetConfig(
-        name=name,
-        version=BUILTIN_FPA_RULE_SET_VERSIONS[name],
-        raw={"version": BUILTIN_FPA_RULE_SET_VERSIONS[name]},
     )
 
 
@@ -240,7 +213,6 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
     raw.update(child.raw)
     return FpaRuleSetConfig(
         name=child.name,
-        version=child.version or parent.version,
         extends=child.extends,
         external_data_rules=(*parent.external_data_rules, *child.external_data_rules),
         raw=raw,
@@ -272,7 +244,9 @@ def resolve_fpa_rule_set_config(rule_set: str) -> FpaRuleSetConfig:
             raise ValueError(f"FPA rule_set 继承出现循环: {name}")
         resolving.add(name)
         try:
-            current = configured.get(name) or _builtin_rule_set(name)
+            current = configured.get(name)
+            if current is None:
+                raise ValueError(f"未知 FPA rule_set: {name}")
             if current.extends:
                 parent = _resolve(current.extends)
                 current = _merge_rule_sets(parent, current)
@@ -660,17 +634,6 @@ class StrictFpaProfile(CustomRulesProfile):
         current_rule_set = current_fpa_rule_set_config()
         if current_rule_set is not None:
             rules.extend(current_rule_set.external_data_rules)
-        try:
-            from ai_gen_reimbursement_docs.config_utils import load_fpa_external_data_rules
-            configured_rules = load_fpa_external_data_rules()
-        except Exception:
-            configured_rules = []
-        for item in configured_rules:
-            aliases = tuple(str(alias).strip() for alias in item.get("source_aliases", []) if str(alias).strip())
-            data_name = str(item.get("data_name") or "").strip()
-            nouns = tuple(str(noun).strip() for noun in item.get("data_nouns", []) if str(noun).strip())
-            if aliases and data_name:
-                rules.append(ExternalDataGroupRule(aliases, data_name, nouns or tuple(EXTERNAL_DATA_GROUP_NOUNS)))
         return rules
 
     def _extract_external_data_name(self, text: str) -> str:
@@ -742,7 +705,8 @@ def resolve_fpa_strategy(profile_name: str = "", strategy: str = "") -> str:
     profile_key = (profile_name or CUSTOM_RULES_PROFILE.name).strip()
     value = (strategy or "").strip()
     if not value:
-        value = DEFAULT_FPA_STRATEGIES.get(profile_key, "rules_first")
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_strategy
+        value = load_fpa_strategy(profile_key)
     if value not in VALID_FPA_STRATEGIES:
         raise ValueError(f"未知 FPA strategy: {strategy}")
     return value
@@ -752,7 +716,10 @@ def resolve_fpa_rule_set(profile_name: str = "", rule_set: str = "") -> str:
     """解析 FPA 规则集名称。空值使用 profile 默认规则集。"""
     profile_key = (profile_name or CUSTOM_RULES_PROFILE.name).strip()
     value = (rule_set or "").strip()
-    return value or DEFAULT_FPA_RULE_SETS.get(profile_key, "custom_rules_default")
+    if not value:
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_rule_set
+        value = load_fpa_rule_set(profile_key)
+    return value
 
 
 def resolve_fpa_execution_config(
@@ -768,6 +735,5 @@ def resolve_fpa_execution_config(
         profile=profile,
         strategy=resolve_fpa_strategy(profile.name, strategy),
         rule_set=resolved_rule_set,
-        rule_set_version=rule_set_config.version,
         rule_set_config=rule_set_config,
     )

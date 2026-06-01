@@ -1,0 +1,100 @@
+# FPA 专用配置
+# 复制到 ~/.ai-gen-reimbursement-docs/fpa_config.yaml 后生效
+#
+# profile 决定默认 FPA 方案；CLI/Web/API 显式传入 fpa_profile 时优先使用显式值。
+
+profile: custom_rules
+
+profiles:
+  custom_rules:
+    strategy: rules_first
+    rule_set: custom_rules_default
+    system_prompt: custom_rules
+    user_prompt: custom_rules
+
+  strict_fpa:
+    strategy: ai_first
+    rule_set: strict_fpa_default
+    system_prompt: strict_fpa
+    user_prompt: strict_fpa
+
+prompt_sets:
+  custom_rules:
+    system: |-
+      你是一个严谨的 FPA 功能点评估助手。你的任务是根据用户提示词中给定的 profile 口径、计算依据归类判定原则和三级模块业务输入，规划 FPA 功能点评估行。
+
+      ## 通用约束
+      1. 必须遵守用户提示词中的 FPA profile 口径。
+      2. 不要机械地为每个功能过程固定生成界面开发或接口开发行。
+      3. 类型必须为 EI / EO / EQ / ILF / EIF 之一。
+      4. 用户提供了带序号的「计算依据归类判定原则列表」，请返回最匹配的 classification_basis_index。
+      5. 计算依据说明必须基于输入业务内容，不要编造不存在的页面、表、接口或流程。
+      6. 不允许输出除 JSON 外的任何内容。
+
+    user: |-
+      ${core_rules}
+
+      计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：
+      ${judgement_rules}
+
+      请以三级模块为单位规划 FPA 行：
+      1. 默认生成 1 条三级模块级界面开发行，覆盖同一页面内的列表、查询条件、按钮、弹窗和状态组件。
+      2. 非界面逻辑按功能动作拆分，一行一个动作。
+      3. 不要为数据库表、字段、保存表动作单独生成行。
+      4. 如果确实需要多条界面开发行，每条都必须给出 split_reason。
+
+      模块输入 JSON：
+      ${payload_json}
+
+      请直接输出 JSON，不要输出其他内容。格式：
+      {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"<计算依据说明>","source_processes":["<功能过程名称>"],"split_reason":"<多界面拆分理由，可空>"}]}
+
+  strict_fpa:
+    system: |-
+      你是一个严谨的 FPA 功能点评估助手。你的任务是根据用户提示词中给定的 strict_fpa 口径、计算依据归类判定原则和三级模块业务输入，规划标准 FPA 功能点评估行。
+
+      ## 通用约束
+      1. 必须遵守用户提示词中的严格 FPA 口径，不按开发工作项拆分。
+      2. 类型必须为 EI / EO / EQ / ILF / EIF 之一。
+      3. 用户提供了带序号的「计算依据归类判定原则列表」，请返回最匹配的 classification_basis_index。
+      4. 计算依据说明必须基于输入业务内容，不要编造不存在的页面、表、接口或流程。
+      5. 不允许输出除 JSON 外的任何内容。
+
+    user: |-
+      ${core_rules}
+
+      计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：
+      ${judgement_rules}
+
+      请以严格 FPA 口径规划本三级模块的 FPA 行：
+      1. 先识别数据功能：本系统维护的数据组为 ILF，外部维护且本系统引用的数据组为 EIF。
+      2. 再识别事务功能：新增/修改/删除/保存/提交/审批/导入为 EI，查询/查看/详情为 EQ，导出/报表/下载文件为 EO。
+      3. 禁止输出界面开发、接口开发、逻辑处理开发、按钮、弹窗、数据库表或字段行。
+      4. 普通外部服务调用不要直接输出 EIF，除非明确引用外部维护的数据组。
+
+      模块输入 JSON：
+      ${payload_json}
+
+      请直接输出 JSON，不要输出其他内容。格式：
+      {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"<计算依据说明>","source_processes":["<功能过程名称>"],"split_reason":""}]}
+
+rule_sets:
+  custom_rules_default: {}
+
+  strict_fpa_default: {}
+
+  # 示例：更保守的 strict_fpa 规则集。
+  strict_fpa_conservative:
+    extends: strict_fpa_default
+    external_data_rules:
+      - source_aliases: ["统一认证平台", "统一认证"]
+        data_name: "统一认证账号"
+        data_nouns: ["账号", "账户", "人员"]
+
+  # 示例：客户 A 的规则集。
+  client_a_rules:
+    extends: strict_fpa_default
+    external_data_rules:
+      - source_aliases: ["供应商平台"]
+        data_name: "供应商平台供应商档案"
+        data_nouns: ["供应商", "档案", "信息"]

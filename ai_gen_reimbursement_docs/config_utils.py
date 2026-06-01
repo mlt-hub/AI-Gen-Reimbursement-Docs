@@ -17,10 +17,18 @@ DEFAULT_CFP_FORMULA = (
 DEFAULT_CONFIG_TEMPLATE_FILES = (
     (".env.example", ".env"),
     ("system_config.yaml.example", "system_config.yaml"),
-    ("fpa_system_prompts_config.yaml.example", "fpa_system_prompts_config.yaml"),
-    ("fpa_user_prompts_config.yaml.example", "fpa_user_prompts_config.yaml"),
-    ("fpa_rule_sets_config.yaml.example", "fpa_rule_sets_config.yaml"),
+    ("fpa_config.yaml.example", "fpa_config.yaml"),
 )
+
+DEFAULT_SHEET_NAMES = {
+    "work_order_meta": "1、工单需求-元数据录入",
+    "func_list": "2、功能清单-内容录入",
+    "fpa_meta": "3、FPA工作量评估-元数据录入",
+    "spec_meta": "4、项目需求说明书-元数据录入",
+    "cosmic_meta": "5、项目功能点拆分表-元数据录入",
+    "list_meta": "6、项目需求清单-元数据录入",
+    "stats_meta": "9、测试元数据自动统计",
+}
 
 
 def config_dir() -> Path:
@@ -113,6 +121,10 @@ class PromptConfig:
 
 class FpaPromptConfigError(ValueError):
     """Raised when required FPA prompt configuration is missing or invalid."""
+
+
+class FpaConfigError(ValueError):
+    """Raised when required FPA configuration is missing or invalid."""
 
 
 def api_key_fingerprint(api_key: str, length: int = 12) -> str:
@@ -380,20 +392,72 @@ def load_fpa_excel_recalc_check() -> bool:
     return _get_system_config_value('fpa_excel_recalc_check', False)
 
 
+FPA_CONFIG_FILENAME = "fpa_config.yaml"
+VALID_FPA_PROFILE_NAMES = {"custom_rules", "strict_fpa"}
+
+
+def load_fpa_config() -> dict[str, object]:
+    """严格读取 FPA 专用配置。"""
+    yaml_path = config_dir() / FPA_CONFIG_FILENAME
+    if not yaml_path.exists():
+        raise FpaConfigError(f"未找到 FPA 配置文件：配置目录/{FPA_CONFIG_FILENAME}")
+    try:
+        cfg = _load_yaml_file(yaml_path)
+    except Exception as exc:
+        raise FpaConfigError(f"读取 FPA 配置失败：配置目录/{FPA_CONFIG_FILENAME}") from exc
+    if not cfg:
+        raise FpaConfigError(f"FPA 配置为空：配置目录/{FPA_CONFIG_FILENAME}")
+    return cfg
+
+
+def load_fpa_profiles_config() -> dict[str, object]:
+    cfg = load_fpa_config()
+    profiles = cfg.get("profiles", {})
+    if not isinstance(profiles, dict):
+        raise FpaConfigError(f"FPA profiles 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles")
+    unknown = sorted(str(name) for name in profiles if str(name) not in VALID_FPA_PROFILE_NAMES)
+    if unknown:
+        raise FpaConfigError(f"未知 FPA profile 配置：{', '.join(unknown)}")
+    return profiles
+
+
+def load_fpa_profile_entry(profile_name: str) -> dict[str, object]:
+    profile_key = str(profile_name or "").strip()
+    profiles = load_fpa_profiles_config()
+    entry = profiles.get(profile_key)
+    if not isinstance(entry, dict):
+        raise FpaConfigError(f"未找到 FPA profile 配置：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_key}")
+    return entry
+
+
 def load_fpa_profile(default: str = "custom_rules") -> str:
-    """读取 FPA 规划口径名称，默认 custom_rules。"""
-    value = _get_system_config_value('fpa_profile', default).strip()
-    return value if value in {"custom_rules", "strict_fpa"} else default
+    """读取默认 FPA 规划口径名称。"""
+    cfg = load_fpa_config()
+    value = str(cfg.get("profile", default) or "").strip()
+    if value not in VALID_FPA_PROFILE_NAMES:
+        raise FpaConfigError(f"未知 FPA profile: {value}")
+    load_fpa_profile_entry(value)
+    return value
 
 
-def load_fpa_strategy(default: str = "") -> str:
-    """读取 FPA 执行策略。空值表示使用 profile 默认策略。"""
-    return _get_system_config_value('fpa_strategy', default).strip()
+def load_fpa_strategy(profile_name: str = "") -> str:
+    """读取指定 profile 的默认 FPA 执行策略。"""
+    profile_key = profile_name or load_fpa_profile()
+    entry = load_fpa_profile_entry(profile_key)
+    value = str(entry.get("strategy", "") or "").strip()
+    if not value:
+        raise FpaConfigError(f"未找到 FPA strategy 配置：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_key}.strategy")
+    return value
 
 
-def load_fpa_rule_set(default: str = "") -> str:
-    """读取 FPA 规则集名称。空值表示使用 profile 默认规则集。"""
-    return _get_system_config_value('fpa_rule_set', default).strip()
+def load_fpa_rule_set(profile_name: str = "") -> str:
+    """读取指定 profile 的默认 FPA 规则集名称。"""
+    profile_key = profile_name or load_fpa_profile()
+    entry = load_fpa_profile_entry(profile_key)
+    value = str(entry.get("rule_set", "") or "").strip()
+    if not value:
+        raise FpaConfigError(f"未找到 FPA rule_set 配置：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_key}.rule_set")
+    return value
 
 
 def load_fpa_check_columns() -> dict[str, list[str]]:
@@ -424,52 +488,12 @@ def load_fpa_check_columns() -> dict[str, list[str]]:
 
 
 def load_fpa_rule_sets_config() -> dict[str, object]:
-    """读取 fpa_rule_sets_config.yaml 中的 rule_sets。"""
-    yaml_path = config_dir() / "fpa_rule_sets_config.yaml"
-    if not yaml_path.exists():
-        return {}
-    try:
-        import yaml
-        with open(yaml_path, 'r', encoding='utf-8') as f:
-            cfg = yaml.safe_load(f) or {}
-        rule_sets = cfg.get("rule_sets", {})
-        return rule_sets if isinstance(rule_sets, dict) else {}
-    except Exception:
-        return {}
-
-
-def load_fpa_external_data_rules() -> list[dict[str, object]]:
-    """读取 strict_fpa 外部数据组扩展规则。
-
-    配置只扩展内置规则，不覆盖内置规则。无配置或配置非法时返回空列表。
-    """
-    rules = _get_system_config_value('fpa_external_data_rules', [])
-    if not isinstance(rules, list):
-        return []
-    normalized: list[dict[str, object]] = []
-    for item in rules:
-        if not isinstance(item, dict):
-            continue
-        aliases = item.get("source_aliases")
-        data_name = str(item.get("data_name") or "").strip()
-        data_nouns = item.get("data_nouns", [])
-        if isinstance(aliases, str):
-            aliases = [aliases]
-        if isinstance(data_nouns, str):
-            data_nouns = [data_nouns]
-        if not isinstance(aliases, list) or not data_name:
-            continue
-        alias_values = [str(alias).strip() for alias in aliases if str(alias).strip()]
-        noun_values = [str(noun).strip() for noun in data_nouns if str(noun).strip()] if isinstance(data_nouns, list) else []
-        if not alias_values:
-            continue
-        normalized.append({
-            "source_aliases": alias_values,
-            "data_name": data_name,
-            "data_nouns": noun_values,
-        })
-    return normalized
-
+    """读取 fpa_config.yaml 中的 rule_sets。"""
+    cfg = load_fpa_config()
+    rule_sets = cfg.get("rule_sets", {})
+    if not isinstance(rule_sets, dict):
+        raise FpaConfigError(f"FPA rule_sets 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 rule_sets")
+    return rule_sets
 
 def load_cfp_formula(default: str = DEFAULT_CFP_FORMULA) -> str:
     """读取 CFP 计算公式，优先从 business_rules.yaml 获取。"""
@@ -540,13 +564,13 @@ def load_gen_spec_ai_limit() -> int:
 def load_sheet_names() -> dict[str, str]:
     """读取功能清单-录入模板.xlsx 的 Sheet 名称映射。
 
-    返回 key → Sheet 名的字典，未配置则返回空 dict 并提醒用户。
+    返回 key → Sheet 名的字典，未配置则返回内置模板默认值。
     """
     yaml_path = config_dir() / "system_config.yaml"
     if not yaml_path.exists():
         _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
-        _log.warning("未找到 system_config.yaml，Sheet 名称将为空，请运行 --init-config 初始化")
-        return {}
+        _log.warning("未找到 system_config.yaml，Sheet 名称将使用内置默认值，请运行 --init-config 初始化")
+        return DEFAULT_SHEET_NAMES.copy()
     try:
         import yaml
         with open(yaml_path, 'r', encoding='utf-8') as f:
@@ -554,12 +578,13 @@ def load_sheet_names() -> dict[str, str]:
         sheets = cfg.get('sheets', {})
         if not sheets:
             _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
-            _log.warning("system_config.yaml 中未配置 sheets 段，Sheet 名称将为空，请补充 sheets 配置")
-        return sheets
+            _log.warning("system_config.yaml 中未配置 sheets 段，Sheet 名称将使用内置默认值")
+            return DEFAULT_SHEET_NAMES.copy()
+        return {**DEFAULT_SHEET_NAMES, **sheets}
     except Exception:
         _log = logging.getLogger('ai_gen_reimbursement_docs.config_utils')
-        _log.warning("system_config.yaml 读取失败，Sheet 名称将为空")
-        return {}
+        _log.warning("system_config.yaml 读取失败，Sheet 名称将使用内置默认值")
+        return DEFAULT_SHEET_NAMES.copy()
 
 
 def load_enable_ai_fill_meta() -> bool:
@@ -603,6 +628,10 @@ def _user_config_source_label(filename: str) -> str:
     return f"用户配置（配置目录/{filename}）"
 
 
+def _user_config_key_source_label(filename: str, key_path: str) -> str:
+    return f"用户配置（配置目录/{filename}: {key_path}）"
+
+
 def _load_yaml_file(yaml_path: Path) -> dict:
     import yaml
 
@@ -611,45 +640,45 @@ def _load_yaml_file(yaml_path: Path) -> dict:
     return cfg if isinstance(cfg, dict) else {}
 
 
-def load_fpa_system_prompt_config(scene: str = "fpa_eval") -> PromptConfig:
-    """严格读取 FPA system prompt 配置，缺失时直接报错。"""
-    filename = "fpa_system_prompts_config.yaml"
-    yaml_path = config_dir() / filename
-    key_path = f"{scene}.system"
-    if not yaml_path.exists():
-        raise FpaPromptConfigError(f"未找到 FPA 系统提示词配置：配置目录/{filename} 中的 {key_path}")
-    try:
-        cfg = _load_yaml_file(yaml_path)
-    except Exception as exc:
-        raise FpaPromptConfigError(f"读取 FPA 系统提示词配置失败：配置目录/{filename}") from exc
-    scene_config = cfg.get(scene, {})
-    val = scene_config.get("system", "") if isinstance(scene_config, dict) else ""
+def _load_fpa_prompt_text(prompt_key: str, prompt_type: str) -> PromptConfig:
+    cfg = load_fpa_config()
+    prompt_sets = cfg.get("prompt_sets", {})
+    if not isinstance(prompt_sets, dict):
+        raise FpaPromptConfigError(f"FPA prompt_sets 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 prompt_sets")
+    prompt_set = prompt_sets.get(prompt_key)
+    key_path = f"prompt_sets.{prompt_key}.{prompt_type}"
+    val = prompt_set.get(prompt_type, "") if isinstance(prompt_set, dict) else ""
     if not isinstance(val, str) or not val.strip():
-        raise FpaPromptConfigError(f"未找到 FPA 系统提示词配置：配置目录/{filename} 中的 {key_path}")
-    return PromptConfig(text=val, source_label=_user_config_source_label(filename))
+        label = "系统提示词" if prompt_type == "system" else "用户提示词"
+        raise FpaPromptConfigError(f"未找到 FPA {label}配置：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}")
+    return PromptConfig(text=val, source_label=_user_config_key_source_label(FPA_CONFIG_FILENAME, key_path))
 
 
-def load_fpa_user_prompt_config(profile_name: str, scene: str = "fpa_eval") -> PromptConfig:
-    """严格读取 FPA user prompt 模板配置，缺失时直接报错。"""
-    filename = "fpa_user_prompts_config.yaml"
-    yaml_path = config_dir() / filename
-    key_path = f"{profile_name}.{scene}"
-    if not yaml_path.exists():
-        raise FpaPromptConfigError(f"未找到 FPA 用户提示词配置：配置目录/{filename} 中的 {key_path}")
-    try:
-        cfg = _load_yaml_file(yaml_path)
-    except Exception as exc:
-        raise FpaPromptConfigError(f"读取 FPA 用户提示词配置失败：配置目录/{filename}") from exc
-    profile_config = cfg.get(profile_name, {})
-    val = profile_config.get(scene, "") if isinstance(profile_config, dict) else ""
-    if not isinstance(val, str) or not val.strip():
-        raise FpaPromptConfigError(f"未找到 FPA 用户提示词配置：配置目录/{filename} 中的 {key_path}")
-    return PromptConfig(text=val, source_label=_user_config_source_label(filename))
+def load_fpa_system_prompt_config(profile_name: str) -> PromptConfig:
+    """严格读取当前 profile 绑定的 FPA system prompt。"""
+    entry = load_fpa_profile_entry(profile_name)
+    prompt_key = str(entry.get("system_prompt", "") or "").strip()
+    if not prompt_key:
+        raise FpaPromptConfigError(
+            f"未找到 FPA 系统提示词绑定：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_name}.system_prompt"
+        )
+    return _load_fpa_prompt_text(prompt_key, "system")
 
 
-def load_fpa_user_prompt_template(profile_name: str, scene: str = "fpa_eval") -> str:
-    """从 fpa_user_prompts_config.yaml 读取 FPA 用户提示词模板。"""
-    return load_fpa_user_prompt_config(profile_name, scene).text
+def load_fpa_user_prompt_config(profile_name: str) -> PromptConfig:
+    """严格读取当前 profile 绑定的 FPA user prompt 模板。"""
+    entry = load_fpa_profile_entry(profile_name)
+    prompt_key = str(entry.get("user_prompt", "") or "").strip()
+    if not prompt_key:
+        raise FpaPromptConfigError(
+            f"未找到 FPA 用户提示词绑定：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_name}.user_prompt"
+        )
+    return _load_fpa_prompt_text(prompt_key, "user")
+
+
+def load_fpa_user_prompt_template(profile_name: str) -> str:
+    """从 fpa_config.yaml 读取 FPA 用户提示词模板。"""
+    return load_fpa_user_prompt_config(profile_name).text
 
 
 def migrate_config() -> None:
@@ -695,9 +724,7 @@ def migrate_config() -> None:
     # 对比 .example 和用户配置，自动追加新增的顶层键（含嵌套块）
     yaml_pairs = [
         (home / "system_config.yaml", local / "system_config.yaml.example", "system_config"),
-        (home / "fpa_system_prompts_config.yaml", local / "fpa_system_prompts_config.yaml.example", "fpa_system_prompts_config"),
-        (home / "fpa_user_prompts_config.yaml", local / "fpa_user_prompts_config.yaml.example", "fpa_user_prompts_config"),
-        (home / "fpa_rule_sets_config.yaml", local / "fpa_rule_sets_config.yaml.example", "fpa_rule_sets_config"),
+        (home / "fpa_config.yaml", local / "fpa_config.yaml.example", "fpa_config"),
     ]
     try:
         import yaml
