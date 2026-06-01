@@ -612,6 +612,31 @@ def _supplement_ai_rows_with_rules(
     return combined, warnings
 
 
+def _rules_first_ai_reasons(group: dict[str, object], rule_rows: list[dict[str, object]]) -> list[str]:
+    """Return reasons why rules_first should ask AI to re-plan this module."""
+    reasons: list[str] = []
+    if not rule_rows:
+        reasons.append("规则未生成 FPA 行")
+        return reasons
+
+    for index, row in enumerate(rule_rows, 1):
+        name = str(row.get("新增/修改功能点", "") or "").strip()
+        fpa_type = str(row.get("类型", "") or "").strip()
+        if not name:
+            reasons.append(f"规则行 {index} 新增/修改功能点为空")
+        if fpa_type not in VALID_FPA_TYPES:
+            reasons.append(f"规则行 {index} 类型无效: {fpa_type or '空'}")
+
+    expected = set(_process_names_for_group(group))
+    covered: set[str] = set()
+    for row in rule_rows:
+        covered.update(_source_process_set(row))
+    missing = sorted(expected - covered)
+    if missing:
+        reasons.append(f"规则结果未覆盖功能过程: {'、'.join(missing)}")
+    return reasons
+
+
 def _build_fpa_audit_report(
     *,
     group: dict[str, object],
@@ -1036,7 +1061,7 @@ def _plan_fpa_rows_with_execution(
     audit_trace_path: str = "",
 ) -> list[dict[str, object]]:
     groups = _group_rows_by_l3(rows)
-    if strategy in {"rules_first", "rules_only"}:
+    if strategy == "rules_only":
         logger.info("FPA strategy=%s，使用规则集 %s 生成 FPA", strategy, rule_set)
         all_rows: list[dict[str, object]] = []
         audit_modules: list[dict[str, object]] = []
@@ -1062,7 +1087,7 @@ def _plan_fpa_rows_with_execution(
             "modules": audit_modules,
         })
         return all_rows
-    if not api_key:
+    if strategy != "rules_first" and not api_key:
         raise ValueError(f"FPA strategy={strategy} 需要 API Key，当前未配置")
 
     from ai_gen_reimbursement_docs.config_utils import FpaPromptConfigError, load_flow_max_ai, load_gen_fpa_ai_limit
@@ -1081,22 +1106,60 @@ def _plan_fpa_rows_with_execution(
     audit_modules: list[dict[str, object]] = []
 
     for idx, group in enumerate(groups, 1):
+        rules_first_rows: list[dict[str, object]] = []
+        rules_first_reasons: list[str] = []
+        if strategy == "rules_first":
+            rules_first_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            _attach_profile_rule_hits(rules_first_rows, profile=profile, generation="fallback")
+            rules_first_reasons = _rules_first_ai_reasons(group, rules_first_rows)
+            if not rules_first_reasons:
+                logger.info("  FPA rules_first 使用规则结果 [%d/%d] %s", idx, len(groups), _group_tag(group))
+                all_rows.extend(rules_first_rows)
+                seq += len(rules_first_rows)
+                audit_modules.append({
+                    "module": _group_tag(group),
+                    "l3": group.get("l3", ""),
+                    "source": "rules",
+                    "raw_rows": [],
+                    "warnings": ["规则优先策略未调用 AI：规则结果覆盖完整且基础字段有效"],
+                    "rule_hits": _trace_rule_hits_for_rows(rules_first_rows),
+                })
+                continue
+            if not api_key:
+                warning = "规则结果需要 AI 复核但未配置 API Key，已保留规则生成结果: " + "；".join(rules_first_reasons)
+                logger.warning("FPA rules_first 未调用 AI [%s]: %s", _group_tag(group), warning)
+                all_rows.extend(rules_first_rows)
+                seq += len(rules_first_rows)
+                audit_modules.append({
+                    "module": _group_tag(group),
+                    "l3": group.get("l3", ""),
+                    "source": "rules",
+                    "raw_rows": [],
+                    "warnings": [warning],
+                    "rule_hits": _trace_rule_hits_for_rows(rules_first_rows),
+                })
+                continue
+
         limited = (max_ai > 0 and idx > max_ai) or (module_limit > 0 and idx > module_limit)
         if limited:
             if strategy == "ai_only":
                 raise ValueError(f"FPA strategy=ai_only 但三级模块 {_group_tag(group)} 被 AI 限制跳过")
             skipped += 1
-            group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
-            _attach_profile_rule_hits(group_rows, profile=profile, generation="rules_fallback")
+            group_rows = rules_first_rows or profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            generation = "fallback" if strategy == "rules_first" else "rules_fallback"
+            _attach_profile_rule_hits(group_rows, profile=profile, generation=generation)
             fallback += len(group_rows)
             all_rows.extend(group_rows)
             seq += len(group_rows)
+            warning = "模块超过 AI 调用限制，已使用规则生成"
+            if rules_first_reasons:
+                warning = f"规则结果需要 AI 复核但{warning}: {'；'.join(rules_first_reasons)}"
             audit_modules.append({
                 "module": _group_tag(group),
                 "l3": group.get("l3", ""),
-                "source": "rules_fallback",
+                "source": "rules" if strategy == "rules_first" else "rules_fallback",
                 "raw_rows": [],
-                "warnings": ["模块超过 AI 调用限制，已使用规则生成"],
+                "warnings": [warning],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
             continue
@@ -1126,6 +1189,8 @@ def _plan_fpa_rows_with_execution(
                     profile=profile,
                     strategy=strategy,
                 )
+                if rules_first_reasons:
+                    warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
                 group_rows, supplement_warnings = _supplement_ai_rows_with_rules(
                     group=group,
                     meta=meta,
@@ -1170,6 +1235,8 @@ def _plan_fpa_rows_with_execution(
                 profile=profile,
                 strategy=strategy,
             )
+            if rules_first_reasons:
+                warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
             group_rows, supplement_warnings = _supplement_ai_rows_with_rules(
                 group=group,
                 meta=meta,
@@ -1213,15 +1280,22 @@ def _plan_fpa_rows_with_execution(
             else:
                 parse_failed += 1
             logger.warning("FPA AI 响应解析失败 [%s]: %s", _group_tag(group), exc)
-            group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            group_rows = rules_first_rows or profile.fallback_rows_for_l3(group, meta, start_seq=seq)
             _attach_profile_rule_hits(group_rows, profile=profile, generation="fallback")
             fallback += len(group_rows)
+            fallback_warning = f"AI 调用或解析失败: {exc}"
+            if rules_first_reasons:
+                fallback_warning = (
+                    "规则结果触发 AI 复核，但 AI 调用或解析失败，已保留规则生成结果: "
+                    + "；".join(rules_first_reasons)
+                    + f"；AI错误: {exc}"
+                )
             audit_modules.append({
                 "module": _group_tag(group),
                 "l3": group.get("l3", ""),
                 "source": "rules_fallback",
                 "raw_rows": locals().get("raw_rows", []),
-                "warnings": [f"AI 调用或解析失败: {exc}"],
+                "warnings": [fallback_warning],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
 
@@ -1823,7 +1897,7 @@ def plan_fpa_md_from_tree(
     total = _write_fpa_rows_md(
         fpa_rows,
         output_md_path,
-        ai_filled=bool(api_key) and execution.strategy in {"ai_first", "ai_only"},
+        ai_filled=any(str(row.get("生成方式", "")) in {"ai", "ai_cache"} for row in fpa_rows),
         execution_meta={
             "profile": execution.profile.name,
             "strategy": execution.strategy,
@@ -2036,6 +2110,33 @@ def preview_fpa_module(
                 used_ai = False
                 debug["reason"] = execution.strategy
                 fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+                _attach_profile_rule_hits(fpa_rows, profile=profile, generation="fallback")
+                if execution.strategy == "rules_first":
+                    rules_first_reasons = _rules_first_ai_reasons(group, fpa_rows)
+                    if rules_first_reasons and api_key:
+                        debug["reason"] = "rules_first_needs_ai"
+                        raw_rows, debug = _ai_plan_fpa_rows_for_l3_debug(
+                            group, judgement_rules, _build_domain_context(meta), api_key, model, base_url,
+                            profile=profile,
+                        )
+                        debug["reason"] = "rules_first_needs_ai"
+                        fpa_rows, warnings = _normalize_ai_fpa_rows_for_l3(
+                            group=group,
+                            meta=meta,
+                            ai_rows=raw_rows,
+                            judgement_rules=judgement_rules,
+                            start_seq=1,
+                            profile=profile,
+                            strategy=execution.strategy,
+                        )
+                        warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
+                        used_ai = True
+                    elif rules_first_reasons:
+                        warning = "规则结果需要 AI 复核但未配置 API Key，已保留规则生成结果: " + "；".join(rules_first_reasons)
+                        warnings.append(warning)
+                        debug["reason"] = "rules_first_needs_ai_missing_api_key"
+                    else:
+                        debug["reason"] = "rules_first_rules_ok"
             elif not api_key:
                 debug["reason"] = "missing_api_key"
                 raise ValueError(f"FPA strategy={execution.strategy} 需要 API Key，当前未配置")

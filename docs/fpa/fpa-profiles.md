@@ -110,7 +110,7 @@ strict_fpa   = ai_first    + strict_fpa_default
 策略含义：
 
 ```text
-rules_first：规则优先。当前 custom_rules 内置规则可覆盖现有场景，因此直接按规则生成；后续会细化“规则无法判定再交 AI”。
+rules_first：规则优先。规则结果为空、名称为空、类型非法或未覆盖功能过程时，才在有 API Key 的情况下交给 AI 复核；无 API Key 时保留规则结果并记录 warning。
 ai_first：AI 优先。AI 输出合法且覆盖充分时采用 AI；AI 不完整时由 rules 补漏。
 rules_only：仅规则。不调用 AI。
 ai_only：仅 AI。不使用 rules 补行，AI 失败或被配置限制跳过时直接报错。
@@ -463,7 +463,7 @@ strict_fpa 以 AI 为主，rules 只做 warning、补漏和非法值处理。
 
 ```text
 rules_first:
-  规则优先。当前 custom_rules 内置规则可覆盖现有场景，因此直接按规则生成；后续会细化“规则无法判定再交 AI”。
+  规则优先。规则结果为空、名称为空、类型非法或未覆盖功能过程时，才在有 API Key 的情况下交给 AI 复核；无 API Key 时保留规则结果并记录 warning。
 
 ai_first:
   AI 输出合法且覆盖充分时采用 AI；AI 不完整时由 rules 补漏。
@@ -496,7 +496,6 @@ FPA 审核工作簿 FPA工作量评估-check.xlsx 已生成。
 
 ```text
 功能过程覆盖检查规则配置化。
-rules_first 中“规则无法判定再交 AI”的细粒度判定。
 预览页审核面板继续扩展 AI 原文、规则命中和 warnings 展示。
 ```
 

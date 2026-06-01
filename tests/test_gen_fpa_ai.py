@@ -10,11 +10,13 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     _group_rows_for_audit,
     _group_rows_by_l3,
     _normalize_ai_fpa_rows_for_l3,
+    _plan_fpa_rows_with_execution,
     _plan_fpa_rows_with_ai,
+    _rules_first_ai_reasons,
     generate_fpa_check_xlsx_from_md,
     preview_fpa_module,
 )
-from ai_gen_reimbursement_docs.fpa_profiles import CUSTOM_RULES_PROFILE, STRICT_FPA_PROFILE
+from ai_gen_reimbursement_docs.fpa_profiles import CUSTOM_RULES_PROFILE, STRICT_FPA_PROFILE, CustomRulesProfile
 
 
 def _meta():
@@ -329,6 +331,108 @@ def test_keyword_type_fallbacks():
     assert CUSTOM_RULES_PROFILE.infer_type("引用统一用户中心账号-外部接口处理开发")[0] == "EIF"
 
 
+class LowConfidenceRulesProfile(CustomRulesProfile):
+    def fallback_rows_for_l3(self, group, meta, start_seq=1):
+        return [{
+            "序号": start_seq,
+            "子系统(模块)": meta.get("子系统（模块）", ""),
+            "资产标识": meta.get("资产标识", ""),
+            "新增/修改功能点": "低置信度规则行",
+            "类型": "",
+            "计算依据归类": "",
+            "计算依据说明": "低置信度规则行。",
+            "变更状态": "新增",
+            "调整值": 1,
+            "要素数量": 1,
+            "生成方式": "fallback",
+            "类型理由": "",
+            "源功能过程": "",
+            "后处理警告": "",
+        }]
+
+
+def test_rules_first_keeps_rules_when_rule_rows_are_usable(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: pytest.fail("rules_first should not call AI when rules are usable"),
+    )
+
+    result = _plan_fpa_rows_with_ai(
+        _rows(),
+        _meta(),
+        ["规则一"],
+        api_key="sk-test",
+        model="test",
+        base_url="",
+        strategy="rules_first",
+    )
+
+    assert result
+    assert {row["生成方式"] for row in result} == {"fallback"}
+    assert _rules_first_ai_reasons(_group_rows_by_l3(_rows())[0], result) == []
+
+
+def test_rules_first_calls_ai_when_rule_rows_are_low_confidence(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    response = {
+        "rows": [{
+            "name": "AI 复核功能点",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": "AI 复核功能点，具体为以下：1、覆盖低置信度规则无法覆盖的功能过程。",
+            "source_processes": ["添加垂直行业", "查询垂直行业"],
+        }]
+    }
+    calls = {"count": 0}
+
+    def fake_call_llm(*args, **kwargs):
+        calls["count"] += 1
+        return json.dumps(response, ensure_ascii=False)
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+
+    result = _plan_fpa_rows_with_execution(
+        _rows(),
+        _meta(),
+        ["规则一"],
+        api_key="sk-test",
+        model="test",
+        base_url="",
+        profile=LowConfidenceRulesProfile(),
+        strategy="rules_first",
+        rule_set="custom_rules_default",
+    )
+
+    assert calls["count"] == 1
+    assert result[0]["生成方式"] == "ai"
+    assert result[0]["新增/修改功能点"] == "AI 复核功能点"
+
+
+def test_rules_first_without_api_keeps_low_confidence_rules_and_audit_warning(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    audit_trace = tmp_path / "audit.json"
+
+    result = _plan_fpa_rows_with_execution(
+        _rows(),
+        _meta(),
+        ["规则一"],
+        api_key="",
+        model="test",
+        base_url="",
+        profile=LowConfidenceRulesProfile(),
+        strategy="rules_first",
+        rule_set="custom_rules_default",
+        audit_trace_path=str(audit_trace),
+    )
+
+    assert result[0]["生成方式"] == "fallback"
+    trace = json.loads(audit_trace.read_text(encoding="utf-8"))
+    warnings = trace["modules"][0]["warnings"]
+    assert any("规则结果需要 AI 复核但未配置 API Key" in warning for warning in warnings)
+    assert any("类型无效" in warning for warning in warnings)
+
+
 def test_ai_parse_failure_falls_back(monkeypatch, tmp_path, caplog):
     _write_fpa_prompt_config(tmp_path, monkeypatch)
     monkeypatch.setattr(
@@ -429,6 +533,67 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["thinking"] == "思考过程"
     assert debug["parsed_rows"] == response["rows"]
     assert debug["final_rows"][0]["name"] == "垂直行业数据维护"
+
+
+def test_rules_first_preview_calls_ai_when_rule_rows_are_low_confidence(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    xlsx = tmp_path / "功能清单.xlsx"
+    xlsx.write_bytes(b"placeholder")
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa.read_base_data_from_excel",
+        lambda path: {"tree_rows": _rows(), "meta": _meta()},
+    )
+
+    def fake_fallback(self, group, meta, start_seq=1):
+        return [{
+            "序号": start_seq,
+            "子系统(模块)": meta.get("子系统（模块）", ""),
+            "资产标识": meta.get("资产标识", ""),
+            "新增/修改功能点": "低置信度规则行",
+            "类型": "",
+            "计算依据归类": "",
+            "计算依据说明": "低置信度规则行。",
+            "变更状态": "新增",
+            "调整值": 1,
+            "要素数量": 1,
+            "生成方式": "fallback",
+            "类型理由": "",
+            "源功能过程": "",
+            "后处理警告": "",
+        }]
+
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.fpa_profiles.CustomRulesProfile.fallback_rows_for_l3",
+        fake_fallback,
+    )
+    response = {
+        "rows": [{
+            "name": "AI 预览复核功能点",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": "AI 预览复核功能点，具体为以下：1、覆盖低置信度规则输出。",
+            "source_processes": ["添加垂直行业", "查询垂直行业"],
+        }]
+    }
+
+    def fake_call_llm(*args, **kwargs):
+        assert kwargs.get("return_thinking") is True
+        return json.dumps(response, ensure_ascii=False), "思考过程"
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+
+    result = preview_fpa_module(
+        file_path=str(xlsx),
+        module_name="垂直行业管理",
+        api_key="sk-test",
+        model="test-model",
+        strategy="rules_first",
+    )
+
+    assert result["used_ai"] is True
+    assert result["debug"]["reason"] == "rules_first_needs_ai"
+    assert result["rows"][0]["name"] == "AI 预览复核功能点"
+    assert any("规则结果触发 AI 复核" in warning for warning in result["warnings"])
 
 
 def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
