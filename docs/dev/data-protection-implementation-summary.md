@@ -376,7 +376,7 @@ signing_private_key.pem
 issued_licenses.jsonl
 license.ard.json
 licenses/
-tmp_pytest*/
+.cache/
 .tmp_license_e2e*/
 .tmp_release_check*/
 web_app/tsconfig.tsbuildinfo

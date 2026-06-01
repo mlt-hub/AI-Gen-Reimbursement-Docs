@@ -36,6 +36,7 @@ include = ["ai_gen_reimbursement_docs*"]
 ai_gen_reimbursement_docs = ["py.typed", "licensing/*.pem"]
 
 [tool.pytest.ini_options]
+cache_dir = ".cache/pytest"
 markers = [
     "slow: marks slow integration tests",
 ]
