@@ -1974,7 +1974,7 @@ def preview_fpa_module(
                 "type_reason": row.get("类型理由", ""),
                 "classification_basis": basis,
                 "classification_basis_index": basis_index,
-                "explanation": row.get("计算依据说明", ""),
+                "explanation": _format_fpa_explanation(str(row.get("计算依据说明", "") or "")),
                 "source_processes": [
                     x for x in str(row.get("源功能过程", "")).split("、") if x
                 ],

@@ -251,5 +251,15 @@ class TestFormatFpaExplanation:
         assert "后台" in result
         assert "系统管理" in result
 
+    def test_formats_single_line_structured_explanation(self):
+        text = "垂直行业数据维护，具体如下：触发事件：管理员维护数据；事件流：系统执行数据库操作；业务规则：行业名称不能为空；业务数据：行业ID；涉及表/文件：垂直行业表；涉及服务/接口：垂直行业管理服务。"
+        result = _format_fpa_explanation(text)
+        assert "\n触发事件：" in result
+        assert "\n事件流：" in result
+        assert "\n业务规则：" in result
+        assert "\n业务数据：" in result
+        assert "\n涉及表/文件：" in result
+        assert "\n涉及服务/接口：" in result
+
     def test_empty_string(self):
         assert _format_fpa_explanation("") == ""
