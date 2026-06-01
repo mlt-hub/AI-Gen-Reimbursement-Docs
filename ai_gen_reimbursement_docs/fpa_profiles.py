@@ -11,6 +11,7 @@ from string import Template
 
 
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
+VALID_TRANSACTION_FPA_TYPES = {"EI", "EQ", "EO"}
 
 CUSTOM_RULES_CORE_RULES = """
 FPA 核心口径：
@@ -73,6 +74,30 @@ class ExternalDataGroupRule:
 
 
 @dataclass(frozen=True)
+class KeywordTypeRule:
+    """按关键词配置事务功能类型兜底规则。"""
+
+    fpa_type: str
+    keywords: tuple[str, ...]
+    reason: str = ""
+
+    def matches(self, text: str) -> bool:
+        return any(keyword in text for keyword in self.keywords)
+
+
+@dataclass(frozen=True)
+class InternalDataGroupRule:
+    """本系统维护的 ILF 数据组识别规则。"""
+
+    keywords: tuple[str, ...]
+    data_name: str
+    reason: str = ""
+
+    def matches(self, text: str) -> bool:
+        return any(keyword in text for keyword in self.keywords)
+
+
+@dataclass(frozen=True)
 class FpaExecutionConfig:
     """一次 FPA 执行使用的 profile、策略和规则集。"""
 
@@ -89,6 +114,8 @@ class FpaRuleSetConfig:
     name: str
     extends: str = ""
     external_data_rules: tuple[ExternalDataGroupRule, ...] = field(default_factory=tuple)
+    keyword_rules: tuple[KeywordTypeRule, ...] = field(default_factory=tuple)
+    internal_data_rules: tuple[InternalDataGroupRule, ...] = field(default_factory=tuple)
     raw: dict[str, object] = field(default_factory=dict)
 
 
@@ -191,6 +218,30 @@ def _external_rule_from_dict(item: dict[str, object]) -> ExternalDataGroupRule |
     return ExternalDataGroupRule(alias_values, data_name, noun_values or tuple(EXTERNAL_DATA_GROUP_NOUNS))
 
 
+def _keyword_rule_from_dict(item: dict[str, object]) -> KeywordTypeRule | None:
+    fpa_type = str(item.get("type") or "").strip().upper()
+    keywords = item.get("keywords", [])
+    reason = str(item.get("reason") or "").strip()
+    if not isinstance(keywords, list) or fpa_type not in VALID_TRANSACTION_FPA_TYPES:
+        return None
+    keyword_values = tuple(str(keyword).strip() for keyword in keywords if str(keyword).strip())
+    if not keyword_values:
+        return None
+    return KeywordTypeRule(fpa_type, keyword_values, reason)
+
+
+def _internal_data_rule_from_dict(item: dict[str, object]) -> InternalDataGroupRule | None:
+    keywords = item.get("keywords", [])
+    data_name = str(item.get("data_name") or "").strip()
+    reason = str(item.get("reason") or "").strip()
+    if not isinstance(keywords, list) or not data_name:
+        return None
+    keyword_values = tuple(str(keyword).strip() for keyword in keywords if str(keyword).strip())
+    if not keyword_values:
+        return None
+    return InternalDataGroupRule(keyword_values, data_name, reason)
+
+
 def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
     external_rules: list[ExternalDataGroupRule] = []
     raw_rules = data.get("external_data_rules", [])
@@ -200,10 +251,28 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
                 rule = _external_rule_from_dict(item)
                 if rule is not None:
                     external_rules.append(rule)
+    keyword_rules: list[KeywordTypeRule] = []
+    raw_keyword_rules = data.get("keyword_rules", [])
+    if isinstance(raw_keyword_rules, list):
+        for item in raw_keyword_rules:
+            if isinstance(item, dict):
+                rule = _keyword_rule_from_dict(item)
+                if rule is not None:
+                    keyword_rules.append(rule)
+    internal_rules: list[InternalDataGroupRule] = []
+    raw_internal_rules = data.get("internal_data_rules", [])
+    if isinstance(raw_internal_rules, list):
+        for item in raw_internal_rules:
+            if isinstance(item, dict):
+                rule = _internal_data_rule_from_dict(item)
+                if rule is not None:
+                    internal_rules.append(rule)
     return FpaRuleSetConfig(
         name=name,
         extends=str(data.get("extends") or "").strip(),
         external_data_rules=tuple(external_rules),
+        keyword_rules=tuple(keyword_rules),
+        internal_data_rules=tuple(internal_rules),
         raw=dict(data),
     )
 
@@ -215,6 +284,8 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
         name=child.name,
         extends=child.extends,
         external_data_rules=(*parent.external_data_rules, *child.external_data_rules),
+        keyword_rules=(*parent.keyword_rules, *child.keyword_rules),
+        internal_data_rules=(*parent.internal_data_rules, *child.internal_data_rules),
         raw=raw,
     )
 
@@ -416,6 +487,9 @@ class StrictFpaProfile(CustomRulesProfile):
             return name_action
         if self._is_external_data_group(text):
             return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
+        internal_rule = self._matching_internal_data_rule(text)
+        if internal_rule is not None:
+            return "ILF", internal_rule.reason or "命中 rule_set 内部数据组规则，按 ILF。"
         if self._looks_like_data_group(name, desc):
             return "ILF", "本系统维护的逻辑数据组，按 ILF。"
         desc_action = self._explicit_transaction_type(desc)
@@ -426,6 +500,9 @@ class StrictFpaProfile(CustomRulesProfile):
         return "EI", "未命中明确数据功能关键词，按事务功能 EI 兜底。"
 
     def _explicit_transaction_type(self, text: str) -> tuple[str, str] | None:
+        for rule in self._configured_keyword_rules():
+            if rule.matches(text):
+                return rule.fpa_type, rule.reason or f"命中 rule_set 关键词规则，按 {rule.fpa_type}。"
         if any(k in text for k in STRICT_EO_ACTIONS):
             return "EO", "事务功能产生派生或格式化输出，按 EO。"
         if any(k in text for k in STRICT_EQ_ACTIONS):
@@ -562,6 +639,13 @@ class StrictFpaProfile(CustomRulesProfile):
                 "EIF",
                 "外部系统维护、本系统引用的数据组，按 EIF。",
             ))
+        for rule in self._configured_internal_data_rules():
+            if rule.matches(all_text):
+                data_functions.append((
+                    rule.data_name,
+                    "ILF",
+                    rule.reason or "命中 rule_set 内部数据组规则，按 ILF。",
+                ))
         if self._has_internal_data_function(all_text) or (
             not data_functions
             and any(k in all_text for k in ["维护", "保存", "新增", "添加", "修改", "编辑", "删除", "导入", "配置"])
@@ -635,6 +719,20 @@ class StrictFpaProfile(CustomRulesProfile):
         if current_rule_set is not None:
             rules.extend(current_rule_set.external_data_rules)
         return rules
+
+    def _configured_keyword_rules(self) -> tuple[KeywordTypeRule, ...]:
+        current_rule_set = current_fpa_rule_set_config()
+        return current_rule_set.keyword_rules if current_rule_set is not None else ()
+
+    def _configured_internal_data_rules(self) -> tuple[InternalDataGroupRule, ...]:
+        current_rule_set = current_fpa_rule_set_config()
+        return current_rule_set.internal_data_rules if current_rule_set is not None else ()
+
+    def _matching_internal_data_rule(self, text: str) -> InternalDataGroupRule | None:
+        for rule in self._configured_internal_data_rules():
+            if rule.matches(text):
+                return rule
+        return None
 
     def _extract_external_data_name(self, text: str) -> str:
         patterns = [

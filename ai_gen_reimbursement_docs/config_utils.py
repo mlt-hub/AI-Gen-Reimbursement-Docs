@@ -395,6 +395,7 @@ def load_fpa_excel_recalc_check() -> bool:
 FPA_CONFIG_FILENAME = "fpa_config.yaml"
 VALID_FPA_PROFILE_NAMES = {"custom_rules", "strict_fpa"}
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
+VALID_FPA_TRANSACTION_TYPES = {"EI", "EQ", "EO"}
 
 
 def _fpa_key_path(*parts: object) -> str:
@@ -447,6 +448,50 @@ def _validate_external_data_rules(value: object, key_path: str) -> None:
                 )
 
 
+def _validate_non_empty_string_list(value: object, key_path: str) -> None:
+    if not isinstance(value, list) or not value:
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是非空字符串列表")
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}[{index}] 必须是非空字符串"
+            )
+
+
+def _validate_keyword_rules(value: object, key_path: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, list):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是列表")
+    for index, item in enumerate(value):
+        item_path = f"{key_path}[{index}]"
+        if not isinstance(item, dict):
+            raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path} 必须是对象")
+        fpa_type = _require_non_empty_string(item.get("type"), f"{item_path}.type").upper()
+        if fpa_type not in VALID_FPA_TRANSACTION_TYPES:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path}.type 必须是 EI / EQ / EO"
+            )
+        _validate_non_empty_string_list(item.get("keywords"), f"{item_path}.keywords")
+        if "reason" in item:
+            _require_non_empty_string(item.get("reason"), f"{item_path}.reason")
+
+
+def _validate_internal_data_rules(value: object, key_path: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, list):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是列表")
+    for index, item in enumerate(value):
+        item_path = f"{key_path}[{index}]"
+        if not isinstance(item, dict):
+            raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path} 必须是对象")
+        _validate_non_empty_string_list(item.get("keywords"), f"{item_path}.keywords")
+        _require_non_empty_string(item.get("data_name"), f"{item_path}.data_name")
+        if "reason" in item:
+            _require_non_empty_string(item.get("reason"), f"{item_path}.reason")
+
+
 def validate_fpa_config(cfg: dict[str, object]) -> None:
     """Validate fpa_config.yaml structure and cross references."""
     if not isinstance(cfg, dict) or not cfg:
@@ -485,6 +530,8 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
                 f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {rule_set_path}.extends 指向不存在的 rule_set: {extends}"
             )
         _validate_external_data_rules(rule_entry.get("external_data_rules"), f"{rule_set_path}.external_data_rules")
+        _validate_keyword_rules(rule_entry.get("keyword_rules"), f"{rule_set_path}.keyword_rules")
+        _validate_internal_data_rules(rule_entry.get("internal_data_rules"), f"{rule_set_path}.internal_data_rules")
 
     visited: set[str] = set()
     visiting: set[str] = set()

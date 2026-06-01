@@ -52,6 +52,14 @@ rule_sets:
   strict_fpa_default: {}
   telecom_rules:
     extends: strict_fpa_default
+    keyword_rules:
+      - type: EO
+        keywords: ["打印客户清单"]
+        reason: "客户清单打印属于格式化输出，按 EO。"
+    internal_data_rules:
+      - keywords: ["认证授权关系"]
+        data_name: "认证授权关系"
+        reason: "本系统维护认证授权关系，按 ILF。"
     external_data_rules:
       - source_aliases: ["行业平台"]
         data_name: "行业平台客户档案"
@@ -101,6 +109,8 @@ def test_rule_set_extends_are_loaded(tmp_path):
 
     assert config.rule_set == "telecom_rules"
     assert config.rule_set_config.extends == "strict_fpa_default"
+    assert config.rule_set_config.keyword_rules[0].fpa_type == "EO"
+    assert config.rule_set_config.internal_data_rules[0].data_name == "认证授权关系"
     assert config.rule_set_config.external_data_rules[0].data_name == "行业平台客户档案"
 
 
@@ -119,6 +129,51 @@ def test_rule_set_external_data_rules_affect_strict_profile(tmp_path):
 
     assert fpa_type == "EIF"
     assert "外部系统维护" in reason
+
+
+def test_rule_set_keyword_rules_affect_strict_profile(tmp_path):
+    _write_fpa_config(tmp_path)
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_rules")
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            fpa_type, reason = STRICT_FPA_PROFILE.infer_type(
+                "打印客户清单",
+                "按查询条件生成客户清单打印文件。",
+            )
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
+    assert fpa_type == "EO"
+    assert reason == "客户清单打印属于格式化输出，按 EO。"
+
+
+def test_rule_set_internal_data_rules_affect_strict_profile(tmp_path):
+    _write_fpa_config(tmp_path)
+    group = {
+        "client_type": "后台",
+        "l1": "认证",
+        "l2": "授权",
+        "l3": "授权管理",
+        "l3_desc": "维护认证授权关系。",
+        "processes": [
+            {
+                "name": "维护认证授权关系",
+                "type": "新增",
+                "desc": "本系统维护认证授权关系，并支持新增和删除授权。",
+            }
+        ],
+    }
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_rules")
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            rows = STRICT_FPA_PROFILE.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
+    types = {str(row["新增/修改功能点"]): str(row["类型"]) for row in rows}
+    assert types["认证授权关系"] == "ILF"
 
 
 def test_custom_rules_prompt_is_rendered_from_config(tmp_path):

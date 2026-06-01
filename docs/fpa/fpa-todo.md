@@ -78,6 +78,16 @@ rule_sets.<name>.external_data_rules：
   data_name 必须是非空字符串。
   data_nouns 可选；如配置，必须是字符串列表。
   普通外部服务被配置为数据组时，后续可记录 warning。
+
+rule_sets.<name>.keyword_rules：
+  type 必须是 EI / EQ / EO。
+  keywords 必须是非空字符串列表。
+  reason 可选；如配置，必须是非空字符串。
+
+rule_sets.<name>.internal_data_rules：
+  keywords 必须是非空字符串列表。
+  data_name 必须是非空字符串。
+  reason 可选；如配置，必须是非空字符串。
 ```
 
 ### 验收方式
@@ -86,6 +96,7 @@ rule_sets.<name>.external_data_rules：
 已补充 tests/test_config_utils.py 覆盖 fpa_config.yaml 结构错误。
 已覆盖 rule_set extends 不存在和循环。
 已覆盖 external_data_rules 非法结构。
+已覆盖 keyword_rules / internal_data_rules 非法结构。
 继续保持 pytest -q 通过。
 ```
 
@@ -170,7 +181,7 @@ AI 缓存 key 已包含 profile、strategy、rule_set、rule_set 配置内容、
 支持多套 rule_set 的配置入口已落地。
 rule_set 已并入 fpa_config.yaml。
 rule_set_version 已移除，不再要求用户手动维护版本号。
-rule_set extends 继承已落地，当前支持继承父规则集并追加 external_data_rules。
+rule_set extends 继承已落地，当前支持继承父规则集并追加 keyword_rules、internal_data_rules、external_data_rules。
 ```
 
 第一版 rule_set 建议支持：
@@ -220,14 +231,16 @@ config/fpa_config.yaml.example
   新增统一 FPA 配置示例文件。
   合并 profile、profiles、prompt_sets、rule_sets。
   内置 custom_rules_default、strict_fpa_default。
-  示例 client_a_rules 展示 extends、external_data_rules。
+  示例 strict_fpa_conservative 展示 extends、keyword_rules、internal_data_rules、external_data_rules。
 
 ai_gen_reimbursement_docs/fpa_profiles.py
   新增 FpaRuleSetConfig。
   新增 resolve_fpa_rule_set_config。
   支持内置 rule_set 与用户配置 rule_set 合并。
   支持 extends 继承，并检测循环继承。
-  当前 rule_set 的 external_data_rules 会参与 strict_fpa 外部数据组识别。
+  当前 rule_set 的 keyword_rules 会参与 strict_fpa EI / EQ / EO 事务类型兜底。
+  当前 rule_set 的 internal_data_rules 会参与 strict_fpa ILF 数据组识别。
+  当前 rule_set 的 external_data_rules 会参与 strict_fpa EIF 数据组识别。
 
 ai_gen_reimbursement_docs/config_utils.py
   新增 load_fpa_config / load_fpa_profiles_config / load_fpa_rule_sets_config。
@@ -247,8 +260,8 @@ ai_gen_reimbursement_docs/gen_fpa.py
 ```text
 J1. 已完成：将 rule_set 从“名称入口”升级为 fpa_config.yaml 中的可配置规则集。
 J2. 已完成：移除 rule_set_version；AI cache key 改为纳入 rule_set 实际配置内容。
-J3. 部分完成：支持 rule_set extends 继承并追加 external_data_rules；字段级覆盖策略后续继续细化。
-J4. 部分完成：外部数据源规则可由 rule_set 配置追加；关键词规则、ILF/EIF 判定规则仍在代码中。
+J3. 部分完成：支持 rule_set extends 继承并追加 keyword_rules、internal_data_rules、external_data_rules；字段级覆盖策略后续继续细化。
+J4. 已完成第一版：事务关键词、ILF 内部数据组、EIF 外部数据组规则均可由 rule_set 配置追加；内置默认规则保持不变。
 J5. 细化 rules_first 中“rules 无法判定再交给 AI”的判定条件；当前 custom_rules 的内置规则可覆盖现有场景，因此 rules_first 直接使用规则生成。
 J6. 已完成：Web 高级选项和 FPA 预览页已使用配置驱动的 rule_set 下拉选择，不再是文本输入。
 ```

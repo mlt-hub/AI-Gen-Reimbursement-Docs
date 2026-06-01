@@ -82,6 +82,14 @@ rule_sets:
   strict_fpa_default: {}
   client_a_rules:
     extends: strict_fpa_default
+    keyword_rules:
+      - type: EO
+        keywords: ["打印供应商清单"]
+        reason: "打印清单属于格式化输出，按 EO。"
+    internal_data_rules:
+      - keywords: ["供应商准入关系"]
+        data_name: "供应商准入关系"
+        reason: "本系统维护供应商准入关系，按 ILF。"
     external_data_rules:
       - source_aliases: ["供应商平台"]
         data_name: "供应商档案"
@@ -320,6 +328,30 @@ class TestLoadFpaExecutionOptions:
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             with pytest.raises(FpaConfigError, match=r"external_data_rules\[0\]\.source_aliases 必须是非空字符串列表"):
+                load_fpa_rule_sets_config()
+
+    def test_keyword_rules_shape_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "type: EO", "type: ILF"
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"keyword_rules\[0\]\.type 必须是 EI / EQ / EO"):
+                load_fpa_rule_sets_config()
+
+    def test_internal_data_rules_shape_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                'keywords: ["供应商准入关系"]', 'keywords: []'
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"internal_data_rules\[0\]\.keywords 必须是非空字符串列表"):
                 load_fpa_rule_sets_config()
 
     def test_fpa_check_columns_are_normalized(self, tmp_path):

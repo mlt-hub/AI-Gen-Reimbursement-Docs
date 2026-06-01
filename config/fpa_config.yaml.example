@@ -86,6 +86,14 @@ rule_sets:
   # 示例：更保守的 strict_fpa 规则集。
   strict_fpa_conservative:
     extends: strict_fpa_default
+    keyword_rules:
+      - type: EO
+        keywords: ["打印清单", "打印报表"]
+        reason: "打印清单或报表属于格式化输出，按 EO。"
+    internal_data_rules:
+      - keywords: ["认证授权关系", "角色授权关系"]
+        data_name: "认证授权关系"
+        reason: "本系统维护认证授权关系，按 ILF。"
     external_data_rules:
       - source_aliases: ["统一认证平台", "统一认证"]
         data_name: "统一认证账号"
