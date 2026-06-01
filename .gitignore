@@ -34,8 +34,6 @@ ard-v*
 *.bak
 ~$*
 .cache/
-.tmp_license_e2e*/
-.tmp_release_check*/
 
 # 数据保护发行方敏感材料
 .ard-keys/
@@ -63,3 +61,6 @@ web_app/src/**/*.vue.d.ts
 .agents/skills/hallmark/
 .claude/skills/hallmark/
 skills-lock.json
+
+# 系统隐藏文件
+docs/desktop.ini
