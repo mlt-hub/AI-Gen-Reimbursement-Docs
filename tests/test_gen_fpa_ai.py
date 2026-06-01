@@ -47,11 +47,10 @@ def _rows():
 
 
 def _write_fpa_prompt_config(tmp_path, monkeypatch):
-    (tmp_path / "ai_system_prompts_config.yaml").write_text(
+    (tmp_path / "fpa_system_prompts_config.yaml").write_text(
         """
-ai_prompts:
-  fpa_eval:
-    system: 系统提示词
+fpa_eval:
+  system: 系统提示词
 """,
         encoding="utf-8",
     )
@@ -411,7 +410,7 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["ai_called"] is True
     assert debug["model"] == "test-model"
     assert debug["system_prompt"] == "系统提示词"
-    assert debug["system_prompt_source"] == "用户配置（配置目录/ai_system_prompts_config.yaml）"
+    assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_system_prompts_config.yaml）"
     assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_user_prompts_config.yaml）"
     assert "垂直行业管理" in debug["user_prompt"]
     assert "[system]" in debug["ai_prompt"]

@@ -39,6 +39,7 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
     for name in [
         ".env.example",
         "system_config.yaml.example",
+        "fpa_system_prompts_config.yaml.example",
         "fpa_user_prompts_config.yaml.example",
         "fpa_rule_sets_config.yaml.example",
     ]:
@@ -50,11 +51,13 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
 
     assert sorted(path.name for path in created) == [
         "fpa_rule_sets_config.yaml",
+        "fpa_system_prompts_config.yaml",
         "fpa_user_prompts_config.yaml",
         "system_config.yaml",
     ]
     assert (target / ".env").read_text(encoding="utf-8") == "existing\n"
     assert (target / "system_config.yaml").exists()
+    assert (target / "fpa_system_prompts_config.yaml").exists()
     assert (target / "fpa_user_prompts_config.yaml").exists()
     assert (target / "fpa_rule_sets_config.yaml").exists()
 
@@ -323,11 +326,10 @@ strict_fpa:
         assert result.source_label == "用户配置（配置目录/fpa_user_prompts_config.yaml）"
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
-        (tmp_path / "ai_system_prompts_config.yaml").write_text(
+        (tmp_path / "fpa_system_prompts_config.yaml").write_text(
             """
-ai_prompts:
-  fpa_eval:
-    system: 系统提示词
+fpa_eval:
+  system: 系统提示词
 """,
             encoding="utf-8",
         )
@@ -335,7 +337,7 @@ ai_prompts:
             result = load_fpa_system_prompt_config("fpa_eval")
 
         assert result.text == "系统提示词"
-        assert result.source_label == "用户配置（配置目录/ai_system_prompts_config.yaml）"
+        assert result.source_label == "用户配置（配置目录/fpa_system_prompts_config.yaml）"
 
 
 class TestLoadModelName:

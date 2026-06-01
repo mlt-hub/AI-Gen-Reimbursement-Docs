@@ -17,6 +17,7 @@ DEFAULT_CFP_FORMULA = (
 DEFAULT_CONFIG_TEMPLATE_FILES = (
     (".env.example", ".env"),
     ("system_config.yaml.example", "system_config.yaml"),
+    ("fpa_system_prompts_config.yaml.example", "fpa_system_prompts_config.yaml"),
     ("fpa_user_prompts_config.yaml.example", "fpa_user_prompts_config.yaml"),
     ("fpa_rule_sets_config.yaml.example", "fpa_rule_sets_config.yaml"),
 )
@@ -612,17 +613,16 @@ def _load_yaml_file(yaml_path: Path) -> dict:
 
 def load_fpa_system_prompt_config(scene: str = "fpa_eval") -> PromptConfig:
     """严格读取 FPA system prompt 配置，缺失时直接报错。"""
-    filename = "ai_system_prompts_config.yaml"
+    filename = "fpa_system_prompts_config.yaml"
     yaml_path = config_dir() / filename
-    key_path = f"ai_prompts.{scene}.system"
+    key_path = f"{scene}.system"
     if not yaml_path.exists():
         raise FpaPromptConfigError(f"未找到 FPA 系统提示词配置：配置目录/{filename} 中的 {key_path}")
     try:
         cfg = _load_yaml_file(yaml_path)
     except Exception as exc:
         raise FpaPromptConfigError(f"读取 FPA 系统提示词配置失败：配置目录/{filename}") from exc
-    prompts = cfg.get("ai_prompts", {})
-    scene_config = prompts.get(scene, {}) if isinstance(prompts, dict) else {}
+    scene_config = cfg.get(scene, {})
     val = scene_config.get("system", "") if isinstance(scene_config, dict) else ""
     if not isinstance(val, str) or not val.strip():
         raise FpaPromptConfigError(f"未找到 FPA 系统提示词配置：配置目录/{filename} 中的 {key_path}")
@@ -695,6 +695,7 @@ def migrate_config() -> None:
     # 对比 .example 和用户配置，自动追加新增的顶层键（含嵌套块）
     yaml_pairs = [
         (home / "system_config.yaml", local / "system_config.yaml.example", "system_config"),
+        (home / "fpa_system_prompts_config.yaml", local / "fpa_system_prompts_config.yaml.example", "fpa_system_prompts_config"),
         (home / "fpa_user_prompts_config.yaml", local / "fpa_user_prompts_config.yaml.example", "fpa_user_prompts_config"),
         (home / "fpa_rule_sets_config.yaml", local / "fpa_rule_sets_config.yaml.example", "fpa_rule_sets_config"),
     ]
