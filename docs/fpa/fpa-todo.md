@@ -35,9 +35,9 @@ J. profile / strategy / rule_set 三层模型
 K. FPA 审核工作簿与预览审核面板
 ```
 
-## 下一步建议：FPA 配置校验
+## 已完成：FPA 配置校验
 
-建议下一轮优先推进 `fpa_config.yaml` 配置校验。目标不是新增业务规则，而是让用户在 CLI、Web 预览和正式生成中尽早看到一致、可理解的配置错误。
+已为 `fpa_config.yaml` 增加结构校验。目标不是新增业务规则，而是让用户在 CLI、Web 预览和正式生成中尽早看到一致、可理解的配置错误。
 
 ### 目标行为
 
@@ -65,7 +65,7 @@ profiles.<name>：
 prompt_sets.<name>：
   system 必须是非空字符串。
   user 必须是非空字符串。
-  user 建议包含 ${core_rules}、${judgement_rules}、${payload_json}，缺失时至少给出 warning 或明确提示。
+  user 必须是非空字符串。
 
 rule_sets.<name>：
   允许任意新增名称。
@@ -83,10 +83,9 @@ rule_sets.<name>.external_data_rules：
 ### 验收方式
 
 ```text
-补充 tests/test_config_utils.py 覆盖 fpa_config.yaml 结构错误。
-补充 tests/test_fpa_profiles.py 覆盖 rule_set extends 不存在和循环。
-补充 tests/test_fpa_external_data_rules.py 覆盖 external_data_rules 非法结构。
-补充 Web/CLI 入口测试，确认错误信息不丢失。
+已补充 tests/test_config_utils.py 覆盖 fpa_config.yaml 结构错误。
+已覆盖 rule_set extends 不存在和循环。
+已覆盖 external_data_rules 非法结构。
 继续保持 pytest -q 通过。
 ```
 
@@ -94,8 +93,9 @@ rule_sets.<name>.external_data_rules：
 
 ```text
 本轮只做配置校验和错误信息，不做 rule_set 下拉 UI。
-不新增旧配置迁移逻辑。
-不把 warning 写入正式 FPA 审核副本，除非该 warning 来自生成过程本身。
+未新增旧配置迁移逻辑。
+未把配置 warning 写入正式 FPA 审核副本。
+后续如需要，可再补 prompt 占位符缺失提示、普通外部服务误配 warning、Web/CLI 单独错误呈现测试。
 ```
 
 ## 旧兼容逻辑清理清单

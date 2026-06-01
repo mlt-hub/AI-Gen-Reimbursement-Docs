@@ -2862,20 +2862,20 @@ C5. 对比不同类型策略下的 Excel 公式结果。
 ### D. 配置校验
 
 ```text
-D1. 待推进：为 fpa_config.yaml 增加统一结构校验入口。
-D2. 待推进：校验 profile / profiles / prompt_sets / rule_sets 的必填项和引用关系。
-D3. 待推进：校验 rule_set extends 不存在和循环继承，并给出明确错误。
-D4. 待推进：校验 external_data_rules 的 source_aliases / data_name / data_nouns 结构。
-D5. 待推进：出现已废弃字段 version 时提示用户删除，不再把它当作规则集版本。
+D1. 已完成：为 fpa_config.yaml 增加统一结构校验入口。
+D2. 已完成：校验 profile / profiles / prompt_sets / rule_sets 的必填项和引用关系。
+D3. 已完成：校验 rule_set extends 不存在和循环继承，并给出明确错误。
+D4. 已完成：校验 external_data_rules 的 source_aliases / data_name / data_nouns 结构。
+D5. 已完成：出现已废弃字段 version 时提示用户删除，不再把它当作规则集版本。
 D6. 待推进：普通外部服务被配置为数据组时记录 warning。
 ```
 
-下一步实施建议：
+实现记录：
 
 ```text
-先补文档和测试用例，明确所有错误信息。
-再在 config_utils.py 中新增 fpa_config 校验函数，供 CLI / Web / pipeline 复用。
-最后接入 Web 预览和正式生成入口，保证错误在调用 AI 前返回。
+config_utils.py 新增 validate_fpa_config()，load_fpa_config() 读取后立即校验。
+结构错误统一抛 FpaConfigError，并尽量包含配置文件名和键路径。
+测试覆盖 profile 引用、rule_set 引用、prompt_set 空值、extends 不存在、extends 循环、废弃 version、external_data_rules 非法结构。
 ```
 
 ### E. 领域上下文

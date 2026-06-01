@@ -394,6 +394,139 @@ def load_fpa_excel_recalc_check() -> bool:
 
 FPA_CONFIG_FILENAME = "fpa_config.yaml"
 VALID_FPA_PROFILE_NAMES = {"custom_rules", "strict_fpa"}
+VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
+
+
+def _fpa_key_path(*parts: object) -> str:
+    return ".".join(str(part) for part in parts if str(part))
+
+
+def _require_mapping(value: object, key_path: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是对象")
+    return value
+
+
+def _require_non_empty_string(value: object, key_path: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是非空字符串")
+    return value.strip()
+
+
+def _validate_external_data_rules(value: object, key_path: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, list):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是列表")
+    for index, item in enumerate(value):
+        item_path = f"{key_path}[{index}]"
+        if not isinstance(item, dict):
+            raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path} 必须是对象")
+        aliases = item.get("source_aliases")
+        if not isinstance(aliases, list) or not [str(alias).strip() for alias in aliases if str(alias).strip()]:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path}.source_aliases 必须是非空字符串列表"
+            )
+        for alias_index, alias in enumerate(aliases):
+            if not isinstance(alias, str) or not alias.strip():
+                raise FpaConfigError(
+                    f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path}.source_aliases[{alias_index}] 必须是非空字符串"
+                )
+        _require_non_empty_string(item.get("data_name"), f"{item_path}.data_name")
+        data_nouns = item.get("data_nouns", [])
+        if data_nouns is None:
+            data_nouns = []
+        if not isinstance(data_nouns, list):
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path}.data_nouns 必须是字符串列表"
+            )
+        for noun_index, noun in enumerate(data_nouns):
+            if not isinstance(noun, str) or not noun.strip():
+                raise FpaConfigError(
+                    f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path}.data_nouns[{noun_index}] 必须是非空字符串"
+                )
+
+
+def validate_fpa_config(cfg: dict[str, object]) -> None:
+    """Validate fpa_config.yaml structure and cross references."""
+    if not isinstance(cfg, dict) or not cfg:
+        raise FpaConfigError(f"FPA 配置为空：配置目录/{FPA_CONFIG_FILENAME}")
+
+    profiles = _require_mapping(cfg.get("profiles"), "profiles")
+    prompt_sets = _require_mapping(cfg.get("prompt_sets"), "prompt_sets")
+    rule_sets = _require_mapping(cfg.get("rule_sets"), "rule_sets")
+
+    profile = _require_non_empty_string(cfg.get("profile"), "profile")
+    if profile not in VALID_FPA_PROFILE_NAMES:
+        raise FpaConfigError(f"未知 FPA profile: {profile}")
+    if profile not in profiles:
+        raise FpaConfigError(f"未找到 FPA profile 配置：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile}")
+
+    unknown_profiles = sorted(str(name) for name in profiles if str(name) not in VALID_FPA_PROFILE_NAMES)
+    if unknown_profiles:
+        raise FpaConfigError(f"未知 FPA profile 配置：{', '.join(unknown_profiles)}")
+
+    for prompt_name, prompt_set in prompt_sets.items():
+        prompt_path = _fpa_key_path("prompt_sets", prompt_name)
+        prompt_entry = _require_mapping(prompt_set, prompt_path)
+        _require_non_empty_string(prompt_entry.get("system"), f"{prompt_path}.system")
+        _require_non_empty_string(prompt_entry.get("user"), f"{prompt_path}.user")
+
+    for rule_set_name, rule_set in rule_sets.items():
+        rule_set_path = _fpa_key_path("rule_sets", rule_set_name)
+        rule_entry = _require_mapping(rule_set, rule_set_path)
+        if "version" in rule_entry:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {rule_set_path}.version 已废弃，请删除该字段"
+            )
+        extends = str(rule_entry.get("extends") or "").strip()
+        if extends and extends not in rule_sets:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {rule_set_path}.extends 指向不存在的 rule_set: {extends}"
+            )
+        _validate_external_data_rules(rule_entry.get("external_data_rules"), f"{rule_set_path}.external_data_rules")
+
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def _visit_rule_set(name: str) -> None:
+        if name in visiting:
+            raise FpaConfigError(f"FPA rule_set 继承出现循环: {name}")
+        if name in visited:
+            return
+        visiting.add(name)
+        entry = rule_sets.get(name)
+        if isinstance(entry, dict):
+            parent = str(entry.get("extends") or "").strip()
+            if parent:
+                _visit_rule_set(parent)
+        visiting.remove(name)
+        visited.add(name)
+
+    for rule_set_name in rule_sets:
+        _visit_rule_set(str(rule_set_name))
+
+    for profile_name, profile_entry in profiles.items():
+        profile_path = _fpa_key_path("profiles", profile_name)
+        entry = _require_mapping(profile_entry, profile_path)
+        strategy = _require_non_empty_string(entry.get("strategy"), f"{profile_path}.strategy")
+        if strategy not in VALID_FPA_STRATEGIES:
+            raise FpaConfigError(f"未知 FPA strategy: {strategy}")
+        rule_set = _require_non_empty_string(entry.get("rule_set"), f"{profile_path}.rule_set")
+        if rule_set not in rule_sets:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.rule_set 指向不存在的 rule_set: {rule_set}"
+            )
+        system_prompt = _require_non_empty_string(entry.get("system_prompt"), f"{profile_path}.system_prompt")
+        if system_prompt not in prompt_sets:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.system_prompt 指向不存在的 prompt_set: {system_prompt}"
+            )
+        user_prompt = _require_non_empty_string(entry.get("user_prompt"), f"{profile_path}.user_prompt")
+        if user_prompt not in prompt_sets:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.user_prompt 指向不存在的 prompt_set: {user_prompt}"
+            )
 
 
 def load_fpa_config() -> dict[str, object]:
@@ -407,6 +540,7 @@ def load_fpa_config() -> dict[str, object]:
         raise FpaConfigError(f"读取 FPA 配置失败：配置目录/{FPA_CONFIG_FILENAME}") from exc
     if not cfg:
         raise FpaConfigError(f"FPA 配置为空：配置目录/{FPA_CONFIG_FILENAME}")
+    validate_fpa_config(cfg)
     return cfg
 
 

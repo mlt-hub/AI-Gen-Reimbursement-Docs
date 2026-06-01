@@ -239,6 +239,89 @@ class TestLoadFpaExecutionOptions:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_rule_sets_config()["client_a_rules"]["extends"] == "strict_fpa_default"
 
+    def test_missing_profile_reference_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "profile: custom_rules", "profile: missing_profile"
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match="未知 FPA profile"):
+                load_fpa_profile()
+
+    def test_profile_rule_set_reference_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "rule_set: strict_fpa_default", "rule_set: missing_rule_set"
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"profiles\.strict_fpa\.rule_set 指向不存在"):
+                load_fpa_strategy("strict_fpa")
+
+    def test_prompt_set_text_is_required(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "system: CUSTOM SYSTEM", 'system: ""'
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"prompt_sets\.custom_rules\.system 必须是非空字符串"):
+                load_fpa_profile()
+
+    def test_rule_set_extends_missing_parent_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "extends: strict_fpa_default", "extends: missing_parent"
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"rule_sets\.client_a_rules\.extends 指向不存在"):
+                load_fpa_rule_sets_config()
+
+    def test_rule_set_extends_cycle_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace("custom_rules_default: {}", "custom_rules_default:\n    extends: client_a_rules")
+        content = content.replace("extends: strict_fpa_default", "extends: custom_rules_default")
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match="FPA rule_set 继承出现循环"):
+                load_fpa_rule_sets_config()
+
+    def test_rule_set_version_field_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "client_a_rules:\n    extends: strict_fpa_default",
+                'client_a_rules:\n    version: "2026.05"\n    extends: strict_fpa_default',
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"rule_sets\.client_a_rules\.version 已废弃"):
+                load_fpa_rule_sets_config()
+
+    def test_external_data_rules_shape_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                'source_aliases: ["供应商平台"]', 'source_aliases: "供应商平台"'
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"external_data_rules\[0\]\.source_aliases 必须是非空字符串列表"):
+                load_fpa_rule_sets_config()
+
     def test_fpa_check_columns_are_normalized(self, tmp_path):
         yaml_file = tmp_path / "system_config.yaml"
         yaml_file.write_text(

@@ -59,11 +59,11 @@ profiles:
     user_prompt: strict_fpa
 prompt_sets:
   custom_rules:
-    system: ""
-    user: ""
+    system: "CUSTOM SYSTEM"
+    user: "${core_rules}"
   strict_fpa:
-    system: ""
-    user: ""
+    system: "STRICT SYSTEM"
+    user: "${core_rules}"
 rule_sets:
   custom_rules_default: {}
   strict_fpa_default: {}
