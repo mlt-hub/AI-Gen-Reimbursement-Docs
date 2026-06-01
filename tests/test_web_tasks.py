@@ -90,6 +90,74 @@ def test_local_user_config_redacts_api_key(monkeypatch, tmp_path):
     assert data["_env"]["ANTHROPIC_BASE_URL"] == "https://api.example.test"
 
 
+def test_fpa_options_returns_config_metadata(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    (tmp_path / "fpa_config.yaml").write_text(
+        """
+profile: strict_fpa
+profiles:
+  custom_rules:
+    strategy: rules_first
+    rule_set: custom_rules_default
+    system_prompt: custom_rules
+    user_prompt: custom_rules
+  strict_fpa:
+    strategy: ai_first
+    rule_set: strict_fpa_default
+    system_prompt: strict_fpa
+    user_prompt: strict_fpa
+prompt_sets:
+  custom_rules:
+    system: custom system secret
+    user: custom user secret
+  strict_fpa:
+    system: strict system secret
+    user: strict user secret
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
+  client_a_rules:
+    extends: strict_fpa_default
+    external_data_rules:
+      - source_aliases: ["供应商平台"]
+        data_name: "供应商平台供应商档案"
+        data_nouns: ["供应商"]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.config_utils.config_dir",
+        lambda: tmp_path,
+    )
+
+    resp = client.get("/api/fpa/options")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["default_profile"] == "strict_fpa"
+    assert data["profiles"] == [
+        {
+            "name": "custom_rules",
+            "label": "用户自定义规则口径",
+            "strategy": "rules_first",
+            "rule_set": "custom_rules_default",
+        },
+        {
+            "name": "strict_fpa",
+            "label": "严格 FPA 口径",
+            "strategy": "ai_first",
+            "rule_set": "strict_fpa_default",
+        },
+    ]
+    assert {item["name"] for item in data["rule_sets"]} == {
+        "custom_rules_default",
+        "strict_fpa_default",
+        "client_a_rules",
+    }
+    assert data["rule_sets"][2]["extends"] == "strict_fpa_default"
+    assert "secret" not in resp.text
+
+
 def test_run_upload_smoke_creates_remote_session(monkeypatch):
     client = _client(monkeypatch, user="alice")
     calls: list[dict] = []

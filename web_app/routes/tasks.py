@@ -53,6 +53,19 @@ def _session_status_payload(session_id: str, state) -> dict:
     }
 
 
+FPA_PROFILE_LABELS = {
+    "custom_rules": "用户自定义规则口径",
+    "strict_fpa": "严格 FPA 口径",
+}
+
+FPA_STRATEGY_LABELS = {
+    "rules_first": "规则优先",
+    "ai_first": "AI 优先",
+    "rules_only": "仅规则",
+    "ai_only": "仅 AI",
+}
+
+
 def create_router(
     *,
     session_manager: SessionManager,
@@ -83,6 +96,61 @@ def create_router(
             if os.path.basename(f) in ("功能清单-录入模板.xlsx", "功能清单.xlsx")
         ]
         return Path(preferred[0] if preferred else xlsx_files[0])
+
+    @router.get("/api/fpa/options")
+    async def api_fpa_options(user: str = Depends(require_auth)):
+        """Return user-safe FPA option metadata for Web selectors."""
+        from ai_gen_reimbursement_docs.config_utils import (
+            VALID_FPA_STRATEGIES,
+            load_fpa_config,
+        )
+
+        try:
+            cfg = load_fpa_config()
+            profiles = cfg.get("profiles", {})
+            rule_sets = cfg.get("rule_sets", {})
+            if not isinstance(profiles, dict) or not isinstance(rule_sets, dict):
+                raise ValueError("FPA 配置结构无效")
+
+            profile_options = []
+            for name, entry in profiles.items():
+                if not isinstance(entry, dict):
+                    continue
+                profile_name = str(name)
+                profile_options.append({
+                    "name": profile_name,
+                    "label": FPA_PROFILE_LABELS.get(profile_name, profile_name),
+                    "strategy": str(entry.get("strategy") or ""),
+                    "rule_set": str(entry.get("rule_set") or ""),
+                })
+
+            rule_set_options = []
+            for name, entry in rule_sets.items():
+                entry_map = entry if isinstance(entry, dict) else {}
+                rule_set_name = str(name)
+                rule_set_options.append({
+                    "name": rule_set_name,
+                    "label": rule_set_name,
+                    "extends": str(entry_map.get("extends") or ""),
+                })
+
+            strategy_names = [
+                name for name in FPA_STRATEGY_LABELS
+                if name in VALID_FPA_STRATEGIES
+            ]
+            strategy_options = [
+                {"name": name, "label": FPA_STRATEGY_LABELS.get(name, name)}
+                for name in strategy_names
+            ]
+
+            return {
+                "default_profile": str(cfg.get("profile") or ""),
+                "profiles": profile_options,
+                "strategies": strategy_options,
+                "rule_sets": rule_set_options,
+            }
+        except Exception as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @router.get("/api/sessions/{session_id}")
     async def get_session_status(

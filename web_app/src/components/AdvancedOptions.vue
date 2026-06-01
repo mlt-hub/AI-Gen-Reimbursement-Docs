@@ -33,24 +33,29 @@
       <div>
         <label for="fpa-profile" class="field-label text-xs">FPA 方案</label>
         <select id="fpa-profile" v-model="config.fpaProfile" class="field-control">
-          <option value="custom_rules">用户自定义规则口径</option>
-          <option value="strict_fpa">严格 FPA 口径</option>
+          <option v-for="profile in fpaOptions.profiles" :key="profile.name" :value="profile.name">
+            {{ profile.label }}
+          </option>
         </select>
       </div>
       <div>
         <label for="fpa-strategy" class="field-label text-xs">FPA 执行策略</label>
         <select id="fpa-strategy" v-model="config.fpaStrategy" class="field-control">
-          <option value="">跟随方案默认</option>
-          <option value="rules_first">规则优先</option>
-          <option value="ai_first">AI 优先</option>
-          <option value="rules_only">仅规则</option>
-          <option value="ai_only">仅 AI</option>
+          <option value="">{{ defaultStrategyLabel }}</option>
+          <option v-for="strategy in fpaOptions.strategies" :key="strategy.name" :value="strategy.name">
+            {{ strategy.label }}
+          </option>
         </select>
       </div>
       <div>
         <label for="fpa-rule-set" class="field-label text-xs">FPA 规则集</label>
-        <input id="fpa-rule-set" type="text" v-model.trim="config.fpaRuleSet" placeholder="留空使用方案默认规则集"
-          class="field-control" />
+        <select id="fpa-rule-set" v-model="config.fpaRuleSet" class="field-control">
+          <option value="">{{ defaultRuleSetLabel }}</option>
+          <option v-for="ruleSet in fpaOptions.rule_sets" :key="ruleSet.name" :value="ruleSet.name">
+            {{ ruleSet.label }}
+          </option>
+        </select>
+        <div v-if="fpaOptionsError" class="mt-1 text-xs text-[var(--color-warning)]">{{ fpaOptionsError }}</div>
       </div>
       <div class="flex items-end pb-2">
         <label class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)]">
@@ -63,11 +68,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useConfigStore } from '@/stores/config.ts'
 import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
+import { useFpaOptions } from '@/composables/useFpaOptions.ts'
 
 const config = useConfigStore()
+const { fpaOptions, fpaOptionsError, loadFpaOptions } = useFpaOptions()
 const apiKeyInput = ref<HTMLInputElement | null>(null)
 const {
   inputName: apiKeyInputName,
@@ -78,4 +85,28 @@ const {
   getValue: () => config.apiKey,
   setValue: value => { config.apiKey = value },
 })
+
+const selectedProfile = computed(() => (
+  fpaOptions.value.profiles.find(profile => profile.name === config.fpaProfile)
+  ?? fpaOptions.value.profiles[0]
+))
+const defaultStrategyLabel = computed(() => {
+  const strategy = fpaOptions.value.strategies.find(item => item.name === selectedProfile.value?.strategy)
+  return strategy ? `跟随方案默认（${strategy.label}）` : '跟随方案默认'
+})
+const defaultRuleSetLabel = computed(() => (
+  selectedProfile.value?.rule_set ? `跟随方案默认（${selectedProfile.value.rule_set}）` : '跟随方案默认'
+))
+
+watch(
+  fpaOptions,
+  options => {
+    if (config.fpaRuleSet && !options.rule_sets.some(ruleSet => ruleSet.name === config.fpaRuleSet)) {
+      config.fpaRuleSet = ''
+    }
+  },
+  { immediate: true },
+)
+
+onMounted(loadFpaOptions)
 </script>

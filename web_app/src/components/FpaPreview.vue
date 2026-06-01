@@ -2,7 +2,7 @@
   <div class="flex h-full min-h-0 flex-col">
     <div class="border-b border-[var(--color-rule)] px-5 py-4">
       <div class="flex flex-col gap-4">
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_180px_160px]">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_180px_160px_180px]">
           <div>
             <label for="fpa-preview-module" class="field-label text-xs">三级模块</label>
             <select
@@ -20,21 +20,31 @@
           <div>
             <label for="fpa-preview-profile" class="field-label text-xs">FPA 方案</label>
             <select id="fpa-preview-profile" v-model="config.fpaProfile" class="field-control">
-              <option value="custom_rules">用户自定义规则口径</option>
-              <option value="strict_fpa">严格 FPA 口径</option>
+              <option v-for="profile in fpaOptions.profiles" :key="profile.name" :value="profile.name">
+                {{ profile.label }}
+              </option>
             </select>
           </div>
           <div>
             <label for="fpa-preview-strategy" class="field-label text-xs">执行策略</label>
             <select id="fpa-preview-strategy" v-model="config.fpaStrategy" class="field-control">
-              <option value="">默认</option>
-              <option value="rules_first">规则优先</option>
-              <option value="ai_first">AI 优先</option>
-              <option value="rules_only">仅规则</option>
-              <option value="ai_only">仅 AI</option>
+              <option value="">{{ defaultStrategyLabel }}</option>
+              <option v-for="strategy in fpaOptions.strategies" :key="strategy.name" :value="strategy.name">
+                {{ strategy.label }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label for="fpa-preview-rule-set" class="field-label text-xs">规则集</label>
+            <select id="fpa-preview-rule-set" v-model="config.fpaRuleSet" class="field-control">
+              <option value="">{{ defaultRuleSetLabel }}</option>
+              <option v-for="ruleSet in fpaOptions.rule_sets" :key="ruleSet.name" :value="ruleSet.name">
+                {{ ruleSet.label }}
+              </option>
             </select>
           </div>
         </div>
+        <div v-if="fpaOptionsError" class="text-xs text-[var(--color-warning)]">{{ fpaOptionsError }}</div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-h-5 text-xs text-[var(--color-ink-soft)]">
             <span v-if="modules.length">已生成 {{ modules.length }} 个三级模块，可从下拉框选择。</span>
@@ -221,12 +231,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
 import { useConfigStore } from '@/stores/config.ts'
 import { useSessionStore } from '@/stores/session.ts'
 import { useToastStore } from '@/stores/toast.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import { useFpaOptions } from '@/composables/useFpaOptions.ts'
 
 interface FpaPreviewRow {
   name: string
@@ -310,6 +321,7 @@ interface FpaPreviewModulesResult {
 const config = useConfigStore()
 const session = useSessionStore()
 const toast = useToastStore()
+const { fpaOptions, fpaOptionsError, loadFpaOptions } = useFpaOptions()
 
 const modules = ref<FpaPreviewModule[]>([])
 const moduleWarnings = ref<string[]>([])
@@ -323,6 +335,17 @@ const previewWarnings = computed(() => result.value?.warnings ?? [])
 const generationCountEntries = computed(() => Object.entries(result.value?.audit?.generation_counts ?? {}))
 const canLoadModules = computed(() => config.isValid && !session.isRunning && !previewLoading.value)
 const canPreview = computed(() => config.isValid && selectedModuleIndex.value !== '' && !session.isRunning && !modulesLoading.value)
+const selectedProfile = computed(() => (
+  fpaOptions.value.profiles.find(profile => profile.name === config.fpaProfile)
+  ?? fpaOptions.value.profiles[0]
+))
+const defaultStrategyLabel = computed(() => {
+  const strategy = fpaOptions.value.strategies.find(item => item.name === selectedProfile.value?.strategy)
+  return strategy ? `默认（${strategy.label}）` : '默认'
+})
+const defaultRuleSetLabel = computed(() => (
+  selectedProfile.value?.rule_set ? `默认（${selectedProfile.value.rule_set}）` : '默认'
+))
 
 watch(
   () => [config.workMode, config.xlsxPath, config.selectedFile],
@@ -334,6 +357,18 @@ watch(
     error.value = ''
   },
 )
+
+watch(
+  fpaOptions,
+  options => {
+    if (config.fpaRuleSet && !options.rule_sets.some(ruleSet => ruleSet.name === config.fpaRuleSet)) {
+      config.fpaRuleSet = ''
+    }
+  },
+  { immediate: true },
+)
+
+onMounted(loadFpaOptions)
 
 function appendInputSource(body: FormData) {
   if (config.workMode === 'local') {
@@ -402,17 +437,11 @@ async function runPreview() {
 }
 
 function profileLabel(profile: string) {
-  return profile === 'strict_fpa' ? '严格 FPA 口径' : '用户自定义规则口径'
+  return fpaOptions.value.profiles.find(item => item.name === profile)?.label ?? profile
 }
 
 function strategyLabel(strategy: string) {
-  const labels: Record<string, string> = {
-    rules_first: '规则优先',
-    ai_first: 'AI 优先',
-    rules_only: '仅规则',
-    ai_only: '仅 AI',
-  }
-  return labels[strategy] ?? strategy
+  return fpaOptions.value.strategies.find(item => item.name === strategy)?.label ?? strategy
 }
 
 function debugReasonLabel(reason?: string) {
