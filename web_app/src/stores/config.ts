@@ -28,19 +28,12 @@ function saveBool(key: string, val: boolean) {
   try { localStorage.setItem(key, String(val)) } catch { /* 忽略 */ }
 }
 
-function loadSessionStr(key: string, fallback: string): string {
-  try { return sessionStorage.getItem(key) ?? fallback } catch { return fallback }
-}
-
-function saveSessionStr(key: string, val: string) {
-  try {
-    if (val) sessionStorage.setItem(key, val)
-    else sessionStorage.removeItem(key)
-  } catch { /* 忽略 */ }
-}
-
 function removeLocalStr(key: string) {
   try { localStorage.removeItem(key) } catch { /* 忽略 */ }
+}
+
+function removeSessionStr(key: string) {
+  try { sessionStorage.removeItem(key) } catch { /* 忽略 */ }
 }
 
 const API_KEY_PLACEHOLDERS = new Set([
@@ -81,13 +74,14 @@ interface ImportedUserSettings extends Partial<UserSettings> {
 
 export const useConfigStore = defineStore('config', () => {
   removeLocalStr('apiKey')
+  removeSessionStr('apiKey')
 
   const workMode = ref<WorkMode>('local')
   const backendStatus = ref<BackendStatus>('checking')
   const pipelineMode = ref<PipelineMode>(loadStr('pipelineMode', 'from-excel-gen-all') as PipelineMode)
   const xlsxPath = ref('')
   const outputDir = ref('')
-  const apiKey = ref(normalizeApiKeyInput(loadSessionStr('apiKey', '')))
+  const apiKey = ref('')
   const model = ref(loadStr('model', ''))
   const baseUrl = ref(loadStr('baseUrl', ''))
   const maxTokens = ref(loadStr('maxTokens', ''))
@@ -99,7 +93,6 @@ export const useConfigStore = defineStore('config', () => {
   const selectedFile = ref<File | null>(null)
 
   // ── 自动持久化 ──
-  watch(apiKey, v => saveSessionStr('apiKey', normalizeApiKeyInput(v)))
   watch(model, v => saveStr('model', v))
   watch(baseUrl, v => saveStr('baseUrl', v))
   watch(maxTokens, v => saveStr('maxTokens', v))

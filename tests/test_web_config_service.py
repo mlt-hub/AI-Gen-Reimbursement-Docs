@@ -60,3 +60,13 @@ def test_save_config_to_dir_preserves_existing_sensitive_env_when_omitted(tmp_pa
     assert "ANTHROPIC_API_KEY=sk-existing" in env_text
     assert "ANTHROPIC_BASE_URL=https://new.example.test" in env_text
     assert "ANTHROPIC_MODEL=deepseek-v4-flash" in env_text
+
+
+def test_redact_env_dict_hides_sensitive_values_without_fragments():
+    redacted = config_service.redact_env_dict({
+        "ANTHROPIC_API_KEY": "sk-secret-value",
+        "ANTHROPIC_BASE_URL": "https://api.example.test",
+    })
+
+    assert redacted["ANTHROPIC_API_KEY"] == "***"
+    assert redacted["ANTHROPIC_BASE_URL"] == "https://api.example.test"

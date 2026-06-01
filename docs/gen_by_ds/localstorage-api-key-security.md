@@ -6,13 +6,13 @@
 
 | Key | 内容 | 代码位置 |
 |---|---|---|
-| `apiKey` | API Key 明文，短期实现为 `sessionStorage` 会话级保存 | `config.ts` |
+| `apiKey` | API Key 明文，仅保存在当前 Pinia store 内存状态中，不写入浏览器存储 | `config.ts` |
 | `model` | 模型名称，继续保存到 `localStorage` | `config.ts` |
 | `baseUrl` | API 端点地址，继续保存到 `localStorage` | `config.ts` |
 | `maxTokens` | 最大 Token 数，继续保存到 `localStorage` | `config.ts` |
 | `projectName` / `fpaProfile` / … | 其他非敏感业务配置，继续保存到 `localStorage` | `config.ts` |
 
-当前短期实现：`apiKey` 单独使用 `sessionStorage`，并在 Pinia store 初始化时清理历史遗留的 `localStorage.apiKey`；其他非敏感配置仍通过 `watch` 写入 `localStorage`。
+当前短期实现：`apiKey` 只保存在当前页面运行期间的 Pinia store 内存状态中，并在 store 初始化时清理历史遗留的 `localStorage.apiKey` 和 `sessionStorage.apiKey`；其他非敏感配置仍通过 `watch` 写入 `localStorage`。
 
 此外，[`Home.vue`](../../web_app/src/views/Home.vue#L313) 用 `localStorage` 保存最近一次会话 ID，用于页面刷新后恢复任务状态。
 
@@ -91,7 +91,7 @@ API Key [fpa_preview]: missing, source=missing
          │
 ┌─────────────────────────────────────────────────────┐
 │ 前端                                                │
-│ - 用户可选输入覆盖 Key → 仅存 sessionStorage / 内存    │
+│ - 用户可选输入覆盖 Key → 仅存当前页面内存状态          │
 │ - 不持久化 API Key                                  │
 │ - 读取配置从服务端 /api/config 获取                    │
 └─────────────────────────────────────────────────────┘
@@ -105,33 +105,34 @@ API Key [fpa_preview]: missing, source=missing
 
 **改动点**：
 1. 任务接口默认不再依赖前端传入 `api_key`，服务端优先读取 `~/.ai-gen-reimbursement-docs/.env`
-2. 前端 `config.ts` 移除 `localStorage` 中 `apiKey` 的持久化，改为 `sessionStorage` 或内存
+2. 前端 `config.ts` 移除 `localStorage` 和 `sessionStorage` 中 `apiKey` 的持久化，仅保留当前页面内存状态
 3. 前端仅在用户显式填写"本次会话覆盖 Key"时随任务请求传递该 Key
 4. 日志、历史记录、错误响应、导出配置均不得包含 API Key 原文片段
 
-### 降级方案：sessionStorage 替代 localStorage
+### 降级方案：当前页面内存替代浏览器存储
 
-如果暂时不调整服务端任务接口，至少将 API Key 从 `localStorage` 改为 `sessionStorage`：
+如果暂时不调整服务端任务接口，至少将 API Key 从浏览器持久/会话存储中移除，仅保存在当前页面内存状态：
 
-| 对比 | localStorage | sessionStorage |
+| 对比 | localStorage | sessionStorage | 当前页面内存 |
 |---|---|---|
-| 生命周期 | 永久 | 关闭标签页即清除 |
-| XSS 可读 | 是 | 是 |
-| 浏览器同步 | 可能泄露 | 不同步 |
-| 持久化风险 | 高 | 低（不会遗留） |
+| 生命周期 | 永久 | 关闭标签页即清除 | 刷新或关闭页面即清除 |
+| XSS 可读 | 是 | 是 | 是 |
+| 浏览器同步 | 可能泄露 | 不同步 | 不同步 |
+| 持久化风险 | 高 | 中（同标签页刷新仍保留） | 低 |
 
-改动最小：只对 `apiKey` 使用 `sessionStorage`；`model`、`baseUrl`、`fpaProfile` 等非敏感配置继续使用 `localStorage`，避免牺牲用户体验。
+改动最小：只对 `apiKey` 使用内存状态；`model`、`baseUrl`、`fpaProfile` 等非敏感配置继续使用 `localStorage`，避免牺牲用户体验。
 
 **局限性**：XSS 仍可读取，只是减少了持久化泄露面。
 
 已实施的短期动作：
 
-- `apiKey` 初始化时只从 `sessionStorage` 读取
-- `apiKey` 变化时只写入 `sessionStorage`
-- store 初始化时删除历史遗留的 `localStorage.apiKey`
+- `apiKey` 初始化为空，不从 `localStorage` 或 `sessionStorage` 恢复
+- `apiKey` 变化时不写入任何浏览器存储
+- store 初始化时删除历史遗留的 `localStorage.apiKey` 和 `sessionStorage.apiKey`
 - 导出的用户设置 JSON 不再包含 `apiKey`
 - 导入旧配置时如存在 `apiKey`，只写入当前会话状态，不重新持久化到 `localStorage`
 - 后端任务、FPA 预览和 Prompt Debug 入口会记录 Key 来源及不可逆指纹，不记录 Key 原文片段
+- 配置读取接口只返回敏感值占位符 `***`，前端不会把占位符填入 API Key 输入框
 
 ---
 
@@ -139,7 +140,7 @@ API Key [fpa_preview]: missing, source=missing
 
 | 场景 | 推荐方案 |
 |---|---|
-| 当前阶段（内部工具、未上线） | **已实施短期方案**：`apiKey` 从 `localStorage` 移到 `sessionStorage`，并清理历史遗留 Key |
+| 当前阶段（内部工具、未上线） | **已实施短期方案**：`apiKey` 从浏览器存储移到当前页面内存状态，并清理历史遗留 Key |
 | 上线前 | **推荐方案**：任务接口默认使用服务端 `.env` Key，前端只允许会话级覆盖 |
 
-两阶段可渐进实施：先切 `sessionStorage` 快速止血，再把任务接口改成默认由服务端注入 Key，前端只保留本次会话覆盖能力。
+两阶段可渐进实施：先切当前页面内存状态快速止血，再把任务接口改成默认由服务端注入 Key，前端只保留本次会话覆盖能力。

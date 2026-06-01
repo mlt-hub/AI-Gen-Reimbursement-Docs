@@ -86,7 +86,10 @@ async def config_read(request: Request):
 async def get_user_config(user: str = Depends(require_auth)):
     """返回当前用户的个人配置（可编辑的 key-value）。"""
     if not user:
-        return read_config()
+        data = read_config()
+        if isinstance(data.get("_env"), dict):
+            data["_env"] = redact_env_dict(data["_env"])
+        return data
 
     user_dir = user_config_dir(user)
     result: dict = {"_env": {}, "_system": {}}

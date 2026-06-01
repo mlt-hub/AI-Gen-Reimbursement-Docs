@@ -65,6 +65,31 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     server.session_manager.cleanup_download(data["session_id"])
 
 
+def test_local_user_config_redacts_api_key(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="", local_mode=True)
+    (tmp_path / ".env").write_text(
+        "ANTHROPIC_API_KEY=sk-local-secret\n"
+        "ANTHROPIC_BASE_URL=https://api.example.test\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "web_app.services.config_service.config_dir",
+        lambda: tmp_path,
+    )
+    monkeypatch.setattr(
+        "web_app.routes.config.config_dir",
+        lambda: tmp_path,
+    )
+
+    resp = client.get("/api/user/config")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["_env"]["ANTHROPIC_API_KEY"] == "***"
+    assert "sk-local-secret" not in resp.text
+    assert data["_env"]["ANTHROPIC_BASE_URL"] == "https://api.example.test"
+
+
 def test_run_upload_smoke_creates_remote_session(monkeypatch):
     client = _client(monkeypatch, user="alice")
     calls: list[dict] = []
