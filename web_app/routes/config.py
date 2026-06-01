@@ -9,6 +9,7 @@ from web_app.services.config_service import (
     config_dir,
     mask_env_content,
     read_config,
+    redact_env_dict,
     save_config_to_dir,
 )
 
@@ -26,7 +27,10 @@ async def get_default_work_mode():
 
 @router.get("/api/config")
 async def get_config():
-    return read_config()
+    data = read_config()
+    if isinstance(data.get("_env"), dict):
+        data["_env"] = redact_env_dict(data["_env"])
+    return data
 
 
 @router.post("/api/config")
@@ -47,7 +51,10 @@ async def config_read(request: Request):
         result: dict = {}
         for key, fname in [("env", ".env"), ("system_config", "system_config.yaml")]:
             fp = user_dir / fname
-            result[key] = fp.read_text(encoding="utf-8") if fp.exists() else ""
+            if key == "env":
+                result[key] = mask_env_content(fp) if fp.exists() else ""
+            else:
+                result[key] = fp.read_text(encoding="utf-8") if fp.exists() else ""
 
         biz_path = Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs" / "business_rules.yaml"
         result["business_rules"] = biz_path.read_text(encoding="utf-8") if biz_path.exists() else ""
@@ -68,7 +75,10 @@ async def config_read(request: Request):
         ("business_rules", "business_rules.yaml"),
     ]:
         fp = cfg_dir / fname
-        result[key] = fp.read_text(encoding="utf-8") if fp.exists() else ""
+        if key == "env":
+            result[key] = mask_env_content(fp) if fp.exists() else ""
+        else:
+            result[key] = fp.read_text(encoding="utf-8") if fp.exists() else ""
     return result
 
 
@@ -89,7 +99,7 @@ async def get_user_config(user: str = Depends(require_auth)):
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip()
-        result["_env"] = env
+        result["_env"] = redact_env_dict(env)
 
     sys_path = user_dir / "system_config.yaml"
     if sys_path.exists():

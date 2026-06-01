@@ -407,7 +407,9 @@ async function loadUserConfig() {
         if (m) {
           const k = m[1].trim()
           const v = m[2].trim()
-          if (k === 'ANTHROPIC_API_KEY') envFields.apiKey = normalizeApiKeyInput(v)
+          if (k === 'ANTHROPIC_API_KEY') {
+            if (v !== '***') envFields.apiKey = normalizeApiKeyInput(v)
+          }
           else if (k === 'ANTHROPIC_BASE_URL') envFields.baseUrl = v
           else if (k === 'ANTHROPIC_MODEL') envFields.model = v
         }
