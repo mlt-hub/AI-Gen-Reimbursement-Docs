@@ -274,6 +274,80 @@ def test_strict_fpa_uses_clear_description_for_internal_relation_name():
     assert types["查看详情"] == "EQ"
 
 
+def test_strict_fpa_treats_external_reference_without_local_maintenance_as_eif():
+    rows = [
+        _row(
+            "地市后台",
+            "组织管理",
+            "组织引用",
+            "组织引用",
+            "系统引用主数据平台维护的组织主数据，本系统不维护组织主数据。",
+            "选择组织",
+            "从主数据平台组织主数据中选择组织并关联到当前业务对象。",
+        ),
+        _row(
+            "地市后台",
+            "组织管理",
+            "组织引用",
+            "组织引用",
+            "系统引用主数据平台维护的组织主数据，本系统不维护组织主数据。",
+            "查看组织详情",
+            "查看主数据平台组织主数据的组织名称、层级和状态。",
+            "查询",
+        ),
+    ]
+
+    result = _build_fpa_rule_rows(rows, _meta(), profile=STRICT_FPA_PROFILE)
+    types = _types_by_name(result)
+
+    assert types["组织主数据"] == "EIF"
+    assert "组织本地档案" not in types
+    assert types["选择组织"] == "EI"
+    assert types["查看组织详情"] == "EQ"
+
+
+def test_strict_fpa_treats_external_sync_then_local_maintenance_as_ilf():
+    rows = [
+        _row(
+            "地市后台",
+            "组织管理",
+            "组织档案",
+            "组织档案维护",
+            "从主数据平台同步组织主数据后，本系统继续维护组织服务范围、启停状态和本地负责人。",
+            "同步组织信息",
+            "从主数据平台同步组织编码、组织名称和层级信息，写入本系统组织本地档案。",
+        ),
+        _row(
+            "地市后台",
+            "组织管理",
+            "组织档案",
+            "组织档案维护",
+            "从主数据平台同步组织主数据后，本系统继续维护组织服务范围、启停状态和本地负责人。",
+            "编辑组织扩展信息",
+            "维护本系统组织本地档案中的服务范围、启停状态和本地负责人。",
+        ),
+        _row(
+            "地市后台",
+            "组织管理",
+            "组织档案",
+            "组织档案维护",
+            "从主数据平台同步组织主数据后，本系统继续维护组织服务范围、启停状态和本地负责人。",
+            "查看组织档案",
+            "查看本系统保存的组织本地档案和同步来源信息。",
+            "查询",
+        ),
+    ]
+
+    result = _build_fpa_rule_rows(rows, _meta(), profile=STRICT_FPA_PROFILE)
+    types = _types_by_name(result)
+
+    assert types["组织本地档案"] == "ILF"
+    assert "组织主数据" not in types
+    assert types["同步组织信息"] == "EI"
+    assert types["编辑组织扩展信息"] == "EI"
+    assert types["查看组织档案"] == "EQ"
+
+
 def test_strict_fpa_keeps_valid_ai_ei_when_description_mentions_query_list():
     group = {
         "client_type": "地市后台",

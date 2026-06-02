@@ -698,12 +698,21 @@ class StrictFpaProfile(CustomRulesProfile):
             ]
         )
         data_functions: list[tuple[str, str, str]] = []
-        for external_name in self._external_data_names(all_text, l3):
-            data_functions.append((
-                external_name,
-                "EIF",
-                "外部系统维护、本系统引用的数据组，按 EIF。",
-            ))
+        synced_local_names = self._synced_local_data_names(all_text)
+        if synced_local_names:
+            for local_name in synced_local_names:
+                data_functions.append((
+                    local_name,
+                    "ILF",
+                    "外部数据同步进入本系统后继续维护，按本系统 ILF。",
+                ))
+        else:
+            for external_name in self._external_data_names(all_text, l3):
+                data_functions.append((
+                    external_name,
+                    "EIF",
+                    "外部系统维护、本系统引用的数据组，按 EIF。",
+                ))
         for rule in self._configured_internal_data_rules():
             if rule.matches(all_text):
                 data_functions.append((
@@ -772,7 +781,7 @@ class StrictFpaProfile(CustomRulesProfile):
 
     def _has_internal_data_function(self, text: str) -> bool:
         return any(k in text for k in [
-            "本系统维护", "本系统保存",
+            "本系统维护", "本系统保存", "本系统继续维护",
             "维护本系统", "记录本系统",
         ])
 
@@ -825,6 +834,23 @@ class StrictFpaProfile(CustomRulesProfile):
                 name = name[len(prefix):]
         name = re.split(r"(?:中选择|中查看|中读取|并|，|。|；|、)", name, maxsplit=1)[0]
         return name.strip(" 的。；，、")
+
+    def _synced_local_data_names(self, text: str) -> list[str]:
+        if "同步" not in text or not any(k in text for k in ["本系统继续维护", "写入本系统", "本系统保存", "本系统维护"]):
+            return []
+        patterns = [
+            r"(?:写入|保存到|维护|查看)(?:本系统)?([^，。；、\s]{2,24}(?:本地档案|扩展信息|本地信息|本地记录|本地数据|档案|信息|记录))",
+            r"(?:本系统继续维护)([^，。；、\s]{2,24}(?:本地档案|扩展信息|本地信息|本地记录|本地数据|档案|信息|记录))",
+        ]
+        names: list[str] = []
+        seen: set[str] = set()
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+                name = match.group(1).strip(" 的。；，、")
+                if name and name not in seen:
+                    seen.add(name)
+                    names.append(name)
+        return names
 
     def _extra_internal_data_names(self, l3: str, process_list: list[object]) -> list[str]:
         base = self._internal_data_name(l3)
