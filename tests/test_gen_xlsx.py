@@ -9,6 +9,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     _format_fpa_explanation,
     calculate_fpa_row_workload,
     calculate_fpa_total,
+    calculate_fpa_excel_formula_projection,
     generate_fpa_xlsx_from_md,
     validate_fpa_excel_recalculation,
 )
@@ -185,6 +186,21 @@ class TestFpaTotalCalculation:
         assert ws.cell(4, 12).value == "=J4*K4"
         assert ws.cell(1, 12).value == "=SUM(L3:L4)"
         wb.close()
+
+    def test_formula_projection_rejects_unexpected_workload_formula(self, tmp_path):
+        xlsx = tmp_path / "fpa.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "FPA功能点估算"
+        ws.cell(1, 12).value = "=SUM(L3:L3)"
+        ws.cell(3, 10).value = 2
+        ws.cell(3, 11).value = 1
+        ws.cell(3, 12).value = "=J3+K3"
+        wb.save(xlsx)
+        wb.close()
+
+        with pytest.raises(ValueError, match="第 3 行工作量公式无效"):
+            calculate_fpa_excel_formula_projection(str(xlsx))
 
     def test_recalc_validation_passes_when_cached_total_matches(self, monkeypatch, tmp_path):
         xlsx = tmp_path / "fpa.xlsx"

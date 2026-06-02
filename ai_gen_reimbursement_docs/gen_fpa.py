@@ -936,6 +936,32 @@ def calculate_fpa_total(rows: list[dict[str, object]]) -> float:
     return sum(calculate_fpa_row_workload(row) for row in rows)
 
 
+def calculate_fpa_excel_formula_projection(xlsx_path: str) -> float:
+    """读取 Excel 公式输入列，确定性投影 L 列工作量总和。"""
+    from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
+
+    wb = openpyxl.load_workbook(xlsx_path, data_only=False)
+    try:
+        sheet_name = _get_system_config_value("fpa_sheet", "FPA功能点估算")
+        ws = wb[sheet_name]
+        last_data_row = ws.max_row
+        expected_total_formula = f"=SUM(L3:L{last_data_row})"
+        if ws.cell(1, FPA_COL_FORMULA_WORKLOAD).value != expected_total_formula:
+            raise ValueError(f"FPA Excel 汇总公式无效，应为 {expected_total_formula}")
+
+        total = 0.0
+        for row_num in range(3, last_data_row + 1):
+            expected_row_formula = f"=J{row_num}*K{row_num}"
+            if ws.cell(row_num, FPA_COL_FORMULA_WORKLOAD).value != expected_row_formula:
+                raise ValueError(f"FPA Excel 第 {row_num} 行工作量公式无效，应为 {expected_row_formula}")
+            total += _as_float(ws.cell(row_num, FPA_COL_ADJUST).value) * _as_float(
+                ws.cell(row_num, FPA_COL_ELEMENTS).value
+            )
+        return total
+    finally:
+        wb.close()
+
+
 def _recalculate_with_excel_com(xlsx_path: str) -> tuple[bool, str]:
     """Use local Excel COM to recalculate and save formula caches."""
     if os.name != "nt":

@@ -2933,7 +2933,7 @@ C1. 已完成：细化 EI / EQ / EO / ILF / EIF 关键词优先级。
 C2. 已完成：建立类型冲突矩阵。
 C3. 已完成：增加可配置类型映射表。
 C4. 已完成：增加可配置 AI 类型冲突规则表。
-C5. 对比不同类型策略下的 Excel 公式结果。
+C5. 已完成：对比不同类型策略下的 Excel 公式结果。
 ```
 
 实现记录：
@@ -2967,18 +2967,25 @@ strict_fpa 已支持 ai_type_conflict_rules：
 4. conflict: false 可压制已确认可接受的 AI 类型差异，例如规则认为“本地报表快照”为 ILF、AI 返回 EO 时不提示冲突。
 5. conflict: true 可强制人工复核项目级特例，即使矩阵原本不会提示冲突。
 6. ai_first / ai_only 策略仍保留合法 AI type；该规则只影响是否记录类型冲突 warning。
+
+C5 已增加确定性 Excel 公式投影校验：
+1. 新增 calculate_fpa_excel_formula_projection(xlsx_path)，不依赖 Excel / LibreOffice 复算引擎。
+2. 校验正式 FPA Excel 的 L1 汇总公式必须为 =SUM(L3:L末行)，每行 L 列必须为 =J行*K行。
+3. 使用 J 列调整值和 K 列要素数量投影计算 Excel 公式应得总工作量。
+4. vertical_industry_management golden case 下，custom_rules / rules_only 的 MD 汇总和 Excel 投影均为 8；strict_fpa / rules_only 的 MD 汇总和 Excel 投影均为 13。
+5. 该校验补充已有可选 fpa_excel_recalc_check：默认路径仍不依赖外部 Excel 公式缓存，可选复算只作为环境具备时的额外 warning 校验。
 ```
 
 已执行：
 
 ```powershell
-.\scripts\test.ps1 tests/test_fpa_profiles.py tests/test_config_utils.py tests/test_gen_fpa_ai.py tests/test_gen_fpa_strict_profile.py tests/test_fpa_external_data_rules.py -vv
+.\scripts\test.ps1 tests/test_fpa_acceptance.py::test_fpa_acceptance_formula_projection_matches_summary_across_type_strategies tests/test_gen_xlsx.py::TestFpaTotalCalculation -vv
 ```
 
 结果：
 
 ```text
-122 passed
+8 passed
 ```
 
 ### D. 配置校验

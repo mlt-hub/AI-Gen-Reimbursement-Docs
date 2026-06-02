@@ -5,8 +5,10 @@ import openpyxl
 
 from ai_gen_reimbursement_docs.excel_source import generate_md_files
 from ai_gen_reimbursement_docs.gen_fpa import (
+    calculate_fpa_excel_formula_projection,
     _read_fpa_rows_md_for_audit,
     generate_fpa_check_xlsx_from_md,
+    generate_fpa_xlsx_from_md,
     plan_fpa_md_from_tree,
     preview_fpa_module,
 )
@@ -48,6 +50,13 @@ def _headers(ws) -> list[str]:
     return [cell.value for cell in ws[1]]
 
 
+def _summary_total(summary_md: Path) -> float:
+    text = summary_md.read_text(encoding="utf-8")
+    marker = "FPA工作量（人/天）:"
+    assert marker in text
+    return float(text.split(marker, 1)[1].strip().split()[0])
+
+
 def _write_minimal_excel(path: Path, rows: list[dict[str, str]], meta: dict[str, str]) -> None:
     wb = openpyxl.Workbook()
     ws_meta = wb.active
@@ -83,6 +92,39 @@ def _write_minimal_excel(path: Path, rows: list[dict[str, str]], meta: dict[str,
         ])
     wb.save(path)
     wb.close()
+
+
+def test_fpa_acceptance_formula_projection_matches_summary_across_type_strategies(tmp_path):
+    case = json.loads((FIXTURE_DIR / "vertical_industry_management.json").read_text(encoding="utf-8"))
+    template = Path(__file__).parent / "fixtures" / "output_templates" / "FPA工作量评估-输出模板.xlsx"
+    tree_md = tmp_path / "tree.md"
+    meta_md = tmp_path / "meta.md"
+    _write_tree_md(tree_md, case["rows"])
+    _write_meta_md(meta_md, case["meta"])
+
+    totals: dict[str, float] = {}
+    projections: dict[str, float] = {}
+    for profile_name in ("custom_rules", "strict_fpa"):
+        fpa_md = tmp_path / f"{profile_name}.md"
+        summary_md = tmp_path / f"{profile_name}-summary.md"
+        fpa_xlsx = tmp_path / f"{profile_name}.xlsx"
+
+        plan_fpa_md_from_tree(
+            str(tree_md),
+            str(meta_md),
+            str(fpa_md),
+            summary_md_path=str(summary_md),
+            profile_name=profile_name,
+            strategy="rules_only",
+            rule_set=f"{profile_name}_default",
+        )
+        generate_fpa_xlsx_from_md(str(fpa_md), str(meta_md), str(template), str(fpa_xlsx))
+
+        totals[profile_name] = _summary_total(summary_md)
+        projections[profile_name] = calculate_fpa_excel_formula_projection(str(fpa_xlsx))
+
+    assert totals == {"custom_rules": 8.0, "strict_fpa": 13.0}
+    assert projections == totals
 
 
 def test_fpa_acceptance_strict_rules_formal_check_workbook_from_golden_case(tmp_path):
