@@ -44,7 +44,10 @@
             </select>
           </div>
         </div>
-        <div v-if="fpaOptionsError" class="text-xs text-[var(--color-warning)]">{{ fpaOptionsError }}</div>
+        <div v-if="fpaOptionsError" class="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-xs text-[var(--color-warning)]">
+          <div class="font-semibold">无法加载 FPA 方案配置</div>
+          <div class="mt-1 leading-5">{{ friendlyFpaOptionsError }}</div>
+        </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-h-5 text-xs text-[var(--color-ink-soft)]">
             <span v-if="modules.length">已生成 {{ modules.length }} 个三级模块，可从下拉框选择。</span>
@@ -88,7 +91,9 @@
       </div>
 
       <div v-if="error" class="mt-4 rounded-md border border-[var(--color-danger)] bg-[var(--color-danger-soft)] px-3 py-2 text-sm text-[var(--color-danger)]">
-        {{ error }}
+        <div class="font-semibold">{{ error.title }}</div>
+        <div class="mt-1 leading-5">{{ error.detail }}</div>
+        <div v-if="error.nextStep" class="mt-1 text-xs leading-5">{{ error.nextStep }}</div>
       </div>
 
       <div v-if="moduleWarnings.length" class="mt-4 rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-xs text-[var(--color-warning)]">
@@ -105,6 +110,25 @@
           <span :class="['shrink-0 rounded px-2 py-1 text-xs font-semibold', result.used_ai ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]']">
             {{ result.used_ai ? 'AI' : '兜底' }}
           </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
+          <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
+            <div class="text-[var(--color-ink-soft)]">新增/修改功能点</div>
+            <div class="mt-1 text-lg font-semibold text-[var(--color-ink)]">{{ result.rows.length }}</div>
+          </div>
+          <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
+            <div class="text-[var(--color-ink-soft)]">功能过程覆盖</div>
+            <div class="mt-1 text-lg font-semibold text-[var(--color-ink)]">{{ coverageSummary }}</div>
+          </div>
+          <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
+            <div class="text-[var(--color-ink-soft)]">生成方式</div>
+            <div class="mt-1 truncate font-semibold text-[var(--color-ink)]">{{ generationSummary }}</div>
+          </div>
+          <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
+            <div class="text-[var(--color-ink-soft)]">规则集</div>
+            <div class="mt-1 truncate font-semibold text-[var(--color-ink)]">{{ result.rule_set || '-' }}</div>
+          </div>
         </div>
 
         <div class="overflow-hidden rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
@@ -352,6 +376,12 @@ interface FpaPreviewModulesResult {
   warnings: string[]
 }
 
+interface PreviewErrorMessage {
+  title: string
+  detail: string
+  nextStep?: string
+}
+
 const config = useConfigStore()
 const session = useSessionStore()
 const toast = useToastStore()
@@ -362,11 +392,31 @@ const moduleWarnings = ref<string[]>([])
 const selectedModuleIndex = ref('')
 const modulesLoading = ref(false)
 const previewLoading = ref(false)
-const error = ref('')
+const error = ref<PreviewErrorMessage | null>(null)
 const result = ref<FpaPreviewResult | null>(null)
 
 const previewWarnings = computed(() => result.value?.warnings ?? [])
 const generationCountEntries = computed(() => Object.entries(result.value?.audit?.generation_counts ?? {}))
+const friendlyFpaOptionsError = computed(() => (
+  toFriendlyError('options', fpaOptionsError.value).detail
+))
+const generationSummary = computed(() => {
+  if (!result.value) return '-'
+  const entries = generationCountEntries.value
+  if (entries.length) return entries.map(([name, count]) => `${name} ${count}`).join(' / ')
+
+  const counts = result.value.rows.reduce<Record<string, number>>((acc, row) => {
+    acc[row.generation] = (acc[row.generation] ?? 0) + 1
+    return acc
+  }, {})
+  const rowEntries = Object.entries(counts)
+  return rowEntries.length ? rowEntries.map(([name, count]) => `${name} ${count}`).join(' / ') : '-'
+})
+const coverageSummary = computed(() => {
+  const coverage = result.value?.audit?.coverage
+  if (!coverage) return '-'
+  return `${coverage.covered_count}/${coverage.process_total}`
+})
 const canLoadModules = computed(() => config.isValid && !session.isRunning && !previewLoading.value)
 const canPreview = computed(() => config.isValid && selectedModuleIndex.value !== '' && !session.isRunning && !modulesLoading.value)
 const selectedProfile = computed(() => (
@@ -388,7 +438,7 @@ watch(
     moduleWarnings.value = []
     selectedModuleIndex.value = ''
     result.value = null
-    error.value = ''
+    error.value = null
   },
 )
 
@@ -415,7 +465,7 @@ function appendInputSource(body: FormData) {
 async function loadModules() {
   if (!canLoadModules.value) return
   modulesLoading.value = true
-  error.value = ''
+  error.value = null
   result.value = null
   moduleWarnings.value = []
   selectedModuleIndex.value = ''
@@ -433,8 +483,8 @@ async function loadModules() {
     selectedModuleIndex.value = modules.value.length ? String(modules.value[0].index) : ''
   } catch (e) {
     const msg = normalizeApiError(e)
-    error.value = msg
-    toast.show('error', msg)
+    error.value = toFriendlyError('modules', msg)
+    toast.show('error', error.value.title)
   } finally {
     modulesLoading.value = false
   }
@@ -443,7 +493,7 @@ async function loadModules() {
 async function runPreview() {
   if (!canPreview.value) return
   previewLoading.value = true
-  error.value = ''
+  error.value = null
   result.value = null
 
   const body = new FormData()
@@ -463,10 +513,44 @@ async function runPreview() {
     })
   } catch (e) {
     const msg = normalizeApiError(e)
-    error.value = msg
-    toast.show('error', msg)
+    error.value = toFriendlyError('preview', msg)
+    toast.show('error', error.value.title)
   } finally {
     previewLoading.value = false
+  }
+}
+
+function toFriendlyError(context: 'options' | 'modules' | 'preview', message: string): PreviewErrorMessage {
+  const text = message.trim() || '请求失败'
+  const isConnectionError = text.includes('无法连接服务') || text.includes('Failed to fetch')
+  const isGenericHttpError = /^请求失败 \(\d+\)$/.test(text)
+
+  if (context === 'options') {
+    return {
+      title: '无法加载 FPA 方案配置',
+      detail: isConnectionError || isGenericHttpError
+        ? '请确认后端服务已启动，并检查 FPA 配置接口是否可用。页面会先使用内置默认方案。'
+        : text,
+      nextStep: '如果刚修改过 FPA 配置，请重启后端服务后刷新页面。',
+    }
+  }
+
+  if (context === 'modules') {
+    return {
+      title: '无法生成基础数据',
+      detail: isConnectionError || isGenericHttpError
+        ? '系统暂时无法解析功能清单。请确认后端服务已启动，且功能清单路径或上传文件可读取。'
+        : text,
+      nextStep: '请检查输入设置中的功能清单来源，然后重新点击“生成基础数据”。',
+    }
+  }
+
+  return {
+    title: '无法生成 FPA 预览',
+    detail: isConnectionError || isGenericHttpError
+      ? '系统暂时无法生成当前三级模块的 FPA 预览。请确认后端服务、FPA 方案和规则集配置正常。'
+      : text,
+    nextStep: '可以先更换执行策略或规则集，或重新生成基础数据后再试。',
   }
 }
 
