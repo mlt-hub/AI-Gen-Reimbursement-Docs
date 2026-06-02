@@ -336,6 +336,43 @@ def _renumber_rows(rows: list[dict[str, object]], start_seq: int) -> None:
         row["序号"] = start_seq + offset
 
 
+def _normalize_ai_fpa_name_prefix(name: str, group: dict[str, object]) -> str:
+    """Force AI row names to use the module path from source data."""
+    clean_name = str(name or "").strip()
+    if not clean_name:
+        return clean_name
+
+    prefix = _group_tag(group).strip()
+    if not prefix:
+        return clean_name
+    if clean_name == prefix or clean_name.startswith(f"{prefix}-"):
+        return clean_name
+
+    client_type = str(group.get("client_type", "") or "").strip()
+    l1 = str(group.get("l1", "") or "").strip()
+    l2 = str(group.get("l2", "") or "").strip()
+    l3 = str(group.get("l3", "") or "").strip()
+    path_parts = [part for part in [l1, l2, l3] if part]
+    suffix = clean_name
+
+    if path_parts:
+        path_pattern = "-".join(re.escape(part) for part in path_parts)
+        path_match = re.match(rf"^.*?{path_pattern}-(?P<suffix>.+)$", clean_name)
+        if path_match:
+            suffix = path_match.group("suffix").strip()
+    if suffix == clean_name and client_type:
+        client_prefixes = [client_type, f"【{client_type}】"]
+        for client_prefix in client_prefixes:
+            if suffix == client_prefix:
+                suffix = ""
+                break
+            if suffix.startswith(f"{client_prefix}-"):
+                suffix = suffix[len(client_prefix) + 1:].strip()
+                break
+
+    return f"{prefix}-{suffix}" if suffix else prefix
+
+
 def _normalize_ai_fpa_rows_for_l3(
     *,
     group: dict[str, object],
@@ -546,11 +583,25 @@ def _normalize_ai_fpa_rows_for_l3(
         else:
             source_text = str(source_processes or "")
 
+        output_name = _normalize_ai_fpa_name_prefix(name, group)
+        if output_name != name:
+            warning = f"{_group_tag(group)} AI 行名称前缀已按源功能清单规范化: {name} -> {output_name}"
+            warnings.append(warning)
+            row_warnings.append(warning)
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.ai_name_prefix",
+                "rule_desc": "新增/修改功能点前缀必须来自源功能清单的客户端类型、一级模块、二级模块、三级模块。",
+                "suggested_type": "",
+                "adopted": "是",
+                "warnings": [warning],
+            })
+
         row = {
             "序号": seq,
             "子系统(模块)": subsystem,
             "资产标识": asset,
-            "新增/修改功能点": name,
+            "新增/修改功能点": output_name,
             "类型": fpa_type,
             "计算依据归类": basis,
             "计算依据说明": explanation,

@@ -158,8 +158,10 @@ def test_normalize_ai_rows_maps_basis_and_types():
             },
         ],
     )
-    assert warnings == []
+    assert any("AI 行名称前缀已按源功能清单规范化" in w for w in warnings)
     assert [r["类型"] for r in rows] == ["EI", "ILF"]
+    assert rows[0]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业管理界面开发"
+    assert rows[1]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-添加垂直行业-逻辑处理开发"
     assert rows[0]["计算依据归类"] == "规则一"
     assert rows[1]["计算依据归类"] == "规则二"
 
@@ -219,9 +221,47 @@ def test_strict_profile_normalizes_ai_development_work_item_names():
         ],
     )
 
-    assert rows[0]["新增/修改功能点"] == "添加垂直行业"
+    assert rows[0]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-添加垂直行业"
     assert rows[0]["类型"] == "EI"
     assert any("已规范化" in w for w in warnings)
+
+
+def test_ai_name_prefix_is_forced_from_source_module_path():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        ai_rows=[
+            {
+                "name": "和乐业-垂直行业营销-垂直行业管理-垂直行业管理-查询垂直行业",
+                "type": "EQ",
+                "explanation": "查询垂直行业。",
+            },
+            {
+                "name": "地市后台-垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组",
+                "type": "ILF",
+                "explanation": "垂直行业数据组。",
+            },
+            {
+                "name": "自定义页面列表查询",
+                "type": "EQ",
+                "explanation": "查询自定义页面。",
+            },
+        ],
+    )
+
+    assert [row["新增/修改功能点"] for row in rows] == [
+        "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-查询垂直行业",
+        "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组",
+        "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-自定义页面列表查询",
+    ]
+    assert len([w for w in warnings if "AI 行名称前缀已按源功能清单规范化" in w]) == 3
+    assert all(
+        any(hit["rule_id"] == "postprocess.ai_name_prefix" for hit in row["_规则命中详情"])
+        for row in rows
+    )
 
 
 def test_strict_profile_corrects_external_service_eif_misclassification():
@@ -518,7 +558,7 @@ def test_rules_first_calls_ai_when_rule_rows_are_low_confidence(monkeypatch, tmp
 
     assert calls["count"] == 1
     assert result[0]["生成方式"] == "ai"
-    assert result[0]["新增/修改功能点"] == "AI 复核功能点"
+    assert result[0]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-AI 复核功能点"
 
 
 def test_rules_first_without_api_keeps_low_confidence_rules_and_audit_warning(monkeypatch, tmp_path):
@@ -644,7 +684,7 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert "垂直行业数据维护" in debug["raw_response"]
     assert debug["thinking"] == "思考过程"
     assert debug["parsed_rows"] == response["rows"]
-    assert debug["final_rows"][0]["name"] == "垂直行业数据维护"
+    assert debug["final_rows"][0]["name"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据维护"
     assert result["audit"]["raw_ai"]["source"] == "ai"
     assert result["audit"]["raw_ai"]["raw_rows"] == response["rows"]
 
@@ -761,7 +801,7 @@ def test_rules_first_preview_calls_ai_when_rule_rows_are_low_confidence(monkeypa
 
     assert result["used_ai"] is True
     assert result["debug"]["reason"] == "rules_first_needs_ai"
-    assert result["rows"][0]["name"] == "AI 预览复核功能点"
+    assert result["rows"][0]["name"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-AI 预览复核功能点"
     assert any("规则结果触发 AI 复核" in warning for warning in result["warnings"])
 
 
@@ -827,7 +867,7 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
         audit_trace_path=str(audit_trace_path),
     )
 
-    assert second[0]["新增/修改功能点"] == "垂直行业管理界面开发"
+    assert second[0]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业管理界面开发"
     trace = json.loads(audit_trace_path.read_text(encoding="utf-8"))
     assert trace["modules"][0]["source"] == "ai_cache"
     assert any("缓存命中" in r.message for r in caplog.records)
