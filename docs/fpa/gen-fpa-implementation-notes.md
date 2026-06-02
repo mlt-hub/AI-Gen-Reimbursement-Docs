@@ -510,7 +510,7 @@ JSON 输出格式要求
 
 ### 领域上下文
 
-当前领域上下文来自元数据 MD，主要字段包括：
+当前领域上下文由元数据 MD 与配置目录/domain_context.json 合并得到。元数据 MD 主要字段包括：
 
 ```text
 子系统（模块）
@@ -519,7 +519,7 @@ JSON 输出格式要求
 功能用户-接收者判定
 ```
 
-这些字段由功能清单 Excel 的元数据 Sheet 生成到 MD 后，再由代码读取。
+这些字段由功能清单 Excel 的元数据 Sheet 生成到 MD 后，再由代码读取；项目级 domain_context.json 额外补充系统边界、本系统维护数据组、外部引用数据组和普通外部服务。
 
 ### 计算依据归类判定原则
 
@@ -3022,7 +3022,7 @@ Warnings Sheet 中来源规则ID 为 config.external_data_rules.external_service
 ```text
 E1. 已完成：为项目保存 domain_context.json。
 E2. 已完成：显式记录系统边界、本系统维护数据组、外部引用数据组、普通外部服务。
-E3. 将领域上下文稳定传入 FPA prompt。
+E3. 已完成：将领域上下文稳定传入 FPA prompt。
 ```
 
 实现记录：
@@ -3034,7 +3034,9 @@ E1/E2 已增加项目级 FPA 领域上下文文件：
 3. 数据组和普通外部服务使用对象列表；对象必须包含 name，可选 aliases 和 description。
 4. external_data_groups 额外要求 source，用于明确外部引用数据组由哪个外部系统维护。
 5. 新增 load_fpa_domain_context() 严格加载入口；缺文件、JSON 解析失败或结构错误均抛出明确的 FpaConfigError。
-6. 本轮不将 domain_context.json 接入 FPA prompt；E3 仍作为独立行为变更推进。
+6. load_optional_fpa_domain_context() 在文件缺失时返回空对象，已有配置目录仍可使用元数据上下文继续生成；文件存在但 JSON 或结构非法时仍明确失败。
+7. _build_domain_context(meta) 会将项目级 domain_context.json 合并到已有元数据上下文，统一传入正式生成和预览 prompt。
+8. AI cache key 已包含合并后的 domain_context；领域边界发生变化时会自动失效旧缓存。
 ```
 
 ### F. 验收

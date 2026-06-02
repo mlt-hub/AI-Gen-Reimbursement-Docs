@@ -471,6 +471,13 @@ def load_fpa_domain_context() -> dict[str, object]:
     return context
 
 
+def load_optional_fpa_domain_context() -> dict[str, object]:
+    """Read project-level FPA domain context when configured."""
+    if not (config_dir() / FPA_DOMAIN_CONTEXT_FILENAME).exists():
+        return {}
+    return load_fpa_domain_context()
+
+
 def _fpa_key_path(*parts: object) -> str:
     return ".".join(str(part) for part in parts if str(part))
 

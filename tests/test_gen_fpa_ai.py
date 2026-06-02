@@ -647,6 +647,61 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["final_rows"][0]["name"] == "垂直行业数据维护"
 
 
+def test_fpa_preview_prompt_includes_project_domain_context(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    (tmp_path / "domain_context.json").write_text(
+        """
+{
+  "system_boundary": "本系统维护供应商协同关系，不维护供应商主档。",
+  "internal_data_groups": [{"name": "供应商协同关系"}],
+  "external_data_groups": [{"name": "供应商档案", "source": "供应商平台"}],
+  "external_services": [{"name": "短信平台"}]
+}
+""",
+        encoding="utf-8",
+    )
+    xlsx = tmp_path / "功能清单.xlsx"
+    xlsx.write_bytes(b"placeholder")
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa.read_base_data_from_excel",
+        lambda path: {"tree_rows": _rows(), "meta": _meta()},
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: (
+            json.dumps(
+                {
+                    "rows": [{
+                        "name": "领域上下文验证功能点",
+                        "type": "EI",
+                        "classification_basis_index": 1,
+                        "explanation": "领域上下文验证功能点，具体为以下：1、覆盖上下文传入。",
+                    }]
+                },
+                ensure_ascii=False,
+            ),
+            "",
+        ),
+    )
+
+    result = preview_fpa_module(
+        file_path=str(xlsx),
+        module_name="垂直行业管理",
+        api_key="sk-test",
+        model="test-model",
+        base_url="",
+        strategy="ai_only",
+    )
+
+    prompt = result["debug"]["user_prompt"]
+    assert '"子系统（模块）": "测试系统"' in prompt
+    assert '"system_boundary": "本系统维护供应商协同关系，不维护供应商主档。"' in prompt
+    assert '"name": "供应商协同关系"' in prompt
+    assert '"name": "供应商档案"' in prompt
+    assert '"source": "供应商平台"' in prompt
+    assert '"name": "短信平台"' in prompt
+
+
 def test_rules_first_preview_calls_ai_when_rule_rows_are_low_confidence(monkeypatch, tmp_path):
     _write_fpa_prompt_config(tmp_path, monkeypatch)
     xlsx = tmp_path / "功能清单.xlsx"
@@ -774,6 +829,67 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
     trace = json.loads(audit_trace_path.read_text(encoding="utf-8"))
     assert trace["modules"][0]["source"] == "ai_cache"
     assert any("缓存命中" in r.message for r in caplog.records)
+
+
+def test_ai_cache_is_invalidated_when_project_domain_context_changes(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    domain_context_path = tmp_path / "domain_context.json"
+    domain_context_path.write_text(
+        """
+{
+  "system_boundary": "本系统维护供应商关系。",
+  "internal_data_groups": [{"name": "供应商关系"}],
+  "external_data_groups": [],
+  "external_services": []
+}
+""",
+        encoding="utf-8",
+    )
+    cache_path = tmp_path / "fpa_ai_cache.json"
+    response = {
+        "rows": [{
+            "name": "供应商关系维护",
+            "type": "ILF",
+            "classification_basis_index": 1,
+            "explanation": "供应商关系维护，具体为以下：1、保存供应商关系。",
+        }]
+    }
+    calls = {"count": 0}
+
+    def fake_call(*args, **kwargs):
+        calls["count"] += 1
+        return json.dumps(response, ensure_ascii=False)
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call)
+    for _ in range(2):
+        _plan_fpa_rows_with_ai(
+            _rows(),
+            _meta(),
+            ["规则一"],
+            api_key="sk-test",
+            model="test-model",
+            base_url="",
+            cache_path=str(cache_path),
+            strategy="ai_first",
+        )
+    assert calls["count"] == 1
+
+    domain_context_path.write_text(
+        domain_context_path.read_text(encoding="utf-8").replace("供应商关系。", "供应商协同关系。"),
+        encoding="utf-8",
+    )
+    _plan_fpa_rows_with_ai(
+        _rows(),
+        _meta(),
+        ["规则一"],
+        api_key="sk-test",
+        model="test-model",
+        base_url="",
+        cache_path=str(cache_path),
+        strategy="ai_first",
+    )
+
+    assert calls["count"] == 2
 
 
 def test_fpa_check_xlsx_columns_can_be_configured(monkeypatch, tmp_path):

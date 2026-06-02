@@ -823,13 +823,17 @@ def _ai_plan_fpa_rows_for_l3(
 
 
 def _build_domain_context(meta: dict[str, str]) -> dict[str, object]:
+    from ai_gen_reimbursement_docs.config_utils import load_optional_fpa_domain_context
+
     keys = [
         "子系统（模块）",
         "资产标识",
         "新增/修改功能点前缀生成规则",
         "功能用户-接收者判定",
     ]
-    return {k: meta.get(k, "") for k in keys if meta.get(k)}
+    context = {k: meta.get(k, "") for k in keys if meta.get(k)}
+    context.update(load_optional_fpa_domain_context())
+    return context
 
 
 def _fpa_ai_cache_key(
