@@ -146,6 +146,16 @@ external_data_rules：为 strict_fpa 配置 EIF 外部数据组识别规则。
 merge：规则段继承策略，append 表示继承父规则后追加，replace 表示替换父规则段。
 ```
 
+rule_set 选择建议：
+
+```text
+custom_rules_default：custom_rules 的默认规则集。适合继续使用报账材料中的模板友好表达，例如界面开发、逻辑处理开发、查询处理开发。
+strict_fpa_default：strict_fpa 的默认规则集。适合按标准 FPA 的 EI / EQ / EO / ILF / EIF 口径生成结果。
+strict_fpa_conservative：strict_fpa 的扩展示例规则集，不是默认口径。用于展示如何通过 extends 追加 keyword_rules、type_mapping_rules、ai_type_conflict_rules、internal_data_rules 和 external_data_rules。
+```
+
+`strict_fpa_conservative` 中的 `ai_type_conflict_rules` 示例用于说明“已确认可接受的 AI 差异如何压制冲突 warning”。真实项目中只有当人工确认该差异符合项目口径时，才应配置 `conflict: false`。
+
 如果 `external_data_rules` 把短信平台、支付网关、OCR、文件存储、地图服务等普通外部服务配置为外部数据组，配置仍会加载，不阻断预览或正式生成；系统会在预览 audit 和正式 `FPA工作量评估-check.xlsx` 的 warnings 中记录配置 warning，提醒人工复核。
 
 示例：

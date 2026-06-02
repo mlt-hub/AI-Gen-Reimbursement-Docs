@@ -79,11 +79,16 @@ prompt_sets:
       {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"<计算依据说明>","source_processes":["<功能过程名称>"],"split_reason":""}]}
 
 rule_sets:
+  # custom_rules 的默认规则集。
+  # 适合继续使用报账材料中的模板友好表达，例如界面开发、逻辑处理开发、查询处理开发。
   custom_rules_default: {}
 
+  # strict_fpa 的默认规则集。
+  # 适合按标准 FPA 的 EI / EQ / EO / ILF / EIF 口径生成结果。
   strict_fpa_default: {}
 
-  # 示例：更保守的 strict_fpa 规则集。
+  # 示例：更保守的 strict_fpa 扩展规则集。
+  # 该规则集不是 strict_fpa 的默认口径，主要演示如何通过 extends 追加项目级规则。
   strict_fpa_conservative:
     extends: strict_fpa_default
     keyword_rules:
@@ -105,7 +110,7 @@ rule_sets:
           ai_type: EO
           keywords: ["本地报表快照"]
           conflict: false
-          reason: "本地报表快照允许 AI 按格式化输出复核，不提示类型冲突。"
+          reason: "示例：已确认项目口径允许 AI 按格式化输出复核时，不提示类型冲突。"
     internal_data_rules:
       merge: append
       items:
