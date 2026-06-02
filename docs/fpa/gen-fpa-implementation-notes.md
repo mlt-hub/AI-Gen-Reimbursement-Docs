@@ -2231,6 +2231,7 @@ Sheet: 规则命中详情
 rules_fallback 行使用浅橙色底色。
 存在未覆盖功能过程的模块行使用浅橙色底色。
 规则命中详情中有 warning 的行使用浅黄色底色，rules_fallback 行使用浅橙色底色。
+rules_fallback 的 warning 会区分“AI 未覆盖功能过程”和“AI 未包含数据功能行”，避免出现“未覆盖 0 个功能过程”的误导性提示。
 ```
 
 同一个 `FpaAuditReport` 同时服务：
@@ -2438,7 +2439,7 @@ strict_fpa 默认 ai_first + strict_fpa_default。
 Web 高级选项和 FPA 预览页已支持配置驱动的 profile / strategy / rule_set 下拉选择。
 strict_fpa 无 API Key 时会提示需要 API Key，不再静默使用规则生成。
 ai_first 保留 AI 合法 type；与 rules 冲突时只记录 warning。
-ai_first 在 AI 覆盖不完整时追加 rules_fallback 行。
+ai_first 在 AI 覆盖不完整或缺少必要数据功能行时追加 rules_fallback 行。
 ai_only 不使用 rules 补行，AI 失败或被配置限制跳过时直接报错。
 rules_first 会先检查规则结果质量；规则结果为空、名称为空、类型非法或未覆盖功能过程时，有 API Key 则触发 AI 复核，无 API Key 则保留规则结果并记录 warning。
 FPA AI 缓存 key 和 cache entry 已记录 profile、strategy、rule_set 及 rule_set 配置内容。

@@ -13,6 +13,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     _plan_fpa_rows_with_execution,
     _plan_fpa_rows_with_ai,
     _rules_first_ai_reasons,
+    _supplement_ai_rows_with_rules,
     generate_fpa_check_xlsx_from_md,
     preview_fpa_module,
 )
@@ -385,6 +386,50 @@ def test_ai_first_does_not_warn_type_conflict_when_rule_type_matches_ai_type():
     assert rows[0]["类型"] == "EI"
     assert not any("AI type=EI 与规则存在冲突" in warning for warning in warnings)
     assert not any(hit["rule_id"] == "postprocess.ai_first_type_conflict" for hit in rows[0]["_规则命中详情"])
+
+
+def test_ai_first_data_function_supplement_warning_does_not_report_zero_missing_processes():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户档案",
+            "三级模块": "客户档案",
+            "三级模块整体功能描述": "维护客户档案。",
+            "功能过程": "添加客户档案",
+            "功能过程类型": "新增",
+            "功能过程描述": "保存客户档案。",
+        },
+    ])[0]
+    ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "添加客户档案",
+                "type": "EI",
+                "explanation": "保存客户档案。",
+                "source_processes": ["添加客户档案"],
+            },
+        ],
+    )
+
+    combined, warnings = _supplement_ai_rows_with_rules(
+        group=group,
+        meta=_meta(),
+        ai_rows=ai_rows,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+    )
+
+    assert len(combined) == 2
+    assert any(row["生成方式"] == "rules_fallback" and row["类型"] == "ILF" for row in combined)
+    assert any("AI 结果未包含数据功能行" in warning for warning in warnings)
+    assert not any("未覆盖 0 个功能过程" in warning for warning in warnings)
 
 
 def test_strict_profile_keeps_real_external_data_group_eif():

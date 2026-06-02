@@ -682,6 +682,8 @@ def _supplement_ai_rows_with_rules(
     missing_processes = expected_processes - covered_processes
     has_data_function = any(str(row.get("类型", "")) in {"ILF", "EIF"} for row in ai_rows)
     supplemental: list[dict[str, object]] = []
+    data_function_supplements = 0
+    missing_process_supplements = 0
 
     for row in rule_rows:
         row_type = str(row.get("类型", ""))
@@ -694,8 +696,20 @@ def _supplement_ai_rows_with_rules(
         copied = dict(row)
         copied["生成方式"] = "rules_fallback"
         reason = str(copied.get("类型理由", "") or "")
-        copied["类型理由"] = reason or "AI 未覆盖该功能过程，按规则集补齐。"
-        warning = "AI 结果未覆盖该功能过程，已按规则集补齐；未覆盖 AI 已判定类型。"
+        if include_missing_process:
+            missing_process_supplements += 1
+        if include_data_row:
+            data_function_supplements += 1
+        copied["类型理由"] = reason or (
+            "AI 未包含数据功能行，按规则集补齐。"
+            if include_data_row and not include_missing_process
+            else "AI 未覆盖该功能过程，按规则集补齐。"
+        )
+        warning = (
+            "AI 结果未包含数据功能行，已按规则集补齐；未覆盖 AI 已判定类型。"
+            if include_data_row and not include_missing_process
+            else "AI 结果未覆盖该功能过程，已按规则集补齐；未覆盖 AI 已判定类型。"
+        )
         old_warning = str(copied.get("后处理警告", "") or "")
         copied["后处理警告"] = f"{old_warning}；{warning}" if old_warning else warning
         _attach_profile_rule_hits([copied], profile=profile, generation="rules_fallback")
@@ -707,9 +721,13 @@ def _supplement_ai_rows_with_rules(
     combined = [*ai_rows, *supplemental]
     for seq, row in enumerate(combined, 1):
         row["序号"] = seq
-    warnings = [
-        f"{_group_tag(group)} AI 结果未覆盖 {len(missing_processes)} 个功能过程，已追加 {len(supplemental)} 条 rules_fallback 行"
-    ]
+    warning_parts: list[str] = []
+    if missing_process_supplements:
+        warning_parts.append(f"AI 结果未覆盖 {len(missing_processes)} 个功能过程")
+    if data_function_supplements:
+        warning_parts.append("AI 结果未包含数据功能行")
+    reason = "，".join(warning_parts) or "AI 结果需要规则补齐"
+    warnings = [f"{_group_tag(group)} {reason}，已追加 {len(supplemental)} 条 rules_fallback 行"]
     return combined, warnings
 
 

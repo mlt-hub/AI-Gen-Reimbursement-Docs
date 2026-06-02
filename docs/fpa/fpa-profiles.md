@@ -210,7 +210,7 @@ rule_sets:
 无 API Key：不生成，提示需要 API Key。
 AI 返回非法 type：使用规则推断出的合法 type 兜底。
 AI 返回 JSON 非法、结构非法或无有效行：按 rules fallback 生成。
-AI 有效但未覆盖部分功能过程：追加 rules_fallback 行。
+AI 有效但未覆盖部分功能过程，或 strict_fpa 下缺少必要数据功能行：追加 rules_fallback 行，并按补齐原因记录 warning。
 AI 合法 type 与 rules 判断冲突：仅当 rules 建议 type 与 AI type 不一致时记录 warning；AI 与 rules 同为 EI/EQ/EO/ILF/EIF 时不视为 type 冲突。
 ```
 
