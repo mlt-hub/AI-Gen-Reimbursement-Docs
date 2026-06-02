@@ -2071,6 +2071,12 @@ row_tag
 docs/fpa/gen-fpa-implementation-notes.md
 ```
 
+多预览页面扩展等待 `gen-cosmic` 重构后再恢复评估，独立记录在：
+
+```text
+docs/fpa/fpa-deferred-preview-after-cosmic.md
+```
+
 对应章节：
 
 ```text

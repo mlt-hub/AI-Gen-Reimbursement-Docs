@@ -2929,6 +2929,12 @@ tests/test_fpa_acceptance.py::test_fpa_acceptance_real_excel_to_md_to_formal_che
 
 以下事项已确认暂不推进。后续如需继续，可按本节末尾的指令模板恢复。
 
+I 组“多预览页面扩展”已转出当前 FPA 收口队列，等待 `gen-cosmic` 重构完成后再评估：
+
+```text
+docs/fpa/fpa-deferred-preview-after-cosmic.md
+```
+
 ### A. 真实项目 Golden Case
 
 ```text

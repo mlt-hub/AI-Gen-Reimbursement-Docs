@@ -543,6 +543,12 @@ FPA 审核工作簿与预览审核面板
 docs/fpa/gen-fpa-implementation-notes.md
 ```
 
+多预览页面扩展已等 `gen-cosmic` 重构后再评估，独立记录在：
+
+```text
+docs/fpa/fpa-deferred-preview-after-cosmic.md
+```
+
 对应章节：
 
 ```text
