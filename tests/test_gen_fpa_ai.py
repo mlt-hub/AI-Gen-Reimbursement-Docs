@@ -305,7 +305,13 @@ def test_strict_profile_corrects_external_service_eif_misclassification():
     )
 
     assert rows[0]["类型"] == "EI"
-    assert any("明显冲突" in w for w in warnings)
+    conflict_warning = next(w for w in warnings if "明显冲突" in w)
+    assert "规则建议 type=EI" in conflict_warning
+    assert "普通外部服务调用按触发事务处理，不能直接判 EIF" in conflict_warning
+    hit = next(hit for hit in rows[0]["_规则命中详情"] if hit["rule_id"] == "postprocess.keyword_type_conflict")
+    assert hit["suggested_type"] == "EI"
+    assert "规则建议 type=EI" in hit["rule_desc"]
+    assert "普通外部服务调用按触发事务处理，不能直接判 EIF" in hit["rule_desc"]
 
 
 def test_ai_first_keeps_valid_ai_type_without_keyword_override():
@@ -338,7 +344,13 @@ def test_ai_first_keeps_valid_ai_type_without_keyword_override():
     )
 
     assert rows[0]["类型"] == "EIF"
-    assert any("AI 优先策略下保留 AI type" in w for w in warnings)
+    conflict_warning = next(w for w in warnings if "AI 优先策略下保留 AI type" in w)
+    assert "规则建议 type=EI" in conflict_warning
+    assert "普通外部服务调用按触发事务处理，不能直接判 EIF" in conflict_warning
+    hit = next(hit for hit in rows[0]["_规则命中详情"] if hit["rule_id"] == "postprocess.ai_first_type_conflict")
+    assert hit["suggested_type"] == "EI"
+    assert "规则建议 type=EI" in hit["rule_desc"]
+    assert "普通外部服务调用按触发事务处理，不能直接判 EIF" in hit["rule_desc"]
 
 
 def test_strict_profile_keeps_real_external_data_group_eif():

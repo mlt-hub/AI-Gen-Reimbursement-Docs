@@ -473,8 +473,13 @@ def _normalize_ai_fpa_rows_for_l3(
                 "warnings": row_warnings[-1:] if ai_type else [],
             })
         elif profile.has_obvious_conflict(name, explanation, ai_type):
+            rule_basis = fallback_reason or "规则认为 AI type 存在业务冲突。"
+            conflict_detail = f"规则建议 type={fallback_type}；规则依据：{rule_basis}"
             if strategy in {"ai_first", "ai_only"}:
-                warning = f"{name} AI type={ai_type} 与规则存在冲突，AI 优先策略下保留 AI type"
+                warning = (
+                    f"{name} AI type={ai_type} 与规则存在冲突（{conflict_detail}），"
+                    f"AI 优先策略下保留 AI type={ai_type}"
+                )
                 warnings.append(warning)
                 row_warnings.append(warning)
                 fpa_type = ai_type
@@ -482,13 +487,16 @@ def _normalize_ai_fpa_rows_for_l3(
                 row_hits.append({
                     "hit_object": name,
                     "rule_id": "postprocess.ai_first_type_conflict",
-                    "rule_desc": fallback_reason or "规则认为 AI type 存在业务冲突，但 AI 优先策略保留合法 AI type。",
+                    "rule_desc": f"{conflict_detail}；AI 优先策略保留合法 AI type。",
                     "suggested_type": fallback_type,
                     "adopted": "否",
                     "warnings": [warning],
                 })
             else:
-                warning = f"{name} AI type={ai_type} 与关键词规则明显冲突，已使用 {fallback_type} 兜底"
+                warning = (
+                    f"{name} AI type={ai_type} 与关键词规则明显冲突（{conflict_detail}），"
+                    f"已使用规则建议 type={fallback_type} 兜底"
+                )
                 warnings.append(warning)
                 row_warnings.append(warning)
                 fpa_type = fallback_type
@@ -496,7 +504,7 @@ def _normalize_ai_fpa_rows_for_l3(
                 row_hits.append({
                     "hit_object": name,
                     "rule_id": "postprocess.keyword_type_conflict",
-                    "rule_desc": fallback_reason or "AI type 与关键词规则明显冲突，采用规则建议类型。",
+                    "rule_desc": f"{conflict_detail}；采用规则建议类型。",
                     "suggested_type": fallback_type,
                     "adopted": "是",
                     "warnings": [warning],
