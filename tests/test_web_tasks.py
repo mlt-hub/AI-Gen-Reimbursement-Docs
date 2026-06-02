@@ -435,6 +435,7 @@ def test_session_status_returns_running_remote_session(monkeypatch, tmp_path):
     assert data["run_state"] == "running"
     assert data["output_dir"] == ""
     assert data["has_zip"] is False
+    assert data["progress_steps"] == {}
     server.session_manager.cleanup_download(session_id)
 
 

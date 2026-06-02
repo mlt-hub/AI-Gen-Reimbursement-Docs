@@ -225,7 +225,7 @@ def _run_pipeline_with_args(
     project_name: str = "",
 ) -> None:
     """执行管道并输出摘要（零参数模式复用）。"""
-    from ai_gen_reimbursement_docs.cli.logging import setup_logging
+    from ai_gen_reimbursement_docs.cli.logging import build_cli_callbacks, setup_logging
     from ai_gen_reimbursement_docs.cli.notify import play_notify_sound
     from ai_gen_reimbursement_docs.exceptions import CosmicToolError
     from ai_gen_reimbursement_docs.pipeline import run_pipeline_simple
@@ -248,6 +248,7 @@ def _run_pipeline_with_args(
             model=model,
             base_url=base_url,
             project_name=project_name,
+            callbacks=build_cli_callbacks(),
         )
     except KeyboardInterrupt:
         _record_cli_history(
@@ -1007,6 +1008,7 @@ def main():
                 templates[key] = val
 
         # 交互式参数（gen-cosmic/gen-all/gen-list 均由 pipeline 内部处理）
+        from ai_gen_reimbursement_docs.cli.logging import build_cli_callbacks
         from ai_gen_reimbursement_docs.pipeline import run_pipeline
         from ai_gen_reimbursement_docs.exceptions import CosmicToolError
         run_id = _new_cli_run_id()
@@ -1033,6 +1035,7 @@ def main():
                 fpa_profile=args.fpa_profile,
                 fpa_strategy=args.fpa_strategy,
                 fpa_rule_set=args.fpa_rule_set,
+                callbacks=build_cli_callbacks(),
             )
         except KeyboardInterrupt:
             _record_cli_history(

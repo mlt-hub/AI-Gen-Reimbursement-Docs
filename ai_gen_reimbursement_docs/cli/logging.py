@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime
 
+from ai_gen_reimbursement_docs.pipeline_callbacks import PipelineCallbacks, PipelineEvent
 from ai_gen_reimbursement_docs.runtime_context import web_mode_var
 
 
@@ -20,6 +21,29 @@ class PathShortener(logging.Filter):
             record.msg = _replace_path(str(record.msg), base + os.sep, "")
             record.msg = _replace_path(str(record.msg), base, "")
         return True
+
+
+def render_pipeline_event(event: PipelineEvent) -> None:
+    """将共享 pipeline 事件渲染为简洁的 CLI 文本。"""
+    event_type = event.get("type", "")
+    message = event.get("message", "")
+    payload = event.get("payload", {})
+    if event_type == "step_started":
+        print(f"\n▶ {message}")
+    elif event_type == "activity":
+        print(f"  · {message}")
+    elif event_type == "artifact":
+        print(f"  ✓ {payload.get('label', '产物')}: {payload.get('path', '')}")
+    elif event_type == "input_required":
+        print(f"  ! {message}")
+    elif event_type == "step_done":
+        print(f"  ✓ {message}")
+    elif event_type == "step_failed":
+        print(f"  ✗ {message}")
+
+
+def build_cli_callbacks() -> PipelineCallbacks:
+    return PipelineCallbacks(emit_event=render_pipeline_event)
 
 
 def _replace_path(text: str, old: str, new: str) -> str:

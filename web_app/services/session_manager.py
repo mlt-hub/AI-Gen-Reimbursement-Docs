@@ -30,6 +30,7 @@ class SessionState:
     task_done_at: datetime | None = None
     last_error: str | None = None
     done_files: list[dict[str, Any]] = field(default_factory=list)
+    progress_steps: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class SessionManager:
@@ -172,6 +173,64 @@ class SessionManager:
             if state:
                 state.done_files = files
                 state.updated_at = _now_utc()
+
+    def record_pipeline_event(self, session_id: str, event: dict[str, Any]) -> None:
+        step = str(event.get("step") or "")
+        event_type = str(event.get("type") or "")
+        if not step or event_type not in {
+            "step_started", "activity", "artifact", "input_required",
+            "step_done", "step_failed",
+        }:
+            return
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return
+            now = _now_utc()
+            progress = state.progress_steps.setdefault(step, {
+                "key": step,
+                "status": "pending",
+                "current_action": "",
+                "artifacts": [],
+                "started_at": None,
+                "finished_at": None,
+                "error": "",
+            })
+            message = str(event.get("message") or "")
+            if event_type == "step_started":
+                progress["status"] = "running"
+                progress["started_at"] = now.isoformat()
+                progress["finished_at"] = None
+                progress["error"] = ""
+            elif event_type == "activity":
+                progress["current_action"] = message
+            elif event_type == "artifact":
+                artifact = dict(event.get("payload") or {})
+                if artifact and artifact not in progress["artifacts"]:
+                    progress["artifacts"].append(artifact)
+            elif event_type == "input_required":
+                progress["status"] = "waiting_input"
+                progress["current_action"] = message
+            elif event_type == "step_done":
+                progress["status"] = "done"
+                progress["current_action"] = message
+                progress["finished_at"] = now.isoformat()
+            elif event_type == "step_failed":
+                progress["status"] = "failed"
+                progress["error"] = message
+                progress["finished_at"] = now.isoformat()
+            state.updated_at = now
+
+    def get_progress_steps(self, session_id: str) -> list[dict[str, Any]]:
+        state = self.get(session_id)
+        if state is None:
+            return []
+        order = ["basedata", "fpa", "spec", "cosmic", "list"]
+        return [
+            dict(state.progress_steps[key])
+            for key in order
+            if key in state.progress_steps
+        ]
 
     def remove_queue(self, session_id: str) -> None:
         with self._lock:

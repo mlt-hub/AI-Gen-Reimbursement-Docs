@@ -14,6 +14,7 @@ def emit_session_event(session_manager: SessionManager, data: dict) -> None:
     sid = session_var.get()
     if not sid:
         return
+    session_manager.record_pipeline_event(sid, data)
     q = session_manager.get_queue(sid)
     if q:
         q.put(json.dumps(data, ensure_ascii=False))

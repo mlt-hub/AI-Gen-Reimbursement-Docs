@@ -2,7 +2,25 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TypedDict
+
+
+PipelineEventType = Literal[
+    "step_started",
+    "activity",
+    "artifact",
+    "input_required",
+    "step_done",
+    "step_failed",
+]
+PipelineStep = Literal["basedata", "fpa", "spec", "cosmic", "list"]
+
+
+class PipelineEvent(TypedDict, total=False):
+    type: PipelineEventType
+    step: PipelineStep
+    message: str
+    payload: dict[str, Any]
 
 
 @dataclass(frozen=True)

@@ -24,8 +24,15 @@
           </div>
         </div>
       </div>
-      <StepsBar v-if="session.isRunning || session.isDone" />
-      <LogViewer />
+      <GenerationProgress v-if="session.isRunning || session.isDone || steps.hasProgress" />
+      <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
+        <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
+          运行详情 / 排错信息
+        </summary>
+        <div class="h-80 border-t border-[var(--color-rule)]">
+          <LogViewer />
+        </div>
+      </details>
       <ActionBar @ai="openAIModal" @reset="resetTask" />
     </div>
 
@@ -143,9 +150,10 @@ import { useStepsStore } from '@/stores/steps.ts'
 import { useToastStore } from '@/stores/toast.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 import ConfigPanel from '@/components/ConfigPanel.vue'
-import StepsBar from '@/components/StepsBar.vue'
+import GenerationProgress from '@/components/GenerationProgress.vue'
 import LogViewer from '@/components/LogViewer.vue'
 import ActionBar from '@/components/ActionBar.vue'
+import type { StepProgress } from '@/stores/steps.ts'
 
 interface RunTaskResponse {
   session_id: string
@@ -158,6 +166,7 @@ interface SessionStatusResponse {
   run_state: RunState
   output_dir?: string
   done_files?: DoneFile[]
+  progress_steps?: Record<string, StepProgress>
 }
 
 interface AiInteraction {
@@ -179,6 +188,7 @@ const session = useSessionStore()
 const config = useConfigStore()
 const log = useLogStore()
 const toast = useToastStore()
+const steps = useStepsStore()
 const LAST_SESSION_KEY = 'ard:lastSessionId'
 
 const runStateLabels = { idle: '就绪', running: '运行中', done: '已完成', error: '出错' }
@@ -305,7 +315,7 @@ async function startTask() {
 
   log.clear()
   session.reset()
-  useStepsStore().reset()
+  steps.reset()
 
   try {
     const data = await apiFetch<RunTaskResponse>(url, { method: 'POST', body })
@@ -334,13 +344,14 @@ async function restoreLastSession() {
       output_dir: data.output_dir || '',
       done_files: data.done_files || [],
     })
+    steps.applySnapshot(data.progress_steps)
     log.clear()
     if (data.run_state === 'running') {
       log.append({ level: 'INFO', msg: '已恢复正在运行的任务，继续接收后续日志', time: '' })
       log.connect()
     } else if (data.run_state === 'done') {
       log.append({ level: 'DONE', msg: '已恢复已完成的任务，可下载交付物', time: '' })
-      useStepsStore().finishAll()
+      steps.finishAll()
     } else {
       log.append({ level: 'ERROR', msg: '已恢复出错的任务', time: '' })
     }
@@ -399,6 +410,7 @@ watch(aiTab, (t) => {
 function resetTask() {
   session.reset()
   log.clear()
+  steps.reset()
   localStorage.removeItem(LAST_SESSION_KEY)
 }
 

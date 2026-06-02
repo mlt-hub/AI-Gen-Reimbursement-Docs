@@ -7,7 +7,9 @@ import logging
 import os
 import re
 import shutil
+from contextvars import ContextVar
 from dataclasses import dataclass, field
+from typing import Any
 
 from ai_gen_reimbursement_docs.config_utils import (
     load_enable_ai_fill_meta,
@@ -17,7 +19,11 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_out_templates,
 )
 from ai_gen_reimbursement_docs.fpa_profiles import resolve_fpa_execution_config
-from ai_gen_reimbursement_docs.pipeline_callbacks import PipelineCallbacks
+from ai_gen_reimbursement_docs.pipeline_callbacks import (
+    PipelineCallbacks,
+    PipelineEvent,
+    PipelineStep,
+)
 from ai_gen_reimbursement_docs.runtime_context import callbacks_var, current_callbacks
 from ai_gen_reimbursement_docs.excel_source import (
     generate_md_files, verify_module_tree_stats
@@ -38,6 +44,10 @@ from ai_gen_reimbursement_docs.gen_cosmic import (
 )
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.pipeline')
+_active_step_var: ContextVar[PipelineStep | None] = ContextVar(
+    "pipeline_active_step",
+    default=None,
+)
 
 
 def _is_web() -> bool:
@@ -56,6 +66,12 @@ def _prompt_fpa_reduced(default_value: float) -> float:
     from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
     if load_fpa_reduced_use_workload():
         return default_value
+    _emit_event(
+        "input_required",
+        "cosmic",
+        "等待确认 FPA 核减后的工作量",
+        {"field": "fpa_reduced", "default": default_value},
+    )
     if _is_web():
         return current_callbacks().wait_for_fpa_input(default_value)
     # CLI fallback
@@ -77,6 +93,12 @@ def _prompt_list_values(md_dir: str, cfp_total: float, fpa_reduced: float) -> tu
     from ai_gen_reimbursement_docs.config_utils import load_fpa_reduced_use_workload
     if load_fpa_reduced_use_workload():
         return cfp_total, fpa_reduced
+    _emit_event(
+        "input_required",
+        "list",
+        "等待确认送审工作量和送审功能点",
+        {"cfp_default": cfp_total, "fpa_default": fpa_reduced},
+    )
     if _is_web():
         return current_callbacks().wait_for_list_input(cfp_total, fpa_reduced)
     # CLI fallback
@@ -84,10 +106,59 @@ def _prompt_list_values(md_dir: str, cfp_total: float, fpa_reduced: float) -> tu
     return prompt_list_values(md_dir)
 
 
-def _step(key: str):
-    """向前端发送步骤进度事件。key: basedata | fpa | spec | cosmic | list"""
+def _emit_event(
+    event_type: str,
+    step: PipelineStep,
+    message: str = "",
+    payload: dict[str, Any] | None = None,
+) -> None:
+    event: PipelineEvent = {"type": event_type, "step": step}
+    if message:
+        event["message"] = message
+    if payload:
+        event["payload"] = payload
+    current_callbacks().emit_event(event)
+
+
+def _step(key: PipelineStep, message: str = "") -> None:
+    """发送阶段开始事件，并保留旧 Web 步骤事件兼容。"""
+    _active_step_var.set(key)
+    _emit_event("step_started", key, message)
     if _is_web():
         current_callbacks().emit_event({"type": "step", "key": key})
+
+
+def _activity(step: PipelineStep, message: str) -> None:
+    _emit_event("activity", step, message)
+
+
+def _artifact(step: PipelineStep, path: str, label: str, *, is_temp: bool = False) -> None:
+    if not path:
+        return
+    _emit_event(
+        "artifact",
+        step,
+        f"已生成{label}",
+        {
+            "label": label,
+            "name": os.path.basename(path),
+            "path": path,
+            "is_temp": is_temp,
+        },
+    )
+
+
+def _step_done(step: PipelineStep, message: str = "") -> None:
+    _emit_event("step_done", step, message)
+    if _active_step_var.get() == step:
+        _active_step_var.set(None)
+
+
+def _step_failed(message: str) -> None:
+    step = _active_step_var.get()
+    if step:
+        _emit_event("step_failed", step, message)
+        _active_step_var.set(None)
 
 
 VALID_MODES = {"gen-all", "gen-basedata", "gen-fpa", "gen-cosmic", "gen-list", "gen-spec"}
@@ -142,8 +213,8 @@ def run_pipeline(
     Returns:
         PipelineResult：各交付物路径和统计值
     """
-    if callbacks is not None and callbacks_var.get() is not callbacks:
-        token = callbacks_var.set(callbacks)
+    if callbacks is not None:
+        token = callbacks_var.set(callbacks) if callbacks_var.get() is not callbacks else None
         try:
             return run_pipeline(
                 mode=mode,
@@ -160,8 +231,12 @@ def run_pipeline(
                 fpa_strategy=fpa_strategy,
                 fpa_rule_set=fpa_rule_set,
             )
+        except Exception as exc:
+            _step_failed(str(exc))
+            raise
         finally:
-            callbacks_var.reset(token)
+            if token is not None:
+                callbacks_var.reset(token)
 
     # 校验
     if not os.path.exists(file_path):
@@ -221,6 +296,11 @@ def run_pipeline(
         logger.info("gen-all全流程模式：按依赖顺序执行...")
     _ensure_basedata_impl(file_path, md_dir, tree_md, meta_md_tpl)
     _fill_meta_if_needed(meta_md_tpl, meta_filled_md, tree_md, api_key, model, base_url)
+    _artifact("basedata", tree_md, "模块树 Markdown", is_temp=True)
+    _artifact("basedata", meta_md_tpl, "元数据 Markdown", is_temp=True)
+    if os.path.exists(meta_filled_md):
+        _artifact("basedata", meta_filled_md, "AI 填充元数据 Markdown", is_temp=True)
+    _step_done("basedata", "基础数据已准备完成")
     _current_meta = meta_filled_md if os.path.exists(meta_filled_md) else meta_md_tpl
 
     # 从元数据解析输出文件名（Excel Sheet 中配置的「文件名」字段）
@@ -373,9 +453,11 @@ def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
 def _ensure_basedata_impl(file_path: str, md_dir: str,
                           tree_md: str, meta_md_tpl: str) -> None:
     """生成 gen-basedata-*.md 数据源文件。"""
-    _step("basedata")
+    _step("basedata", "读取功能清单并生成基础数据")
     logger.info("第0步: 生成基础数据")
+    _activity("basedata", "正在读取功能清单")
     generate_md_files(file_path, md_dir)
+    _activity("basedata", "正在校验模块树和元数据")
     verify_module_tree_stats(tree_md, meta_md_tpl)
 
 
@@ -388,6 +470,7 @@ def _fill_meta_if_needed(meta_md_tpl: str, meta_filled_md: str, tree_md: str,
         return
     from ai_gen_reimbursement_docs.excel_source import ai_fill_meta_md
     if load_enable_ai_fill_meta():
+        _activity("basedata", "正在调用 AI 填充文档元数据")
         ai_fill_meta_md(meta_md_tpl, meta_filled_md, api_key, model, base_url, tree_md=tree_md)
     else:
         logger.info("enable_ai_fill_meta=false，跳过 AI 填充，直接复制模板")
@@ -474,8 +557,9 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
              fpa_profile="", fpa_strategy="", fpa_rule_set=""):
     """第1步：FPA 工作量评估。"""
     _check_cancelled()
-    _step("fpa")
+    _step("fpa", "生成 FPA 工作量评估")
     logger.info("第1步: 生成FPA工作量评估...")
+    _activity("fpa", "正在准备 FPA 模板")
     fpa_src = _check_template(templates_dict, 'fpa', 'FPA工作量评估')
 
     fpa_md = os.path.join(md_dir, '1.1.gen-fpa-FPA-模板.md')
@@ -497,6 +581,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
     )
 
     if execution.strategy in {"rules_first", "ai_first", "ai_only"}:
+        _activity("fpa", "正在规划新增/修改功能点")
         plan_fpa_md_from_tree(
             tree_md,
             meta_md,
@@ -536,6 +621,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
             ],
         })
 
+    _activity("fpa", "正在写入 FPA Excel 模板")
     fpa_xlsx = generate_fpa_xlsx_from_md(fpa_filled_md, meta_md, fpa_src, fpa_xlsx)
     fpa_check_xlsx = os.path.splitext(fpa_xlsx)[0] + "-check.xlsx"
     fpa_check_xlsx = generate_fpa_check_xlsx_from_md(
@@ -552,6 +638,9 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
             logger.warning(warning)
     result.fpa_xlsx = fpa_xlsx
     result.fpa_check_xlsx = fpa_check_xlsx
+    _artifact("fpa", fpa_xlsx, "FPA 工作量评估")
+    _artifact("fpa", fpa_check_xlsx, "FPA 审核副本")
+    _step_done("fpa", "FPA 工作量评估已生成")
     logger.info(f"FPA工作量评估已生成: {fpa_xlsx}")
     return result
 
@@ -561,7 +650,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                 project_name, result, fpa_reduced=None):
     """第2步：COSMIC 功能点拆分表。"""
     _check_cancelled()
-    _step("cosmic")
+    _step("cosmic", "生成 COSMIC 项目功能点拆分表")
     logger.info("第3步：生成项目功能点拆分表...")
 
     from ai_gen_reimbursement_docs.excel_source import read_project_name, read_md_value
@@ -581,13 +670,16 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
 
     init_md_path = os.path.join(md_dir, '3.2.gen-cosmic-COSMIC-模板.md')
     filled_md_path = os.path.join(md_dir, '3.3.gen-cosmic-AI填充-COSMIC.md')
+    _activity("cosmic", "正在准备 COSMIC 模板")
     _, _cosmic_modules = init_cosmic_template_md(tree_md, project, init_md_path)
 
     if api_key:
+        _activity("cosmic", "正在调用 AI 生成 COSMIC 拆分数据")
         shutil.copy2(init_md_path, filled_md_path)
         ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md,
                           modules=_cosmic_modules)
         _cosmic_cfp = _read_cfp_formula_from_meta_md(meta_md)
+        _activity("cosmic", "正在写入 COSMIC Excel 模板")
         cosmic_xlsx = generate_cosmic_xlsx_from_md(filled_md_path, cosmic_src, cosmic_xlsx, meta_md,
                                                    md_dir=md_dir, project_name=project_name,
                                                    cfp_formula=_cosmic_cfp)
@@ -598,6 +690,9 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
         logger.warning("未设置 API Key，无法生成 COSMIC 拆分数据")
 
     result.cosmic_xlsx = cosmic_xlsx
+    if os.path.exists(cosmic_xlsx):
+        _artifact("cosmic", cosmic_xlsx, "项目功能点拆分表")
+    _step_done("cosmic", "COSMIC 项目功能点拆分表阶段已完成")
     return result
 
 
@@ -606,7 +701,7 @@ def _generate_list(md_dir, tree_md, meta_md,
               fpa_reduced=None, cfp_total=None):
     """第3步：需求清单。fpa_reduced/cfp_total 为 None 时从 MD 文件读取默认值并弹窗确认。"""
     _check_cancelled()
-    _step("list")
+    _step("list", "生成项目需求清单")
     logger.info("第4步：生成项目需求清单...")
     require_src = _check_template(templates_dict, 'list', '项目需求清单')
 
@@ -621,9 +716,12 @@ def _generate_list(md_dir, tree_md, meta_md,
     cfp_total, fpa_reduced = _prompt_list_values(
         md_dir, float(cfp_total or 0), float(fpa_reduced or 0))
 
+    _activity("list", "正在写入需求清单 Excel 模板")
     require_xlsx = generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
                                               cfp_total=cfp_total, fpa_reduced=fpa_reduced)
     result.require_xlsx = require_xlsx
+    _artifact("list", require_xlsx, "项目需求清单")
+    _step_done("list", "项目需求清单已生成")
     return result
 
 
@@ -631,7 +729,7 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
               doc_dir, spec_docx, templates_dict, api_key, model, base_url, result):
     """需求说明书（无固定顺序依赖）。"""
     _check_cancelled()
-    _step("spec")
+    _step("spec", "生成项目需求说明书")
     logger.info("第2步：生成项目需求说明书...")
     spec_src = _check_template(templates_dict, 'spec', '项目需求说明书')
 
@@ -645,12 +743,15 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
 
     spec_md = os.path.join(md_dir, '2.1.gen-spec-SPEC-功能需求章节-模板.md')
     spec_filled_md = os.path.join(md_dir, '2.2.gen-spec-AI填充-SPEC-功能需求章节.md')
+    _activity("spec", "正在整理功能需求章节")
     init_spec_template_md(tree_md, meta_md, spec_md)
     if api_key:
+        _activity("spec", "正在调用 AI 补全功能需求章节")
         ai_fill_spec_md(spec_md, spec_filled_md, api_key, model, base_url)
     else:
         shutil.copy2(spec_md, spec_filled_md)
 
+    _activity("spec", "正在写入需求说明书 Word 模板")
     spec_docx = generate_spec_docx_from_md(spec_src, spec_docx, meta_md, tree_md, filled_md_path=spec_filled_md)
 
     # 自动更新目录（Word COM）
@@ -668,6 +769,8 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
             spec_docx = _new_path
 
     result.spec_docx = spec_docx
+    _artifact("spec", spec_docx, "项目需求说明书")
+    _step_done("spec", "项目需求说明书已生成")
     logger.info(f"项目需求说明书已生成: {spec_docx}")
     return result
 

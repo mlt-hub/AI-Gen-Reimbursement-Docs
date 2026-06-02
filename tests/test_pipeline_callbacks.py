@@ -40,7 +40,52 @@ def test_pipeline_step_uses_callbacks_event():
     finally:
         callbacks_var.reset(token)
 
-    assert events == [{"type": "step", "key": "fpa"}]
+    assert events == [
+        {"type": "step_started", "step": "fpa"},
+        {"type": "step", "key": "fpa"},
+    ]
+
+
+def test_pipeline_activity_uses_shared_event_model():
+    events = []
+    callbacks = PipelineCallbacks(emit_event=events.append)
+    token = callbacks_var.set(callbacks)
+    try:
+        pipeline._activity("spec", "正在写入需求说明书 Word 模板")
+    finally:
+        callbacks_var.reset(token)
+
+    assert events == [{
+        "type": "activity",
+        "step": "spec",
+        "message": "正在写入需求说明书 Word 模板",
+    }]
+
+
+def test_pipeline_emits_step_failed_for_stage_error(monkeypatch, tmp_path):
+    input_file = tmp_path / "input.xlsx"
+    input_file.write_bytes(b"xlsx")
+    events = []
+
+    def fail_basedata(*args, **kwargs):
+        pipeline._step("basedata", "读取功能清单并生成基础数据")
+        raise RuntimeError("bad input")
+
+    monkeypatch.setattr(pipeline, "_ensure_basedata_impl", fail_basedata)
+
+    with pytest.raises(RuntimeError, match="bad input"):
+        pipeline.run_pipeline(
+            mode="gen-basedata",
+            file_path=str(input_file),
+            output_dir=str(tmp_path / "out"),
+            callbacks=PipelineCallbacks(emit_event=events.append),
+        )
+
+    assert events[-1] == {
+        "type": "step_failed",
+        "step": "basedata",
+        "message": "bad input",
+    }
 
 
 def test_pipeline_check_cancelled_uses_callbacks():

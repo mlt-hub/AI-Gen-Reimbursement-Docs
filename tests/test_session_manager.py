@@ -103,3 +103,38 @@ def test_task_lifecycle_fields_are_recorded():
 
     assert state.task_done_at is not None
     assert state.last_error == "boom"
+
+
+def test_pipeline_events_build_progress_snapshot():
+    manager = SessionManager()
+    manager.create("s1", mode="local")
+
+    manager.record_pipeline_event("s1", {
+        "type": "step_started",
+        "step": "fpa",
+        "message": "生成 FPA 工作量评估",
+    })
+    manager.record_pipeline_event("s1", {
+        "type": "activity",
+        "step": "fpa",
+        "message": "正在写入 FPA Excel 模板",
+    })
+    manager.record_pipeline_event("s1", {
+        "type": "artifact",
+        "step": "fpa",
+        "payload": {"label": "FPA 工作量评估", "path": "fpa.xlsx"},
+    })
+    manager.record_pipeline_event("s1", {
+        "type": "step_done",
+        "step": "fpa",
+        "message": "FPA 工作量评估已生成",
+    })
+
+    progress = manager.get_progress_steps("s1")
+
+    assert progress[0]["key"] == "fpa"
+    assert progress[0]["status"] == "done"
+    assert progress[0]["current_action"] == "FPA 工作量评估已生成"
+    assert progress[0]["artifacts"] == [{"label": "FPA 工作量评估", "path": "fpa.xlsx"}]
+    assert progress[0]["started_at"]
+    assert progress[0]["finished_at"]

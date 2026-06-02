@@ -45,6 +45,7 @@ def _session_status_payload(session_id: str, state) -> dict:
         "output_dir": str(output_dir) if output_dir else "",
         "has_zip": bool(zip_path and zip_path.exists()),
         "done_files": state.done_files,
+        "progress_steps": state.progress_steps,
         "last_error": state.last_error,
         "created_at": state.created_at.isoformat(),
         "updated_at": state.updated_at.isoformat(),
