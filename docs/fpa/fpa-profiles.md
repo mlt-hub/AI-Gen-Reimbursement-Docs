@@ -537,12 +537,14 @@ FPA 审核工作簿 FPA工作量评估-check.xlsx 已生成。
 详细设计见：
 
 ```text
+docs/fpa/fpa-refactor-summary.md
 docs/fpa/gen-fpa-implementation-notes.md
 ```
 
 对应章节：
 
 ```text
+FPA 重构收口说明
 下一阶段设计决策：profile / strategy / rule_set
 FPA 审核工作簿与预览审核面板
 ```
