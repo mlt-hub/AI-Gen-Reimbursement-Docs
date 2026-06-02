@@ -28,6 +28,9 @@ def test_preview_fpa_module_by_index_uses_fallback(test_excel, tmp_path):
     assert result["audit"]["coverage"]["process_total"] == result["module"]["process_count"]
     assert result["audit"]["coverage"]["covered_count"] > 0
     assert "fallback" in result["audit"]["generation_counts"]
+    assert result["audit"]["rule_hits"]
+    assert result["audit"]["rule_hits"][0]["rule_id"]
+    assert result["audit"]["rule_hits"][0]["function_point"]
     assert all(row["generation"] == "fallback" for row in result["rows"])
     assert not list(tmp_path.glob("**/FPA工作量评估.xlsx"))
 

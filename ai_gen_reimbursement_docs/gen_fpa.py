@@ -76,6 +76,7 @@ class FpaAuditReport:
     raw_source: str = ""
     raw_rows: list[object] = field(default_factory=list)
     raw_warnings: list[str] = field(default_factory=list)
+    rule_hits: list[dict[str, object]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -98,6 +99,7 @@ class FpaAuditReport:
                 "warnings": self.raw_warnings,
                 "raw_rows": self.raw_rows,
             },
+            "rule_hits": self.rule_hits,
         }
 
 
@@ -681,6 +683,7 @@ def _build_fpa_audit_report(
     raw_source: str = "",
     raw_rows: list[object] | None = None,
     raw_warnings: list[str] | None = None,
+    rule_hits: list[dict[str, object]] | None = None,
 ) -> FpaAuditReport:
     process_names = _process_names_for_group(group)
     expected = set(process_names)
@@ -711,6 +714,7 @@ def _build_fpa_audit_report(
         raw_source=raw_source,
         raw_rows=list(raw_rows or []),
         raw_warnings=list(raw_warnings or []),
+        rule_hits=list(rule_hits or []),
     )
 
 
@@ -727,6 +731,40 @@ def _module_payload_for_audit(index: int, group: dict[str, object]) -> dict[str,
     }
 
 
+def _audit_rule_hits_for_rows(
+    rows: list[dict[str, object]],
+    traced_hits_by_seq: dict[str, list[dict[str, object]]],
+    group: dict[str, object],
+) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for row in rows:
+        row_seq = str(row.get("序号", "") or "")
+        traced_hits = traced_hits_by_seq.get(row_seq, [])
+        if not traced_hits:
+            rule_id, rule_desc = _rule_hit_for_audit(row)
+            traced_hits = [{
+                "hit_object": row.get("源功能过程", "") or group.get("l3", ""),
+                "rule_id": rule_id,
+                "rule_desc": rule_desc,
+                "suggested_type": row.get("类型", ""),
+                "adopted": "是",
+                "warnings": _warning_items(row.get("后处理警告", "")),
+            }]
+        for hit in traced_hits:
+            result.append({
+                "fpa_seq": row.get("序号", ""),
+                "function_point": row.get("新增/修改功能点", ""),
+                "generation": row.get("生成方式", ""),
+                "hit_object": hit.get("hit_object", "") or row.get("源功能过程", "") or group.get("l3", ""),
+                "rule_id": hit.get("rule_id", ""),
+                "rule_desc": hit.get("rule_desc", ""),
+                "suggested_type": hit.get("suggested_type", "") or row.get("类型", ""),
+                "adopted": hit.get("adopted", "") or "是",
+                "warnings": hit.get("warnings", []) if isinstance(hit.get("warnings", []), list) else [],
+            })
+    return result
+
+
 def _build_fpa_audit_reports_for_groups(
     *,
     groups: list[dict[str, object]],
@@ -737,16 +775,19 @@ def _build_fpa_audit_reports_for_groups(
     strategy: str,
     rule_set: str,
     raw_audit_by_module: dict[int, dict[str, object]] | None = None,
+    rule_hits_by_seq: dict[str, list[dict[str, object]]] | None = None,
 ) -> list[FpaAuditReport]:
     reports: list[FpaAuditReport] = []
     raw_audit_by_module = raw_audit_by_module or {}
+    rule_hits_by_seq = rule_hits_by_seq or {}
     for idx, group in enumerate(groups, 1):
+        rows = rows_by_module.get(idx, [])
         raw_audit = raw_audit_by_module.get(idx, {})
         raw_warnings = raw_audit.get("warnings", [])
         reports.append(_build_fpa_audit_report(
             group=group,
             module=_module_payload_for_audit(idx, group),
-            fpa_rows=rows_by_module.get(idx, []),
+            fpa_rows=rows,
             warnings=warnings_by_module.get(idx, []),
             profile=profile,
             profile_version=profile_version,
@@ -755,6 +796,7 @@ def _build_fpa_audit_reports_for_groups(
             raw_source=str(raw_audit.get("source", "") or ""),
             raw_rows=raw_audit.get("raw_rows", []) if isinstance(raw_audit.get("raw_rows", []), list) else [],
             raw_warnings=raw_warnings if isinstance(raw_warnings, list) else _warning_items(raw_warnings),
+            rule_hits=_audit_rule_hits_for_rows(rows, rule_hits_by_seq, group),
         ))
     return reports
 
@@ -1768,6 +1810,7 @@ def generate_fpa_check_xlsx_from_md(
         strategy=execution_meta.get("strategy", ""),
         rule_set=execution_meta.get("rule_set", ""),
         raw_audit_by_module=raw_audit_by_module_idx,
+        rule_hits_by_seq=rule_hits_by_seq,
     )
     sheet_columns = _fpa_check_columns()
 
@@ -1864,46 +1907,30 @@ def generate_fpa_check_xlsx_from_md(
 
     ws_rule_hits = wb.create_sheet("规则命中详情")
     ws_rule_hits.append(sheet_columns["规则命中详情"])
-    written_rule_rows: set[str] = set()
-    for idx, group in enumerate(groups, 1):
-        for row in rows_by_module.get(idx, []):
-            row_seq = str(row.get("序号", "") or "")
-            if row_seq in written_rule_rows:
-                continue
-            written_rule_rows.add(row_seq)
-            traced_hits = rule_hits_by_seq.get(row_seq, [])
-            if not traced_hits:
-                rule_id, rule_desc = _rule_hit_for_audit(row)
-                traced_hits = [{
-                    "hit_object": row.get("源功能过程", "") or group.get("l3", ""),
-                    "rule_id": rule_id,
-                    "rule_desc": rule_desc,
-                    "suggested_type": row.get("类型", ""),
-                    "adopted": "是",
-                    "warnings": _warning_items(row.get("后处理警告", "")),
-                }]
-            for hit in traced_hits:
-                warnings = "；".join(
-                    str(x) for x in hit.get("warnings", [])
-                    if isinstance(hit.get("warnings", []), list) and str(x).strip()
-                )
-                _append_audit_row(ws_rule_hits, sheet_columns["规则命中详情"], {
-                    "模块序号": idx,
-                    "客户端类型": group.get("client_type", ""),
-                    "一级模块": group.get("l1", ""),
-                    "二级模块": group.get("l2", ""),
-                    "三级模块": group.get("l3", ""),
-                    "FPA行序号": row.get("序号", ""),
-                    "功能点名称": row.get("新增/修改功能点", ""),
-                    "生成方式": row.get("生成方式", ""),
-                    "rule_set": execution_meta.get("rule_set", ""),
-                    "命中对象": hit.get("hit_object", "") or row.get("源功能过程", "") or group.get("l3", ""),
-                    "规则ID": hit.get("rule_id", ""),
-                    "规则说明": hit.get("rule_desc", ""),
-                    "建议类型": hit.get("suggested_type", "") or row.get("类型", ""),
-                    "是否采用": hit.get("adopted", "") or "是",
-                    "Warnings": warnings,
-                })
+    for idx, audit_report in enumerate(audit_reports, 1):
+        module_payload = audit_report.module
+        for hit in audit_report.rule_hits:
+            warnings = "；".join(
+                str(x) for x in hit.get("warnings", [])
+                if isinstance(hit.get("warnings", []), list) and str(x).strip()
+            )
+            _append_audit_row(ws_rule_hits, sheet_columns["规则命中详情"], {
+                "模块序号": idx,
+                "客户端类型": module_payload.get("client_type", ""),
+                "一级模块": module_payload.get("l1", ""),
+                "二级模块": module_payload.get("l2", ""),
+                "三级模块": module_payload.get("l3", ""),
+                "FPA行序号": hit.get("fpa_seq", ""),
+                "功能点名称": hit.get("function_point", ""),
+                "生成方式": hit.get("generation", ""),
+                "rule_set": audit_report.rule_set,
+                "命中对象": hit.get("hit_object", ""),
+                "规则ID": hit.get("rule_id", ""),
+                "规则说明": hit.get("rule_desc", ""),
+                "建议类型": hit.get("suggested_type", ""),
+                "是否采用": hit.get("adopted", ""),
+                "Warnings": warnings,
+            })
 
     ws_raw = wb.create_sheet("AI原始返回")
     ws_raw.append(sheet_columns["AI原始返回"])
