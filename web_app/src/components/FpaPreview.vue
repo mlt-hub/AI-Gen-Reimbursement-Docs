@@ -95,9 +95,9 @@
         <div v-for="item in moduleWarnings" :key="item" class="leading-5">{{ item }}</div>
       </div>
 
-      <div v-if="result" class="mt-4 overflow-hidden rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
-        <div class="flex items-center justify-between gap-3 border-b border-[var(--color-rule)] px-3 py-2">
-          <div class="min-w-0">
+      <div v-if="result" class="mt-5 space-y-3">
+        <div class="flex items-center justify-between gap-3 rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] px-4 py-3">
+          <div class="min-w-0 leading-tight">
             <div class="text-sm font-semibold text-[var(--color-ink)]">FPA 功能点估算</div>
             <div class="mt-1 truncate text-xs font-semibold text-[var(--color-ink-muted)]">{{ result.module.l3 }}</div>
             <div class="text-xs text-[var(--color-ink-soft)]">{{ result.module.process_count }} 个功能过程 · {{ profileLabel(result.profile) }} · {{ strategyLabel(result.strategy) }}</div>
@@ -107,124 +107,125 @@
           </span>
         </div>
 
-        <div class="overflow-x-auto">
-          <table class="w-full min-w-[760px] text-left text-xs">
-            <thead class="bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]">
-              <tr>
-                <th class="w-12 px-3 py-2 font-semibold">#</th>
-                <th class="px-3 py-2 font-semibold">新增/修改功能点</th>
-                <th class="w-16 px-3 py-2 font-semibold">类型</th>
-                <th class="w-20 px-3 py-2 font-semibold">生成方式</th>
-                <th class="px-3 py-2 font-semibold">计算依据归类</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, idx) in result.rows" :key="idx" class="border-t border-[var(--color-rule)] align-top">
-                <td class="px-3 py-2 text-[var(--color-ink-soft)]">{{ idx + 1 }}</td>
-                <td class="px-3 py-2">
-                  <div class="font-medium text-[var(--color-ink)]">{{ row.name }}</div>
-                  <div v-if="row.explanation" class="mt-2 text-[var(--color-ink-soft)]">
-                    <span class="font-semibold text-[var(--color-ink-muted)]">计算依据说明：</span>
-                    <span class="whitespace-pre-wrap leading-5">{{ row.explanation }}</span>
+        <div class="overflow-hidden rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[760px] text-left text-xs">
+              <thead class="bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]">
+                <tr>
+                  <th class="w-12 px-3 py-2 font-semibold">#</th>
+                  <th class="px-3 py-2 font-semibold">新增/修改功能点</th>
+                  <th class="w-16 px-3 py-2 font-semibold">类型</th>
+                  <th class="w-20 px-3 py-2 font-semibold">生成方式</th>
+                  <th class="px-3 py-2 font-semibold">计算依据归类</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, idx) in result.rows" :key="idx" class="border-t border-[var(--color-rule)] align-top">
+                  <td class="px-3 py-2 text-[var(--color-ink-soft)]">{{ idx + 1 }}</td>
+                  <td class="px-3 py-2">
+                    <div class="font-medium text-[var(--color-ink)]">{{ row.name }}</div>
+                    <div v-if="row.explanation" class="mt-2 text-[var(--color-ink-soft)]">
+                      <span class="font-semibold text-[var(--color-ink-muted)]">计算依据说明：</span>
+                      <span class="whitespace-pre-wrap leading-5">{{ row.explanation }}</span>
+                    </div>
+                  </td>
+                  <td class="px-3 py-2">
+                    <span class="inline-flex rounded bg-[var(--color-accent-soft)] px-2 py-1 font-semibold text-[var(--color-accent-strong)]">{{ row.type }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-[var(--color-ink-soft)]">{{ row.generation }}</td>
+                  <td class="px-3 py-2 text-[var(--color-ink-muted)]">{{ row.classification_basis || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div v-if="previewWarnings.length" class="border-t border-[var(--color-rule)] px-3 py-2 text-xs text-[var(--color-warning)]">
+            <div v-for="item in previewWarnings" :key="item" class="leading-5">{{ item }}</div>
+          </div>
+
+          <div v-if="result.audit" class="border-t border-[var(--color-rule)] px-3 py-2">
+            <details open>
+              <summary class="subtle-link cursor-pointer select-none text-xs">审核信息</summary>
+              <div class="mt-3 grid grid-cols-2 gap-3 text-xs md:grid-cols-3">
+                <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="text-[var(--color-ink-soft)]">功能过程覆盖</div>
+                  <div class="mt-1 text-base font-semibold text-[var(--color-ink)]">{{ result.audit.coverage.covered_count }}/{{ result.audit.coverage.process_total }}</div>
+                </div>
+                <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="text-[var(--color-ink-soft)]">未覆盖</div>
+                  <div class="mt-1 text-base font-semibold text-[var(--color-ink)]">{{ result.audit.coverage.missing_count }}</div>
+                </div>
+                <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="text-[var(--color-ink-soft)]">规则集</div>
+                  <div class="mt-1 truncate font-semibold text-[var(--color-ink)]">{{ result.audit.rule_set }}</div>
+                </div>
+              </div>
+
+              <div class="mt-3 grid gap-3 text-xs md:grid-cols-2">
+                <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="font-semibold text-[var(--color-ink)]">生成方式</div>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    <span v-for="item in generationCountEntries" :key="item[0]" class="rounded bg-[var(--color-surface)] px-2 py-1 text-[var(--color-ink-muted)]">
+                      {{ item[0] }}: {{ item[1] }}
+                    </span>
                   </div>
-                </td>
-                <td class="px-3 py-2">
-                  <span class="inline-flex rounded bg-[var(--color-accent-soft)] px-2 py-1 font-semibold text-[var(--color-accent-strong)]">{{ row.type }}</span>
-                </td>
-                <td class="px-3 py-2 text-[var(--color-ink-soft)]">{{ row.generation }}</td>
-                <td class="px-3 py-2 text-[var(--color-ink-muted)]">{{ row.classification_basis || '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div v-if="previewWarnings.length" class="border-t border-[var(--color-rule)] px-3 py-2 text-xs text-[var(--color-warning)]">
-          <div v-for="item in previewWarnings" :key="item" class="leading-5">{{ item }}</div>
-        </div>
-
-        <div v-if="result.audit" class="border-t border-[var(--color-rule)] px-3 py-2">
-          <details open>
-            <summary class="subtle-link cursor-pointer select-none text-xs">审核信息</summary>
-            <div class="mt-3 grid grid-cols-2 gap-3 text-xs md:grid-cols-3">
-              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="text-[var(--color-ink-soft)]">功能过程覆盖</div>
-                <div class="mt-1 text-base font-semibold text-[var(--color-ink)]">{{ result.audit.coverage.covered_count }}/{{ result.audit.coverage.process_total }}</div>
-              </div>
-              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="text-[var(--color-ink-soft)]">未覆盖</div>
-                <div class="mt-1 text-base font-semibold text-[var(--color-ink)]">{{ result.audit.coverage.missing_count }}</div>
-              </div>
-              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="text-[var(--color-ink-soft)]">规则集</div>
-                <div class="mt-1 truncate font-semibold text-[var(--color-ink)]">{{ result.audit.rule_set }}</div>
-              </div>
-            </div>
-
-            <div class="mt-3 grid gap-3 text-xs md:grid-cols-2">
-              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="font-semibold text-[var(--color-ink)]">生成方式</div>
-                <div class="mt-2 flex flex-wrap gap-2">
-                  <span v-for="item in generationCountEntries" :key="item[0]" class="rounded bg-[var(--color-surface)] px-2 py-1 text-[var(--color-ink-muted)]">
-                    {{ item[0] }}: {{ item[1] }}
-                  </span>
+                </div>
+                <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="font-semibold text-[var(--color-ink)]">缺失功能过程</div>
+                  <div v-if="result.audit.coverage.missing_processes.length" class="mt-2 space-y-1 text-[var(--color-warning)]">
+                    <div v-for="item in result.audit.coverage.missing_processes" :key="item">{{ item }}</div>
+                  </div>
+                  <div v-else class="mt-2 text-[var(--color-ink-muted)]">无</div>
                 </div>
               </div>
-              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="font-semibold text-[var(--color-ink)]">缺失功能过程</div>
-                <div v-if="result.audit.coverage.missing_processes.length" class="mt-2 space-y-1 text-[var(--color-warning)]">
-                  <div v-for="item in result.audit.coverage.missing_processes" :key="item">{{ item }}</div>
-                </div>
-                <div v-else class="mt-2 text-[var(--color-ink-muted)]">无</div>
-              </div>
-            </div>
-          </details>
-        </div>
+            </details>
+          </div>
 
-        <div v-if="result.debug" class="border-t border-[var(--color-rule)] px-3 py-2">
-          <details>
-            <summary class="subtle-link cursor-pointer select-none text-xs">
-              AI 调试信息
-              <span class="ml-2 text-[var(--color-ink-soft)]">{{ result.debug.ai_called ? '已调用 AI' : debugReasonLabel(result.debug.reason) }}</span>
-            </summary>
-            <div class="mt-3 space-y-3 text-xs">
-              <div v-if="result.debug.error" class="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-[var(--color-warning)]">
-                {{ result.debug.error }}
-              </div>
-              <div v-if="result.debug.system_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-semibold text-[var(--color-ink)]">系统提示词</span>
-                  <span class="text-[var(--color-ink-soft)]">{{ result.debug.system_prompt_source || '未配置' }}</span>
+          <div v-if="result.debug" class="border-t border-[var(--color-rule)] px-3 py-2">
+            <details>
+              <summary class="subtle-link cursor-pointer select-none text-xs">
+                AI 调试信息
+                <span class="ml-2 text-[var(--color-ink-soft)]">{{ result.debug.ai_called ? '已调用 AI' : debugReasonLabel(result.debug.reason) }}</span>
+              </summary>
+              <div class="mt-3 space-y-3 text-xs">
+                <div v-if="result.debug.error" class="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-[var(--color-warning)]">
+                  {{ result.debug.error }}
                 </div>
-                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.system_prompt }}</pre>
-              </div>
-              <div v-if="result.debug.user_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-semibold text-[var(--color-ink)]">用户提示词</span>
-                  <span class="text-[var(--color-ink-soft)]">{{ result.debug.user_prompt_source || '未配置' }}</span>
+                <div v-if="result.debug.system_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-semibold text-[var(--color-ink)]">系统提示词</span>
+                    <span class="text-[var(--color-ink-soft)]">{{ result.debug.system_prompt_source || '未配置' }}</span>
+                  </div>
+                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.system_prompt }}</pre>
                 </div>
-                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.user_prompt }}</pre>
+                <div v-if="result.debug.user_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-semibold text-[var(--color-ink)]">用户提示词</span>
+                    <span class="text-[var(--color-ink-soft)]">{{ result.debug.user_prompt_source || '未配置' }}</span>
+                  </div>
+                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.user_prompt }}</pre>
+                </div>
+                <div v-if="result.debug.ai_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="font-semibold text-[var(--color-ink)]">AI Prompts</div>
+                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.ai_prompt }}</pre>
+                </div>
+                <div v-if="result.debug.raw_response" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="font-semibold text-[var(--color-ink)]">AI Responses</div>
+                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.raw_response }}</pre>
+                </div>
+                <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="font-semibold text-[var(--color-ink)]">AI Thinking</div>
+                  <pre v-if="result.debug.thinking" class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.thinking }}</pre>
+                  <div v-else class="mt-2 text-[var(--color-ink-soft)]">当前模型未返回思考过程</div>
+                </div>
+                <div v-if="result.debug.parsed_rows.length" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="font-semibold text-[var(--color-ink)]">解析结果</div>
+                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ stringifyDebug(result.debug.parsed_rows) }}</pre>
+                </div>
               </div>
-              <div v-if="result.debug.ai_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="font-semibold text-[var(--color-ink)]">AI Prompts</div>
-                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.ai_prompt }}</pre>
-              </div>
-              <div v-if="result.debug.raw_response" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="font-semibold text-[var(--color-ink)]">AI Responses</div>
-                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.raw_response }}</pre>
-              </div>
-              <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="font-semibold text-[var(--color-ink)]">AI Thinking</div>
-                <pre v-if="result.debug.thinking" class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.thinking }}</pre>
-                <div v-else class="mt-2 text-[var(--color-ink-soft)]">当前模型未返回思考过程</div>
-              </div>
-              <div v-if="result.debug.parsed_rows.length" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                <div class="font-semibold text-[var(--color-ink)]">解析结果</div>
-                <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ stringifyDebug(result.debug.parsed_rows) }}</pre>
-              </div>
-            </div>
-          </details>
+            </details>
+          </div>
         </div>
-
       </div>
     </div>
   </div>
