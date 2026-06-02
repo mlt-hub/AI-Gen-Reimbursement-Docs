@@ -321,6 +321,118 @@ def test_strict_profile_keeps_real_external_data_group_eif():
     assert not any("明显冲突" in w for w in warnings)
 
 
+def test_strict_profile_warns_when_ai_complex_eif_needs_manual_review():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "风控管理",
+            "二级模块": "风险画像",
+            "三级模块": "风险画像",
+            "三级模块整体功能描述": "结合多源业务信息生成风险画像。",
+            "功能过程": "查看画像",
+            "功能过程类型": "查询",
+            "功能过程描述": "查看企业风险画像详情。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "跨域企业风险画像",
+                "type": "EIF",
+                "explanation": "AI 判断该风险画像由外部风控平台维护，本系统只引用。",
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "EIF"
+    assert any("AI 数据功能需人工复核" in warning for warning in warnings)
+    review_hits = [
+        hit
+        for hit in rows[0]["_规则命中详情"]
+        if hit["rule_id"] == "postprocess.ai_data_group_review"
+    ]
+    assert review_hits
+    assert review_hits[0]["suggested_type"] == "EIF"
+
+
+def test_strict_profile_warns_when_ai_complex_ilf_needs_manual_review():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "营销管理",
+            "二级模块": "客群洞察",
+            "三级模块": "客群洞察",
+            "三级模块整体功能描述": "生成客户洞察结果。",
+            "功能过程": "刷新洞察",
+            "功能过程类型": "新增",
+            "功能过程描述": "刷新客户洞察。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "客户生命周期洞察",
+                "type": "ILF",
+                "explanation": "AI 判断本系统保存并持续维护客户生命周期洞察结果。",
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "ILF"
+    assert any("AI 数据功能需人工复核" in warning for warning in warnings)
+    assert any(
+        hit["rule_id"] == "postprocess.ai_data_group_review"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_strict_profile_data_group_review_survives_unrelated_ai_warning():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "风控管理",
+            "二级模块": "风险画像",
+            "三级模块": "风险画像",
+            "三级模块整体功能描述": "结合多源业务信息生成风险画像。",
+            "功能过程": "查看画像",
+            "功能过程类型": "查询",
+            "功能过程描述": "查看企业风险画像详情。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["有效规则"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "跨域企业风险画像",
+                "type": "EIF",
+                "explanation": "AI 判断该风险画像由外部风控平台维护，本系统只引用。",
+                "classification_basis_index": 99,
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "EIF"
+    assert any("classification_basis_index 越界" in warning for warning in warnings)
+    assert any("AI 数据功能需人工复核" in warning for warning in warnings)
+
+
 def test_keyword_type_fallbacks():
     assert CUSTOM_RULES_PROFILE.infer_type("客户界面开发")[0] == "EI"
     assert CUSTOM_RULES_PROFILE.infer_type("添加客户-逻辑处理开发")[0] == "ILF"

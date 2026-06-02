@@ -509,6 +509,27 @@ def _normalize_ai_fpa_rows_for_l3(
                     "warnings": [warning],
                 })
 
+        review_warning = profile.ai_data_group_review_warning(name, explanation, fpa_type)
+        has_type_warning = any(
+            hit.get("rule_id") in {
+                "postprocess.invalid_ai_type",
+                "postprocess.ai_first_type_conflict",
+                "postprocess.keyword_type_conflict",
+            }
+            for hit in row_hits
+        )
+        if review_warning and not has_type_warning:
+            warnings.append(review_warning)
+            row_warnings.append(review_warning)
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.ai_data_group_review",
+                "rule_desc": "AI 识别出数据功能，但当前 strict_fpa 规则无法确认数据组边界，需人工复核。",
+                "suggested_type": fpa_type,
+                "adopted": "是",
+                "warnings": [review_warning],
+            })
+
         source_processes = raw.get("source_processes", [])
         if isinstance(source_processes, list):
             source_text = "、".join(str(x) for x in source_processes if str(x).strip())

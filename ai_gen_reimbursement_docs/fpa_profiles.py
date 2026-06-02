@@ -439,6 +439,9 @@ class CustomRulesProfile:
             for k in ["界面开发", "导出", "导入", "查询", "查看", "详情", "添加", "新增", "编辑", "删除", "维护", "保存"]
         )
 
+    def ai_data_group_review_warning(self, name: str, desc: str, ai_type: str) -> str:
+        return ""
+
     def logic_point_name(self, name: str, desc: str = "") -> str:
         text = f"{name} {desc}"
         if any(k in text for k in ["查询", "查看", "详情", "列表检索", "检索"]):
@@ -587,6 +590,20 @@ class StrictFpaProfile(CustomRulesProfile):
             return ai_type == "EIF"
         name_action = self._explicit_transaction_type(name)
         return name_action is not None and name_action[0] != ai_type
+
+    def ai_data_group_review_warning(self, name: str, desc: str, ai_type: str) -> str:
+        ai_type = ai_type.upper()
+        if ai_type not in {"ILF", "EIF"}:
+            return ""
+        text = f"{name} {desc}"
+        if ai_type == "EIF" and any(rule.matches(text) for rule in self._external_data_group_rules()):
+            return ""
+        if ai_type == "ILF" and (
+            self._matching_internal_data_rule(text) is not None
+            or self._looks_like_data_group(name)
+        ):
+            return ""
+        return f"{name} AI 数据功能需人工复核：AI type={ai_type}，当前规则未能确认该数据组边界。"
 
     def logic_point_name(self, name: str, desc: str = "") -> str:
         return name
