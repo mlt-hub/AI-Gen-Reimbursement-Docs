@@ -92,6 +92,9 @@ rule_sets:
         - source_aliases: ["行业平台"]
           data_name: "行业平台客户档案"
           data_nouns: ["客户", "档案"]
+    coverage_rules:
+      require_process_coverage: false
+      require_data_function: true
   telecom_replace_rules:
     extends: telecom_rules
     keyword_rules:
@@ -122,6 +125,8 @@ rule_sets:
         - source_aliases: ["标签平台"]
           data_name: "标签平台客户标签"
           data_nouns: ["客户", "标签"]
+    coverage_rules:
+      require_data_function: false
 """,
         encoding="utf-8",
     )
@@ -172,6 +177,8 @@ def test_rule_set_extends_are_loaded(tmp_path):
     assert config.rule_set_config.ai_type_conflict_rules[0].expected_type == "ILF"
     assert config.rule_set_config.internal_data_rules[0].data_name == "认证授权关系"
     assert config.rule_set_config.external_data_rules[0].data_name == "行业平台客户档案"
+    assert config.rule_set_config.coverage_rules.require_process_coverage is False
+    assert config.rule_set_config.coverage_rules.require_data_function is True
 
 
 def test_rule_set_external_data_rules_affect_strict_profile(tmp_path):
@@ -201,6 +208,8 @@ def test_rule_set_replace_discards_parent_rule_sections(tmp_path):
     assert [rule.keywords for rule in config.rule_set_config.ai_type_conflict_rules] == [("标签平台客户标签",)]
     assert [rule.data_name for rule in config.rule_set_config.internal_data_rules] == ["客户标签关系"]
     assert [rule.data_name for rule in config.rule_set_config.external_data_rules] == ["标签平台客户标签"]
+    assert config.rule_set_config.coverage_rules.require_process_coverage is False
+    assert config.rule_set_config.coverage_rules.require_data_function is False
 
 
 def test_rule_set_keyword_rules_affect_strict_profile(tmp_path):

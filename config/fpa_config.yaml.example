@@ -127,6 +127,12 @@ rule_sets:
         - source_aliases: ["统一认证平台", "统一认证"]
           data_name: "统一认证账号"
           data_nouns: ["账号", "账户", "人员"]
+    # 覆盖补齐策略。不配置时默认均为 true。
+    # require_process_coverage=true 表示 AI 未覆盖功能过程时追加 rules_fallback 行。
+    # require_data_function=true 表示 strict_fpa/ai_first 下 AI 缺少 ILF/EIF 数据功能行时按规则补齐。
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
 
   # 示例：客户 A 的规则集。
   client_a_rules:

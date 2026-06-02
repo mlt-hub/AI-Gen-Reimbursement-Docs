@@ -624,6 +624,18 @@ def _validate_internal_data_rules(value: object, key_path: str) -> None:
             _require_non_empty_string(item.get("reason"), f"{item_path}.reason")
 
 
+def _validate_coverage_rules(value: object, key_path: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是对象")
+    for key in ("require_process_coverage", "require_data_function"):
+        if key in value and not isinstance(value.get(key), bool):
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}.{key} 必须是布尔值"
+            )
+
+
 def validate_fpa_config(cfg: dict[str, object]) -> None:
     """Validate fpa_config.yaml structure and cross references."""
     if not isinstance(cfg, dict) or not cfg:
@@ -666,6 +678,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         _validate_type_mapping_rules(rule_entry.get("type_mapping_rules"), f"{rule_set_path}.type_mapping_rules")
         _validate_ai_type_conflict_rules(rule_entry.get("ai_type_conflict_rules"), f"{rule_set_path}.ai_type_conflict_rules")
         _validate_internal_data_rules(rule_entry.get("internal_data_rules"), f"{rule_set_path}.internal_data_rules")
+        _validate_coverage_rules(rule_entry.get("coverage_rules"), f"{rule_set_path}.coverage_rules")
 
     visited: set[str] = set()
     visiting: set[str] = set()

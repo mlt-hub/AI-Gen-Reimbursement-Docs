@@ -223,6 +223,7 @@ AI 缓存 key 已包含 profile、strategy、rule_set、rule_set 配置内容、
 rule_set 已并入 fpa_config.yaml。
 rule_set_version 已移除，不再要求用户手动维护版本号。
 rule_set extends 继承已落地，当前支持按规则段配置 append / replace，覆盖 keyword_rules、type_mapping_rules、ai_type_conflict_rules、internal_data_rules、external_data_rules。
+coverage_rules 已支持配置 ai_first 下 rules_fallback 是否补未覆盖功能过程、是否补数据功能行。
 ```
 
 第一版 rule_set 建议支持：
@@ -231,7 +232,7 @@ rule_set extends 继承已落地，当前支持按规则段配置 append / repla
 关键词规则。
 外部数据源规则。
 ILF / EIF 判定规则。
-功能过程覆盖检查规则。
+功能过程覆盖检查规则第一版：coverage_rules.require_process_coverage / require_data_function。
 ```
 
 本轮代码落地点：

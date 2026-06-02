@@ -519,6 +519,23 @@ class TestLoadFpaExecutionOptions:
             with pytest.raises(FpaConfigError, match=r"internal_data_rules\.items\[0\]\.keywords 必须是非空字符串列表"):
                 load_fpa_rule_sets_config()
 
+    def test_coverage_rules_bool_fields_are_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace(
+            """    external_data_rules:
+      merge: append""",
+            """    coverage_rules:
+      require_process_coverage: "false"
+      require_data_function: true
+    external_data_rules:
+      merge: append""",
+        )
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"coverage_rules\.require_process_coverage 必须是布尔值"):
+                load_fpa_rule_sets_config()
+
     def test_fpa_check_columns_are_normalized(self, tmp_path):
         yaml_file = tmp_path / "system_config.yaml"
         yaml_file.write_text(

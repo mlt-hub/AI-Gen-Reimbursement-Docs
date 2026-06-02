@@ -17,7 +17,13 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     generate_fpa_check_xlsx_from_md,
     preview_fpa_module,
 )
-from ai_gen_reimbursement_docs.fpa_profiles import CUSTOM_RULES_PROFILE, STRICT_FPA_PROFILE, CustomRulesProfile
+from ai_gen_reimbursement_docs.fpa_profiles import (
+    CUSTOM_RULES_PROFILE,
+    STRICT_FPA_PROFILE,
+    CustomRulesProfile,
+    FpaCoverageRules,
+    FpaRuleSetConfig,
+)
 
 
 def _meta():
@@ -430,6 +436,104 @@ def test_ai_first_data_function_supplement_warning_does_not_report_zero_missing_
     assert any(row["生成方式"] == "rules_fallback" and row["类型"] == "ILF" for row in combined)
     assert any("AI 结果未包含数据功能行" in warning for warning in warnings)
     assert not any("未覆盖 0 个功能过程" in warning for warning in warnings)
+
+
+def test_coverage_rules_can_disable_data_function_supplement():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户档案",
+            "三级模块": "客户档案",
+            "三级模块整体功能描述": "维护客户档案。",
+            "功能过程": "添加客户档案",
+            "功能过程类型": "新增",
+            "功能过程描述": "保存客户档案。",
+        },
+    ])[0]
+    ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": "添加客户档案",
+            "type": "EI",
+            "explanation": "保存客户档案。",
+            "source_processes": ["添加客户档案"],
+        }],
+    )
+
+    combined, warnings = _supplement_ai_rows_with_rules(
+        group=group,
+        meta=_meta(),
+        ai_rows=ai_rows,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        rule_set_config=FpaRuleSetConfig(
+            name="no_data_supplement",
+            coverage_rules=FpaCoverageRules(require_data_function=False),
+        ),
+    )
+
+    assert combined == ai_rows
+    assert warnings == []
+
+
+def test_coverage_rules_can_disable_missing_process_supplement():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "查询和导出客户。",
+            "功能过程": "查询客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "按客户名称查询客户列表。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "查询和导出客户。",
+            "功能过程": "导出客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "导出客户列表。",
+        },
+    ])[0]
+    ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=CUSTOM_RULES_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": "查询客户-查询处理开发",
+            "type": "EQ",
+            "explanation": "按客户名称查询客户列表。",
+            "source_processes": ["查询客户"],
+        }],
+    )
+
+    combined, warnings = _supplement_ai_rows_with_rules(
+        group=group,
+        meta=_meta(),
+        ai_rows=ai_rows,
+        profile=CUSTOM_RULES_PROFILE,
+        strategy="ai_first",
+        rule_set_config=FpaRuleSetConfig(
+            name="no_process_supplement",
+            coverage_rules=FpaCoverageRules(require_process_coverage=False),
+        ),
+    )
+
+    assert combined == ai_rows
+    assert warnings == []
 
 
 def test_strict_profile_keeps_real_external_data_group_eif():

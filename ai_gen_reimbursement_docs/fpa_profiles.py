@@ -151,6 +151,14 @@ class FpaExecutionConfig:
 
 
 @dataclass(frozen=True)
+class FpaCoverageRules:
+    """功能过程覆盖与规则补齐策略。"""
+
+    require_process_coverage: bool | None = None
+    require_data_function: bool | None = None
+
+
+@dataclass(frozen=True)
 class FpaRuleSetConfig:
     """一套可配置 FPA 规则集。"""
 
@@ -166,6 +174,7 @@ class FpaRuleSetConfig:
     ai_type_conflict_rules_merge: str = "append"
     internal_data_rules: tuple[InternalDataGroupRule, ...] = field(default_factory=tuple)
     internal_data_rules_merge: str = "append"
+    coverage_rules: FpaCoverageRules = field(default_factory=FpaCoverageRules)
     config_warnings: tuple[str, ...] = field(default_factory=tuple)
     raw: dict[str, object] = field(default_factory=dict)
 
@@ -333,6 +342,18 @@ def _rule_section_from_dict(data: dict[str, object], key: str) -> tuple[str, lis
     return (merge if merge in VALID_RULE_MERGE_MODES else "append"), (items if isinstance(items, list) else [])
 
 
+def _coverage_rules_from_dict(data: dict[str, object]) -> FpaCoverageRules:
+    section = data.get("coverage_rules")
+    if not isinstance(section, dict):
+        return FpaCoverageRules()
+    require_process_coverage = section.get("require_process_coverage")
+    require_data_function = section.get("require_data_function")
+    return FpaCoverageRules(
+        require_process_coverage=require_process_coverage if isinstance(require_process_coverage, bool) else None,
+        require_data_function=require_data_function if isinstance(require_data_function, bool) else None,
+    )
+
+
 def _looks_like_ordinary_external_service(text: str) -> bool:
     upper_text = text.upper()
     return any(alias.upper() in upper_text for alias in ORDINARY_EXTERNAL_SERVICE_ALIASES)
@@ -405,8 +426,24 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
         ai_type_conflict_rules_merge=ai_type_conflict_merge,
         internal_data_rules=tuple(internal_rules),
         internal_data_rules_merge=internal_merge,
+        coverage_rules=_coverage_rules_from_dict(data),
         config_warnings=_external_data_rule_config_warnings(name, tuple(external_rules)),
         raw=dict(data),
+    )
+
+
+def _merge_coverage_rules(parent: FpaCoverageRules, child: FpaCoverageRules) -> FpaCoverageRules:
+    return FpaCoverageRules(
+        require_process_coverage=(
+            child.require_process_coverage
+            if child.require_process_coverage is not None
+            else parent.require_process_coverage
+        ),
+        require_data_function=(
+            child.require_data_function
+            if child.require_data_function is not None
+            else parent.require_data_function
+        ),
     )
 
 
@@ -443,6 +480,7 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
             child.internal_data_rules_merge,
         ),
         internal_data_rules_merge=child.internal_data_rules_merge,
+        coverage_rules=_merge_coverage_rules(parent.coverage_rules, child.coverage_rules),
         config_warnings=_external_data_rule_config_warnings(child.name, external_data_rules),
         raw=raw,
     )

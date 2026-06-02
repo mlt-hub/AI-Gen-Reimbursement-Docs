@@ -668,9 +668,15 @@ def _supplement_ai_rows_with_rules(
     ai_rows: list[dict[str, object]],
     profile: CustomRulesProfile,
     strategy: str,
+    rule_set_config: FpaRuleSetConfig | None = None,
 ) -> tuple[list[dict[str, object]], list[str]]:
     """AI 优先策略下，用规则补齐 AI 没覆盖的功能过程，不覆盖 AI 已判定的类型。"""
     if strategy != "ai_first" or not ai_rows:
+        return ai_rows, []
+    coverage_rules = rule_set_config.coverage_rules if isinstance(rule_set_config, FpaRuleSetConfig) else None
+    require_process_coverage = True if coverage_rules is None or coverage_rules.require_process_coverage is None else coverage_rules.require_process_coverage
+    require_data_function = True if coverage_rules is None or coverage_rules.require_data_function is None else coverage_rules.require_data_function
+    if not require_process_coverage and not require_data_function:
         return ai_rows, []
 
     rule_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
@@ -688,8 +694,8 @@ def _supplement_ai_rows_with_rules(
     for row in rule_rows:
         row_type = str(row.get("类型", ""))
         row_sources = _source_process_set(row)
-        include_data_row = row_type in {"ILF", "EIF"} and not has_data_function
-        include_missing_process = bool(row_sources & missing_processes)
+        include_data_row = require_data_function and row_type in {"ILF", "EIF"} and not has_data_function
+        include_missing_process = require_process_coverage and bool(row_sources & missing_processes)
         if not include_data_row and not include_missing_process:
             continue
 
@@ -1459,6 +1465,7 @@ def _plan_fpa_rows_with_execution(
                     ai_rows=group_rows,
                     profile=profile,
                     strategy=strategy,
+                    rule_set_config=rule_set_config,
                 )
                 _renumber_rows(group_rows, seq)
                 warnings.extend(supplement_warnings)
@@ -1505,6 +1512,7 @@ def _plan_fpa_rows_with_execution(
                 ai_rows=group_rows,
                 profile=profile,
                 strategy=strategy,
+                rule_set_config=rule_set_config,
             )
             _renumber_rows(group_rows, seq)
             warnings.extend(supplement_warnings)
@@ -2436,6 +2444,7 @@ def preview_fpa_module(
                             ai_rows=fpa_rows,
                             profile=profile,
                             strategy=execution.strategy,
+                            rule_set_config=execution.rule_set_config,
                         )
                         warnings.extend(supplement_warnings)
                         warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
@@ -2471,6 +2480,7 @@ def preview_fpa_module(
                     ai_rows=fpa_rows,
                     profile=profile,
                     strategy=execution.strategy,
+                    rule_set_config=execution.rule_set_config,
                 )
                 warnings.extend(supplement_warnings)
                 if not fpa_rows:

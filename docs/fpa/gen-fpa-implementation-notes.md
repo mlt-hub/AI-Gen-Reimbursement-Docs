@@ -2002,13 +2002,12 @@ client_b_rules:
 已完成：外部数据源规则，使用 external_data_rules 追加 EIF 外部数据组规则。
 已完成：ILF / EIF 判定规则第一版，使用 internal_data_rules 追加 ILF 内部数据组规则，EIF 继续使用 external_data_rules。
 已完成：规则段继承策略，keyword_rules / internal_data_rules / external_data_rules 均支持 merge: append / replace。
-待推进：功能过程覆盖检查规则。
+已完成第一版：功能过程覆盖检查规则，使用 coverage_rules 配置 ai_first 下 rules_fallback 是否补未覆盖功能过程、是否补数据功能行。
 ```
 
 后续可扩展：
 
 ```text
-是否必须生成数据功能。
 是否允许一个 FPA 行覆盖多个功能过程。
 最少/最多行数提示。
 配置重复规则检测。
