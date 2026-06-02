@@ -21,42 +21,45 @@
 
     <!-- 操作栏 -->
     <div class="flex flex-col gap-3 px-5 py-3 md:flex-row md:items-center">
-    <span class="min-w-0 flex-1 truncate text-sm text-[var(--color-ink-muted)]">
-      <template v-if="session.outputDir">交付物目录: {{ session.outputDir }}</template>
-    </span>
-    <button v-if="session.isRunning" @click="cancelTask"
-      class="btn-danger">
-      <XCircleIcon class="w-4 h-4" />
-      停止
-    </button>
-    <button v-if="config.workMode === 'local'" @click="openFolder"
-      :disabled="!session.sessionId"
-      class="btn-secondary">
-      <FolderOpenIcon class="w-4 h-4" />
-      打开交付物目录
-    </button>
-    <button v-else @click="downloadZip"
-      :disabled="!session.sessionId || !session.isDone"
-      class="btn-secondary">
-      <ArrowDownTrayIcon class="w-4 h-4" />
-      {{ session.isDone ? '下载交付物 .zip' : '任务完成后可下载' }}
-    </button>
-    <button @click="showAI"
-      :disabled="!session.isDone"
-      class="btn-secondary">
-      <ChatBubbleLeftEllipsisIcon class="w-4 h-4" />
-      AI 交互
-    </button>
-    <button v-if="session.isDone" @click="resetTask"
-      class="btn-quiet">
-      新任务
-    </button>
+      <div class="min-w-0 flex-1">
+        <div v-if="session.outputDir" class="truncate text-sm text-[var(--color-ink-muted)]">
+          交付物目录: {{ session.outputDir }}
+        </div>
+        <div v-else class="text-sm text-[var(--color-ink-soft)]">
+          {{ actionHint }}
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <button v-if="session.isRunning" @click="cancelTask" class="btn-danger">
+          <XCircleIcon class="w-4 h-4" />
+          停止
+        </button>
+
+        <template v-if="session.isDone">
+          <button v-if="config.workMode === 'local'" @click="openFolder" class="btn-primary">
+            <FolderOpenIcon class="w-4 h-4" />
+            打开交付物目录
+          </button>
+          <button v-else @click="downloadZip" class="btn-primary">
+            <ArrowDownTrayIcon class="w-4 h-4" />
+            下载交付物 .zip
+          </button>
+          <button @click="showAI" class="btn-secondary">
+            <ChatBubbleLeftEllipsisIcon class="w-4 h-4" />
+            AI 交互
+          </button>
+          <button @click="resetTask" class="btn-quiet">
+            新任务
+          </button>
+        </template>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { FolderOpenIcon, ArrowDownTrayIcon, ChatBubbleLeftEllipsisIcon, XCircleIcon } from '@heroicons/vue/24/outline'
 import { useSessionStore } from '@/stores/session.ts'
 import { useConfigStore } from '@/stores/config.ts'
@@ -70,6 +73,9 @@ const session = useSessionStore()
 const config = useConfigStore()
 const log = useLogStore()
 const toast = useToastStore()
+const actionHint = computed(() => (
+  session.isRunning ? '任务运行中，可在需要时停止。' : '任务启动后，这里会显示交付物操作。'
+))
 
 function openFolder() {
   if (!session.sessionId) return
