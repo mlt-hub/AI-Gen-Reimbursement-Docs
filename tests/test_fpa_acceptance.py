@@ -190,6 +190,7 @@ def test_fpa_acceptance_preview_and_formal_rules_use_same_rows(tmp_path):
     tree_md = tmp_path / "tree.md"
     meta_md = tmp_path / "meta.md"
     fpa_md = tmp_path / "fpa.md"
+    check_xlsx = tmp_path / "check.xlsx"
 
     _write_minimal_excel(input_xlsx, case["rows"], case["meta"])
     _write_tree_md(tree_md, case["rows"])
@@ -221,6 +222,19 @@ def test_fpa_acceptance_preview_and_formal_rules_use_same_rows(tmp_path):
     ]
     assert preview_summary == formal_summary == case["expected"]["custom_rules"]
     assert preview["audit"]["coverage"]["missing_count"] == 0
+
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx))
+    wb = openpyxl.load_workbook(check_xlsx, data_only=True)
+    try:
+        ws_coverage = wb["覆盖审核"]
+        coverage_headers = _headers(ws_coverage)
+        assert ws_coverage.cell(2, coverage_headers.index("功能过程总数") + 1).value == preview["audit"]["coverage"]["process_total"]
+        assert ws_coverage.cell(2, coverage_headers.index("已覆盖数") + 1).value == preview["audit"]["coverage"]["covered_count"]
+        assert ws_coverage.cell(2, coverage_headers.index("未覆盖数") + 1).value == preview["audit"]["coverage"]["missing_count"]
+        generation_counts = json.loads(ws_coverage.cell(2, coverage_headers.index("生成方式统计") + 1).value)
+        assert generation_counts == preview["audit"]["generation_counts"]
+    finally:
+        wb.close()
     assert not list((tmp_path / "preview").glob("**/FPA工作量评估.xlsx"))
 
 

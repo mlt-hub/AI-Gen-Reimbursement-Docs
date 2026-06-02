@@ -700,6 +700,44 @@ def _build_fpa_audit_report(
     )
 
 
+def _module_payload_for_audit(index: int, group: dict[str, object]) -> dict[str, object]:
+    processes = group.get("processes", [])
+    process_count = len(processes) if isinstance(processes, list) else 0
+    return {
+        "index": index,
+        "client_type": group.get("client_type", ""),
+        "l1": group.get("l1", ""),
+        "l2": group.get("l2", ""),
+        "l3": group.get("l3", ""),
+        "process_count": process_count,
+    }
+
+
+def _build_fpa_audit_reports_for_groups(
+    *,
+    groups: list[dict[str, object]],
+    rows_by_module: dict[int, list[dict[str, object]]],
+    warnings_by_module: dict[int, list[str]],
+    profile: CustomRulesProfile,
+    profile_version: str,
+    strategy: str,
+    rule_set: str,
+) -> list[FpaAuditReport]:
+    return [
+        _build_fpa_audit_report(
+            group=group,
+            module=_module_payload_for_audit(idx, group),
+            fpa_rows=rows_by_module.get(idx, []),
+            warnings=warnings_by_module.get(idx, []),
+            profile=profile,
+            profile_version=profile_version,
+            strategy=strategy,
+            rule_set=rule_set,
+        )
+        for idx, group in enumerate(groups, 1)
+    ]
+
+
 def _rule_set_config_warnings(rule_set_config: object | None) -> list[str]:
     if isinstance(rule_set_config, FpaRuleSetConfig):
         return list(rule_set_config.config_warnings)
@@ -1687,6 +1725,23 @@ def generate_fpa_check_xlsx_from_md(
         config_warnings = [str(w).strip() for w in item_warnings if _is_config_warning(w)]
         if config_warnings:
             config_warnings_by_module_idx[module_idx] = config_warnings
+    warnings_by_module_idx: dict[int, list[str]] = {}
+    for idx in range(1, len(groups) + 1):
+        module_warnings: list[str] = []
+        for row in rows_by_module.get(idx, []):
+            module_warnings.extend(_warning_items(row.get("后处理警告", "")))
+        module_warnings.extend(config_warnings_by_module_idx.get(idx, []))
+        warnings_by_module_idx[idx] = module_warnings
+    profile = get_fpa_profile(execution_meta.get("profile", "") or "custom_rules")
+    audit_reports = _build_fpa_audit_reports_for_groups(
+        groups=groups,
+        rows_by_module=rows_by_module,
+        warnings_by_module=warnings_by_module_idx,
+        profile=profile,
+        profile_version=profile.version,
+        strategy=execution_meta.get("strategy", ""),
+        rule_set=execution_meta.get("rule_set", ""),
+    )
     sheet_columns = _fpa_check_columns()
 
     wb = openpyxl.Workbook()
@@ -1732,38 +1787,26 @@ def generate_fpa_check_xlsx_from_md(
 
     ws_coverage = wb.create_sheet("覆盖审核")
     ws_coverage.append(sheet_columns["覆盖审核"])
-    for idx, group in enumerate(groups, 1):
-        process_names = _process_names_for_group(group)
-        expected = set(process_names)
-        related_rows = rows_by_module.get(idx, [])
-        covered: set[str] = set()
-        generation_counts: dict[str, int] = {}
-        module_warnings: list[str] = []
+    for idx, audit_report in enumerate(audit_reports, 1):
+        group = groups[idx - 1]
+        module_payload = audit_report.module
+        module_warnings = list(warnings_by_module_idx.get(idx, []))
         coverage_warnings: list[str] = []
-        config_warnings = config_warnings_by_module_idx.get(idx, [])
-        for row in related_rows:
-            covered.update(_source_process_set(row))
-            generation = str(row.get("生成方式", "") or "unknown")
-            generation_counts[generation] = generation_counts.get(generation, 0) + 1
-            module_warnings.extend(_warning_items(row.get("后处理警告", "")))
-        module_warnings.extend(config_warnings)
-        covered_list = [name for name in process_names if name in covered]
-        missing_list = [name for name in process_names if name not in covered]
-        if missing_list:
-            coverage_warnings.append(f"未覆盖功能过程: {'、'.join(missing_list)}")
+        if audit_report.missing_processes:
+            coverage_warnings.append(f"未覆盖功能过程: {'、'.join(audit_report.missing_processes)}")
             module_warnings.extend(coverage_warnings)
         _append_audit_row(ws_coverage, sheet_columns["覆盖审核"], {
             "模块序号": idx,
-            "客户端类型": group.get("client_type", ""),
-            "一级模块": group.get("l1", ""),
-            "二级模块": group.get("l2", ""),
-            "三级模块": group.get("l3", ""),
-            "功能过程总数": len(process_names),
-            "已覆盖数": len(covered_list),
-            "未覆盖数": len(missing_list),
-            "已覆盖功能过程": "、".join(covered_list),
-            "未覆盖功能过程": "、".join(missing_list),
-            "生成方式统计": _json.dumps(generation_counts, ensure_ascii=False, sort_keys=True),
+            "客户端类型": module_payload.get("client_type", ""),
+            "一级模块": module_payload.get("l1", ""),
+            "二级模块": module_payload.get("l2", ""),
+            "三级模块": module_payload.get("l3", ""),
+            "功能过程总数": audit_report.process_total,
+            "已覆盖数": len(audit_report.covered_processes),
+            "未覆盖数": len(audit_report.missing_processes),
+            "已覆盖功能过程": "、".join(audit_report.covered_processes),
+            "未覆盖功能过程": "、".join(audit_report.missing_processes),
+            "生成方式统计": _json.dumps(audit_report.generation_counts, ensure_ascii=False, sort_keys=True),
             "Warnings": "；".join(module_warnings),
         })
         for warning in coverage_warnings:
@@ -1776,7 +1819,7 @@ def generate_fpa_check_xlsx_from_md(
                 "来源规则ID": "coverage.missing_process",
                 "来源说明": "功能过程未被任何 FPA 行源功能过程覆盖。",
             })
-        for warning in config_warnings:
+        for warning in config_warnings_by_module_idx.get(idx, []):
             warning_rows.append({
                 "级别": "module",
                 "FPA行序号": "",
@@ -2305,26 +2348,17 @@ def preview_fpa_module(
 
         preview_rows = [_row_to_preview(row) for row in fpa_rows]
         debug["final_rows"] = preview_rows
-        processes = group.get("processes", [])
-        process_count = len(processes) if isinstance(processes, list) else 0
-        module_payload = {
-            "index": idx,
-            "client_type": group.get("client_type", ""),
-            "l1": group.get("l1", ""),
-            "l2": group.get("l2", ""),
-            "l3": group.get("l3", ""),
-            "process_count": process_count,
-        }
-        audit = _build_fpa_audit_report(
-            group=group,
-            module=module_payload,
-            fpa_rows=fpa_rows,
-            warnings=warnings,
+        audit = _build_fpa_audit_reports_for_groups(
+            groups=[group],
+            rows_by_module={1: fpa_rows},
+            warnings_by_module={1: warnings},
             profile=profile,
             profile_version=profile.version,
             strategy=execution.strategy,
             rule_set=execution.rule_set,
-        )
+        )[0]
+        audit.module["index"] = idx
+        module_payload = dict(audit.module)
         return {
             "module": module_payload,
             "rows": preview_rows,

@@ -2262,6 +2262,24 @@ Warnings Sheet 新增“来源规则ID”“来源说明”两列，用于定位
 缺少 audit trace 时仍保留旧的兜底还原逻辑，方便单独从 MD 生成审核副本。
 ```
 
+### K1 第一切片落地：覆盖审核共用 FpaAuditReport
+
+已完成：
+
+```text
+预览 audit 和正式 FPA工作量评估-check.xlsx 的覆盖审核已共用 FpaAuditReport 覆盖统计。
+新增 _build_fpa_audit_reports_for_groups(...) 构建多模块 FpaAuditReport 列表。
+preview_fpa_module(...) 使用同一构建函数生成单模块 audit。
+generate_fpa_check_xlsx_from_md(...) 的覆盖审核 Sheet 使用同一构建函数输出功能过程总数、已覆盖数、未覆盖数、已覆盖功能过程、未覆盖功能过程和生成方式统计。
+AI原始返回和规则命中详情仍继续读取生成期 audit trace，后续如需可继续推进为完整 FpaAuditReport 五 Sheet 统一写出。
+```
+
+已补测试：
+
+```text
+test_fpa_acceptance_preview_and_formal_rules_use_same_rows 现在校验预览 audit 与正式 check.xlsx 覆盖审核的覆盖统计和生成方式统计一致。
+```
+
 ### K5 落地：审核列可配置
 
 已完成：
