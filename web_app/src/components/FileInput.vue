@@ -6,11 +6,13 @@
       <input id="xlsx-path" type="text" v-model="config.xlsxPath"
         placeholder="C:\...\功能清单.xlsx  或  C:\...\项目目录\"
         class="field-control" />
+      <p class="mt-1 text-xs leading-5 text-[var(--color-ink-soft)]">可填写单个功能清单文件，也可填写包含项目资料的目录。</p>
       <div class="mt-3">
         <label for="output-dir" class="field-label">交付物输出目录</label>
         <input id="output-dir" type="text" v-model="config.outputDir"
           placeholder="留空使用默认：xlsx 同级或目录/项目名"
           class="field-control" />
+        <p class="mt-1 text-xs leading-5 text-[var(--color-ink-soft)]">留空时系统会按输入来源自动选择输出位置。</p>
       </div>
     </div>
     <!-- 远程模式 -->
@@ -20,7 +22,11 @@
         <input type="file" accept=".xlsx" @change="onFileChange"
           class="w-full text-sm text-[var(--color-ink-muted)] file:mr-4 file:rounded-md file:border-0 file:bg-[var(--color-accent-soft)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[var(--color-accent-strong)] hover:file:bg-[var(--color-surface-muted)]" />
       </div>
-      <p v-if="selectedName" class="mt-2 text-xs text-[var(--color-accent-strong)]">已选: {{ selectedName }}</p>
+      <div v-if="selectedName" class="mt-2 rounded-md border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-3 py-2 text-xs text-[var(--color-accent-strong)]">
+        <div class="font-semibold">已选择功能清单</div>
+        <div class="mt-0.5 break-all">{{ selectedName }}</div>
+      </div>
+      <p v-else class="mt-2 text-xs leading-5 text-[var(--color-ink-soft)]">仅支持 `.xlsx` 功能清单文件。</p>
     </div>
   </div>
 </template>
