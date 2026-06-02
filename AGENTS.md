@@ -34,6 +34,13 @@
 - 使用清晰的提交信息创建一次 Git commit。
 - 在最终回复中给出提交哈希、提交标题、变更摘要和验证命令结果。
 
+## Python Test Environment
+
+本仓库运行 Python 测试、脚本和 pytest 时，默认必须使用项目虚拟环境：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
