@@ -284,3 +284,31 @@ def test_strict_profile_prefers_explicit_name_action_over_description_keywords()
         "保存后刷新垂直行业列表，并展示查询结果。",
         "EI",
     ) is False
+
+
+def test_strict_profile_transaction_keyword_priority_for_mixed_actions():
+    assert STRICT_FPA_PROFILE.infer_type(
+        "导入并查看客户名单",
+        "上传客户名单文件，导入后查看校验结果。",
+    )[0] == "EI"
+    assert STRICT_FPA_PROFILE.infer_type(
+        "同步并查看组织信息",
+        "从主数据平台同步组织基础信息，写入本系统后查看同步结果。",
+    )[0] == "EI"
+    assert STRICT_FPA_PROFILE.infer_type(
+        "发起退款并查询结果",
+        "调用支付网关发起退款，并查询支付网关返回的退款状态。",
+    )[0] == "EI"
+    assert STRICT_FPA_PROFILE.infer_type(
+        "查询并导出客户清单",
+        "按查询条件生成客户清单导出文件。",
+    )[0] == "EO"
+
+
+def test_strict_profile_external_service_query_is_not_eif():
+    fpa_type, _ = STRICT_FPA_PROFILE.infer_type(
+        "调用支付网关查询支付状态",
+        "调用支付网关查询支付状态，不引用外部维护数据组。",
+    )
+
+    assert fpa_type == "EQ"

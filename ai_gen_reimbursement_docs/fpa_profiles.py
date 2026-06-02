@@ -57,7 +57,11 @@ STRICT_EO_ACTIONS = ("导出", "报表", "下载", "生成文件")
 STRICT_EQ_ACTIONS = ("查询", "查看", "详情", "检索", "列表")
 STRICT_EI_ACTIONS = (
     "新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用",
-    "导入", "选择", "引用", "关联",
+    "导入", "同步", "发起", "写入", "选择", "引用", "关联",
+)
+STRICT_EI_BOUNDARY_ACTIONS = (
+    "新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用",
+    "导入", "同步", "发起", "写入",
 )
 EXTERNAL_SERVICE_CALL_HINTS = ("外部接口", "外部服务", "调用", "平台发送", "网关", "服务上传")
 ORDINARY_EXTERNAL_SERVICE_ALIASES = (
@@ -570,11 +574,19 @@ class StrictFpaProfile(CustomRulesProfile):
                 return rule.fpa_type, rule.reason or f"命中 rule_set 关键词规则，按 {rule.fpa_type}。"
         if any(k in text for k in STRICT_EO_ACTIONS):
             return "EO", "事务功能产生派生或格式化输出，按 EO。"
+        if self._starts_with_any_action(text, STRICT_EQ_ACTIONS):
+            return "EQ", "事务功能读取数据且无派生输出，按 EQ。"
+        if any(k in text for k in STRICT_EI_BOUNDARY_ACTIONS):
+            return "EI", "事务功能进入或改变系统边界内数据，按 EI。"
         if any(k in text for k in STRICT_EQ_ACTIONS):
             return "EQ", "事务功能读取数据且无派生输出，按 EQ。"
         if any(k in text for k in STRICT_EI_ACTIONS):
             return "EI", "事务功能进入或改变系统边界内数据，按 EI。"
         return None
+
+    def _starts_with_any_action(self, text: str, actions: tuple[str, ...]) -> bool:
+        stripped = text.strip()
+        return any(stripped.startswith(action) for action in actions)
 
     def _looks_like_external_data_function_name(self, name: str) -> bool:
         return (
