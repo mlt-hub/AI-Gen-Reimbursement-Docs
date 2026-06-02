@@ -231,7 +231,7 @@ ai_gen_reimbursement_docs/fpa_profiles.py
 
 ai_gen_reimbursement_docs/config_utils.py
   增加 load_fpa_strategy、load_fpa_rule_set。
-  load_fpa_profile 会将系统配置中的无效 profile 回退为 custom_rules，避免旧占位配置阻断默认运行。
+  load_fpa_profile 会从 fpa_config.yaml 严格读取默认 profile；未知 profile 直接报错，不回退旧占位配置。
 
 ai_gen_reimbursement_docs/gen_fpa.py
   正式生成与预览均解析 FpaExecutionConfig。
@@ -278,10 +278,10 @@ ai_gen_reimbursement_docs/fpa_profiles.py
 
 ai_gen_reimbursement_docs/config_utils.py
   新增 load_fpa_config / load_fpa_profiles_config / load_fpa_rule_sets_config。
-  配置自动初始化和迁移会处理 fpa_config.yaml。
+  配置自动初始化会处理 fpa_config.yaml 和 domain_context.json。
 
 ai_gen_reimbursement_docs/cli/main.py
-  --init-config 会初始化 fpa_config.yaml。
+  --init-config 会初始化 fpa_config.yaml 和 domain_context.json。
 
 ai_gen_reimbursement_docs/gen_fpa.py
   正式 FPA MD 头部写入 profile、strategy、rule_set。
@@ -506,7 +506,7 @@ H2. 已初步清理：旧逐行 AI 填充函数和调用路径已移除；文档
 H3. 已初步清理：FPA MD 读取当前要求新 14 列格式，不再保留旧 10 列兼容读取路径。
 H4. 已初步清理：FPA system prompt 和改进计划中的旧口径表述已调整；后续如新增 prompt，仍需复核。
 H5. 已初步清理：测试注释中的“接口行”旧说法已调整；后续新增 fixture 时仍需复核命名。
-H6. 已完成：配置初始化和迁移逻辑已复核；全局 CLI 初始化、exe 自动初始化和 Web 用户目录初始化已共用同一份默认配置模板清单，当前会初始化 fpa_config.yaml。
+H6. 已完成：配置初始化和迁移逻辑已复核；全局 CLI 初始化、exe 自动初始化和 Web 用户目录初始化已共用同一份默认配置模板清单，当前会初始化 fpa_config.yaml 和 domain_context.json。
 H7. 已初步清理：改进计划中“必须兼容旧文件”的表述已改为未上线项目的新约束；README 后续如新增 FPA 段落仍需复核。
 ```
 

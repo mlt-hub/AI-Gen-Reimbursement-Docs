@@ -474,7 +474,7 @@ AI 失败时仍使用 profile fallback_rows_for_l3() 兜底。
 #### 初始化与迁移
 
 ```text
-ard --init-config 会复制 config/fpa_config.yaml.example 到用户配置目录。
+ard --init-config 会复制 config/fpa_config.yaml.example 和 config/domain_context.json.example 到用户配置目录。
 exe 首次运行自动初始化配置时也会复制该文件。
 migrate_config() 会对 fpa_config.yaml 做新增顶层键迁移。
 ```
@@ -3058,9 +3058,9 @@ docs/fpa/strict-fpa-acceptance-record.md
 ```text
 H6 已完成：
 - 复核配置初始化和迁移逻辑后，确认全局 CLI 初始化、exe 首次运行自动初始化、Web 用户目录初始化都应使用同一份默认配置模板清单。
-- 新增 copy_default_config_files(...) 和 DEFAULT_CONFIG_TEMPLATE_FILES，统一维护 .env、system_config.yaml、fpa_config.yaml 的初始化来源。
+- 新增 copy_default_config_files(...) 和 DEFAULT_CONFIG_TEMPLATE_FILES，统一维护 .env、system_config.yaml、fpa_config.yaml、domain_context.json 的初始化来源。
 - CLI --init-config、exe _auto_init_config、auth.init_user_dir 均改为复用该统一逻辑。
-- 修复 Web 用户目录初始化漏复制 FPA 配置的问题；当前初始化 fpa_config.yaml。
+- 修复 Web 用户目录初始化漏复制 FPA 配置的问题；当前初始化 fpa_config.yaml 和 domain_context.json。
 - migrate_config 仍保留“只追加 example 中新增顶层键，不覆盖用户配置”的当前行为；未发现 FPA 主线需要删除的旧兼容迁移分支。
 
 已补测试：
