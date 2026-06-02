@@ -3108,6 +3108,14 @@ docs/fpa/strict-fpa-acceptance-record.md
 ### H. 旧兼容逻辑清理
 
 ```text
+H 组最终复核已完成：
+- H1：未发现当前 FPA 主流程仍保留旧版“每个功能过程固定生成界面开发 + 接口开发”的代码分支。custom_rules 中的“界面开发 / 逻辑处理开发 / 查询处理开发 / 导出处理开发”是当前模板友好口径，不作为旧兼容路径处理。
+- H2：旧逐行 AI 填充函数和调用路径已移除；gen-fpa-improvement-plan.md 中的旧流程描述只保留为历史问题背景。
+- H3：FPA MD 读取要求新 14 列格式，不保留旧 10 列读取兼容路径。
+- H4：FPA prompt、README 和当前方案文档已复核；strict_fpa 明确不生成“界面开发 / 接口开发 / 逻辑处理开发”等开发工作项，custom_rules 明确保留模板友好命名。
+- H5：测试注释和 fixture 已复核；旧开发项名称只出现在 custom_rules 当前口径、strict_fpa 规范化/负例测试或历史文档背景中。
+- H7：README 当前 FPA 段落未发现旧兼容承诺；current_project 兼容别名、rule_set_version 暴露、旧 10 列读取兼容均未恢复。
+
 H6 已完成：
 - 复核配置初始化和迁移逻辑后，确认全局 CLI 初始化、exe 首次运行自动初始化、Web 用户目录初始化都应使用同一份默认配置模板清单。
 - 新增 copy_default_config_files(...) 和 DEFAULT_CONFIG_TEMPLATE_FILES，统一维护 .env、system_config.yaml、fpa_config.yaml、domain_context.json 的初始化来源。
