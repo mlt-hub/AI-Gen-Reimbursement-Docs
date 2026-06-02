@@ -15,9 +15,20 @@
     </section>
 
     <div class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-      <aside class="surface min-h-0 overflow-y-auto rounded-xl p-4">
-        <slot name="controls" />
-      </aside>
+      <details
+        ref="controlsDetails"
+        class="surface min-h-0 overflow-y-auto rounded-xl p-4"
+        :open="controlsOpen"
+        @toggle="syncControlsOpen"
+      >
+        <summary class="subtle-link flex cursor-pointer select-none items-center justify-between text-sm lg:hidden">
+          <span>输入来源与高级设置</span>
+          <span class="text-xs text-[var(--color-ink-soft)]">{{ controlsOpen ? '收起' : '展开' }}</span>
+        </summary>
+        <div class="mt-4 lg:mt-0">
+          <slot name="controls" />
+        </div>
+      </details>
       <section class="surface min-h-[520px] overflow-hidden rounded-xl">
         <slot />
       </section>
@@ -26,7 +37,29 @@
 </template>
 
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+
 defineProps<{
   title: string
 }>()
+
+const controlsDetails = ref<HTMLDetailsElement | null>(null)
+const controlsOpen = ref(true)
+
+function applyControlsDefault() {
+  controlsOpen.value = window.matchMedia('(min-width: 1024px)').matches
+}
+
+function syncControlsOpen() {
+  controlsOpen.value = Boolean(controlsDetails.value?.open)
+}
+
+onMounted(() => {
+  applyControlsDefault()
+  window.addEventListener('resize', applyControlsDefault)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', applyControlsDefault)
+})
 </script>

@@ -5,6 +5,7 @@
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">输入设置</p>
           <h3 class="mt-1 text-lg font-bold text-[var(--color-ink)]">选择功能清单</h3>
+          <p class="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">填写输入来源后，在右侧生成基础数据并选择三级模块预览。</p>
         </div>
         <FileInput />
         <div class="space-y-3 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3">
