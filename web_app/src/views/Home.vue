@@ -32,8 +32,8 @@
     <!-- FPA核减后的工作量输入弹窗 -->
     <Teleport to="body">
       <div v-if="session.inputPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div class="surface w-full max-w-[420px] rounded-xl p-6">
-          <h3 class="text-lg font-semibold mb-2">FPA核减后的工作量确认</h3>
+        <div class="surface max-h-[calc(100vh-2rem)] w-full max-w-[420px] overflow-y-auto rounded-xl p-5 sm:p-6">
+          <h3 class="mb-2 text-lg font-semibold">FPA 核减后的工作量确认</h3>
           <p class="mb-4 text-sm text-[var(--color-ink-muted)]">请输入FPA核减后的工作量（人/天），或直接确认使用默认值。</p>
           <div class="mb-4">
             <label class="field-label">FPA核减后的工作量（人/天）</label>
@@ -46,7 +46,7 @@
               @keyup.enter="submitFpaInput"
             />
           </div>
-          <div class="flex justify-end gap-3">
+          <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
             <button @click="cancelTask" class="btn-quiet">取消任务</button>
             <button @click="submitFpaInput" class="btn-primary">确认继续</button>
           </div>
@@ -57,8 +57,8 @@
     <!-- 送审工作量和功能点确认弹窗 -->
     <Teleport to="body">
       <div v-if="session.listPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div class="surface w-full max-w-[420px] rounded-xl p-6">
-          <h3 class="text-lg font-semibold mb-2">送审确认</h3>
+        <div class="surface max-h-[calc(100vh-2rem)] w-full max-w-[420px] overflow-y-auto rounded-xl p-5 sm:p-6">
+          <h3 class="mb-2 text-lg font-semibold">送审确认</h3>
           <p class="mb-4 text-sm text-[var(--color-ink-muted)]">请确认送审工作量和送审功能点，或直接使用默认值。</p>
           <div class="mb-3">
             <label class="field-label">送审工作量（人/天）</label>
@@ -82,7 +82,7 @@
               @keyup.enter="submitListInput"
             />
           </div>
-          <div class="flex justify-end gap-3">
+          <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
             <button @click="cancelTask" class="btn-quiet">取消任务</button>
             <button @click="submitListInput" class="btn-primary">确认继续</button>
           </div>
@@ -93,20 +93,20 @@
     <!-- AI 交互弹窗 -->
     <Teleport to="body">
       <div v-if="aiModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="closeAIModal">
-        <div class="surface flex h-[85vh] w-[92vw] max-w-5xl flex-col overflow-hidden rounded-xl">
-          <div class="px-5 py-3 border-b border-[var(--color-rule)] flex items-center justify-between">
-            <h3 class="text-lg font-semibold">AI 交互记录</h3>
+        <div class="surface flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl sm:w-[92vw]">
+          <div class="flex items-center justify-between gap-3 border-b border-[var(--color-rule)] px-4 py-3 sm:px-5">
+            <h3 class="min-w-0 truncate text-lg font-semibold">AI 交互记录</h3>
             <button @click="closeAIModal" class="btn-quiet min-h-0 px-2 py-1 text-xl leading-none">&times;</button>
           </div>
-          <div class="flex border-b border-[var(--color-rule)] px-5">
+          <div class="flex overflow-x-auto border-b border-[var(--color-rule)] px-4 sm:px-5">
             <button v-for="tab in ['list', 'combined']" :key="tab"
               @click="aiTab = tab"
-              :class="['py-2 px-4 text-sm border-b-2 transition-colors',
+              :class="['shrink-0 border-b-2 px-4 py-2 text-sm transition-colors',
                 aiTab === tab ? 'border-[var(--color-accent)] text-[var(--color-accent-strong)] font-medium' : 'border-transparent text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]']">
               {{ tab === 'list' ? '交互列表' : '合并日志' }}
             </button>
           </div>
-          <div class="flex-1 overflow-y-auto bg-[var(--color-page)] p-5">
+          <div class="flex-1 overflow-y-auto bg-[var(--color-page)] p-4 sm:p-5">
             <div v-if="aiLoading" class="flex h-full items-center justify-center text-[var(--color-ink-soft)]">加载中...</div>
             <div v-else-if="aiTab === 'list' && aiInteractions.length === 0" class="flex h-full items-center justify-center text-[var(--color-ink-soft)]">暂无 AI 交互记录</div>
             <template v-else-if="aiTab === 'list'">
