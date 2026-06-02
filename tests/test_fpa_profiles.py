@@ -67,6 +67,19 @@ rule_sets:
         - type: EIF
           keywords: ["第三方评分标签"]
           reason: "第三方评分标签由外部维护，按 EIF。"
+    ai_type_conflict_rules:
+      merge: append
+      items:
+        - expected_type: ILF
+          ai_type: EO
+          keywords: ["本地报表快照"]
+          conflict: false
+          reason: "本地报表快照允许 AI 按格式化输出复核，不提示类型冲突。"
+        - expected_type: EO
+          ai_type: EO
+          keywords: ["监管报表导出"]
+          conflict: true
+          reason: "监管报表导出即使 AI 返回 EO 也要求人工复核。"
     internal_data_rules:
       merge: append
       items:
@@ -91,6 +104,13 @@ rule_sets:
       items:
         - type: EIF
           keywords: ["标签平台客户标签"]
+    ai_type_conflict_rules:
+      merge: replace
+      items:
+        - expected_type: EIF
+          ai_type: ILF
+          keywords: ["标签平台客户标签"]
+          conflict: true
     internal_data_rules:
       merge: replace
       items:
@@ -149,6 +169,7 @@ def test_rule_set_extends_are_loaded(tmp_path):
     assert config.rule_set_config.extends == "strict_fpa_default"
     assert config.rule_set_config.keyword_rules[0].fpa_type == "EO"
     assert config.rule_set_config.type_mapping_rules[0].fpa_type == "ILF"
+    assert config.rule_set_config.ai_type_conflict_rules[0].expected_type == "ILF"
     assert config.rule_set_config.internal_data_rules[0].data_name == "认证授权关系"
     assert config.rule_set_config.external_data_rules[0].data_name == "行业平台客户档案"
 
@@ -177,6 +198,7 @@ def test_rule_set_replace_discards_parent_rule_sections(tmp_path):
 
     assert [rule.keywords for rule in config.rule_set_config.keyword_rules] == [("浏览客户清单",)]
     assert [rule.keywords for rule in config.rule_set_config.type_mapping_rules] == [("标签平台客户标签",)]
+    assert [rule.keywords for rule in config.rule_set_config.ai_type_conflict_rules] == [("标签平台客户标签",)]
     assert [rule.data_name for rule in config.rule_set_config.internal_data_rules] == ["客户标签关系"]
     assert [rule.data_name for rule in config.rule_set_config.external_data_rules] == ["标签平台客户标签"]
 
@@ -213,6 +235,11 @@ def test_rule_set_type_mapping_rules_affect_strict_profile(tmp_path):
                 "查询条件生成后持久化保存本地报表快照。",
                 "EO",
             )
+            forced_conflict = STRICT_FPA_PROFILE.has_obvious_conflict(
+                "监管报表导出",
+                "导出监管报表文件。",
+                "EO",
+            )
             desc_only_type, desc_only_reason = STRICT_FPA_PROFILE.infer_type(
                 "评分标签",
                 "读取第三方评分标签并展示。",
@@ -222,7 +249,8 @@ def test_rule_set_type_mapping_rules_affect_strict_profile(tmp_path):
 
     assert fpa_type == "ILF"
     assert reason == "本系统持久化报表快照，按 ILF。"
-    assert has_conflict
+    assert not has_conflict
+    assert forced_conflict
     assert desc_only_type == "EIF"
     assert desc_only_reason == "第三方评分标签由外部维护，按 EIF。"
 

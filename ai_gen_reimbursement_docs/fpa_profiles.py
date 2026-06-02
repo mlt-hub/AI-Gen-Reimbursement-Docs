@@ -111,6 +111,24 @@ class TypeMappingRule:
 
 
 @dataclass(frozen=True)
+class AiTypeConflictRule:
+    """按关键词配置 AI type 与规则建议 type 的冲突处理。"""
+
+    expected_type: str
+    ai_type: str
+    keywords: tuple[str, ...]
+    conflict: bool = True
+    reason: str = ""
+
+    def matches(self, text: str, expected_type: str, ai_type: str) -> bool:
+        return (
+            self.expected_type == expected_type
+            and self.ai_type == ai_type.upper()
+            and any(keyword in text for keyword in self.keywords)
+        )
+
+
+@dataclass(frozen=True)
 class InternalDataGroupRule:
     """本系统维护的 ILF 数据组识别规则。"""
 
@@ -144,6 +162,8 @@ class FpaRuleSetConfig:
     keyword_rules_merge: str = "append"
     type_mapping_rules: tuple[TypeMappingRule, ...] = field(default_factory=tuple)
     type_mapping_rules_merge: str = "append"
+    ai_type_conflict_rules: tuple[AiTypeConflictRule, ...] = field(default_factory=tuple)
+    ai_type_conflict_rules_merge: str = "append"
     internal_data_rules: tuple[InternalDataGroupRule, ...] = field(default_factory=tuple)
     internal_data_rules_merge: str = "append"
     config_warnings: tuple[str, ...] = field(default_factory=tuple)
@@ -273,6 +293,25 @@ def _type_mapping_rule_from_dict(item: dict[str, object]) -> TypeMappingRule | N
     return TypeMappingRule(fpa_type, keyword_values, reason)
 
 
+def _ai_type_conflict_rule_from_dict(item: dict[str, object]) -> AiTypeConflictRule | None:
+    expected_type = str(item.get("expected_type") or "").strip().upper()
+    ai_type = str(item.get("ai_type") or "").strip().upper()
+    keywords = item.get("keywords", [])
+    conflict = item.get("conflict", True)
+    reason = str(item.get("reason") or "").strip()
+    if (
+        expected_type not in VALID_FPA_TYPES
+        or ai_type not in VALID_FPA_TYPES
+        or not isinstance(keywords, list)
+        or not isinstance(conflict, bool)
+    ):
+        return None
+    keyword_values = tuple(str(keyword).strip() for keyword in keywords if str(keyword).strip())
+    if not keyword_values:
+        return None
+    return AiTypeConflictRule(expected_type, ai_type, keyword_values, conflict, reason)
+
+
 def _internal_data_rule_from_dict(item: dict[str, object]) -> InternalDataGroupRule | None:
     keywords = item.get("keywords", [])
     data_name = str(item.get("data_name") or "").strip()
@@ -339,6 +378,13 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
             rule = _type_mapping_rule_from_dict(item)
             if rule is not None:
                 type_mapping_rules.append(rule)
+    ai_type_conflict_rules: list[AiTypeConflictRule] = []
+    ai_type_conflict_merge, raw_ai_type_conflict_rules = _rule_section_from_dict(data, "ai_type_conflict_rules")
+    for item in raw_ai_type_conflict_rules:
+        if isinstance(item, dict):
+            rule = _ai_type_conflict_rule_from_dict(item)
+            if rule is not None:
+                ai_type_conflict_rules.append(rule)
     internal_rules: list[InternalDataGroupRule] = []
     internal_merge, raw_internal_rules = _rule_section_from_dict(data, "internal_data_rules")
     for item in raw_internal_rules:
@@ -355,6 +401,8 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
         keyword_rules_merge=keyword_merge,
         type_mapping_rules=tuple(type_mapping_rules),
         type_mapping_rules_merge=type_mapping_merge,
+        ai_type_conflict_rules=tuple(ai_type_conflict_rules),
+        ai_type_conflict_rules_merge=ai_type_conflict_merge,
         internal_data_rules=tuple(internal_rules),
         internal_data_rules_merge=internal_merge,
         config_warnings=_external_data_rule_config_warnings(name, tuple(external_rules)),
@@ -383,6 +431,12 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
             child.type_mapping_rules_merge,
         ),
         type_mapping_rules_merge=child.type_mapping_rules_merge,
+        ai_type_conflict_rules=_merge_rule_section(
+            parent.ai_type_conflict_rules,
+            child.ai_type_conflict_rules,
+            child.ai_type_conflict_rules_merge,
+        ),
+        ai_type_conflict_rules_merge=child.ai_type_conflict_rules_merge,
         internal_data_rules=_merge_rule_section(
             parent.internal_data_rules,
             child.internal_data_rules,
@@ -648,6 +702,9 @@ class StrictFpaProfile(CustomRulesProfile):
         expected_type = self._conflict_matrix_expected_type(name, desc)
         if expected_type is None:
             return False
+        configured_conflict = self._configured_ai_type_conflict(text, expected_type, ai_type)
+        if configured_conflict is not None:
+            return configured_conflict
         return self._type_conflicts(expected_type, ai_type)
 
     def _conflict_matrix_expected_type(self, name: str, desc: str) -> str | None:
@@ -922,6 +979,16 @@ class StrictFpaProfile(CustomRulesProfile):
         for rule in self._configured_type_mapping_rules():
             if rule.matches(text):
                 return rule.fpa_type, rule.reason or f"命中 rule_set 类型映射规则，按 {rule.fpa_type}。"
+        return None
+
+    def _configured_ai_type_conflict_rules(self) -> tuple[AiTypeConflictRule, ...]:
+        current_rule_set = current_fpa_rule_set_config()
+        return current_rule_set.ai_type_conflict_rules if current_rule_set is not None else ()
+
+    def _configured_ai_type_conflict(self, text: str, expected_type: str, ai_type: str) -> bool | None:
+        for rule in self._configured_ai_type_conflict_rules():
+            if rule.matches(text, expected_type, ai_type):
+                return rule.conflict
         return None
 
     def _configured_internal_data_rules(self) -> tuple[InternalDataGroupRule, ...]:

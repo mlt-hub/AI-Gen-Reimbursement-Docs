@@ -511,6 +511,27 @@ def _validate_type_mapping_rules(value: object, key_path: str) -> None:
             _require_non_empty_string(item.get("reason"), f"{item_path}.reason")
 
 
+def _validate_ai_type_conflict_rules(value: object, key_path: str) -> None:
+    items = _validate_rule_section(value, key_path)
+    if items is None:
+        return
+    for index, item in enumerate(items):
+        item_path = f"{key_path}.items[{index}]"
+        if not isinstance(item, dict):
+            raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path} 必须是对象")
+        for type_key in ("expected_type", "ai_type"):
+            fpa_type = _require_non_empty_string(item.get(type_key), f"{item_path}.{type_key}").upper()
+            if fpa_type not in VALID_FPA_TYPES:
+                raise FpaConfigError(
+                    f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path}.{type_key} 必须是 EI / EQ / EO / ILF / EIF"
+                )
+        _validate_non_empty_string_list(item.get("keywords"), f"{item_path}.keywords")
+        if "conflict" in item and not isinstance(item.get("conflict"), bool):
+            raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path}.conflict 必须是布尔值")
+        if "reason" in item:
+            _require_non_empty_string(item.get("reason"), f"{item_path}.reason")
+
+
 def _validate_internal_data_rules(value: object, key_path: str) -> None:
     items = _validate_rule_section(value, key_path)
     if items is None:
@@ -565,6 +586,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         _validate_external_data_rules(rule_entry.get("external_data_rules"), f"{rule_set_path}.external_data_rules")
         _validate_keyword_rules(rule_entry.get("keyword_rules"), f"{rule_set_path}.keyword_rules")
         _validate_type_mapping_rules(rule_entry.get("type_mapping_rules"), f"{rule_set_path}.type_mapping_rules")
+        _validate_ai_type_conflict_rules(rule_entry.get("ai_type_conflict_rules"), f"{rule_set_path}.ai_type_conflict_rules")
         _validate_internal_data_rules(rule_entry.get("internal_data_rules"), f"{rule_set_path}.internal_data_rules")
 
     visited: set[str] = set()

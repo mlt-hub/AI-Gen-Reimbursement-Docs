@@ -98,6 +98,14 @@ rule_sets:
         - type: ILF
           keywords: ["本地报表快照"]
           reason: "本系统持久化报表快照，按 ILF。"
+    ai_type_conflict_rules:
+      merge: append
+      items:
+        - expected_type: ILF
+          ai_type: EO
+          keywords: ["本地报表快照"]
+          conflict: false
+          reason: "本地报表快照允许 AI 按格式化输出复核，不提示类型冲突。"
     internal_data_rules:
       merge: append
       items:

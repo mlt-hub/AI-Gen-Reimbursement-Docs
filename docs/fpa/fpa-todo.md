@@ -95,6 +95,15 @@ rule_sets.<name>.type_mapping_rules：
   keywords 必须是非空字符串列表。
   reason 可选；如配置，必须是非空字符串。
 
+rule_sets.<name>.ai_type_conflict_rules：
+  必须是对象；items 必须是列表。
+  merge 可选，只允许 append / replace，默认 append。
+  expected_type 必须是 EI / EQ / EO / ILF / EIF。
+  ai_type 必须是 EI / EQ / EO / ILF / EIF。
+  keywords 必须是非空字符串列表。
+  conflict 可选；如配置，必须是布尔值。
+  reason 可选；如配置，必须是非空字符串。
+
 rule_sets.<name>.internal_data_rules：
   必须是对象；items 必须是列表。
   merge 可选，只允许 append / replace，默认 append。
@@ -109,7 +118,7 @@ rule_sets.<name>.internal_data_rules：
 已补充 tests/test_config_utils.py 覆盖 fpa_config.yaml 结构错误。
 已覆盖 rule_set extends 不存在和循环。
 已覆盖 external_data_rules 非法结构。
-已覆盖 keyword_rules / type_mapping_rules / internal_data_rules 非法结构。
+已覆盖 keyword_rules / type_mapping_rules / ai_type_conflict_rules / internal_data_rules 非法结构。
 已覆盖规则段旧列表结构和非法 merge 值。
 已覆盖普通外部服务被配置为 external_data_rules 时仍允许加载，并在预览 audit、正式审核副本 warnings 中可见。
 继续保持 pytest -q 通过。
@@ -163,6 +172,7 @@ strict_fpa 类型冲突规则已收紧：AI 为主，名称明确动作优先，
 strict_fpa 事务关键词优先级已细化：导出/报表/下载优先 EO；名称以查询/查看开头优先 EQ；导入/同步/发起/写入/保存等边界变更动作优先 EI；普通外部服务调用仍不判 EIF。
 strict_fpa 已建立类型冲突矩阵：事务功能与数据功能错判会进入冲突 warning；描述中的低置信引用/选择/关联不会覆盖 AI 复杂数据组复核。
 strict_fpa 已支持 type_mapping_rules 通用类型映射表，可将项目级特例直接映射到 EI / EQ / EO / ILF / EIF，并参与类型冲突矩阵。
+strict_fpa 已支持 ai_type_conflict_rules，在类型冲突矩阵前按 expected_type + ai_type + keywords 覆盖是否提示冲突。
 COSMIC 预览暂不推进：gen-cosmic 逻辑后续可能重构，现在不新增 /preview/cosmic 页面，避免把当前临时数据流固化到 UI/API/测试。
 ```
 
@@ -199,7 +209,7 @@ AI 缓存 key 已包含 profile、strategy、rule_set、rule_set 配置内容、
 支持多套 rule_set 的配置入口已落地。
 rule_set 已并入 fpa_config.yaml。
 rule_set_version 已移除，不再要求用户手动维护版本号。
-rule_set extends 继承已落地，当前支持按规则段配置 append / replace，覆盖 keyword_rules、type_mapping_rules、internal_data_rules、external_data_rules。
+rule_set extends 继承已落地，当前支持按规则段配置 append / replace，覆盖 keyword_rules、type_mapping_rules、ai_type_conflict_rules、internal_data_rules、external_data_rules。
 ```
 
 第一版 rule_set 建议支持：
@@ -250,16 +260,17 @@ config/fpa_config.yaml.example
   新增统一 FPA 配置示例文件。
   合并 profile、profiles、prompt_sets、rule_sets。
   内置 custom_rules_default、strict_fpa_default。
-  示例 strict_fpa_conservative 展示 extends、keyword_rules、type_mapping_rules、internal_data_rules、external_data_rules。
+  示例 strict_fpa_conservative 展示 extends、keyword_rules、type_mapping_rules、ai_type_conflict_rules、internal_data_rules、external_data_rules。
 
 ai_gen_reimbursement_docs/fpa_profiles.py
   新增 FpaRuleSetConfig。
   新增 resolve_fpa_rule_set_config。
   支持内置 rule_set 与用户配置 rule_set 合并。
   支持 extends 继承，并检测循环继承。
-  keyword_rules / type_mapping_rules / internal_data_rules / external_data_rules 支持 merge: append / replace。
+  keyword_rules / type_mapping_rules / ai_type_conflict_rules / internal_data_rules / external_data_rules 支持 merge: append / replace。
   当前 rule_set 的 keyword_rules 会参与 strict_fpa EI / EQ / EO 事务类型兜底。
   当前 rule_set 的 type_mapping_rules 会参与 strict_fpa EI / EQ / EO / ILF / EIF 通用类型映射和类型冲突矩阵。
+  当前 rule_set 的 ai_type_conflict_rules 会参与 strict_fpa AI 类型冲突判定，可覆盖矩阵是否提示冲突。
   当前 rule_set 的 internal_data_rules 会参与 strict_fpa ILF 数据组识别。
   当前 rule_set 的 external_data_rules 会参与 strict_fpa EIF 数据组识别。
 
@@ -281,7 +292,7 @@ ai_gen_reimbursement_docs/gen_fpa.py
 ```text
 J1. 已完成：将 rule_set 从“名称入口”升级为 fpa_config.yaml 中的可配置规则集。
 J2. 已完成：移除 rule_set_version；AI cache key 改为纳入 rule_set 实际配置内容。
-J3. 已完成第一版：rule_set extends 支持 keyword_rules、type_mapping_rules、internal_data_rules、external_data_rules 按规则段 append / replace；更细的按单条规则 ID 删除或覆盖暂不引入。
+J3. 已完成第一版：rule_set extends 支持 keyword_rules、type_mapping_rules、ai_type_conflict_rules、internal_data_rules、external_data_rules 按规则段 append / replace；更细的按单条规则 ID 删除或覆盖暂不引入。
 J4. 已完成第一版：事务关键词、ILF 内部数据组、EIF 外部数据组规则均可由 rule_set 配置追加；内置默认规则保持不变。
 J5. 已完成第一版：rules_first 在规则结果为空、名称为空、类型非法或未覆盖功能过程时触发 AI 复核；无 API Key 时保留规则结果并记录 warning。
 J6. 已完成：Web 高级选项和 FPA 预览页已使用配置驱动的 rule_set 下拉选择，不再是文本输入。
@@ -470,6 +481,7 @@ strict_fpa 支持 AI 辅助识别复杂 ILF / EIF；当 AI 合法数据功能无
 收紧内部数据功能触发条件，避免把“CRM 系统维护”等外部系统维护误识别为本系统 ILF。
 strict_fpa 建立 EI / EQ / EO / ILF / EIF 类型冲突矩阵，覆盖事务功能与数据功能互错，并保留复杂 AI 数据组人工复核路径。
 strict_fpa 支持 type_mapping_rules 通用类型映射表，适合少量项目级特例直接映射到五类 FPA 类型。
+strict_fpa 支持 ai_type_conflict_rules 覆盖类型冲突矩阵，适合压制已确认可接受的 AI 差异或强制人工复核特例。
 新增 Excel -> MD -> FPA MD -> summary -> check.xlsx 的文件级验收链路。
 ```
 

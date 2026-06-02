@@ -400,6 +400,48 @@ class TestLoadFpaExecutionOptions:
             with pytest.raises(FpaConfigError, match=r"type_mapping_rules\.items\[0\]\.type 必须是 EI / EQ / EO / ILF / EIF"):
                 load_fpa_rule_sets_config()
 
+    def test_ai_type_conflict_rules_shape_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace(
+            """    internal_data_rules:
+      merge: append""",
+            """    ai_type_conflict_rules:
+      merge: append
+      items:
+        - expected_type: BAD
+          ai_type: EO
+          keywords: ["供应商风险快照"]
+          conflict: "false"
+    internal_data_rules:
+      merge: append""",
+        )
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"ai_type_conflict_rules\.items\[0\]\.expected_type 必须是 EI / EQ / EO / ILF / EIF"):
+                load_fpa_rule_sets_config()
+
+    def test_ai_type_conflict_rule_conflict_bool_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace(
+            """    internal_data_rules:
+      merge: append""",
+            """    ai_type_conflict_rules:
+      merge: append
+      items:
+        - expected_type: ILF
+          ai_type: EO
+          keywords: ["供应商风险快照"]
+          conflict: "false"
+    internal_data_rules:
+      merge: append""",
+        )
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"ai_type_conflict_rules\.items\[0\]\.conflict 必须是布尔值"):
+                load_fpa_rule_sets_config()
+
     def test_internal_data_rules_shape_is_rejected(self, tmp_path):
         _write_fpa_config(tmp_path)
         (tmp_path / "fpa_config.yaml").write_text(
