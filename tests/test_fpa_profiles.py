@@ -312,3 +312,25 @@ def test_strict_profile_external_service_query_is_not_eif():
     )
 
     assert fpa_type == "EQ"
+
+
+def test_strict_profile_type_conflict_matrix_for_transactions_and_data_functions():
+    conflict_cases = [
+        ("保存客户配置", "保存后刷新列表。", "EQ"),
+        ("查看客户详情", "查看客户基础信息。", "EI"),
+        ("导出客户清单", "导出客户清单文件。", "EQ"),
+        ("客户档案", "本系统维护的客户基础信息。", "EI"),
+        ("统一用户中心账号", "统一用户中心维护的人员账号，本系统只引用。", "EQ"),
+    ]
+    for name, desc, ai_type in conflict_cases:
+        assert STRICT_FPA_PROFILE.has_obvious_conflict(name, desc, ai_type), (name, ai_type)
+
+    non_conflict_cases = [
+        ("保存客户配置", "保存后刷新列表。", "EI"),
+        ("查看客户详情", "查看客户基础信息。", "EQ"),
+        ("导出客户清单", "导出客户清单文件。", "EO"),
+        ("客户档案", "本系统维护的客户基础信息。", "ILF"),
+        ("统一用户中心账号", "统一用户中心维护的人员账号，本系统只引用。", "EIF"),
+    ]
+    for name, desc, ai_type in non_conflict_cases:
+        assert not STRICT_FPA_PROFILE.has_obvious_conflict(name, desc, ai_type), (name, ai_type)

@@ -600,8 +600,44 @@ class StrictFpaProfile(CustomRulesProfile):
             return True
         if any(k in text for k in EXTERNAL_SERVICE_CALL_HINTS):
             return ai_type == "EIF"
+        expected_type = self._conflict_matrix_expected_type(name, desc)
+        if expected_type is None:
+            return False
+        return self._type_conflicts(expected_type, ai_type)
+
+    def _conflict_matrix_expected_type(self, name: str, desc: str) -> str | None:
+        text = f"{name} {desc}"
         name_action = self._explicit_transaction_type(name)
-        return name_action is not None and name_action[0] != ai_type
+        if name_action:
+            return name_action[0]
+        if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
+            return "EIF"
+        if self._is_external_data_group(text) and self._looks_like_external_data_function_name(name):
+            return "EIF"
+        if self._matching_internal_data_rule(text) is not None:
+            return "ILF"
+        if self._looks_like_data_group(name, desc):
+            return "ILF"
+        desc_action = self._explicit_transaction_type(desc)
+        if desc_action:
+            if desc_action[0] != "EI" or any(k in desc for k in STRICT_EI_BOUNDARY_ACTIONS):
+                return desc_action[0]
+        return None
+
+    def _type_conflicts(self, expected_type: str, ai_type: str) -> bool:
+        ai_type = ai_type.upper()
+        if ai_type not in {"EI", "EQ", "EO", "ILF", "EIF"}:
+            return True
+        if expected_type == ai_type:
+            return False
+        conflict_matrix = {
+            "EI": {"EQ", "EO", "ILF", "EIF"},
+            "EQ": {"EI", "EO", "ILF", "EIF"},
+            "EO": {"EI", "EQ", "ILF", "EIF"},
+            "ILF": {"EI", "EQ", "EO", "EIF"},
+            "EIF": {"EI", "EQ", "EO", "ILF"},
+        }
+        return ai_type in conflict_matrix.get(expected_type, set())
 
     def ai_data_group_review_warning(self, name: str, desc: str, ai_type: str) -> str:
         ai_type = ai_type.upper()
@@ -707,6 +743,11 @@ class StrictFpaProfile(CustomRulesProfile):
 
     def _looks_like_data_group(self, name: str, desc: str = "") -> bool:
         text = f"{name} {desc}"
+        if (
+            any(k in text for k in EXTERNAL_MAINTAINED_HINTS)
+            or re.search(r"(?:外部应用|外部系统|第三方系统|外部|第三方)[^，。；、\s]{0,16}(?:维护|提供)", text)
+        ) and not self._has_internal_data_function(text):
+            return False
         if any(k in name for k in ["信息", "数据组", "主数据", "名单", "关系", "配置", "记录", "模板"]):
             return not any(k in name for k in ["查询", "查看", "详情", "新增", "添加", "修改", "编辑", "删除", "导入", "导出"])
         return "维护" in text and not any(k in name for k in ["查询", "查看", "新增", "添加", "修改", "编辑", "删除"])
