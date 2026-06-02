@@ -369,6 +369,15 @@ def _normalize_ai_fpa_name_prefix(name: str, group: dict[str, object]) -> str:
             if suffix.startswith(f"{client_prefix}-"):
                 suffix = suffix[len(client_prefix) + 1:].strip()
                 break
+    if l1 and suffix:
+        path_candidate = suffix
+        bracket_match = re.match(r"^【[^】]+】(?P<rest>.+)$", path_candidate)
+        if bracket_match:
+            path_candidate = bracket_match.group("rest").strip()
+        if path_candidate.startswith(f"{l1}-"):
+            parts = [part.strip() for part in path_candidate.split("-") if part.strip()]
+            if len(parts) >= 4:
+                suffix = "-".join(parts[3:]).strip()
 
     return f"{prefix}-{suffix}" if suffix else prefix
 

@@ -249,6 +249,16 @@ def test_ai_name_prefix_is_forced_from_source_module_path():
                 "type": "EQ",
                 "explanation": "查询自定义页面。",
             },
+            {
+                "name": "【地市后台】垂直行业营销-装修管理-首页装修-行业首页装修数据",
+                "type": "ILF",
+                "explanation": "行业首页装修数据。",
+            },
+            {
+                "name": "地市后台-垂直行业营销-装修管理-自定义装修-自定义页面信息",
+                "type": "ILF",
+                "explanation": "自定义页面信息。",
+            },
         ],
     )
 
@@ -256,8 +266,10 @@ def test_ai_name_prefix_is_forced_from_source_module_path():
         "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-查询垂直行业",
         "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组",
         "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-自定义页面列表查询",
+        "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-行业首页装修数据",
+        "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-自定义页面信息",
     ]
-    assert len([w for w in warnings if "AI 行名称前缀已按源功能清单规范化" in w]) == 3
+    assert len([w for w in warnings if "AI 行名称前缀已按源功能清单规范化" in w]) == 5
     assert all(
         any(hit["rule_id"] == "postprocess.ai_name_prefix" for hit in row["_规则命中详情"])
         for row in rows
