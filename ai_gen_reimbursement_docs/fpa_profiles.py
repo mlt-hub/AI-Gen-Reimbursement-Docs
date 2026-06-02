@@ -11,6 +11,7 @@ from string import Template
 
 
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
+VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_TRANSACTION_FPA_TYPES = {"EI", "EQ", "EO"}
 VALID_RULE_MERGE_MODES = {"append", "replace"}
 
@@ -98,6 +99,18 @@ class KeywordTypeRule:
 
 
 @dataclass(frozen=True)
+class TypeMappingRule:
+    """按关键词配置任意 FPA 类型映射规则。"""
+
+    fpa_type: str
+    keywords: tuple[str, ...]
+    reason: str = ""
+
+    def matches(self, text: str) -> bool:
+        return any(keyword in text for keyword in self.keywords)
+
+
+@dataclass(frozen=True)
 class InternalDataGroupRule:
     """本系统维护的 ILF 数据组识别规则。"""
 
@@ -129,6 +142,8 @@ class FpaRuleSetConfig:
     external_data_rules_merge: str = "append"
     keyword_rules: tuple[KeywordTypeRule, ...] = field(default_factory=tuple)
     keyword_rules_merge: str = "append"
+    type_mapping_rules: tuple[TypeMappingRule, ...] = field(default_factory=tuple)
+    type_mapping_rules_merge: str = "append"
     internal_data_rules: tuple[InternalDataGroupRule, ...] = field(default_factory=tuple)
     internal_data_rules_merge: str = "append"
     config_warnings: tuple[str, ...] = field(default_factory=tuple)
@@ -246,6 +261,18 @@ def _keyword_rule_from_dict(item: dict[str, object]) -> KeywordTypeRule | None:
     return KeywordTypeRule(fpa_type, keyword_values, reason)
 
 
+def _type_mapping_rule_from_dict(item: dict[str, object]) -> TypeMappingRule | None:
+    fpa_type = str(item.get("type") or "").strip().upper()
+    keywords = item.get("keywords", [])
+    reason = str(item.get("reason") or "").strip()
+    if not isinstance(keywords, list) or fpa_type not in VALID_FPA_TYPES:
+        return None
+    keyword_values = tuple(str(keyword).strip() for keyword in keywords if str(keyword).strip())
+    if not keyword_values:
+        return None
+    return TypeMappingRule(fpa_type, keyword_values, reason)
+
+
 def _internal_data_rule_from_dict(item: dict[str, object]) -> InternalDataGroupRule | None:
     keywords = item.get("keywords", [])
     data_name = str(item.get("data_name") or "").strip()
@@ -305,6 +332,13 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
             rule = _keyword_rule_from_dict(item)
             if rule is not None:
                 keyword_rules.append(rule)
+    type_mapping_rules: list[TypeMappingRule] = []
+    type_mapping_merge, raw_type_mapping_rules = _rule_section_from_dict(data, "type_mapping_rules")
+    for item in raw_type_mapping_rules:
+        if isinstance(item, dict):
+            rule = _type_mapping_rule_from_dict(item)
+            if rule is not None:
+                type_mapping_rules.append(rule)
     internal_rules: list[InternalDataGroupRule] = []
     internal_merge, raw_internal_rules = _rule_section_from_dict(data, "internal_data_rules")
     for item in raw_internal_rules:
@@ -319,6 +353,8 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
         external_data_rules_merge=external_merge,
         keyword_rules=tuple(keyword_rules),
         keyword_rules_merge=keyword_merge,
+        type_mapping_rules=tuple(type_mapping_rules),
+        type_mapping_rules_merge=type_mapping_merge,
         internal_data_rules=tuple(internal_rules),
         internal_data_rules_merge=internal_merge,
         config_warnings=_external_data_rule_config_warnings(name, tuple(external_rules)),
@@ -341,6 +377,12 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
         external_data_rules_merge=child.external_data_rules_merge,
         keyword_rules=_merge_rule_section(parent.keyword_rules, child.keyword_rules, child.keyword_rules_merge),
         keyword_rules_merge=child.keyword_rules_merge,
+        type_mapping_rules=_merge_rule_section(
+            parent.type_mapping_rules,
+            child.type_mapping_rules,
+            child.type_mapping_rules_merge,
+        ),
+        type_mapping_rules_merge=child.type_mapping_rules_merge,
         internal_data_rules=_merge_rule_section(
             parent.internal_data_rules,
             child.internal_data_rules,
@@ -549,6 +591,9 @@ class StrictFpaProfile(CustomRulesProfile):
 
     def infer_type(self, name: str, desc: str = "") -> tuple[str, str]:
         text = f"{name} {desc}"
+        type_mapping = self._configured_type_mapping(text)
+        if type_mapping:
+            return type_mapping
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
         name_action = self._explicit_transaction_type(name)
@@ -607,6 +652,9 @@ class StrictFpaProfile(CustomRulesProfile):
 
     def _conflict_matrix_expected_type(self, name: str, desc: str) -> str | None:
         text = f"{name} {desc}"
+        type_mapping = self._configured_type_mapping(text)
+        if type_mapping:
+            return type_mapping[0]
         name_action = self._explicit_transaction_type(name)
         if name_action:
             return name_action[0]
@@ -865,6 +913,16 @@ class StrictFpaProfile(CustomRulesProfile):
     def _configured_keyword_rules(self) -> tuple[KeywordTypeRule, ...]:
         current_rule_set = current_fpa_rule_set_config()
         return current_rule_set.keyword_rules if current_rule_set is not None else ()
+
+    def _configured_type_mapping_rules(self) -> tuple[TypeMappingRule, ...]:
+        current_rule_set = current_fpa_rule_set_config()
+        return current_rule_set.type_mapping_rules if current_rule_set is not None else ()
+
+    def _configured_type_mapping(self, text: str) -> tuple[str, str] | None:
+        for rule in self._configured_type_mapping_rules():
+            if rule.matches(text):
+                return rule.fpa_type, rule.reason or f"命中 rule_set 类型映射规则，按 {rule.fpa_type}。"
+        return None
 
     def _configured_internal_data_rules(self) -> tuple[InternalDataGroupRule, ...]:
         current_rule_set = current_fpa_rule_set_config()

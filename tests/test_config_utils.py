@@ -381,6 +381,25 @@ class TestLoadFpaExecutionOptions:
             with pytest.raises(FpaConfigError, match=r"keyword_rules\.items\[0\]\.type 必须是 EI / EQ / EO"):
                 load_fpa_rule_sets_config()
 
+    def test_type_mapping_rules_shape_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace(
+            """    internal_data_rules:
+      merge: append""",
+            """    type_mapping_rules:
+      merge: append
+      items:
+        - type: BAD
+          keywords: ["供应商风险快照"]
+    internal_data_rules:
+      merge: append""",
+        )
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"type_mapping_rules\.items\[0\]\.type 必须是 EI / EQ / EO / ILF / EIF"):
+                load_fpa_rule_sets_config()
+
     def test_internal_data_rules_shape_is_rejected(self, tmp_path):
         _write_fpa_config(tmp_path)
         (tmp_path / "fpa_config.yaml").write_text(

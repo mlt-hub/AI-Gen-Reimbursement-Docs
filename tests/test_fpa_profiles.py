@@ -58,6 +58,15 @@ rule_sets:
         - type: EO
           keywords: ["打印客户清单"]
           reason: "客户清单打印属于格式化输出，按 EO。"
+    type_mapping_rules:
+      merge: append
+      items:
+        - type: ILF
+          keywords: ["本地报表快照"]
+          reason: "本系统持久化报表快照，按 ILF。"
+        - type: EIF
+          keywords: ["第三方评分标签"]
+          reason: "第三方评分标签由外部维护，按 EIF。"
     internal_data_rules:
       merge: append
       items:
@@ -77,6 +86,11 @@ rule_sets:
       items:
         - type: EQ
           keywords: ["浏览客户清单"]
+    type_mapping_rules:
+      merge: replace
+      items:
+        - type: EIF
+          keywords: ["标签平台客户标签"]
     internal_data_rules:
       merge: replace
       items:
@@ -134,6 +148,7 @@ def test_rule_set_extends_are_loaded(tmp_path):
     assert config.rule_set == "telecom_rules"
     assert config.rule_set_config.extends == "strict_fpa_default"
     assert config.rule_set_config.keyword_rules[0].fpa_type == "EO"
+    assert config.rule_set_config.type_mapping_rules[0].fpa_type == "ILF"
     assert config.rule_set_config.internal_data_rules[0].data_name == "认证授权关系"
     assert config.rule_set_config.external_data_rules[0].data_name == "行业平台客户档案"
 
@@ -161,6 +176,7 @@ def test_rule_set_replace_discards_parent_rule_sections(tmp_path):
         config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_replace_rules")
 
     assert [rule.keywords for rule in config.rule_set_config.keyword_rules] == [("浏览客户清单",)]
+    assert [rule.keywords for rule in config.rule_set_config.type_mapping_rules] == [("标签平台客户标签",)]
     assert [rule.data_name for rule in config.rule_set_config.internal_data_rules] == ["客户标签关系"]
     assert [rule.data_name for rule in config.rule_set_config.external_data_rules] == ["标签平台客户标签"]
 
@@ -180,6 +196,35 @@ def test_rule_set_keyword_rules_affect_strict_profile(tmp_path):
 
     assert fpa_type == "EO"
     assert reason == "客户清单打印属于格式化输出，按 EO。"
+
+
+def test_rule_set_type_mapping_rules_affect_strict_profile(tmp_path):
+    _write_fpa_config(tmp_path)
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_rules")
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            fpa_type, reason = STRICT_FPA_PROFILE.infer_type(
+                "本地报表快照",
+                "查询条件生成后持久化保存本地报表快照。",
+            )
+            has_conflict = STRICT_FPA_PROFILE.has_obvious_conflict(
+                "本地报表快照",
+                "查询条件生成后持久化保存本地报表快照。",
+                "EO",
+            )
+            desc_only_type, desc_only_reason = STRICT_FPA_PROFILE.infer_type(
+                "评分标签",
+                "读取第三方评分标签并展示。",
+            )
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
+    assert fpa_type == "ILF"
+    assert reason == "本系统持久化报表快照，按 ILF。"
+    assert has_conflict
+    assert desc_only_type == "EIF"
+    assert desc_only_reason == "第三方评分标签由外部维护，按 EIF。"
 
 
 def test_rule_set_internal_data_rules_affect_strict_profile(tmp_path):

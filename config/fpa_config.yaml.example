@@ -92,6 +92,12 @@ rule_sets:
         - type: EO
           keywords: ["打印清单", "打印报表"]
           reason: "打印清单或报表属于格式化输出，按 EO。"
+    type_mapping_rules:
+      merge: append
+      items:
+        - type: ILF
+          keywords: ["本地报表快照"]
+          reason: "本系统持久化报表快照，按 ILF。"
     internal_data_rules:
       merge: append
       items:
