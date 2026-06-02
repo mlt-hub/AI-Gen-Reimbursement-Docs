@@ -135,6 +135,81 @@ def test_strict_fpa_erp_document_reference_uses_external_rule_table():
     assert types["查看ERP订单信息"] == "EQ"
 
 
+def test_strict_fpa_detects_multiple_external_data_groups_from_separate_processes():
+    rows = [
+        _row(
+            "地市后台",
+            "协同管理",
+            "业务关联",
+            "跨系统业务关联",
+            "维护跨系统业务关联关系。",
+            "选择CRM客户",
+            "从 CRM 系统维护的客户档案中选择客户并保存到本系统关联关系。",
+        ),
+        _row(
+            "地市后台",
+            "协同管理",
+            "业务关联",
+            "跨系统业务关联",
+            "维护跨系统业务关联关系。",
+            "关联ERP订单",
+            "从 ERP 系统维护的采购订单中选择订单并保存到本系统关联关系。",
+        ),
+        _row(
+            "地市后台",
+            "协同管理",
+            "业务关联",
+            "跨系统业务关联",
+            "维护跨系统业务关联关系。",
+            "选择归属组织",
+            "从主数据平台维护的组织主数据中选择组织并保存到本系统关联关系。",
+        ),
+    ]
+
+    result = _build_fpa_rule_rows(rows, _meta(), profile=STRICT_FPA_PROFILE)
+    types = _types_by_name(result)
+
+    assert types["CRM客户档案"] == "EIF"
+    assert types["ERP业务单据"] == "EIF"
+    assert types["组织主数据"] == "EIF"
+    assert types["选择CRM客户"] == "EI"
+    assert types["关联ERP订单"] == "EI"
+    assert types["选择归属组织"] == "EI"
+
+
+def test_strict_fpa_keeps_internal_relation_data_with_external_references():
+    rows = [
+        _row(
+            "地市后台",
+            "营销活动",
+            "活动配置",
+            "客户订单关联",
+            "系统引用 CRM 系统维护的客户档案和 ERP 系统维护的采购订单，本系统保存客户订单匹配关系、活动关联状态和生效时间。",
+            "新增客户订单关联",
+            "选择 CRM 客户档案和 ERP 采购订单，保存客户订单匹配关系。",
+        ),
+        _row(
+            "地市后台",
+            "营销活动",
+            "活动配置",
+            "客户订单关联",
+            "系统引用 CRM 系统维护的客户档案和 ERP 系统维护的采购订单，本系统保存客户订单匹配关系、活动关联状态和生效时间。",
+            "查看客户订单关联",
+            "查看已保存的客户订单匹配关系及外部客户、订单摘要。",
+            "查询",
+        ),
+    ]
+
+    result = _build_fpa_rule_rows(rows, _meta(), profile=STRICT_FPA_PROFILE)
+    types = _types_by_name(result)
+
+    assert types["CRM客户档案"] == "EIF"
+    assert types["ERP业务单据"] == "EIF"
+    assert types["客户订单关联关系"] == "ILF"
+    assert types["新增客户订单关联"] == "EI"
+    assert types["查看客户订单关联"] == "EQ"
+
+
 def test_strict_fpa_keeps_valid_ai_ei_when_description_mentions_query_list():
     group = {
         "client_type": "地市后台",

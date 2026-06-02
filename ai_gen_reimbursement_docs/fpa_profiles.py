@@ -670,8 +670,11 @@ class StrictFpaProfile(CustomRulesProfile):
             return False
         has_external_source = any(rule.matches(text) for rule in self._external_data_group_rules())
         has_maintenance_hint = any(k in text for k in EXTERNAL_MAINTAINED_HINTS)
+        has_generic_external_maintenance = bool(
+            re.search(r"(?:外部应用|外部系统|第三方系统|外部|第三方)[^，。；、\s]{0,16}(?:维护|提供)", text)
+        )
         has_data_noun = any(k in text for k in EXTERNAL_DATA_GROUP_NOUNS)
-        return has_data_noun and (has_external_source or has_maintenance_hint)
+        return has_data_noun and (has_external_source or has_maintenance_hint or has_generic_external_maintenance)
 
     def _looks_like_data_group(self, name: str, desc: str = "") -> bool:
         text = f"{name} {desc}"
@@ -753,9 +756,7 @@ class StrictFpaProfile(CustomRulesProfile):
             if rule.matches(text):
                 names.append(rule.data_name)
         if not names:
-            extracted = self._extract_external_data_name(text)
-            if extracted:
-                names.append(extracted)
+            names.extend(self._extract_external_data_names(text))
         if not names:
             name = fallback or "外部维护数据组"
             names.append(name if "数据组" in name else f"{name}数据组")
@@ -797,18 +798,28 @@ class StrictFpaProfile(CustomRulesProfile):
         return None
 
     def _extract_external_data_name(self, text: str) -> str:
+        names = self._extract_external_data_names(text)
+        return names[0] if names else ""
+
+    def _extract_external_data_names(self, text: str) -> list[str]:
         patterns = [
+            r"(?:外部应用|外部系统|第三方系统|外部|第三方)[^，。；、\s]{0,16}(?:维护|提供)的?([^，。；、\s]{2,24}(?:数据组|主数据|基础数据|档案|信息|记录|账号|账户|单据))",
             r"(?:引用|读取|使用|选择|同步)([^，。；、\s]{2,24}(?:数据组|主数据|基础数据|档案|信息|记录|账号|账户|单据))",
             r"([^，。；、\s]{2,24}(?:数据组|主数据|基础数据|档案|信息|记录|账号|账户|单据))(?:由|为)?(?:外部应用|外部系统|第三方系统|外部|第三方)[^，。；、\s]{0,12}(?:维护|提供)",
             r"(?:本系统不维护)([^，。；、\s]{2,24}(?:数据组|主数据|基础数据|档案|信息|记录|账号|账户|单据))",
         ]
+        names: list[str] = []
+        seen: set[str] = set()
         for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                return self._clean_external_data_name(match.group(1))
-        return ""
+            for match in re.finditer(pattern, text):
+                name = self._clean_external_data_name(match.group(1))
+                if name and name not in seen:
+                    seen.add(name)
+                    names.append(name)
+        return names
 
     def _clean_external_data_name(self, name: str) -> str:
+        name = re.sub(r"^(?:外部应用|外部系统|第三方系统|外部|第三方)[^，。；、\s]{0,16}(?:维护|提供)的?", "", name)
         for prefix in ["外部应用维护的", "外部系统维护的", "第三方系统维护的", "外部维护的", "本系统不维护的"]:
             if name.startswith(prefix):
                 name = name[len(prefix):]
@@ -825,7 +836,19 @@ class StrictFpaProfile(CustomRulesProfile):
             text = f"{p.get('name', '')} {p.get('desc', '')}"
             if "管理员" in text:
                 names.append(f"{base}管理员关系")
+            if any(k in text for k in ["关联关系", "匹配关系", "映射关系", "绑定关系"]):
+                names.append(self._relation_data_name(l3))
         return names
+
+    def _relation_data_name(self, l3: str) -> str:
+        name = l3.replace("管理", "").replace("维护", "").strip() or l3
+        if not name:
+            return "业务关联关系"
+        if name.endswith("关系"):
+            return name
+        if name.endswith("关联"):
+            return f"{name}关系"
+        return f"{name}关联关系"
 
     def _dedupe_data_functions(
         self,

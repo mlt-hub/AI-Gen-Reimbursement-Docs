@@ -41,6 +41,18 @@ def test_strict_fpa_external_service_calls_are_not_data_groups(text):
     assert not STRICT_FPA_PROFILE._is_external_data_group(text)
 
 
+def test_strict_fpa_extracts_multiple_generic_external_data_names():
+    text = (
+        "系统引用外部征信平台维护的企业信用记录，"
+        "并引用外部合同平台维护的合同档案，本系统只保存业务关联关系。"
+    )
+
+    assert STRICT_FPA_PROFILE._external_data_names(text, "外部引用") == [
+        "企业信用记录",
+        "合同档案",
+    ]
+
+
 def test_strict_fpa_external_data_rules_can_be_extended_from_config(tmp_path):
     yaml_file = tmp_path / "fpa_config.yaml"
     yaml_file.write_text(
