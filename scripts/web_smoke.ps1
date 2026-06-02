@@ -62,7 +62,13 @@ function Get-Dom {
         $Url
     )
 
-    $output = & $BrowserPath @args 2>$null | Out-String
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & $BrowserPath @args 2>$null | Out-String
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ([string]::IsNullOrWhiteSpace($output)) {
         throw "无法读取页面 DOM: $Url"
     }

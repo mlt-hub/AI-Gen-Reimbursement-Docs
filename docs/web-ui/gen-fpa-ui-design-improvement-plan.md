@@ -592,3 +592,17 @@ scripts/check_web_ui.ps1
 
 - `cd web_app && npm run build`
 - 使用 Playwright 检查 375px 首页：本机路径说明和输出目录说明可见，页面无横向滚动。
+
+### 2026-06-02：第八批总体验收与 smoke 稳定性修复
+
+已完成：
+
+- 修复 `scripts/web_smoke.ps1` 在 Edge 输出无关 stderr 时被 PowerShell `NativeCommandError` 打断的问题。
+- 保持 smoke 判断依据为 DOM 内容和页面断言，不把浏览器诊断噪声当作页面失败。
+- 完成 Web UI 检查脚本总体验收。
+- 按响应式矩阵检查首页和 FPA 预览页的 320px、375px、414px、768px、1440px 宽度。
+
+验证：
+
+- `powershell -ExecutionPolicy Bypass -File scripts/check_web_ui.ps1`
+- Playwright 矩阵检查 `/` 与 `/preview/fpa`：上述五个宽度下均无横向滚动；首页 `生成任务` 与 `预览 FPA 功能点` 可见；FPA 预览页 `FPA 预览`、`生成基础数据` 和友好错误提示可见。
