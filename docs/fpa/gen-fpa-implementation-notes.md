@@ -459,7 +459,8 @@ ${payload_json}
 fpa_config.yaml 不存在 -> 报错。
 profile 未配置模板 -> 报错。
 配置文件读取失败 -> 报错。
-未知占位符 -> 原样保留，不中断任务。
+未知占位符 -> 报错，错误信息指向 prompt_sets.<name>.user。
+缺少 ${core_rules} / ${judgement_rules} / ${payload_json} 任一核心占位符 -> 报错。
 ```
 
 用户提示词模板只影响 AI 规划阶段，不替代代码后处理：
@@ -2452,11 +2453,12 @@ rule_set external_data_rules 会参与 strict_fpa EIF 数据组识别。
 预览接口返回 rule_set。
 ```
 
-本轮未实现，继续留在暂缓任务池：
+已完成：
 
 ```text
-功能过程覆盖检查规则配置化。
-预览页审核面板。
+功能过程覆盖检查规则配置化：coverage_rules.require_process_coverage / require_data_function。
+预览页审核面板基础版，以及正式 FPA工作量评估-check.xlsx 五张审核 Sheet。
+用户提示词模板占位符校验：只允许并要求 ${core_rules} / ${judgement_rules} / ${payload_json}。
 ```
 
 ### 推荐实施顺序

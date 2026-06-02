@@ -254,7 +254,7 @@ def _render_configured_fpa_prompt(
     from ai_gen_reimbursement_docs.config_utils import load_fpa_user_prompt_template
 
     template = load_fpa_user_prompt_template(profile_name)
-    return Template(template).safe_substitute({
+    return Template(template).substitute({
         "core_rules": core_rules,
         "judgement_rules": _numbered_judgement_rules(judgement_rules),
         "payload_json": json.dumps(_prompt_payload(group, domain_context), ensure_ascii=False, indent=2),

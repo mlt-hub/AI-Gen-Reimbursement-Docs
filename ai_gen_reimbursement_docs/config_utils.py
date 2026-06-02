@@ -8,6 +8,7 @@ import shutil
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from string import Template
 
 DEFAULT_CFP_FORMULA = (
     'IF(OR(L{row}="新增",L{row}="修改"),1,'
@@ -400,6 +401,7 @@ VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_FPA_TRANSACTION_TYPES = {"EI", "EQ", "EO"}
 VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
+FPA_USER_PROMPT_PLACEHOLDERS = frozenset({"core_rules", "judgement_rules", "payload_json"})
 
 
 def _validate_domain_context_string_list(value: object, key_path: str) -> None:
@@ -636,6 +638,28 @@ def _validate_coverage_rules(value: object, key_path: str) -> None:
             )
 
 
+def _validate_fpa_user_prompt_template(template_text: str, key_path: str) -> None:
+    template = Template(template_text)
+    if not template.is_valid():
+        raise FpaConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 包含非法占位符，"
+            "请使用 ${core_rules} / ${judgement_rules} / ${payload_json}"
+        )
+    identifiers = set(template.get_identifiers())
+    unknown = sorted(identifiers - FPA_USER_PROMPT_PLACEHOLDERS)
+    if unknown:
+        raise FpaConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 包含未知占位符: "
+            f"{', '.join('${' + name + '}' for name in unknown)}"
+        )
+    missing = sorted(FPA_USER_PROMPT_PLACEHOLDERS - identifiers)
+    if missing:
+        raise FpaConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须包含占位符: "
+            f"{', '.join('${' + name + '}' for name in missing)}"
+        )
+
+
 def validate_fpa_config(cfg: dict[str, object]) -> None:
     """Validate fpa_config.yaml structure and cross references."""
     if not isinstance(cfg, dict) or not cfg:
@@ -659,7 +683,8 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         prompt_path = _fpa_key_path("prompt_sets", prompt_name)
         prompt_entry = _require_mapping(prompt_set, prompt_path)
         _require_non_empty_string(prompt_entry.get("system"), f"{prompt_path}.system")
-        _require_non_empty_string(prompt_entry.get("user"), f"{prompt_path}.user")
+        user_template = _require_non_empty_string(prompt_entry.get("user"), f"{prompt_path}.user")
+        _validate_fpa_user_prompt_template(user_template, f"{prompt_path}.user")
 
     for rule_set_name, rule_set in rule_sets.items():
         rule_set_path = _fpa_key_path("rule_sets", rule_set_name)

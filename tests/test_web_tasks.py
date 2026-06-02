@@ -109,10 +109,10 @@ profiles:
 prompt_sets:
   custom_rules:
     system: custom system secret
-    user: custom user secret
+    user: custom user secret ${core_rules} ${judgement_rules} ${payload_json}
   strict_fpa:
     system: strict system secret
-    user: strict user secret
+    user: strict user secret ${core_rules} ${judgement_rules} ${payload_json}
 rule_sets:
   custom_rules_default: {}
   strict_fpa_default: {}

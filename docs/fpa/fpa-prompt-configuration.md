@@ -99,15 +99,16 @@ rule_sets：可新增任意规则集，可用 extends 继承其他规则集。
 | `core_rules` | 当前 FPA profile 的核心规则文本 |
 | `judgement_rules` | 从 FPA 模板中读取的计算依据归类判定原则 |
 | `payload_json` | 当前三级模块、功能过程和领域上下文的结构化 JSON |
-| `domain_context` | 子系统、资产标识、功能用户等上下文 |
 
-建议用户提示词至少保留：
+用户提示词必须保留全部三个占位符：
 
 ```text
 ${core_rules}
 ${judgement_rules}
 ${payload_json}
 ```
+
+除上述三个变量外，不支持其他占位符。`domain_context` 会放在 `${payload_json}` 的 JSON 内容中，不是独立模板变量。未知占位符、非法占位符或缺少任一核心占位符都会在读取 `fpa_config.yaml` 时直接报错。
 
 ## 缺失配置处理
 
@@ -119,6 +120,8 @@ ${payload_json}
 未找到 FPA 配置文件：配置目录/fpa_config.yaml
 未找到 FPA 系统提示词配置：配置目录/fpa_config.yaml 中的 prompt_sets.custom_rules.system
 未找到 FPA 用户提示词配置：配置目录/fpa_config.yaml 中的 prompt_sets.custom_rules.user
+FPA 配置无效：配置目录/fpa_config.yaml 中的 prompt_sets.strict_fpa.user 包含未知占位符: ${unknown_placeholder}
+FPA 配置无效：配置目录/fpa_config.yaml 中的 prompt_sets.strict_fpa.user 必须包含占位符: ${judgement_rules}
 ```
 
 这样可以保证用户看到的 Prompt 来源与实际调用一致。

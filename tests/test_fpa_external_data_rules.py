@@ -72,10 +72,10 @@ profiles:
 prompt_sets:
   custom_rules:
     system: "CUSTOM SYSTEM"
-    user: "${core_rules}"
+    user: "${core_rules} ${judgement_rules} ${payload_json}"
   strict_fpa:
     system: "STRICT SYSTEM"
-    user: "${core_rules}"
+    user: "${core_rules} ${judgement_rules} ${payload_json}"
 rule_sets:
   custom_rules_default: {}
   strict_fpa_default: {}
@@ -121,10 +121,10 @@ profiles:
 prompt_sets:
   custom_rules:
     system: "CUSTOM SYSTEM"
-    user: "${core_rules}"
+    user: "${core_rules} ${judgement_rules} ${payload_json}"
   strict_fpa:
     system: "STRICT SYSTEM"
-    user: "${core_rules}"
+    user: "${core_rules} ${judgement_rules} ${payload_json}"
 rule_sets:
   custom_rules_default: {}
   strict_fpa_default: {}

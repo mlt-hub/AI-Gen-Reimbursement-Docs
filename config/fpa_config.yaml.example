@@ -19,6 +19,9 @@ profiles:
     user_prompt: strict_fpa
 
 prompt_sets:
+  # user 模板只支持并且必须包含这三个占位符：
+  # ${core_rules}、${judgement_rules}、${payload_json}
+  # domain_context 已包含在 ${payload_json} 中，不是独立占位符。
   custom_rules:
     system: |-
       你是一个严谨的 FPA 功能点评估助手。你的任务是根据用户提示词中给定的 profile 口径、计算依据归类判定原则和三级模块业务输入，规划 FPA 功能点评估行。

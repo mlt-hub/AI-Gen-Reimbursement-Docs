@@ -45,8 +45,6 @@ prompt_sets:
       ${judgement_rules}
       PAYLOAD:
       ${payload_json}
-      UNKNOWN:
-      ${unknown_placeholder}
 rule_sets:
   custom_rules_default: {}
   strict_fpa_default: {}
@@ -346,7 +344,7 @@ def test_fpa_user_prompt_template_can_be_loaded_from_separate_config(tmp_path):
     assert STRICT_FPA_PROFILE.core_rules in prompt
     assert "1) 规则一" in prompt
     assert '"l3": "客户管理"' in prompt
-    assert "${unknown_placeholder}" in prompt
+    assert "${" not in prompt
 
 
 def test_strict_profile_normalizes_development_suffixes():

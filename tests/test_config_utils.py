@@ -77,10 +77,10 @@ profiles:
 prompt_sets:
   custom_rules:
     system: CUSTOM SYSTEM
-    user: CUSTOM ${core_rules}
+    user: CUSTOM ${core_rules} ${judgement_rules} ${payload_json}
   strict_fpa:
     system: STRICT SYSTEM
-    user: STRICT ${core_rules}
+    user: STRICT ${core_rules} ${judgement_rules} ${payload_json}
 rule_sets:
   custom_rules_default: {}
   strict_fpa_default: {}
@@ -354,6 +354,45 @@ class TestLoadFpaExecutionOptions:
             with pytest.raises(FpaConfigError, match=r"prompt_sets\.custom_rules\.system 必须是非空字符串"):
                 load_fpa_profile()
 
+    def test_user_prompt_unknown_placeholder_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+                "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${unknown_placeholder}",
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"prompt_sets\.strict_fpa\.user 包含未知占位符: \$\{unknown_placeholder\}"):
+                load_fpa_profile()
+
+    def test_user_prompt_missing_required_placeholder_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+                "STRICT ${core_rules} ${payload_json}",
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"prompt_sets\.strict_fpa\.user 必须包含占位符: \$\{judgement_rules\}"):
+                load_fpa_profile()
+
+    def test_user_prompt_invalid_placeholder_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        (tmp_path / "fpa_config.yaml").write_text(
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
+                "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+                "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${",
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"prompt_sets\.strict_fpa\.user 包含非法占位符"):
+                load_fpa_profile()
+
     def test_rule_set_extends_missing_parent_is_rejected(self, tmp_path):
         _write_fpa_config(tmp_path)
         (tmp_path / "fpa_config.yaml").write_text(
@@ -565,14 +604,14 @@ class TestLoadFpaUserPromptTemplate:
     def test_configured_template(self, tmp_path):
         _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            assert load_fpa_user_prompt_template("strict_fpa") == "STRICT ${core_rules}"
+            assert load_fpa_user_prompt_template("strict_fpa") == "STRICT ${core_rules} ${judgement_rules} ${payload_json}"
 
     def test_configured_template_exposes_safe_source_label(self, tmp_path):
         _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             result = load_fpa_user_prompt_config("strict_fpa")
 
-        assert result.text == "STRICT ${core_rules}"
+        assert result.text == "STRICT ${core_rules} ${judgement_rules} ${payload_json}"
         assert result.source_label == "用户配置（配置目录/fpa_config.yaml: prompt_sets.strict_fpa.user）"
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):

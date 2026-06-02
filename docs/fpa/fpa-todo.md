@@ -76,7 +76,7 @@ profiles.<name>：
 prompt_sets.<name>：
   system 必须是非空字符串。
   user 必须是非空字符串。
-  user 必须是非空字符串。
+  user 只允许并且必须包含 ${core_rules} / ${judgement_rules} / ${payload_json}。
 
 rule_sets.<name>：
   允许任意新增名称。
