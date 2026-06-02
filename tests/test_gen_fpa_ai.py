@@ -353,6 +353,40 @@ def test_ai_first_keeps_valid_ai_type_without_keyword_override():
     assert "普通外部服务调用按触发事务处理，不能直接判 EIF" in hit["rule_desc"]
 
 
+def test_ai_first_does_not_warn_type_conflict_when_rule_type_matches_ai_type():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "垂直行业营销",
+            "二级模块": "垂直行业管理",
+            "三级模块": "垂直行业管理",
+            "三级模块整体功能描述": "维护垂直行业基础信息和管理员。",
+            "功能过程": "添加垂直行业",
+            "功能过程类型": "新增",
+            "功能过程描述": "点击添加按钮，在弹窗输入垂直行业名称并保存。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "添加垂直行业",
+                "type": "EI",
+                "explanation": "点击添加按钮，在弹窗输入垂直行业名称并保存。",
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "EI"
+    assert not any("AI type=EI 与规则存在冲突" in warning for warning in warnings)
+    assert not any(hit["rule_id"] == "postprocess.ai_first_type_conflict" for hit in rows[0]["_规则命中详情"])
+
+
 def test_strict_profile_keeps_real_external_data_group_eif():
     group = _group_rows_by_l3([
         {

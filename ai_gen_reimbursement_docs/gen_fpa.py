@@ -472,7 +472,7 @@ def _normalize_ai_fpa_rows_for_l3(
                 "adopted": "是",
                 "warnings": row_warnings[-1:] if ai_type else [],
             })
-        elif profile.has_obvious_conflict(name, explanation, ai_type):
+        elif fallback_type != ai_type and profile.has_obvious_conflict(name, explanation, ai_type):
             rule_basis = fallback_reason or "规则认为 AI type 存在业务冲突。"
             conflict_detail = f"规则建议 type={fallback_type}；规则依据：{rule_basis}"
             if strategy in {"ai_first", "ai_only"}:

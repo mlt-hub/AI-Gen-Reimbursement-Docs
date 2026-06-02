@@ -1806,6 +1806,7 @@ strict_fpa 以 AI 规划为主。
 关键词规则用于 AI 缺失、非法 type 和确定性冲突兜底。
 关键词规则不是与 AI 并列的第二套主判断器。
 说明中的辅助文字不能覆盖名称中的明确业务动作。
+当 AI type 与规则建议 type 相同（例如同为 EI）时，即使文本中出现按钮、弹窗等 strict_fpa 复核词，也不记录“type 冲突” warning。
 ```
 
 ## 下一阶段设计决策：profile / strategy / rule_set
