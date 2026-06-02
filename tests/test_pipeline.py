@@ -1,5 +1,6 @@
 """run_pipeline() 集成测试 —— 端到端验证各模式交付物生成。"""
 
+import json
 import os
 from pathlib import Path
 
@@ -148,6 +149,68 @@ class TestGenFpa:
                 templates=TEMPLATES,
                 fpa_profile="unknown_profile",
             )
+
+    def test_rules_first_pipeline_calls_ai_when_rule_rows_are_low_confidence(
+        self, output_dir, test_excel, monkeypatch
+    ):
+        calls = {"count": 0}
+
+        def fake_fallback(self, group, meta, start_seq=1):
+            return [{
+                "序号": start_seq,
+                "子系统(模块)": meta.get("子系统（模块）", ""),
+                "资产标识": meta.get("资产标识", ""),
+                "新增/修改功能点": "低置信度规则行",
+                "类型": "",
+                "计算依据归类": "",
+                "计算依据说明": "低置信度规则行。",
+                "变更状态": "新增",
+                "调整值": 1,
+                "要素数量": 1,
+                "生成方式": "fallback",
+                "类型理由": "",
+                "源功能过程": "",
+                "后处理警告": "",
+            }]
+
+        response = {
+            "rows": [{
+                "name": "AI 复核功能点",
+                "type": "EI",
+                "classification_basis_index": 1,
+                "explanation": "AI 复核功能点，具体为以下：1、覆盖低置信度规则无法覆盖的功能过程。",
+                "source_processes": [],
+            }]
+        }
+
+        def fake_call_llm(*args, **kwargs):
+            calls["count"] += 1
+            return json.dumps(response, ensure_ascii=False)
+
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.fpa_profiles.CustomRulesProfile.fallback_rows_for_l3",
+            fake_fallback,
+        )
+        monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+
+        result = run_pipeline(
+            mode="gen-fpa",
+            file_path=test_excel,
+            output_dir=output_dir,
+            templates=TEMPLATES,
+            api_key="sk-test",
+            model="test",
+            fpa_strategy="rules_first",
+        )
+
+        filled_md = Path(output_dir) / "md" / "1.3.gen-fpa-AI填充-FPA.md"
+        content = filled_md.read_text(encoding="utf-8")
+
+        assert calls["count"] > 0
+        assert os.path.exists(result.fpa_xlsx)
+        assert "**strategy**: rules_first" in content
+        assert "AI 复核功能点" in content
+        assert "低置信度规则行" not in content
 
 
 class TestGenCosmic:

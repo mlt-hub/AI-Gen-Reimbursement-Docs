@@ -116,6 +116,8 @@ rules_only：仅规则。不调用 AI。
 ai_only：仅 AI。不使用 rules 补行，AI 失败或被配置限制跳过时直接报错。
 ```
 
+正式 `gen-fpa`、`gen-all` 中的 FPA 步骤和 FPA 单模块预览都使用同一套 strategy 语义。也就是说，`rules_first` 不只是预览策略：正式生成时如果规则结果低置信度且配置了 API Key，也会调用 AI 复核；如果没有 API Key，则保留规则结果并在审核副本中记录 warning。
+
 当前 rule_set 已并入 FPA 专用配置文件。正式生成、预览、审核副本和 AI 缓存都会记录 rule_set；不再记录或要求用户维护 `rule_set_version`。
 
 配置文件：

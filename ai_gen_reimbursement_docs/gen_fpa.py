@@ -2393,7 +2393,17 @@ def preview_fpa_module(
                             profile=profile,
                             strategy=execution.strategy,
                         )
+                        fpa_rows, supplement_warnings = _supplement_ai_rows_with_rules(
+                            group=group,
+                            meta=meta,
+                            ai_rows=fpa_rows,
+                            profile=profile,
+                            strategy=execution.strategy,
+                        )
+                        warnings.extend(supplement_warnings)
                         warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
+                        if not fpa_rows:
+                            raise ValueError("AI 规划未生成有效 FPA 行")
                         used_ai = True
                     elif rules_first_reasons:
                         warning = "规则结果需要 AI 复核但未配置 API Key，已保留规则生成结果: " + "；".join(rules_first_reasons)

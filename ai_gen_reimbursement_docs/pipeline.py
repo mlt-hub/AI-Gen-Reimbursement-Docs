@@ -496,7 +496,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
         rule_set=execution.rule_set,
     )
 
-    if execution.strategy in {"ai_first", "ai_only"}:
+    if execution.strategy in {"rules_first", "ai_first", "ai_only"}:
         plan_fpa_md_from_tree(
             tree_md,
             meta_md,
@@ -530,7 +530,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
                     "l3": group.get("l3", ""),
                     "source": "rules",
                     "raw_rows": [],
-                    "warnings": [*config_warnings, "规则优先策略未调用 AI"],
+                    "warnings": [*config_warnings, "仅规则策略未调用 AI"],
                 }
                 for group in groups
             ],
