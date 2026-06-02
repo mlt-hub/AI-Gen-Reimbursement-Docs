@@ -88,3 +88,50 @@ rule_sets:
             assert STRICT_FPA_PROFILE._external_data_name(text, "认证引用") == "统一认证账号"
         finally:
             reset_current_fpa_rule_set_config(token)
+
+
+def test_rule_set_warns_when_external_data_rule_looks_like_ordinary_service(tmp_path):
+    yaml_file = tmp_path / "fpa_config.yaml"
+    yaml_file.write_text(
+        """
+profile: strict_fpa
+profiles:
+  custom_rules:
+    strategy: rules_first
+    rule_set: custom_rules_default
+    system_prompt: custom_rules
+    user_prompt: custom_rules
+  strict_fpa:
+    strategy: rules_only
+    rule_set: strict_fpa_sms
+    system_prompt: strict_fpa
+    user_prompt: strict_fpa
+prompt_sets:
+  custom_rules:
+    system: "CUSTOM SYSTEM"
+    user: "${core_rules}"
+  strict_fpa:
+    system: "STRICT SYSTEM"
+    user: "${core_rules}"
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
+  strict_fpa_sms:
+    extends: strict_fpa_default
+    external_data_rules:
+      merge: append
+      items:
+        - source_aliases: ["短信平台"]
+          data_name: "短信平台消息记录"
+          data_nouns: ["短信", "记录"]
+""",
+        encoding="utf-8",
+    )
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        execution = resolve_fpa_execution_config("strict_fpa")
+
+    assert execution.rule_set_config.config_warnings
+    assert "FPA 配置 warning" in execution.rule_set_config.config_warnings[0]
+    assert "短信平台" in execution.rule_set_config.config_warnings[0]
+    assert "普通外部服务" in execution.rule_set_config.config_warnings[0]

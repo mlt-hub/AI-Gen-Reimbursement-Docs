@@ -727,3 +727,64 @@ fpa_check_columns:
     assert [cell.value for cell in wb["规则命中详情"][1]] == ["功能点名称", "规则ID", "是否采用"]
     assert wb["Warnings"].cell(2, 3).value == "postprocess.classification_basis_index"
     wb.close()
+
+
+def test_fpa_check_xlsx_includes_rule_set_config_warning(tmp_path):
+    fpa_md = tmp_path / "fpa.md"
+    fpa_md.write_text(
+        """# FPA 工作量评估
+
+**profile**: custom_rules
+**strategy**: rules_first
+**rule_set**: sms_service_rules
+
+| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |
+|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|
+| 1 | 测试系统 | TEST | 发送短信-逻辑处理开发 | EI |  | 调用短信平台发送通知。 | 新增 | 2 | 1 | fallback | 普通外部服务调用按事务处理。 | 发送短信 |  |
+""",
+        encoding="utf-8",
+    )
+    tree_md = tmp_path / "tree.md"
+    tree_md.write_text(
+        """| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程类型 | 功能过程描述 |
+|------|---------|---------|---------|----------|----------------------|----------|--------------|--------------|
+| 后台 | 通知 | 短信通知 | 短信通知 | 地市后台 | 发送短信通知。 | 发送短信 | 新增 | 调用短信平台发送通知。 |
+""",
+        encoding="utf-8",
+    )
+    warning = (
+        "FPA 配置 warning: rule_set sms_service_rules 的 external_data_rules "
+        "将普通外部服务「短信平台」配置为外部数据组「短信平台消息记录」。"
+    )
+    audit_trace = tmp_path / "trace.json"
+    audit_trace.write_text(
+        json.dumps({
+            "modules": [{
+                "module": "【地市后台】通知-短信通知-短信通知",
+                "l3": "短信通知",
+                "source": "rules",
+                "raw_rows": [],
+                "warnings": [warning, "规则优先策略未调用 AI"],
+                "rule_hits": [],
+            }],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    output = tmp_path / "check.xlsx"
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(output), str(audit_trace))
+
+    wb = openpyxl.load_workbook(output, data_only=True)
+    warning_rows = [
+        [cell.value for cell in row]
+        for row in wb["Warnings"].iter_rows(min_row=2)
+    ]
+    assert any(row[4] == warning for row in warning_rows)
+    assert any(row[5] == "config.external_data_rules.external_service" for row in warning_rows)
+    coverage_headers = [cell.value for cell in wb["覆盖审核"][1]]
+    coverage_warning = wb["覆盖审核"].cell(2, coverage_headers.index("Warnings") + 1).value
+    assert warning in coverage_warning
+    raw_headers = [cell.value for cell in wb["AI原始返回"][1]]
+    raw_warning = wb["AI原始返回"].cell(2, raw_headers.index("Warnings") + 1).value
+    assert warning in raw_warning
+    wb.close()

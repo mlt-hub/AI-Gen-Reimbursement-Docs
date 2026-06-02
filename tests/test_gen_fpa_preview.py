@@ -156,3 +156,35 @@ def test_preview_fpa_module_strict_requires_api_key(test_excel, tmp_path):
             profile_name="strict_fpa",
             work_dir=str(tmp_path),
         )
+
+
+def test_preview_fpa_module_includes_rule_set_config_warning(test_excel, default_fpa_config, tmp_path):
+    config_path = default_fpa_config / "fpa_config.yaml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            "rule_set: custom_rules_default",
+            "rule_set: sms_service_rules",
+            1,
+        )
+        + """
+
+  sms_service_rules:
+    extends: custom_rules_default
+    external_data_rules:
+      merge: append
+      items:
+        - source_aliases: ["短信平台"]
+          data_name: "短信平台消息记录"
+          data_nouns: ["短信", "记录"]
+""",
+        encoding="utf-8",
+    )
+
+    result = preview_fpa_module(
+        file_path=test_excel,
+        module_index=1,
+        work_dir=str(tmp_path),
+    )
+
+    assert any("FPA 配置 warning" in warning and "短信平台" in warning for warning in result["warnings"])
+    assert any("FPA 配置 warning" in warning for warning in result["audit"]["warnings"])

@@ -2919,7 +2919,7 @@ D4a. 已完成：校验 keyword_rules 的 type / keywords / reason 结构。
 D4b. 已完成：校验 internal_data_rules 的 keywords / data_name / reason 结构。
 D4c. 已完成：校验三类规则段必须使用 merge / items 对象结构，merge 只允许 append / replace。
 D5. 已完成：出现已废弃字段 version 时提示用户删除，不再把它当作规则集版本。
-D6. 待推进：普通外部服务被配置为数据组时记录 warning。
+D6. 已完成：普通外部服务被配置为数据组时记录 warning。
 ```
 
 实现记录：
@@ -2928,6 +2928,11 @@ D6. 待推进：普通外部服务被配置为数据组时记录 warning。
 config_utils.py 新增 validate_fpa_config()，load_fpa_config() 读取后立即校验。
 结构错误统一抛 FpaConfigError，并尽量包含配置文件名和键路径。
 测试覆盖 profile 引用、rule_set 引用、prompt_set 空值、extends 不存在、extends 循环、废弃 version、三类规则段旧列表结构、非法 merge、external_data_rules / keyword_rules / internal_data_rules 非法结构。
+普通外部服务误配为 external_data_rules 时不抛 FpaConfigError；resolve_fpa_rule_set_config() 会在 FpaRuleSetConfig.config_warnings 中记录 warning。
+当前覆盖短信平台、支付网关、OCR、文件存储、对象存储、地图服务等普通外部服务别名。
+预览 preview_fpa_module 返回的 warnings / audit.warnings 会包含该配置 warning。
+正式生成 audit trace 的模块 warnings 会包含该配置 warning，FPA工作量评估-check.xlsx 的覆盖审核、Warnings、AI原始返回 Sheet 均可见。
+Warnings Sheet 中来源规则ID 为 config.external_data_rules.external_service。
 ```
 
 ### E. 领域上下文
@@ -3059,7 +3064,7 @@ G4 实现记录：
 推进指定事项：
 
 ```text
-按照 docs/fpa/gen-fpa-implementation-notes.md 的“暂缓推进任务池”，只推进 D5：普通外部服务被配置为数据组时记录 warning。完成后更新文档并跑相关测试。
+按照 docs/fpa/gen-fpa-implementation-notes.md 的“暂缓推进任务池”，只推进 D6：普通外部服务被配置为数据组时记录 warning。完成后更新文档并跑相关测试。
 ```
 
 需要我先重新评估优先级时：

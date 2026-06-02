@@ -60,6 +60,13 @@ STRICT_EI_ACTIONS = (
     "导入", "选择", "引用", "关联",
 )
 EXTERNAL_SERVICE_CALL_HINTS = ("外部接口", "外部服务", "调用", "平台发送", "网关", "服务上传")
+ORDINARY_EXTERNAL_SERVICE_ALIASES = (
+    "短信平台", "短信服务", "短信网关",
+    "支付网关", "支付平台",
+    "OCR", "OCR服务", "OCR平台",
+    "文件存储", "对象存储", "存储服务",
+    "地图服务", "地图平台",
+)
 
 
 @dataclass(frozen=True)
@@ -120,6 +127,7 @@ class FpaRuleSetConfig:
     keyword_rules_merge: str = "append"
     internal_data_rules: tuple[InternalDataGroupRule, ...] = field(default_factory=tuple)
     internal_data_rules_merge: str = "append"
+    config_warnings: tuple[str, ...] = field(default_factory=tuple)
     raw: dict[str, object] = field(default_factory=dict)
 
 
@@ -255,6 +263,29 @@ def _rule_section_from_dict(data: dict[str, object], key: str) -> tuple[str, lis
     return (merge if merge in VALID_RULE_MERGE_MODES else "append"), (items if isinstance(items, list) else [])
 
 
+def _looks_like_ordinary_external_service(text: str) -> bool:
+    upper_text = text.upper()
+    return any(alias.upper() in upper_text for alias in ORDINARY_EXTERNAL_SERVICE_ALIASES)
+
+
+def _external_data_rule_config_warnings(
+    rule_set_name: str,
+    rules: tuple[ExternalDataGroupRule, ...],
+) -> tuple[str, ...]:
+    warnings: list[str] = []
+    for rule in rules:
+        text = " ".join((*rule.source_aliases, rule.data_name, *rule.data_nouns))
+        if not _looks_like_ordinary_external_service(text):
+            continue
+        aliases = "、".join(rule.source_aliases)
+        warnings.append(
+            "FPA 配置 warning: "
+            f"rule_set {rule_set_name} 的 external_data_rules 将普通外部服务「{aliases}」"
+            f"配置为外部数据组「{rule.data_name}」。配置仍会加载，但普通外部服务调用通常不应按 EIF 数据组计量。"
+        )
+    return tuple(warnings)
+
+
 def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
     external_rules: list[ExternalDataGroupRule] = []
     external_merge, raw_external_rules = _rule_section_from_dict(data, "external_data_rules")
@@ -286,6 +317,7 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
         keyword_rules_merge=keyword_merge,
         internal_data_rules=tuple(internal_rules),
         internal_data_rules_merge=internal_merge,
+        config_warnings=_external_data_rule_config_warnings(name, tuple(external_rules)),
         raw=dict(data),
     )
 
@@ -293,14 +325,15 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
 def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRuleSetConfig:
     raw = dict(parent.raw)
     raw.update(child.raw)
+    external_data_rules = _merge_rule_section(
+        parent.external_data_rules,
+        child.external_data_rules,
+        child.external_data_rules_merge,
+    )
     return FpaRuleSetConfig(
         name=child.name,
         extends=child.extends,
-        external_data_rules=_merge_rule_section(
-            parent.external_data_rules,
-            child.external_data_rules,
-            child.external_data_rules_merge,
-        ),
+        external_data_rules=external_data_rules,
         external_data_rules_merge=child.external_data_rules_merge,
         keyword_rules=_merge_rule_section(parent.keyword_rules, child.keyword_rules, child.keyword_rules_merge),
         keyword_rules_merge=child.keyword_rules_merge,
@@ -310,6 +343,7 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
             child.internal_data_rules_merge,
         ),
         internal_data_rules_merge=child.internal_data_rules_merge,
+        config_warnings=_external_data_rule_config_warnings(child.name, external_data_rules),
         raw=raw,
     )
 

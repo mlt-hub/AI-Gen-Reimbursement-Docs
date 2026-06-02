@@ -30,6 +30,7 @@ from ai_gen_reimbursement_docs.excel_source import (
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     CustomRulesProfile,
+    FpaRuleSetConfig,
     adjust_value_for_type as _adjust_value_for_type,
     get_fpa_profile,
     group_tag as _group_tag,
@@ -45,6 +46,7 @@ logger = logging.getLogger('ai_gen_reimbursement_docs.gen_fpa')
 VALID_FPA_TYPES = {"EI", "ILF", "EQ", "EO", "EIF"}
 FPA_PROFILE = CUSTOM_RULES_PROFILE
 RULE_HITS_KEY = "_规则命中详情"
+CONFIG_WARNING_PREFIX = "FPA 配置 warning:"
 
 
 @dataclass(frozen=True)
@@ -677,6 +679,22 @@ def _build_fpa_audit_report(
     )
 
 
+def _rule_set_config_warnings(rule_set_config: object | None) -> list[str]:
+    if isinstance(rule_set_config, FpaRuleSetConfig):
+        return list(rule_set_config.config_warnings)
+    return []
+
+
+def _with_config_warnings(warnings: list[str], rule_set_config: object | None) -> list[str]:
+    merged = list(_rule_set_config_warnings(rule_set_config))
+    merged.extend(warnings)
+    return merged
+
+
+def _is_config_warning(warning: object) -> bool:
+    return str(warning or "").strip().startswith(CONFIG_WARNING_PREFIX)
+
+
 class FpaAiDebugError(ValueError):
     """FPA 预览 AI 调试信息异常。"""
 
@@ -801,16 +819,19 @@ def _fpa_ai_cache_key(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
-    rule_set_config: dict[str, object] | None = None,
+    rule_set_config: object | None = None,
     system_prompt: str = "",
     user_prompt: str = "",
 ) -> str:
+    serializable_rule_set_config = (
+        rule_set_config.raw if isinstance(rule_set_config, FpaRuleSetConfig) else rule_set_config or {}
+    )
     payload = {
         "profile": profile.name,
         "profile_version": profile.version,
         "strategy": strategy,
         "rule_set": rule_set,
-        "rule_set_config": rule_set_config or {},
+        "rule_set_config": serializable_rule_set_config,
         "core_rules": profile.core_rules,
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
@@ -1020,13 +1041,15 @@ def _plan_fpa_rows_with_ai(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
+    rule_set_config: object | None = None,
     audit_trace_path: str = "",
 ) -> list[dict[str, object]]:
     execution = resolve_fpa_execution_config(profile.name, strategy, rule_set)
     profile = execution.profile
     strategy = execution.strategy
     rule_set = execution.rule_set
-    rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
+    effective_rule_set_config = rule_set_config if isinstance(rule_set_config, FpaRuleSetConfig) else execution.rule_set_config
+    rule_set_token = set_current_fpa_rule_set_config(effective_rule_set_config)
     try:
         return _plan_fpa_rows_with_execution(
             rows,
@@ -1039,7 +1062,7 @@ def _plan_fpa_rows_with_ai(
             profile=profile,
             strategy=strategy,
             rule_set=rule_set,
-            rule_set_config=execution.rule_set_config.raw,
+            rule_set_config=effective_rule_set_config,
             audit_trace_path=audit_trace_path,
         )
     finally:
@@ -1057,10 +1080,11 @@ def _plan_fpa_rows_with_execution(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
-    rule_set_config: dict[str, object] | None = None,
+    rule_set_config: object | None = None,
     audit_trace_path: str = "",
 ) -> list[dict[str, object]]:
     groups = _group_rows_by_l3(rows)
+    config_warnings = _rule_set_config_warnings(rule_set_config)
     if strategy == "rules_only":
         logger.info("FPA strategy=%s，使用规则集 %s 生成 FPA", strategy, rule_set)
         all_rows: list[dict[str, object]] = []
@@ -1076,7 +1100,7 @@ def _plan_fpa_rows_with_execution(
                 "l3": group.get("l3", ""),
                 "source": "rules",
                 "raw_rows": [],
-                "warnings": ["规则优先策略未调用 AI"],
+                "warnings": [*config_warnings, "规则优先策略未调用 AI"],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
         _save_fpa_audit_trace(audit_trace_path, {
@@ -1121,7 +1145,7 @@ def _plan_fpa_rows_with_execution(
                     "l3": group.get("l3", ""),
                     "source": "rules",
                     "raw_rows": [],
-                    "warnings": ["规则优先策略未调用 AI：规则结果覆盖完整且基础字段有效"],
+                    "warnings": [*config_warnings, "规则优先策略未调用 AI：规则结果覆盖完整且基础字段有效"],
                     "rule_hits": _trace_rule_hits_for_rows(rules_first_rows),
                 })
                 continue
@@ -1135,7 +1159,7 @@ def _plan_fpa_rows_with_execution(
                     "l3": group.get("l3", ""),
                     "source": "rules",
                     "raw_rows": [],
-                    "warnings": [warning],
+                    "warnings": [*config_warnings, warning],
                     "rule_hits": _trace_rule_hits_for_rows(rules_first_rows),
                 })
                 continue
@@ -1159,7 +1183,7 @@ def _plan_fpa_rows_with_execution(
                 "l3": group.get("l3", ""),
                 "source": "rules" if strategy == "rules_first" else "rules_fallback",
                 "raw_rows": [],
-                "warnings": [warning],
+                "warnings": [*config_warnings, warning],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
             continue
@@ -1172,7 +1196,7 @@ def _plan_fpa_rows_with_execution(
             profile=profile,
             strategy=strategy,
             rule_set=rule_set,
-            rule_set_config=rule_set_config or {},
+            rule_set_config=rule_set_config.raw if isinstance(rule_set_config, FpaRuleSetConfig) else rule_set_config or {},
             system_prompt=prompt_context.system_prompt,
             user_prompt=prompt_context.user_prompt,
         )
@@ -1213,7 +1237,7 @@ def _plan_fpa_rows_with_execution(
                         "l3": group.get("l3", ""),
                         "source": "ai_cache",
                         "raw_rows": raw_rows,
-                        "warnings": warnings,
+                        "warnings": _with_config_warnings(warnings, rule_set_config),
                         "rule_hits": _trace_rule_hits_for_rows(group_rows),
                     })
                     continue
@@ -1266,7 +1290,7 @@ def _plan_fpa_rows_with_execution(
                 "l3": group.get("l3", ""),
                 "source": "ai",
                 "raw_rows": raw_rows,
-                "warnings": warnings,
+                "warnings": _with_config_warnings(warnings, rule_set_config),
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
         except FpaPromptConfigError:
@@ -1295,7 +1319,7 @@ def _plan_fpa_rows_with_execution(
                 "l3": group.get("l3", ""),
                 "source": "rules_fallback",
                 "raw_rows": locals().get("raw_rows", []),
-                "warnings": [fallback_warning],
+                "warnings": [*config_warnings, fallback_warning],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
 
@@ -1599,6 +1623,19 @@ def generate_fpa_check_xlsx_from_md(
     rows_by_module = _group_rows_for_audit(fpa_rows, groups)
     audit_trace = _load_fpa_audit_trace(audit_trace_path)
     rule_hits_by_seq = _rule_hits_from_audit_trace(audit_trace)
+    audit_modules = audit_trace.get("modules", [])
+    if not isinstance(audit_modules, list):
+        audit_modules = []
+    config_warnings_by_module_idx: dict[int, list[str]] = {}
+    for module_idx, item in enumerate(audit_modules, 1):
+        if not isinstance(item, dict):
+            continue
+        item_warnings = item.get("warnings", [])
+        if not isinstance(item_warnings, list):
+            continue
+        config_warnings = [str(w).strip() for w in item_warnings if _is_config_warning(w)]
+        if config_warnings:
+            config_warnings_by_module_idx[module_idx] = config_warnings
     sheet_columns = _fpa_check_columns()
 
     wb = openpyxl.Workbook()
@@ -1652,11 +1689,13 @@ def generate_fpa_check_xlsx_from_md(
         generation_counts: dict[str, int] = {}
         module_warnings: list[str] = []
         coverage_warnings: list[str] = []
+        config_warnings = config_warnings_by_module_idx.get(idx, [])
         for row in related_rows:
             covered.update(_source_process_set(row))
             generation = str(row.get("生成方式", "") or "unknown")
             generation_counts[generation] = generation_counts.get(generation, 0) + 1
             module_warnings.extend(_warning_items(row.get("后处理警告", "")))
+        module_warnings.extend(config_warnings)
         covered_list = [name for name in process_names if name in covered]
         missing_list = [name for name in process_names if name not in covered]
         if missing_list:
@@ -1685,6 +1724,16 @@ def generate_fpa_check_xlsx_from_md(
                 "Warning": warning,
                 "来源规则ID": "coverage.missing_process",
                 "来源说明": "功能过程未被任何 FPA 行源功能过程覆盖。",
+            })
+        for warning in config_warnings:
+            warning_rows.append({
+                "级别": "module",
+                "FPA行序号": "",
+                "模块序号": idx,
+                "对象": group.get("l3", ""),
+                "Warning": warning,
+                "来源规则ID": "config.external_data_rules.external_service",
+                "来源说明": "rule_set.external_data_rules 将普通外部服务配置为外部数据组，配置加载不中断但需要人工复核。",
             })
 
     ws_warnings = wb.create_sheet("Warnings")
@@ -1737,9 +1786,8 @@ def generate_fpa_check_xlsx_from_md(
 
     ws_raw = wb.create_sheet("AI原始返回")
     ws_raw.append(sheet_columns["AI原始返回"])
-    raw_modules = audit_trace.get("modules", [])
-    if isinstance(raw_modules, list):
-        for item in raw_modules:
+    if isinstance(audit_modules, list):
+        for item in audit_modules:
             if not isinstance(item, dict):
                 continue
             _append_audit_row(ws_raw, sheet_columns["AI原始返回"], {
@@ -1881,19 +1929,24 @@ def plan_fpa_md_from_tree(
     if not judgement_rules:
         logger.warning("未配置「计算依据归类判定原则」，AI 输出的归类将无法按模板 index 映射")
     cache_path = os.path.join(os.path.dirname(output_md_path) or ".", "fpa_ai_cache.json") if api_key else ""
-    fpa_rows = _plan_fpa_rows_with_ai(
-        rows,
-        meta,
-        judgement_rules,
-        api_key,
-        model,
-        base_url,
-        cache_path=cache_path,
-        profile=profile,
-        strategy=execution.strategy,
-        rule_set=execution.rule_set,
-        audit_trace_path=audit_trace_path,
-    )
+    rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
+    try:
+        fpa_rows = _plan_fpa_rows_with_ai(
+            rows,
+            meta,
+            judgement_rules,
+            api_key,
+            model,
+            base_url,
+            cache_path=cache_path,
+            profile=profile,
+            strategy=execution.strategy,
+            rule_set=execution.rule_set,
+            rule_set_config=execution.rule_set_config,
+            audit_trace_path=audit_trace_path,
+        )
+    finally:
+        reset_current_fpa_rule_set_config(rule_set_token)
     total = _write_fpa_rows_md(
         fpa_rows,
         output_md_path,
@@ -2181,6 +2234,7 @@ def preview_fpa_module(
             fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
         finally:
             reset_current_fpa_rule_set_config(rule_set_token)
+        warnings = _with_config_warnings(warnings, execution.rule_set_config)
 
         def _row_to_preview(row: dict[str, object]) -> dict[str, object]:
             basis = str(row.get("计算依据归类", ""))

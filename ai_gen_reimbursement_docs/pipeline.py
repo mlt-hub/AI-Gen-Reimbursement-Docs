@@ -518,6 +518,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
         from ai_gen_reimbursement_docs.gen_fpa import _group_tag
         from ai_gen_reimbursement_docs.excel_source import parse_module_tree_md
         groups = _group_rows_by_l3(parse_module_tree_md(tree_md))
+        config_warnings = list(execution.rule_set_config.config_warnings)
         _save_fpa_audit_trace(fpa_audit_trace, {
             "version": 1,
             "profile": execution.profile.name,
@@ -529,7 +530,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
                     "l3": group.get("l3", ""),
                     "source": "rules",
                     "raw_rows": [],
-                    "warnings": ["规则优先策略未调用 AI"],
+                    "warnings": [*config_warnings, "规则优先策略未调用 AI"],
                 }
                 for group in groups
             ],
