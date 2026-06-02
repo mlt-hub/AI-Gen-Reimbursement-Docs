@@ -1,21 +1,40 @@
 <template>
   <div class="flex-1 flex flex-col min-h-0">
     <!-- 日志级别过滤 -->
-    <div class="flex items-center justify-between gap-3 border-b border-[var(--color-console-line)] bg-[var(--color-console)] px-5 py-2">
-      <span class="text-xs font-semibold text-slate-400">运行日志</span>
+    <div
+      :class="[
+        'flex items-center justify-between gap-3 border-b px-5 py-2',
+        hasEntries
+          ? 'border-[var(--color-console-line)] bg-[var(--color-console)]'
+          : 'border-[var(--color-rule)] bg-[var(--color-surface-raised)]',
+      ]"
+    >
+      <span :class="['text-xs font-semibold', hasEntries ? 'text-slate-400' : 'text-[var(--color-ink-muted)]']">运行日志</span>
       <div class="flex items-center gap-2">
-      <span class="text-xs text-slate-500">显示级别</span>
+      <span :class="['text-xs', hasEntries ? 'text-slate-500' : 'text-[var(--color-ink-soft)]']">显示级别</span>
       <select v-model="filterLevel" @change="saveLevel"
-        class="rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-200 focus:border-[var(--color-focus)] focus:outline-none">
+        :class="[
+          'rounded-md border px-2 py-1 text-xs focus:border-[var(--color-focus)] focus:outline-none',
+          hasEntries
+            ? 'border-slate-600 bg-slate-800 text-slate-200'
+            : 'border-[var(--color-rule-strong)] bg-[var(--color-surface)] text-[var(--color-ink-muted)]',
+        ]">
         <option v-for="lv in levels" :key="lv" :value="lv">{{ lv }}</option>
       </select>
       </div>
     </div>
     <!-- 日志列表 -->
-    <div ref="logEl" class="flex-1 overflow-y-auto bg-[var(--color-console)] p-5 font-mono text-sm leading-6">
-      <div v-if="logStore.entries.length === 0" class="flex h-full flex-col items-center justify-center gap-1 text-center text-sm text-slate-500">
-        <p>等待任务启动，实时日志将在此处显示</p>
-        <p v-if="config.backendStatus === 'offline'" class="text-xs text-amber-300">未检测到后端服务。</p>
+    <div
+      ref="logEl"
+      :class="[
+        'flex-1 overflow-y-auto p-5 text-sm leading-6',
+        hasEntries ? 'bg-[var(--color-console)] font-mono' : 'bg-[var(--color-surface-raised)]',
+      ]"
+    >
+      <div v-if="!hasEntries" class="flex h-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--color-rule)] bg-[var(--color-surface)] px-4 py-8 text-center text-sm text-[var(--color-ink-muted)]">
+        <p class="font-semibold text-[var(--color-ink)]">等待任务启动</p>
+        <p class="max-w-md leading-5">实时日志会在生成任务开始后显示。当前可以先填写功能清单路径，或进入 FPA 预览做功能点估算。</p>
+        <p v-if="config.backendStatus === 'offline'" class="text-xs text-[var(--color-warning)]">未检测到后端服务，启动后端后才可运行生成任务。</p>
       </div>
       <template v-for="(entry, i) in filteredEntries" :key="i">
         <div v-if="entry.level === 'DONE'"
@@ -51,6 +70,7 @@ const filterLevel = ref('INFO')
 const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 
 const levelOrder: Record<string, number> = { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, DONE: -1 }
+const hasEntries = computed(() => logStore.entries.length > 0)
 
 const filteredEntries = computed(() => {
   const min = levelOrder[filterLevel.value] ?? 1

@@ -22,11 +22,12 @@
       </div>
         <nav class="flex flex-wrap items-center gap-1 text-sm">
           <router-link to="/" class="nav-link" active-class="nav-link-active">生成</router-link>
-          <router-link to="/config" class="nav-link" active-class="nav-link-active">配置</router-link>
-          <router-link to="/history" class="nav-link" active-class="nav-link-active">历史</router-link>
           <router-link to="/preview/fpa" class="nav-link" active-class="nav-link-active">预览</router-link>
-          <router-link to="/license" class="nav-link" active-class="nav-link-active">授权</router-link>
-          <router-link to="/prompt-debug" class="nav-link" active-class="nav-link-active">提示词调试</router-link>
+          <router-link to="/history" class="nav-link" active-class="nav-link-active">历史</router-link>
+          <router-link to="/config" class="nav-link" active-class="nav-link-active">配置</router-link>
+          <span class="mx-1 hidden h-5 w-px bg-[var(--color-rule)] lg:inline-block" />
+          <router-link to="/license" class="nav-link hidden opacity-80 lg:inline-flex" active-class="nav-link-active">授权</router-link>
+          <router-link to="/prompt-debug" class="nav-link hidden opacity-80 lg:inline-flex" active-class="nav-link-active">提示词调试</router-link>
           <template v-if="auth.isRemote && auth.isLoggedIn">
             <span class="mx-2 hidden h-5 w-px bg-[var(--color-rule)] md:inline-block" />
             <span class="rounded-md bg-[var(--color-surface-muted)] px-2 py-1 text-xs text-[var(--color-ink-muted)]">{{ auth.username }}</span>

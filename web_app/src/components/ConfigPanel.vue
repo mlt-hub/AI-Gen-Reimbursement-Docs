@@ -18,11 +18,23 @@
 
     <FileInput />
 
+    <router-link
+      to="/preview/fpa"
+      class="group rounded-lg border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-3 py-3 transition-colors hover:bg-[var(--color-surface-raised)]"
+    >
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-[var(--color-accent-strong)]">预览 FPA 功能点</div>
+          <p class="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">按当前输入和 FPA 方案先生成可审阅的功能点估算。</p>
+        </div>
+        <span class="shrink-0 text-lg font-semibold text-[var(--color-accent-strong)] transition-transform group-hover:translate-x-0.5">→</span>
+      </div>
+    </router-link>
+
     <div class="space-y-3 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3">
       <AdvancedOptions />
       <TemplateUpload />
       <TemplateDownload />
-      <router-link to="/preview/fpa" class="btn-quiet inline-flex w-full items-center justify-center">打开 FPA 预览</router-link>
     </div>
 
     <button @click="$emit('start')"
