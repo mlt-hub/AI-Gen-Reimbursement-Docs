@@ -3042,9 +3042,15 @@ E1/E2 已增加项目级 FPA 领域上下文文件：
 ### F. 验收
 
 ```text
-F1. 补充 strict_fpa 人工验收记录。
+F1. 已完成：补充 strict_fpa 人工验收记录。
 F2. 已使用真实模型跑代表性样例，检查说明质量、warning、缓存和正式生成结果；预览链路无真实 AI 调用，已由 mock / fixture / rules 路径覆盖。
 F3. 已使用真实业务输入复核拆分粒度、类型判断、覆盖和汇总值。
+```
+
+F1 记录文件：
+
+```text
+docs/fpa/strict-fpa-acceptance-record.md
 ```
 
 ### H. 旧兼容逻辑清理

@@ -340,6 +340,12 @@ tests/test_fpa_golden_fixture_reports.py
 .\scripts\test.ps1 tests/test_fpa_golden_fixture_reports.py
 ```
 
+strict_fpa 人工验收记录已归档到：
+
+```text
+docs/fpa/strict-fpa-acceptance-record.md
+```
+
 如果实际输出和预期输出不一致，pytest 会打印差异报告：
 
 ```text

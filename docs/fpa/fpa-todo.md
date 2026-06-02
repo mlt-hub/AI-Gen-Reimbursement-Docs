@@ -433,6 +433,7 @@ K5. 已完成：增加用户可配置的审核列。
 本地自动化验收已补充：
 
 ```text
+F1. 已完成：strict_fpa 人工验收记录已归档到 docs/fpa/strict-fpa-acceptance-record.md。
 F2. 部分完成：已在不调用真实 AI API 的前提下，使用 mock、fixture、golden cases 和本地规则路径验证预览、正式生成、check.xlsx、warning 来源、规则命中详情。
 F2. 补充完成：已自动化验证 mock AI cache 命中后 audit trace 与 check.xlsx 的 AI原始返回 Sheet 标记为 ai_cache。
 F2. 真实模型验收已尝试但当前受执行环境限制：2026-05-31 已确认 API Key、base_url、model 配置存在，并选取 mixed_internal_external_data_functions、payment_gateway_refund、master_data_org_reference 作为代表样例；受限沙箱内真实模型连接失败，流程按设计回退 rules_fallback，不能作为真实模型质量结论；申请沙箱外网络调用被策略拒绝，因为会向外部 LLM 端点发送仓库 fixture / 业务样例数据。
