@@ -18,6 +18,7 @@ DEFAULT_CONFIG_TEMPLATE_FILES = (
     (".env.example", ".env"),
     ("system_config.yaml.example", "system_config.yaml"),
     ("fpa_config.yaml.example", "fpa_config.yaml"),
+    ("domain_context.json.example", "domain_context.json"),
 )
 
 DEFAULT_SHEET_NAMES = {
@@ -393,11 +394,81 @@ def load_fpa_excel_recalc_check() -> bool:
 
 
 FPA_CONFIG_FILENAME = "fpa_config.yaml"
+FPA_DOMAIN_CONTEXT_FILENAME = "domain_context.json"
 VALID_FPA_PROFILE_NAMES = {"custom_rules", "strict_fpa"}
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_FPA_TRANSACTION_TYPES = {"EI", "EQ", "EO"}
 VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
+
+
+def _validate_domain_context_string_list(value: object, key_path: str) -> None:
+    if not isinstance(value, list):
+        raise FpaConfigError(
+            f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 中的 {key_path} 必须是字符串列表"
+        )
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise FpaConfigError(
+                f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 中的 {key_path}[{index}] 必须是非空字符串"
+            )
+
+
+def _validate_domain_context_items(value: object, key_path: str, *, require_source: bool = False) -> None:
+    if not isinstance(value, list):
+        raise FpaConfigError(
+            f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 中的 {key_path} 必须是列表"
+        )
+    for index, item in enumerate(value):
+        item_path = f"{key_path}[{index}]"
+        if not isinstance(item, dict):
+            raise FpaConfigError(
+                f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 中的 {item_path} 必须是对象"
+            )
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise FpaConfigError(
+                f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 中的 {item_path}.name 必须是非空字符串"
+            )
+        if require_source:
+            source = item.get("source")
+            if not isinstance(source, str) or not source.strip():
+                raise FpaConfigError(
+                    f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 中的 {item_path}.source 必须是非空字符串"
+                )
+        if "aliases" in item:
+            _validate_domain_context_string_list(item.get("aliases"), f"{item_path}.aliases")
+        if "description" in item and not isinstance(item.get("description"), str):
+            raise FpaConfigError(
+                f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 中的 {item_path}.description 必须是字符串"
+            )
+
+
+def validate_fpa_domain_context(context: dict[str, object]) -> None:
+    """Validate project-level FPA domain boundary context."""
+    if not isinstance(context, dict):
+        raise FpaConfigError(f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 必须是对象")
+    system_boundary = context.get("system_boundary")
+    if not isinstance(system_boundary, str):
+        raise FpaConfigError(
+            f"FPA 领域上下文无效：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME} 中的 system_boundary 必须是字符串"
+        )
+    _validate_domain_context_items(context.get("internal_data_groups"), "internal_data_groups")
+    _validate_domain_context_items(context.get("external_data_groups"), "external_data_groups", require_source=True)
+    _validate_domain_context_items(context.get("external_services"), "external_services")
+
+
+def load_fpa_domain_context() -> dict[str, object]:
+    """Strictly read project-level FPA domain boundary context."""
+    json_path = config_dir() / FPA_DOMAIN_CONTEXT_FILENAME
+    if not json_path.exists():
+        raise FpaConfigError(f"未找到 FPA 领域上下文文件：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME}")
+    try:
+        context = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise FpaConfigError(f"读取 FPA 领域上下文失败：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME}") from exc
+    validate_fpa_domain_context(context)
+    return context
 
 
 def _fpa_key_path(*parts: object) -> str:

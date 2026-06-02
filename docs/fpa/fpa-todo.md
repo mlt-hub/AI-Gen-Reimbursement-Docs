@@ -174,6 +174,7 @@ strict_fpa 已建立类型冲突矩阵：事务功能与数据功能错判会进
 strict_fpa 已支持 type_mapping_rules 通用类型映射表，可将项目级特例直接映射到 EI / EQ / EO / ILF / EIF，并参与类型冲突矩阵。
 strict_fpa 已支持 ai_type_conflict_rules，在类型冲突矩阵前按 expected_type + ai_type + keywords 覆盖是否提示冲突。
 FPA 已支持确定性 Excel 公式投影校验：不同 profile / strategy 生成的 MD 汇总值可与 Excel J×K/SUM 公式投影值对比，不依赖外部复算引擎。
+FPA 已增加项目级 domain_context.json：显式记录系统边界、本系统维护数据组、外部引用数据组和普通外部服务；当前尚未接入 prompt。
 COSMIC 预览暂不推进：gen-cosmic 逻辑后续可能重构，现在不新增 /preview/cosmic 页面，避免把当前临时数据流固化到 UI/API/测试。
 ```
 

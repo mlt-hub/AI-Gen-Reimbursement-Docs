@@ -11,6 +11,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     copy_default_config_files,
     api_key_fingerprint,
     load_fpa_excel_recalc_check,
+    load_fpa_domain_context,
     load_max_tokens,
     load_cfp_formula,
     load_cosmic_warn_marker,
@@ -39,6 +40,7 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
         ".env.example",
         "system_config.yaml.example",
         "fpa_config.yaml.example",
+        "domain_context.json.example",
     ]:
         (source / name).write_text(f"{name}\n", encoding="utf-8")
     target.mkdir()
@@ -47,12 +49,14 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
     created = copy_default_config_files(target, source)
 
     assert sorted(path.name for path in created) == [
+        "domain_context.json",
         "fpa_config.yaml",
         "system_config.yaml",
     ]
     assert (target / ".env").read_text(encoding="utf-8") == "existing\n"
     assert (target / "system_config.yaml").exists()
     assert (target / "fpa_config.yaml").exists()
+    assert (target / "domain_context.json").exists()
 
 
 def _write_fpa_config(tmp_path):
@@ -103,6 +107,67 @@ rule_sets:
 """,
         encoding="utf-8",
     )
+
+
+def _write_fpa_domain_context(tmp_path):
+    (tmp_path / "domain_context.json").write_text(
+        """
+{
+  "system_boundary": "本系统维护供应商准入协同数据，不维护供应商主档。",
+  "internal_data_groups": [
+    {"name": "供应商准入关系", "aliases": ["供应商关系"]}
+  ],
+  "external_data_groups": [
+    {"name": "供应商档案", "source": "供应商平台", "aliases": ["供应商主档"]}
+  ],
+  "external_services": [
+    {"name": "短信平台", "aliases": ["短信服务"]}
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+
+class TestLoadFpaDomainContext:
+    def test_loads_project_domain_boundary_context(self, tmp_path):
+        _write_fpa_domain_context(tmp_path)
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            context = load_fpa_domain_context()
+
+        assert context["system_boundary"] == "本系统维护供应商准入协同数据，不维护供应商主档。"
+        assert context["internal_data_groups"] == [{"name": "供应商准入关系", "aliases": ["供应商关系"]}]
+        assert context["external_data_groups"] == [
+            {"name": "供应商档案", "source": "供应商平台", "aliases": ["供应商主档"]}
+        ]
+        assert context["external_services"] == [{"name": "短信平台", "aliases": ["短信服务"]}]
+
+    def test_missing_domain_context_file_is_rejected(self, tmp_path):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match="未找到 FPA 领域上下文文件"):
+                load_fpa_domain_context()
+
+    def test_external_data_group_source_is_required(self, tmp_path):
+        _write_fpa_domain_context(tmp_path)
+        path = tmp_path / "domain_context.json"
+        path.write_text(path.read_text(encoding="utf-8").replace('"source": "供应商平台", ', ""), encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"external_data_groups\[0\]\.source 必须是非空字符串"):
+                load_fpa_domain_context()
+
+    def test_external_services_must_be_a_list(self, tmp_path):
+        _write_fpa_domain_context(tmp_path)
+        path = tmp_path / "domain_context.json"
+        path.write_text(path.read_text(encoding="utf-8").replace(
+            '"external_services": [\n    {"name": "短信平台", "aliases": ["短信服务"]}\n  ]',
+            '"external_services": "短信平台"',
+        ), encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match="external_services 必须是列表"):
+                load_fpa_domain_context()
 
 
 class TestGetSystemConfigValue:

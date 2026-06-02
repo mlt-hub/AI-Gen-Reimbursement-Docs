@@ -3020,9 +3020,21 @@ Warnings Sheet 中来源规则ID 为 config.external_data_rules.external_service
 ### E. 领域上下文
 
 ```text
-E1. 为项目保存 domain_context.json。
-E2. 显式记录系统边界、本系统维护数据组、外部引用数据组、普通外部服务。
+E1. 已完成：为项目保存 domain_context.json。
+E2. 已完成：显式记录系统边界、本系统维护数据组、外部引用数据组、普通外部服务。
 E3. 将领域上下文稳定传入 FPA prompt。
+```
+
+实现记录：
+
+```text
+E1/E2 已增加项目级 FPA 领域上下文文件：
+1. 默认配置初始化会复制 config/domain_context.json.example 为配置目录/domain_context.json，不覆盖已有文件。
+2. domain_context.json 固定记录 system_boundary、internal_data_groups、external_data_groups、external_services。
+3. 数据组和普通外部服务使用对象列表；对象必须包含 name，可选 aliases 和 description。
+4. external_data_groups 额外要求 source，用于明确外部引用数据组由哪个外部系统维护。
+5. 新增 load_fpa_domain_context() 严格加载入口；缺文件、JSON 解析失败或结构错误均抛出明确的 FpaConfigError。
+6. 本轮不将 domain_context.json 接入 FPA prompt；E3 仍作为独立行为变更推进。
 ```
 
 ### F. 验收

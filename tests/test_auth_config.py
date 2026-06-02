@@ -12,5 +12,6 @@ def test_init_user_dir_copies_all_default_config_files(monkeypatch, tmp_path):
     assert (user_dir / ".env").exists()
     assert (user_dir / "system_config.yaml").exists()
     assert (user_dir / "fpa_config.yaml").exists()
+    assert (user_dir / "domain_context.json").exists()
     assert (user_dir / "templates").is_dir()
     assert (user_dir / "tasks").is_dir()

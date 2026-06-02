@@ -452,6 +452,7 @@ Excel 模板列结构暂不随 profile 改动。
 pipeline 工作量汇总建议由代码中的业务计算规则统一产生。
 Excel 继续保留模板原有公式；Excel/LibreOffice 复算只作为可选校验。
 可使用确定性 Excel 公式投影校验对比不同 profile / strategy 输出：读取 J 列调整值、K 列要素数量和 L 列公式，不依赖外部复算引擎即可验证 MD 汇总值与 Excel 公式口径一致。
+项目级领域边界使用配置目录/domain_context.json 保存，显式记录 system_boundary、internal_data_groups、external_data_groups、external_services；当前已支持初始化、加载和结构校验，尚未接入 prompt。
 ```
 
 如果严格 FPA 结果用于正式方法学审计，建议结合人工复核。
