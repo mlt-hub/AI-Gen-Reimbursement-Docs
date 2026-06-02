@@ -1338,7 +1338,7 @@ def _plan_fpa_rows_with_execution(
                 "l3": group.get("l3", ""),
                 "source": "rules",
                 "raw_rows": [],
-                "warnings": [*config_warnings, "规则优先策略未调用 AI"],
+                "warnings": [*config_warnings, "仅规则策略未调用 AI"],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
             })
         _save_fpa_audit_trace(audit_trace_path, {
@@ -1865,6 +1865,7 @@ def generate_fpa_check_xlsx_from_md(
     if not isinstance(audit_modules, list):
         audit_modules = []
     config_warnings_by_module_idx: dict[int, list[str]] = {}
+    trace_warnings_by_module_idx: dict[int, list[str]] = {}
     for module_idx, item in enumerate(audit_modules, 1):
         if not isinstance(item, dict):
             continue
@@ -1874,6 +1875,9 @@ def generate_fpa_check_xlsx_from_md(
         config_warnings = [str(w).strip() for w in item_warnings if _is_config_warning(w)]
         if config_warnings:
             config_warnings_by_module_idx[module_idx] = config_warnings
+        trace_warnings = [str(w).strip() for w in item_warnings if str(w).strip() and not _is_config_warning(w)]
+        if trace_warnings:
+            trace_warnings_by_module_idx[module_idx] = trace_warnings
     raw_audit_by_module_idx: dict[int, dict[str, object]] = {
         module_idx: item
         for module_idx, item in enumerate(audit_modules, 1)
@@ -1885,6 +1889,9 @@ def generate_fpa_check_xlsx_from_md(
         for row in rows_by_module.get(idx, []):
             module_warnings.extend(_warning_items(row.get("后处理警告", "")))
         module_warnings.extend(config_warnings_by_module_idx.get(idx, []))
+        for warning in trace_warnings_by_module_idx.get(idx, []):
+            if warning not in module_warnings:
+                module_warnings.append(warning)
         warnings_by_module_idx[idx] = module_warnings
     profile = get_fpa_profile(execution_meta.get("profile", "") or "custom_rules")
     audit_reports = _build_fpa_audit_reports_for_groups(
@@ -1984,6 +1991,18 @@ def generate_fpa_check_xlsx_from_md(
                 "Warning": warning,
                 "来源规则ID": "config.external_data_rules.external_service",
                 "来源说明": "rule_set.external_data_rules 将普通外部服务配置为外部数据组，配置加载不中断但需要人工复核。",
+            })
+        for warning in trace_warnings_by_module_idx.get(idx, []):
+            if any(item.get("Warning") == warning for item in warning_rows):
+                continue
+            warning_rows.append({
+                "级别": "module",
+                "FPA行序号": "",
+                "模块序号": idx,
+                "对象": group.get("l3", ""),
+                "Warning": warning,
+                "来源规则ID": "audit.module_warning",
+                "来源说明": "生成期模块级审核 warning。",
             })
 
     ws_warnings = wb.create_sheet("Warnings")

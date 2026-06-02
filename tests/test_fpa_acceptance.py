@@ -50,6 +50,14 @@ def _headers(ws) -> list[str]:
     return [cell.value for cell in ws[1]]
 
 
+def _sheet_records(ws) -> list[dict[str, object]]:
+    headers = _headers(ws)
+    return [
+        {header: ws.cell(row=row, column=idx + 1).value for idx, header in enumerate(headers)}
+        for row in range(2, ws.max_row + 1)
+    ]
+
+
 def _summary_total(summary_md: Path) -> float:
     text = summary_md.read_text(encoding="utf-8")
     marker = "FPA工作量（人/天）:"
@@ -180,7 +188,7 @@ def test_fpa_acceptance_strict_rules_formal_check_workbook_from_golden_case(tmp_
     ws_raw = wb["AI原始返回"]
     raw_headers = _headers(ws_raw)
     assert ws_raw.cell(2, raw_headers.index("来源") + 1).value == "rules"
-    assert ws_raw.cell(2, raw_headers.index("Warnings") + 1).value == "规则优先策略未调用 AI"
+    assert ws_raw.cell(2, raw_headers.index("Warnings") + 1).value == "仅规则策略未调用 AI"
     wb.close()
 
 
@@ -358,6 +366,391 @@ def test_fpa_acceptance_mock_ai_warning_source_reaches_check_workbook(monkeypatc
     assert "postprocess.ai_type_validation" in rule_ids
     assert "postprocess.classification_basis_index" in rule_ids
     wb.close()
+
+
+def test_fpa_acceptance_check_workbook_does_not_report_type_conflict_when_types_match(monkeypatch, tmp_path):
+    rows = [
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "垂直行业营销",
+            "二级模块": "垂直行业管理",
+            "三级模块": "垂直行业管理",
+            "三级模块整体功能描述": "维护垂直行业基础信息和管理员。",
+            "功能过程": "添加垂直行业",
+            "功能过程类型": "新增",
+            "功能过程描述": "点击添加按钮，在弹窗输入垂直行业名称并保存。",
+        }
+    ]
+    tree_md = tmp_path / "tree.md"
+    meta_md = tmp_path / "meta.md"
+    fpa_md = tmp_path / "fpa.md"
+    audit_trace = tmp_path / "trace.json"
+    check_xlsx = tmp_path / "check.xlsx"
+
+    _write_tree_md(tree_md, rows)
+    _write_meta_md(meta_md, {"子系统（模块）": "测试系统", "资产标识": "TEST-001"})
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: json.dumps({
+            "rows": [{
+                "name": "添加垂直行业",
+                "type": "EI",
+                "explanation": "点击添加按钮，在弹窗输入垂直行业名称并保存。",
+                "source_processes": ["添加垂直行业"],
+            }]
+        }, ensure_ascii=False),
+    )
+
+    plan_fpa_md_from_tree(
+        str(tree_md),
+        str(meta_md),
+        str(fpa_md),
+        api_key="sk-test",
+        model="mock-model",
+        profile_name="strict_fpa",
+        strategy="ai_first",
+        audit_trace_path=str(audit_trace),
+    )
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx), str(audit_trace))
+
+    wb = openpyxl.load_workbook(check_xlsx, data_only=True)
+    try:
+        warning_text = "；".join(str(row["Warning"] or "") for row in _sheet_records(wb["Warnings"]))
+        assert "AI type=EI 与规则存在冲突" not in warning_text
+
+        rule_hits = _sheet_records(wb["规则命中详情"])
+        assert not any(row["规则ID"] == "postprocess.ai_first_type_conflict" for row in rule_hits)
+    finally:
+        wb.close()
+
+
+def test_fpa_acceptance_check_workbook_type_conflict_metadata_is_consistent(monkeypatch, tmp_path):
+    rows = [
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "消息管理",
+            "二级模块": "通知发送",
+            "三级模块": "短信通知",
+            "三级模块整体功能描述": "系统调用短信平台发送通知短信。",
+            "功能过程": "发送测试短信",
+            "功能过程类型": "新增",
+            "功能过程描述": "调用短信平台发送测试短信。",
+        }
+    ]
+    tree_md = tmp_path / "tree.md"
+    meta_md = tmp_path / "meta.md"
+    fpa_md = tmp_path / "fpa.md"
+    audit_trace = tmp_path / "trace.json"
+    check_xlsx = tmp_path / "check.xlsx"
+
+    _write_tree_md(tree_md, rows)
+    _write_meta_md(meta_md, {"子系统（模块）": "测试系统", "资产标识": "TEST-001"})
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: json.dumps({
+            "rows": [{
+                "name": "发送测试短信",
+                "type": "EIF",
+                "explanation": "调用短信平台发送测试短信。",
+                "source_processes": ["发送测试短信"],
+            }]
+        }, ensure_ascii=False),
+    )
+
+    plan_fpa_md_from_tree(
+        str(tree_md),
+        str(meta_md),
+        str(fpa_md),
+        api_key="sk-test",
+        model="mock-model",
+        profile_name="strict_fpa",
+        strategy="ai_first",
+        audit_trace_path=str(audit_trace),
+    )
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx), str(audit_trace))
+
+    wb = openpyxl.load_workbook(check_xlsx, data_only=True)
+    try:
+        result_rows = _sheet_records(wb["FPA结果"])
+        ai_row = next(row for row in result_rows if row["生成方式"] == "ai")
+        assert ai_row["类型"] == "EIF"
+
+        warnings = _sheet_records(wb["Warnings"])
+        assert any("AI type=EIF 与规则存在冲突" in str(row["Warning"]) for row in warnings)
+
+        rule_hits = _sheet_records(wb["规则命中详情"])
+        conflict_hit = next(row for row in rule_hits if row["规则ID"] == "postprocess.ai_first_type_conflict")
+        assert conflict_hit["建议类型"] == "EI"
+        assert conflict_hit["是否采用"] == "否"
+        assert "规则建议 type=EI" in conflict_hit["规则说明"]
+    finally:
+        wb.close()
+
+
+def test_fpa_acceptance_check_workbook_distinguishes_data_function_supplement_from_missing_process(monkeypatch, tmp_path):
+    rows = [
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户档案",
+            "三级模块": "客户档案",
+            "三级模块整体功能描述": "维护客户档案。",
+            "功能过程": "添加客户档案",
+            "功能过程类型": "新增",
+            "功能过程描述": "保存客户档案。",
+        }
+    ]
+    tree_md = tmp_path / "tree.md"
+    meta_md = tmp_path / "meta.md"
+    fpa_md = tmp_path / "fpa.md"
+    audit_trace = tmp_path / "trace.json"
+    check_xlsx = tmp_path / "check.xlsx"
+
+    _write_tree_md(tree_md, rows)
+    _write_meta_md(meta_md, {"子系统（模块）": "测试系统", "资产标识": "TEST-001"})
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: json.dumps({
+            "rows": [{
+                "name": "添加客户档案",
+                "type": "EI",
+                "explanation": "保存客户档案。",
+                "source_processes": ["添加客户档案"],
+            }]
+        }, ensure_ascii=False),
+    )
+
+    plan_fpa_md_from_tree(
+        str(tree_md),
+        str(meta_md),
+        str(fpa_md),
+        api_key="sk-test",
+        model="mock-model",
+        profile_name="strict_fpa",
+        strategy="ai_first",
+        audit_trace_path=str(audit_trace),
+    )
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx), str(audit_trace))
+
+    wb = openpyxl.load_workbook(check_xlsx, data_only=True)
+    try:
+        coverage_rows = _sheet_records(wb["覆盖审核"])
+        coverage_warning = str(coverage_rows[0]["Warnings"] or "")
+        assert "AI 结果未包含数据功能行" in coverage_warning
+        assert "未覆盖 0 个功能过程" not in coverage_warning
+
+        warning_rows = _sheet_records(wb["Warnings"])
+        warning_text = "；".join(str(row["Warning"] or "") for row in warning_rows)
+        assert "AI 结果未包含数据功能行" in warning_text
+        assert "未覆盖 0 个功能过程" not in warning_text
+
+        rule_hits = _sheet_records(wb["规则命中详情"])
+        assert any(
+            row["生成方式"] == "rules_fallback"
+            and row["建议类型"] == "ILF"
+            and "AI 结果未包含数据功能行" in str(row["Warnings"])
+            for row in rule_hits
+        )
+    finally:
+        wb.close()
+
+
+def test_fpa_acceptance_check_workbook_reports_missing_process_supplement(monkeypatch, tmp_path):
+    rows = [
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "查询和导出客户。",
+            "功能过程": "查询客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "按客户名称查询客户列表。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "查询和导出客户。",
+            "功能过程": "导出客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "导出客户列表。",
+        },
+    ]
+    tree_md = tmp_path / "tree.md"
+    meta_md = tmp_path / "meta.md"
+    fpa_md = tmp_path / "fpa.md"
+    audit_trace = tmp_path / "trace.json"
+    check_xlsx = tmp_path / "check.xlsx"
+
+    _write_tree_md(tree_md, rows)
+    _write_meta_md(meta_md, {"子系统（模块）": "测试系统", "资产标识": "TEST-001"})
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: json.dumps({
+            "rows": [{
+                "name": "查询客户-查询处理开发",
+                "type": "EQ",
+                "explanation": "按客户名称查询客户列表。",
+                "source_processes": ["查询客户"],
+            }]
+        }, ensure_ascii=False),
+    )
+
+    plan_fpa_md_from_tree(
+        str(tree_md),
+        str(meta_md),
+        str(fpa_md),
+        api_key="sk-test",
+        model="mock-model",
+        profile_name="custom_rules",
+        strategy="ai_first",
+        audit_trace_path=str(audit_trace),
+    )
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx), str(audit_trace))
+
+    wb = openpyxl.load_workbook(check_xlsx, data_only=True)
+    try:
+        coverage_warning = str(_sheet_records(wb["覆盖审核"])[0]["Warnings"] or "")
+        assert "AI 结果未覆盖 1 个功能过程" in coverage_warning
+        assert "导出客户" not in str(_sheet_records(wb["覆盖审核"])[0]["未覆盖功能过程"] or "")
+
+        rule_hits = _sheet_records(wb["规则命中详情"])
+        assert any(
+            row["生成方式"] == "rules_fallback"
+            and "AI 结果未覆盖该功能过程" in str(row["Warnings"])
+            for row in rule_hits
+        )
+    finally:
+        wb.close()
+
+
+def test_fpa_acceptance_rules_first_check_workbook_explains_rules_without_ai(monkeypatch, tmp_path):
+    rows = [
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "按条件查询客户。",
+            "功能过程": "查询客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "按客户名称查询客户列表。",
+        }
+    ]
+    tree_md = tmp_path / "tree.md"
+    meta_md = tmp_path / "meta.md"
+    fpa_md = tmp_path / "fpa.md"
+    audit_trace = tmp_path / "trace.json"
+    check_xlsx = tmp_path / "check.xlsx"
+
+    _write_tree_md(tree_md, rows)
+    _write_meta_md(meta_md, {"子系统（模块）": "测试系统", "资产标识": "TEST-001"})
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("rules_first should not call AI")),
+    )
+
+    plan_fpa_md_from_tree(
+        str(tree_md),
+        str(meta_md),
+        str(fpa_md),
+        api_key="sk-test",
+        model="mock-model",
+        profile_name="custom_rules",
+        strategy="rules_first",
+        audit_trace_path=str(audit_trace),
+    )
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx), str(audit_trace))
+
+    wb = openpyxl.load_workbook(check_xlsx, data_only=True)
+    try:
+        raw_rows = _sheet_records(wb["AI原始返回"])
+        assert raw_rows[0]["来源"] == "rules"
+        assert "规则优先策略未调用 AI：规则结果覆盖完整且基础字段有效" in str(raw_rows[0]["Warnings"])
+    finally:
+        wb.close()
+
+
+def test_fpa_acceptance_rules_first_low_confidence_check_workbook_explains_ai_review(monkeypatch, tmp_path):
+    rows = [
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "垂直行业营销",
+            "二级模块": "垂直行业管理",
+            "三级模块": "垂直行业管理",
+            "三级模块整体功能描述": "维护垂直行业基础信息。",
+            "功能过程": "添加垂直行业",
+            "功能过程类型": "新增",
+            "功能过程描述": "输入垂直行业名称并保存。",
+        }
+    ]
+    tree_md = tmp_path / "tree.md"
+    meta_md = tmp_path / "meta.md"
+    fpa_md = tmp_path / "fpa.md"
+    audit_trace = tmp_path / "trace.json"
+    check_xlsx = tmp_path / "check.xlsx"
+
+    def fake_fallback(self, group, meta, start_seq=1):
+        return [{
+            "序号": start_seq,
+            "子系统(模块)": meta.get("子系统（模块）", ""),
+            "资产标识": meta.get("资产标识", ""),
+            "新增/修改功能点": "低置信度规则行",
+            "类型": "",
+            "计算依据归类": "",
+            "计算依据说明": "低置信度规则行。",
+            "变更状态": "新增",
+            "调整值": 1,
+            "要素数量": 1,
+            "生成方式": "fallback",
+            "类型理由": "",
+            "源功能过程": "",
+            "后处理警告": "",
+        }]
+
+    _write_tree_md(tree_md, rows)
+    _write_meta_md(meta_md, {"子系统（模块）": "测试系统", "资产标识": "TEST-001"})
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.fpa_profiles.CustomRulesProfile.fallback_rows_for_l3",
+        fake_fallback,
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: json.dumps({
+            "rows": [{
+                "name": "AI 复核功能点",
+                "type": "EI",
+                "explanation": "AI 复核功能点，具体为以下：1、覆盖低置信度规则无法覆盖的功能过程。",
+                "source_processes": ["添加垂直行业"],
+            }]
+        }, ensure_ascii=False),
+    )
+
+    plan_fpa_md_from_tree(
+        str(tree_md),
+        str(meta_md),
+        str(fpa_md),
+        api_key="sk-test",
+        model="mock-model",
+        profile_name="custom_rules",
+        strategy="rules_first",
+        audit_trace_path=str(audit_trace),
+    )
+    generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx), str(audit_trace))
+
+    wb = openpyxl.load_workbook(check_xlsx, data_only=True)
+    try:
+        raw_rows = _sheet_records(wb["AI原始返回"])
+        assert raw_rows[0]["来源"] == "ai"
+        assert "规则结果触发 AI 复核" in str(raw_rows[0]["Warnings"])
+
+        result_rows = _sheet_records(wb["FPA结果"])
+        assert result_rows[0]["生成方式"] == "ai"
+        assert "AI 复核功能点" in str(result_rows[0]["新增/修改功能点"])
+    finally:
+        wb.close()
 
 
 def test_fpa_acceptance_ai_cache_hit_is_visible_in_audit_and_check(monkeypatch, tmp_path):
