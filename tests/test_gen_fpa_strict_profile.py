@@ -205,9 +205,73 @@ def test_strict_fpa_keeps_internal_relation_data_with_external_references():
 
     assert types["CRM客户档案"] == "EIF"
     assert types["ERP业务单据"] == "EIF"
-    assert types["客户订单关联关系"] == "ILF"
+    assert types["客户订单匹配关系"] == "ILF"
     assert types["新增客户订单关联"] == "EI"
     assert types["查看客户订单关联"] == "EQ"
+
+
+def test_strict_fpa_uses_clear_description_when_process_name_is_vague_external_reference():
+    rows = [
+        _row(
+            "地市后台",
+            "风控管理",
+            "风险校验",
+            "风险校验",
+            "配置业务风险校验能力。",
+            "查看详情",
+            "读取外部征信平台维护的企业信用记录，展示信用等级、风险标签和最近更新时间。",
+            "查询",
+        ),
+        _row(
+            "地市后台",
+            "风控管理",
+            "风险校验",
+            "风险校验",
+            "配置业务风险校验能力。",
+            "选择对象",
+            "从外部合同平台维护的合同档案中选择合同并关联到风险校验记录。",
+        ),
+    ]
+
+    result = _build_fpa_rule_rows(rows, _meta(), profile=STRICT_FPA_PROFILE)
+    types = _types_by_name(result)
+
+    assert types["企业信用记录"] == "EIF"
+    assert types["合同档案"] == "EIF"
+    assert types["查看详情"] == "EQ"
+    assert types["选择对象"] == "EI"
+    assert "风险校验数据组" not in types
+
+
+def test_strict_fpa_uses_clear_description_for_internal_relation_name():
+    rows = [
+        _row(
+            "地市后台",
+            "营销活动",
+            "活动配置",
+            "活动配置",
+            "维护活动参与范围配置。",
+            "保存设置",
+            "本系统保存客户与活动的匹配关系、有效期和启停状态。",
+        ),
+        _row(
+            "地市后台",
+            "营销活动",
+            "活动配置",
+            "活动配置",
+            "维护活动参与范围配置。",
+            "查看详情",
+            "查看已保存的客户活动匹配关系和当前生效状态。",
+            "查询",
+        ),
+    ]
+
+    result = _build_fpa_rule_rows(rows, _meta(), profile=STRICT_FPA_PROFILE)
+    types = _types_by_name(result)
+
+    assert types["客户活动匹配关系"] == "ILF"
+    assert types["保存设置"] == "EI"
+    assert types["查看详情"] == "EQ"
 
 
 def test_strict_fpa_keeps_valid_ai_ei_when_description_mentions_query_list():

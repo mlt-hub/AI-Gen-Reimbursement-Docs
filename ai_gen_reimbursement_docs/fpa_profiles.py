@@ -823,6 +823,7 @@ class StrictFpaProfile(CustomRulesProfile):
         for prefix in ["外部应用维护的", "外部系统维护的", "第三方系统维护的", "外部维护的", "本系统不维护的"]:
             if name.startswith(prefix):
                 name = name[len(prefix):]
+        name = re.split(r"(?:中选择|中查看|中读取|并|，|。|；|、)", name, maxsplit=1)[0]
         return name.strip(" 的。；，、")
 
     def _extra_internal_data_names(self, l3: str, process_list: list[object]) -> list[str]:
@@ -837,8 +838,30 @@ class StrictFpaProfile(CustomRulesProfile):
             if "管理员" in text:
                 names.append(f"{base}管理员关系")
             if any(k in text for k in ["关联关系", "匹配关系", "映射关系", "绑定关系"]):
-                names.append(self._relation_data_name(l3))
+                relation_name = self._extract_relation_data_name(text)
+                if relation_name:
+                    names.append(relation_name)
+                else:
+                    names.append(self._relation_data_name(l3))
         return names
+
+    def _extract_relation_data_name(self, text: str) -> str:
+        patterns = [
+            r"(?:本系统)?(?:保存|维护|记录|查看已保存的)([^，。；、\s]{2,24}(?:关联关系|匹配关系|映射关系|绑定关系))",
+            r"(?:本系统)?(?:保存|维护|记录)([^，。；、\s]{2,16})的(关联关系|匹配关系|映射关系|绑定关系)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if not match:
+                continue
+            if len(match.groups()) == 1:
+                raw = match.group(1)
+            else:
+                raw = "".join(group or "" for group in match.groups())
+            name = raw.replace("与", "").replace("和", "").replace("及", "").replace("的", "").strip(" 的。；，、")
+            if any(name.endswith(k) for k in ["关联关系", "匹配关系", "映射关系", "绑定关系"]):
+                return name
+        return ""
 
     def _relation_data_name(self, l3: str) -> str:
         name = l3.replace("管理", "").replace("维护", "").strip() or l3
