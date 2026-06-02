@@ -160,6 +160,47 @@ rule_sets:
     assert "secret" not in resp.text
 
 
+def test_fpa_options_returns_400_for_invalid_prompt_placeholder(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    (tmp_path / "fpa_config.yaml").write_text(
+        """
+profile: strict_fpa
+profiles:
+  custom_rules:
+    strategy: rules_first
+    rule_set: custom_rules_default
+    system_prompt: custom_rules
+    user_prompt: custom_rules
+  strict_fpa:
+    strategy: ai_first
+    rule_set: strict_fpa_default
+    system_prompt: strict_fpa
+    user_prompt: strict_fpa
+prompt_sets:
+  custom_rules:
+    system: custom system
+    user: ${core_rules} ${judgement_rules} ${payload_json}
+  strict_fpa:
+    system: strict system
+    user: ${core_rules} ${judgement_rules} ${payload_json} ${unknown_placeholder}
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.config_utils.config_dir",
+        lambda: tmp_path,
+    )
+
+    resp = client.get("/api/fpa/options")
+
+    assert resp.status_code == 400
+    assert "prompt_sets.strict_fpa.user 包含未知占位符" in resp.json()["detail"]
+    assert "${unknown_placeholder}" in resp.json()["detail"]
+
+
 def test_run_upload_smoke_creates_remote_session(monkeypatch):
     client = _client(monkeypatch, user="alice")
     calls: list[dict] = []
