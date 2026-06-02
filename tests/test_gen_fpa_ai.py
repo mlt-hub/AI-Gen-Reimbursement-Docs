@@ -645,6 +645,8 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["thinking"] == "思考过程"
     assert debug["parsed_rows"] == response["rows"]
     assert debug["final_rows"][0]["name"] == "垂直行业数据维护"
+    assert result["audit"]["raw_ai"]["source"] == "ai"
+    assert result["audit"]["raw_ai"]["raw_rows"] == response["rows"]
 
 
 def test_fpa_preview_prompt_includes_project_domain_context(monkeypatch, tmp_path):

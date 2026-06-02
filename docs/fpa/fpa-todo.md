@@ -421,7 +421,7 @@ rules_fallback 行使用浅橙色底色。
 后续可增强：
 
 ```text
-K1. 已完成第一切片：预览 audit 和正式 check.xlsx 的覆盖审核共用同一套多模块 FpaAuditReport 覆盖统计；AI原始返回和规则命中详情仍继续读取生成期 audit trace。
+K1. 已完成第二切片：预览 audit 和正式 check.xlsx 的覆盖审核、AI原始返回共用同一套多模块 FpaAuditReport；规则命中详情仍继续读取生成期 audit trace。
 K2. 已完成基础版：增加 AI 原始返回 Sheet。
 K3. 已完成基础版：增加规则命中详情 Sheet。
 K4. 已完成：细化 warnings 到更明确的规则命中来源。

@@ -73,6 +73,9 @@ class FpaAuditReport:
     missing_processes: list[str]
     generation_counts: dict[str, int]
     warnings: list[str] = field(default_factory=list)
+    raw_source: str = ""
+    raw_rows: list[object] = field(default_factory=list)
+    raw_warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -90,6 +93,11 @@ class FpaAuditReport:
             },
             "generation_counts": self.generation_counts,
             "warnings": self.warnings,
+            "raw_ai": {
+                "source": self.raw_source,
+                "warnings": self.raw_warnings,
+                "raw_rows": self.raw_rows,
+            },
         }
 
 
@@ -670,6 +678,9 @@ def _build_fpa_audit_report(
     profile_version: str,
     strategy: str,
     rule_set: str,
+    raw_source: str = "",
+    raw_rows: list[object] | None = None,
+    raw_warnings: list[str] | None = None,
 ) -> FpaAuditReport:
     process_names = _process_names_for_group(group)
     expected = set(process_names)
@@ -697,6 +708,9 @@ def _build_fpa_audit_report(
         missing_processes=missing_processes,
         generation_counts=generation_counts,
         warnings=audit_warnings,
+        raw_source=raw_source,
+        raw_rows=list(raw_rows or []),
+        raw_warnings=list(raw_warnings or []),
     )
 
 
@@ -722,9 +736,14 @@ def _build_fpa_audit_reports_for_groups(
     profile_version: str,
     strategy: str,
     rule_set: str,
+    raw_audit_by_module: dict[int, dict[str, object]] | None = None,
 ) -> list[FpaAuditReport]:
-    return [
-        _build_fpa_audit_report(
+    reports: list[FpaAuditReport] = []
+    raw_audit_by_module = raw_audit_by_module or {}
+    for idx, group in enumerate(groups, 1):
+        raw_audit = raw_audit_by_module.get(idx, {})
+        raw_warnings = raw_audit.get("warnings", [])
+        reports.append(_build_fpa_audit_report(
             group=group,
             module=_module_payload_for_audit(idx, group),
             fpa_rows=rows_by_module.get(idx, []),
@@ -733,9 +752,11 @@ def _build_fpa_audit_reports_for_groups(
             profile_version=profile_version,
             strategy=strategy,
             rule_set=rule_set,
-        )
-        for idx, group in enumerate(groups, 1)
-    ]
+            raw_source=str(raw_audit.get("source", "") or ""),
+            raw_rows=raw_audit.get("raw_rows", []) if isinstance(raw_audit.get("raw_rows", []), list) else [],
+            raw_warnings=raw_warnings if isinstance(raw_warnings, list) else _warning_items(raw_warnings),
+        ))
+    return reports
 
 
 def _rule_set_config_warnings(rule_set_config: object | None) -> list[str]:
@@ -1725,6 +1746,11 @@ def generate_fpa_check_xlsx_from_md(
         config_warnings = [str(w).strip() for w in item_warnings if _is_config_warning(w)]
         if config_warnings:
             config_warnings_by_module_idx[module_idx] = config_warnings
+    raw_audit_by_module_idx: dict[int, dict[str, object]] = {
+        module_idx: item
+        for module_idx, item in enumerate(audit_modules, 1)
+        if isinstance(item, dict)
+    }
     warnings_by_module_idx: dict[int, list[str]] = {}
     for idx in range(1, len(groups) + 1):
         module_warnings: list[str] = []
@@ -1741,6 +1767,7 @@ def generate_fpa_check_xlsx_from_md(
         profile_version=profile.version,
         strategy=execution_meta.get("strategy", ""),
         rule_set=execution_meta.get("rule_set", ""),
+        raw_audit_by_module=raw_audit_by_module_idx,
     )
     sheet_columns = _fpa_check_columns()
 
@@ -1880,21 +1907,16 @@ def generate_fpa_check_xlsx_from_md(
 
     ws_raw = wb.create_sheet("AI原始返回")
     ws_raw.append(sheet_columns["AI原始返回"])
-    if isinstance(audit_modules, list):
-        for item in audit_modules:
-            if not isinstance(item, dict):
-                continue
-            _append_audit_row(ws_raw, sheet_columns["AI原始返回"], {
-                "模块": item.get("module", ""),
-                "三级模块": item.get("l3", ""),
-                "来源": item.get("source", ""),
-                "Warnings": (
-                    "；".join(str(x) for x in item.get("warnings", []) if str(x).strip())
-                    if isinstance(item.get("warnings"), list)
-                    else str(item.get("warnings", "") or "")
-                ),
-                "AI原始Rows JSON": _json.dumps(item.get("raw_rows", []), ensure_ascii=False, indent=2),
-            })
+    for audit_report in audit_reports:
+        if not audit_report.raw_source and not audit_report.raw_rows and not audit_report.raw_warnings:
+            continue
+        _append_audit_row(ws_raw, sheet_columns["AI原始返回"], {
+            "模块": _group_tag(audit_report.module),
+            "三级模块": audit_report.module.get("l3", ""),
+            "来源": audit_report.raw_source,
+            "Warnings": "；".join(str(x) for x in audit_report.raw_warnings if str(x).strip()),
+            "AI原始Rows JSON": _json.dumps(audit_report.raw_rows, ensure_ascii=False, indent=2),
+        })
 
     header_fill = PatternFill("solid", fgColor="D9EAF7")
     warning_fill = PatternFill("solid", fgColor="FFF2CC")
@@ -2348,6 +2370,10 @@ def preview_fpa_module(
 
         preview_rows = [_row_to_preview(row) for row in fpa_rows]
         debug["final_rows"] = preview_rows
+        raw_source = "ai" if debug.get("ai_called") and used_ai else "rules"
+        if debug.get("reason") == "ai_failed_fallback":
+            raw_source = "rules_fallback"
+        raw_rows = debug.get("parsed_rows", [])
         audit = _build_fpa_audit_reports_for_groups(
             groups=[group],
             rows_by_module={1: fpa_rows},
@@ -2356,6 +2382,13 @@ def preview_fpa_module(
             profile_version=profile.version,
             strategy=execution.strategy,
             rule_set=execution.rule_set,
+            raw_audit_by_module={
+                1: {
+                    "source": raw_source,
+                    "raw_rows": raw_rows if isinstance(raw_rows, list) else [],
+                    "warnings": warnings,
+                }
+            },
         )[0]
         audit.module["index"] = idx
         module_payload = dict(audit.module)

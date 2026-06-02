@@ -2280,6 +2280,23 @@ AI原始返回和规则命中详情仍继续读取生成期 audit trace，后续
 test_fpa_acceptance_preview_and_formal_rules_use_same_rows 现在校验预览 audit 与正式 check.xlsx 覆盖审核的覆盖统计和生成方式统计一致。
 ```
 
+### K1 第二切片落地：AI原始返回共用 FpaAuditReport
+
+已完成：
+
+```text
+FpaAuditReport 增加 raw_ai 结构，包含 source、warnings、raw_rows。
+preview_fpa_module(...) 的 audit 会返回 raw_ai，AI 预览时 source=ai，raw_rows 为解析后的 AI 原始 rows。
+generate_fpa_check_xlsx_from_md(...) 会把 audit trace 中的 AI 原始返回先归入多模块 FpaAuditReport，再由 report 写入 AI原始返回 Sheet。
+覆盖审核和 AI原始返回已共用 FpaAuditReport；规则命中详情仍继续读取生成期 audit trace，后续如需可继续推进为完整五 Sheet 统一写出。
+```
+
+已补测试：
+
+```text
+test_fpa_preview_returns_ai_debug 校验预览 audit.raw_ai.source 和 raw_rows。
+```
+
 ### K5 落地：审核列可配置
 
 已完成：
