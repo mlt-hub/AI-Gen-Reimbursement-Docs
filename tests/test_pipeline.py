@@ -140,6 +140,29 @@ class TestGenFpa:
         assert result.fpa_reduced > 0
         assert excel_total_formula.startswith("=SUM(L3:L")
 
+    def test_ai_only_failure_does_not_generate_fpa_outputs(self, output_dir, test_excel, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+            lambda *args, **kwargs: '{"rows":[]}',
+        )
+
+        with pytest.raises(ValueError, match="AI 规划未生成有效 FPA 行"):
+            run_pipeline(
+                mode="gen-fpa",
+                file_path=test_excel,
+                output_dir=output_dir,
+                templates=TEMPLATES,
+                api_key="sk-test",
+                fpa_strategy="ai_only",
+            )
+
+        generated_workbooks = [
+            path.name
+            for path in Path(output_dir).rglob("*.xlsx")
+            if "FPA工作量评估" in path.name
+        ]
+        assert generated_workbooks == []
+
     def test_rejects_unknown_profile(self, output_dir, test_excel):
         with pytest.raises(ValueError, match="未知 FPA profile"):
             run_pipeline(

@@ -896,6 +896,35 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert result["audit"]["raw_ai"]["raw_rows"] == response["rows"]
 
 
+def test_ai_only_preview_empty_rows_does_not_fallback(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    xlsx = tmp_path / "功能清单.xlsx"
+    xlsx.write_bytes(b"placeholder")
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa.read_base_data_from_excel",
+        lambda path: {"tree_rows": _rows(), "meta": _meta()},
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: (json.dumps({"rows": []}), "") if kwargs.get("return_thinking") else json.dumps({"rows": []}),
+    )
+
+    def fail_if_fallback(*args, **kwargs):
+        pytest.fail("ai_only 失败时不应使用 rules_fallback")
+
+    monkeypatch.setattr(CustomRulesProfile, "fallback_rows_for_l3", fail_if_fallback)
+
+    with pytest.raises(ValueError, match="AI 规划未生成有效 FPA 行"):
+        preview_fpa_module(
+            file_path=str(xlsx),
+            module_name="垂直行业管理",
+            api_key="sk-test",
+            model="test-model",
+            base_url="",
+            strategy="ai_only",
+        )
+
+
 def test_fpa_preview_prompt_includes_project_domain_context(monkeypatch, tmp_path):
     _write_fpa_prompt_config(tmp_path, monkeypatch)
     (tmp_path / "domain_context.json").write_text(
