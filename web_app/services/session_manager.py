@@ -179,7 +179,7 @@ class SessionManager:
         event_type = str(event.get("type") or "")
         if not step or event_type not in {
             "step_started", "activity", "artifact", "input_required",
-            "step_done", "step_failed",
+            "step_done", "step_failed", "step_cancelled",
         }:
             return
         with self._lock:
@@ -219,6 +219,27 @@ class SessionManager:
                 progress["status"] = "failed"
                 progress["error"] = message
                 progress["finished_at"] = now.isoformat()
+            elif event_type == "step_cancelled":
+                progress["status"] = "cancelled"
+                progress["current_action"] = message
+                progress["finished_at"] = now.isoformat()
+            state.updated_at = now
+
+    def cancel_active_progress(self, session_id: str, message: str = "任务已被用户停止") -> None:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return
+            active = None
+            for step in state.progress_steps.values():
+                if step.get("status") in {"running", "waiting_input"}:
+                    active = step
+            if active is None:
+                return
+            now = _now_utc()
+            active["status"] = "cancelled"
+            active["current_action"] = message
+            active["finished_at"] = now.isoformat()
             state.updated_at = now
 
     def get_progress_steps(self, session_id: str) -> list[dict[str, Any]]:

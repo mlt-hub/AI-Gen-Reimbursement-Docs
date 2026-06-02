@@ -460,6 +460,20 @@ def test_session_status_returns_done_files_and_zip(monkeypatch, tmp_path):
     server.session_manager.cleanup_download(session_id)
 
 
+def test_session_status_returns_cancelled_run_state(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "task_status_cancelled"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    server.session_manager.mark_task_started(session_id)
+    server.session_manager.mark_task_finished(session_id, last_error="cancelled")
+
+    resp = client.get(f"/api/sessions/{session_id}")
+
+    assert resp.status_code == 200
+    assert resp.json()["run_state"] == "cancelled"
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_session_status_hides_other_users_session(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="bob")
     session_id = "task_status_other_user"

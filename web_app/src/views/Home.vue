@@ -24,7 +24,7 @@
           </div>
         </div>
       </div>
-      <GenerationProgress v-if="session.isRunning || session.isDone || steps.hasProgress" />
+      <GenerationProgress v-if="session.isRunning || session.isDone || session.runState === 'cancelled' || steps.hasProgress" />
       <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
         <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
           运行详情 / 排错信息
@@ -191,7 +191,7 @@ const toast = useToastStore()
 const steps = useStepsStore()
 const LAST_SESSION_KEY = 'ard:lastSessionId'
 
-const runStateLabels = { idle: '就绪', running: '运行中', done: '已完成', error: '出错' }
+const runStateLabels = { idle: '就绪', running: '运行中', done: '已完成', error: '出错', cancelled: '已停止' }
 const runTitle = computed(() => {
   if (session.outputDir) return session.outputDir
   if (!session.sessionId) return '等待任务启动'
@@ -207,6 +207,7 @@ const runStateClass = computed(() => {
     running: 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]',
     done: 'border-[var(--color-success)] bg-[var(--color-success-soft)] text-[var(--color-success)]',
     error: 'border-[var(--color-danger)] bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
+    cancelled: 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
   }
   return map[session.runState]
 })
@@ -216,6 +217,7 @@ const runDotClass = computed(() => {
     running: 'bg-[var(--color-accent)]',
     done: 'bg-[var(--color-success)]',
     error: 'bg-[var(--color-danger)]',
+    cancelled: 'bg-[var(--color-warning)]',
   }
   return map[session.runState]
 })
@@ -352,6 +354,8 @@ async function restoreLastSession() {
     } else if (data.run_state === 'done') {
       log.append({ level: 'DONE', msg: '已恢复已完成的任务，可下载交付物', time: '' })
       steps.finishAll()
+    } else if (data.run_state === 'cancelled') {
+      log.append({ level: 'WARNING', msg: '已恢复已停止的任务', time: '' })
     } else {
       log.append({ level: 'ERROR', msg: '已恢复出错的任务', time: '' })
     }

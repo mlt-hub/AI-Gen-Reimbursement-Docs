@@ -27,7 +27,9 @@ from web_app.services.task_runner import (
 from web_app.services.template_service import save_custom_templates, save_custom_templates_into
 
 
-def _session_run_state(state) -> Literal["running", "done", "error"]:
+def _session_run_state(state) -> Literal["running", "done", "error", "cancelled"]:
+    if state.last_error == "cancelled":
+        return "cancelled"
     if state.last_error:
         return "error"
     if state.task_done_at is not None:

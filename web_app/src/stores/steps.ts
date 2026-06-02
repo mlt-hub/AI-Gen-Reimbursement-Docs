@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-export type StepStatus = 'pending' | 'running' | 'done' | 'failed' | 'waiting_input'
+export type StepStatus = 'pending' | 'running' | 'done' | 'failed' | 'waiting_input' | 'cancelled'
 
 export interface StepArtifact {
   label?: string
@@ -114,6 +114,11 @@ export const useStepsStore = defineStore('steps', () => {
         step.error = event.message || '阶段失败'
         step.finished_at = new Date().toISOString()
         return
+      case 'step_cancelled':
+        step.status = 'cancelled'
+        step.current_action = event.message || '任务已被用户停止'
+        step.finished_at = new Date().toISOString()
+        return
     }
   }
 
@@ -151,9 +156,17 @@ export const useStepsStore = defineStore('steps', () => {
     active.finished_at = new Date().toISOString()
   }
 
+  function cancelActive(message: string) {
+    const active = steps.value.find((step) => step.status === 'running' || step.status === 'waiting_input')
+    if (!active) return
+    active.status = 'cancelled'
+    active.current_action = message
+    active.finished_at = new Date().toISOString()
+  }
+
   function reset() {
     byKey.value = Object.fromEntries(STEP_ORDER.map((key) => [key, createStep(key)]))
   }
 
-  return { steps, hasProgress, setActive, handlePipelineEvent, applySnapshot, finishAll, failActive, reset }
+  return { steps, hasProgress, setActive, handlePipelineEvent, applySnapshot, finishAll, failActive, cancelActive, reset }
 })

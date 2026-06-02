@@ -92,7 +92,7 @@ onMounted(async () => {
 })
 
 const statusText = computed(() => {
-  const map = { idle: '就绪', running: '运行中...', done: '完成', error: '出错' }
+  const map = { idle: '就绪', running: '运行中...', done: '完成', error: '出错', cancelled: '已停止' }
   return map[session.runState]
 })
 
@@ -102,6 +102,7 @@ const statusClass = computed(() => {
     running: 'text-[var(--color-accent-strong)]',
     done: 'text-[var(--color-success)]',
     error: 'text-[var(--color-danger)]',
+    cancelled: 'text-[var(--color-warning)]',
   }
   return map[session.runState]
 })

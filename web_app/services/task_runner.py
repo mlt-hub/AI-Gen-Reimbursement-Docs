@@ -216,6 +216,7 @@ def execute_in_session(
     except CancelledError as e:
         error_message = "cancelled"
         logging.getLogger("ai_gen_reimbursement_docs").info(f"任务已停止: {e}")
+        session_manager.cancel_active_progress(session_id)
         pipeline_runtime.emit_session_event(session_manager, {"type": "cancelled"})
         session_manager.mark_task_finished(session_id, last_error="cancelled")
     except Exception as e:

@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 
-export type RunState = 'idle' | 'running' | 'done' | 'error'
+export type RunState = 'idle' | 'running' | 'done' | 'error' | 'cancelled'
 
 export interface InputPrompt {
   field: string
@@ -70,6 +70,12 @@ export const useSessionStore = defineStore('session', () => {
     listPrompt.value = null
   }
 
+  function setCancelled() {
+    runState.value = 'cancelled'
+    inputPrompt.value = null
+    listPrompt.value = null
+  }
+
   function reset() {
     sessionId.value = null
     outputDir.value = ''
@@ -87,5 +93,5 @@ export const useSessionStore = defineStore('session', () => {
     listPrompt.value = prompt
   }
 
-  return { sessionId, runState, outputDir, inputPrompt, listPrompt, doneFiles, isRunning, isDone, start, restore, finish, setError, reset, showInputPrompt, showListPrompt }
+  return { sessionId, runState, outputDir, inputPrompt, listPrompt, doneFiles, isRunning, isDone, start, restore, finish, setError, setCancelled, reset, showInputPrompt, showListPrompt }
 })

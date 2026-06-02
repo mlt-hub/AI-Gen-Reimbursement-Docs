@@ -60,8 +60,8 @@ export const useLogStore = defineStore('log', () => {
           case 'cancelled':
             close()
             append({ level: 'WARNING', msg: '── 任务已被用户停止 ──', time: '' })
-            session.setError()
-            useStepsStore().failActive('任务已被用户停止')
+            session.setCancelled()
+            useStepsStore().cancelActive('任务已被用户停止')
             return
           case 'prompt':
             append({ level: 'INFO', msg: `⏸ ${data.msg || '等待用户输入...'}`, time: data.time || '' })
@@ -87,6 +87,7 @@ export const useLogStore = defineStore('log', () => {
           case 'input_required':
           case 'step_done':
           case 'step_failed':
+          case 'step_cancelled':
             useStepsStore().handlePipelineEvent(data)
             return
           case 'log':

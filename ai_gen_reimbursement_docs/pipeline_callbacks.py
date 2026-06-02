@@ -12,6 +12,7 @@ PipelineEventType = Literal[
     "input_required",
     "step_done",
     "step_failed",
+    "step_cancelled",
 ]
 PipelineStep = Literal["basedata", "fpa", "spec", "cosmic", "list"]
 

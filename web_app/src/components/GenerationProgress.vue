@@ -33,6 +33,14 @@
           <div v-for="artifact in step.artifacts" :key="artifact.path || artifact.name" class="mt-2 flex items-center justify-between gap-3 text-xs">
             <span class="min-w-0 truncate text-[var(--color-ink-muted)]">{{ artifact.name || artifact.label }}</span>
             <span v-if="artifact.is_temp" class="shrink-0 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[var(--color-ink-soft)]">中间文件</span>
+            <button
+              v-else-if="canUseArtifactAction"
+              class="btn-secondary min-h-0 shrink-0 px-2 py-1 text-xs"
+              @click="useArtifactAction"
+            >
+              {{ artifactActionLabel }}
+            </button>
+            <span v-else class="shrink-0 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[var(--color-ink-soft)]">完成后可操作</span>
           </div>
         </div>
       </article>
@@ -41,10 +49,27 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useStepsStore } from '@/stores/steps.ts'
 import type { StepStatus } from '@/stores/steps.ts'
+import { useSessionStore } from '@/stores/session.ts'
+import { useConfigStore } from '@/stores/config.ts'
+import { useToastStore } from '@/stores/toast.ts'
+import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 const stepsStore = useStepsStore()
+const session = useSessionStore()
+const config = useConfigStore()
+const toast = useToastStore()
+
+const canUseArtifactAction = computed(() => {
+  if (!session.sessionId) return false
+  if (config.workMode === 'local') return true
+  return session.isDone
+})
+const artifactActionLabel = computed(() => (
+  config.workMode === 'local' ? '打开目录' : '下载 ZIP'
+))
 
 function statusLabel(status: StepStatus) {
   return {
@@ -53,12 +78,15 @@ function statusLabel(status: StepStatus) {
     done: '已完成',
     failed: '失败',
     waiting_input: '等待确认',
+    cancelled: '已停止',
   }[status]
 }
 
 function cardClass(status: StepStatus) {
   return status === 'failed'
     ? 'border-[var(--color-danger)]'
+    : status === 'cancelled'
+      ? 'border-[var(--color-warning)]'
     : status === 'running' || status === 'waiting_input'
       ? 'border-[var(--color-accent)]'
       : 'border-[var(--color-rule)]'
@@ -71,6 +99,21 @@ function badgeClass(status: StepStatus) {
     done: 'bg-[var(--color-success-soft)] text-[var(--color-success)]',
     failed: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
     waiting_input: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+    cancelled: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
   }[status]
+}
+
+function useArtifactAction() {
+  if (!session.sessionId) return
+  if (config.workMode === 'local') {
+    apiFetch('/api/open-folder?session=' + session.sessionId).catch((e) => {
+      toast.show('error', normalizeApiError(e))
+    })
+    return
+  }
+  if (!session.isDone) return
+  const a = document.createElement('a')
+  a.href = '/api/download/' + session.sessionId
+  a.click()
 }
 </script>

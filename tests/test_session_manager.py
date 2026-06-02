@@ -138,3 +138,35 @@ def test_pipeline_events_build_progress_snapshot():
     assert progress[0]["artifacts"] == [{"label": "FPA 工作量评估", "path": "fpa.xlsx"}]
     assert progress[0]["started_at"]
     assert progress[0]["finished_at"]
+
+
+def test_cancel_active_progress_marks_running_step_cancelled():
+    manager = SessionManager()
+    manager.create("s1", mode="local")
+    manager.record_pipeline_event("s1", {
+        "type": "step_started",
+        "step": "spec",
+        "message": "生成需求说明书",
+    })
+
+    manager.cancel_active_progress("s1")
+
+    progress = manager.get_progress_steps("s1")
+    assert progress[0]["status"] == "cancelled"
+    assert progress[0]["current_action"] == "任务已被用户停止"
+    assert progress[0]["finished_at"]
+
+
+def test_step_cancelled_event_updates_progress_snapshot():
+    manager = SessionManager()
+    manager.create("s1", mode="local")
+
+    manager.record_pipeline_event("s1", {
+        "type": "step_cancelled",
+        "step": "list",
+        "message": "任务已被用户停止",
+    })
+
+    progress = manager.get_progress_steps("s1")
+    assert progress[0]["key"] == "list"
+    assert progress[0]["status"] == "cancelled"
