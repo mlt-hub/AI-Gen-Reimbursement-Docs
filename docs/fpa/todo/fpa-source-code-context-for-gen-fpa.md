@@ -196,6 +196,84 @@ FPA 仍应按业务能力、逻辑数据组和事务功能计量。
 }
 ```
 
+## 实现难度与分期
+
+整体判断：MVP 好实现，中高级自动分析不算简单。
+
+现有 `gen-fpa` 已经有合适的扩展点：prompt payload 中包含 `domain_context`，并且合并后的 `domain_context` 已进入 AI cache key。因此第一版不需要重写生成流程，只需要把源码分析结果整理成领域上下文，再进入现有 `domain_context` 路径。
+
+### 第一阶段：MVP
+
+难度：低。
+
+目标：
+
+- 不做复杂源码解析。
+- 允许用户或简单脚本生成 `source_context.json`。
+- 人工确认后，把稳定信息写入 `domain_context.json`。
+- `gen-fpa` 继续使用现有 prompt 注入和 cache key 逻辑。
+
+适合先验证价值：
+
+- 源码信息是否能减少 ILF/EIF 误判。
+- 外部服务是否能和外部数据组区分开。
+- 计算依据说明是否更贴近真实系统元素。
+
+这一阶段主要新增文档、示例和少量辅助脚本，不触碰核心 FPA 判定算法。
+
+### 第二阶段：实用版
+
+难度：中等。
+
+目标：
+
+- 新增源码扫描命令，输出候选上下文。
+- 按 FPA 有用信息分类，而不是按文件树输出。
+- 每个候选项带来源证据，例如文件路径、类名、方法名、路由。
+- 用户确认后再合并到 `domain_context.json`。
+
+候选输出包括：
+
+- `internal_data_group_candidates`
+- `external_data_group_candidates`
+- `external_service_candidates`
+- `transaction_action_candidates`
+- `system_boundary_candidates`
+
+这一阶段的关键不是“扫描到更多”，而是“候选项可审阅、可解释、可舍弃”。
+
+### 第三阶段：自动辅助版
+
+难度：中高到高。
+
+目标：
+
+- 支持多语言或多框架源码。
+- 识别 ORM、Controller、Service、外部 Client、前端路由。
+- 在 FPA 预览中显示命中的源码证据。
+- 辅助判断 ILF/EIF/EI/EQ/EO，但不直接替代 profile 和 rule_set。
+
+主要难点：
+
+- 不能把数据库表机械等同为 ILF。
+- 不能把接口机械等同为 EI/EQ/EO。
+- 不能把普通外部 API 调用机械等同为 EIF。
+- 源码命名和业务语言可能不一致，需要保留人工确认环节。
+- 多语言、多框架项目的结构差异较大，自动识别规则需要逐步扩展。
+
+### 难度拆解
+
+```text
+把源码摘要接入 gen-fpa prompt：低
+新增 source_context.json 配置和读取：低到中
+生成候选项并带来源证据：中
+扫描 Java/Python/前端等多类源码：中到中高
+自动判 ILF/EIF/EI/EQ/EO：中高
+做到可审计、低误判：高
+```
+
+推荐优先实现第一阶段和第二阶段。这样能获得主要收益，同时避免让源码结构直接污染 FPA 计量口径。
+
 ## 后续可实施能力
 
 ### 源码上下文生成命令
