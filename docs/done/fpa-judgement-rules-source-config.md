@@ -1,5 +1,29 @@
 # FPA 计算依据归类判定原则配置化待办
 
+## 完成记录
+
+- 状态：已完成
+- 完成提交：`f154da1 feat: configure FPA judgement rules source`
+- 完成时间：2026-06-03
+
+已实现内容：
+
+1. `fpa_config.yaml` 支持 `judgement_rules_source`，未配置时默认 `config`。
+2. 新增 `config/fpa_judgement_rules.yaml.example`，用户配置目录使用 `fpa_judgement_rules.yaml`。
+3. `config` 来源下严格校验配置文件缺失、格式错误、空列表和非字符串项。
+4. `template` 来源保留从 FPA 输出模板 Excel 附录读取判定原则的旧行为。
+5. FPA 正式生成和预览统一使用来源选择后的判定原则列表。
+6. AI prompt 中继续按 `1) ...` 编号传入判定原则，`classification_basis_index` 后处理继续按列表序号映射「计算依据归类」。
+7. 配置初始化、文档和测试夹具已同步更新。
+
+验证结果：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_gen_fpa_ai.py tests/test_gen_fpa_preview.py tests/test_pipeline.py tests/test_web_tasks.py
+```
+
+结果：`168 passed`
+
 ## 背景
 
 当前 `gen-fpa` 的「计算依据归类判定原则列表」由 FPA 输出模板 Excel 附录读取：
