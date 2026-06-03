@@ -162,6 +162,87 @@ FPA 仍应按业务能力、逻辑数据组和事务功能计量。
 - EI/EQ/EO 是否和事务动作一致。
 - 计算依据说明是否引用了真实系统元素，且没有把表或接口机械等同为功能点。
 
+## Agent 协作流程
+
+当用户把项目源代码提供给 agent 时，推荐按“先分析、再确认、后落配置”的方式执行。
+
+### 输入要求
+
+用户提供源码路径即可，例如：
+
+```text
+F:\mlt\some-project-source
+```
+
+如果项目包含多个代码仓库，建议同时说明每个仓库的职责，例如：
+
+```text
+backend: F:\project\backend
+frontend: F:\project\frontend
+batch: F:\project\batch-jobs
+```
+
+可选补充：
+
+- 技术栈，例如 Java Spring、Python FastAPI、Vue、React。
+- 哪个仓库属于本系统边界内。
+- 哪些外部系统名称已知。
+- 是否允许读取数据库脚本、配置文件、接口文档和部署配置。
+
+### Agent 执行步骤
+
+1. 扫描源码结构，识别后端、前端、配置、数据库脚本和外部依赖入口。
+2. 提取候选信息：
+   - 本系统维护的数据组候选。
+   - 外部系统维护、本系统引用的数据组候选。
+   - 普通外部服务调用候选。
+   - EI/EQ/EO 事务动作候选。
+   - 系统边界线索。
+3. 为每个候选项保留来源证据，例如文件路径、类名、方法名、接口路径或配置键。
+4. 形成源码上下文分析报告。
+5. 形成 `domain_context.json` 建议稿。
+6. 等用户确认后，再更新实际配置文件。
+
+### 输出产物
+
+第一轮分析建议输出两类文件：
+
+```text
+docs/fpa/todo/source-context-analysis-<project>.md
+docs/fpa/todo/domain-context-suggestion-<project>.json
+```
+
+其中：
+
+- `source-context-analysis-<project>.md`：解释分析范围、候选项、来源证据、判断理由和风险。
+- `domain-context-suggestion-<project>.json`：只放适合进入 `domain_context.json` 的建议稿，不直接作为最终配置写入。
+
+### 人工确认点
+
+进入 `domain_context.json` 前，用户或业务负责人至少确认：
+
+- 哪些数据组确实由本系统维护。
+- 哪些数据组确实由外部系统维护、本系统只是引用。
+- 哪些外部调用只是能力型服务，不应计为 EIF。
+- 源码中的技术名是否需要改成业务名。
+- 是否存在源码未覆盖但业务上必须纳入的系统边界。
+
+### 修改边界
+
+agent 默认不应直接把源码扫描结果写入正式 `domain_context.json`。
+
+默认流程是：
+
+```text
+源码扫描
+→ 候选分析报告
+→ domain_context 建议稿
+→ 用户确认
+→ 更新正式配置
+```
+
+只有用户明确发出“按建议更新配置”“写入 domain_context.json”等指令后，才修改正式配置。
+
 ## 与 domain_context.json 的关系
 
 当前最合适的落点是 `domain_context.json`。
