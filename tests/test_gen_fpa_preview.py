@@ -1,12 +1,47 @@
 from pathlib import Path
 import shutil
 
+import openpyxl
 import pytest
 
-from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module, preview_fpa_modules
+from ai_gen_reimbursement_docs.gen_fpa import _read_fpa_judgement_rules, preview_fpa_module, preview_fpa_modules
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _write_template_with_judgement_rules(path: Path, rules: list[str]) -> None:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "附录1-FPA评估方法说明"
+    ws.cell(1, 3).value = "判定原则"
+    for row, rule in enumerate(rules, 2):
+        ws.cell(row, 3).value = rule
+    wb.save(path)
+    wb.close()
+
+
+def test_read_fpa_judgement_rules_defaults_to_config(default_fpa_config, tmp_path):
+    (default_fpa_config / "fpa_judgement_rules.yaml").write_text(
+        "judgement_rules:\n  - 配置规则一\n  - 配置规则二\n",
+        encoding="utf-8",
+    )
+    template = tmp_path / "template.xlsx"
+    _write_template_with_judgement_rules(template, ["模板规则"])
+
+    assert _read_fpa_judgement_rules(str(template)) == ["配置规则一", "配置规则二"]
+
+
+def test_read_fpa_judgement_rules_can_use_template_source(default_fpa_config, tmp_path):
+    config_path = default_fpa_config / "fpa_config.yaml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace("judgement_rules_source: config", "judgement_rules_source: template"),
+        encoding="utf-8",
+    )
+    template = tmp_path / "template.xlsx"
+    _write_template_with_judgement_rules(template, ["模板规则一", "模板规则二"])
+
+    assert _read_fpa_judgement_rules(str(template)) == ["模板规则一", "模板规则二"]
 
 
 def test_preview_fpa_module_by_index_uses_fallback(test_excel, tmp_path):

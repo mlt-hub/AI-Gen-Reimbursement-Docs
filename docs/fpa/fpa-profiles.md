@@ -418,7 +418,7 @@ ${core_rules}
 当前 profile 的核心规则。
 
 ${judgement_rules}
-从 FPA 输出模板附录 Sheet 读取的“计算依据归类判定原则”。
+按 `judgement_rules_source` 读取的“计算依据归类判定原则”。默认从配置目录/fpa_judgement_rules.yaml 读取；显式配置为 template 时从 FPA 输出模板附录 Sheet 读取。
 
 ${payload_json}
 当前三级模块、功能过程和领域上下文 JSON。

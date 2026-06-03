@@ -259,7 +259,7 @@ def _build_fpa_rule_rows(
     return fpa_rows
 
 
-def _read_fpa_judgement_rules(template_path: str = "") -> list[str]:
+def _read_fpa_judgement_rules_from_template(template_path: str = "") -> list[str]:
     judgement_rules: list[str] = []
     if not template_path:
         return judgement_rules
@@ -278,6 +278,18 @@ def _read_fpa_judgement_rules(template_path: str = "") -> list[str]:
     except Exception as e:
         logger.warning("从模板附录读取判定原则失败: %s", e)
     return judgement_rules
+
+
+def _read_fpa_judgement_rules(template_path: str = "") -> list[str]:
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_fpa_judgement_rules_config,
+        load_fpa_judgement_rules_source,
+    )
+
+    source = load_fpa_judgement_rules_source()
+    if source == "config":
+        return load_fpa_judgement_rules_config()
+    return _read_fpa_judgement_rules_from_template(template_path)
 
 
 def _extract_json_obj(resp: str) -> dict[str, Any]:

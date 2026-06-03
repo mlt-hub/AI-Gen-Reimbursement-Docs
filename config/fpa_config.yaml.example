@@ -4,6 +4,7 @@
 # profile 决定默认 FPA 方案；CLI/Web/API 显式传入 fpa_profile 时优先使用显式值。
 
 profile: custom_rules
+judgement_rules_source: config
 
 profiles:
   custom_rules:

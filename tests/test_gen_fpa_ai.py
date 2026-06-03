@@ -211,6 +211,10 @@ rule_sets:
 """,
         encoding="utf-8",
     )
+    (tmp_path / "fpa_judgement_rules.yaml").write_text(
+        "judgement_rules:\n  - 规则一\n  - 规则二\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: tmp_path)
 
 
@@ -1169,10 +1173,13 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: system_prompt_sets.custom_rules）"
     assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.custom_rules）"
     assert "垂直行业管理" in debug["user_prompt"]
+    assert "1) 规则一" in debug["user_prompt"]
+    assert "2) 规则二" in debug["user_prompt"]
     assert "[system]" in debug["ai_prompt"]
     assert "垂直行业数据维护" in debug["raw_response"]
     assert debug["thinking"] == "思考过程"
     assert debug["parsed_rows"] == response["rows"]
+    assert result["rows"][0]["classification_basis"] == "规则一"
     assert debug["final_rows"][0]["name"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据维护"
     assert result["audit"]["raw_ai"]["source"] == "ai"
     assert result["audit"]["raw_ai"]["raw_rows"] == response["rows"]

@@ -25,7 +25,9 @@ def test_excel():
 def default_fpa_config(tmp_path, monkeypatch):
     cfg_dir = tmp_path / "default-config"
     cfg_dir.mkdir()
-    shutil.copy2(Path(__file__).parent.parent / "config" / "fpa_config.yaml.example", cfg_dir / "fpa_config.yaml")
+    config_dir = Path(__file__).parent.parent / "config"
+    shutil.copy2(config_dir / "fpa_config.yaml.example", cfg_dir / "fpa_config.yaml")
+    shutil.copy2(config_dir / "fpa_judgement_rules.yaml.example", cfg_dir / "fpa_judgement_rules.yaml")
     monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: cfg_dir)
     return cfg_dir
 

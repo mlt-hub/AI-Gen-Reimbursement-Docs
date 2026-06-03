@@ -158,7 +158,7 @@ profiles:
 | 变量 | 作用 |
 |---|---|
 | `core_rules` | 当前 FPA profile 的 `core_rules.<name>` 核心口径文本 |
-| `judgement_rules` | 从 FPA 模板中读取的计算依据归类判定原则 |
+| `judgement_rules` | 按 `judgement_rules_source` 读取的计算依据归类判定原则，默认来自 `fpa_judgement_rules.yaml` |
 | `payload_json` | 当前三级模块、功能过程和领域上下文的结构化 JSON |
 
 用户提示词必须保留全部三个占位符：
@@ -170,6 +170,23 @@ ${payload_json}
 ```
 
 除上述三个变量外，不支持其他占位符。`domain_context` 会放在 `${payload_json}` 的 JSON 内容中，不是独立模板变量。未知占位符、非法占位符或缺少任一核心占位符都会在读取 `fpa_config.yaml` 时直接报错。
+
+### 计算依据归类判定原则来源
+
+`fpa_config.yaml` 通过 `judgement_rules_source` 控制判定原则来源：
+
+```yaml
+judgement_rules_source: config
+```
+
+可选值：
+
+```text
+config：默认值，从配置目录/fpa_judgement_rules.yaml 读取 judgement_rules。
+template：从 FPA 输出模板 Excel 附录 Sheet 读取，保留旧模板来源行为。
+```
+
+`config` 来源下，`fpa_judgement_rules.yaml` 必须存在，且 `judgement_rules` 必须是非空字符串列表。缺失、格式错误或空列表会直接报错，避免 AI 返回 `classification_basis_index` 后无法映射“计算依据归类”。
 
 ## 默认规则配置
 

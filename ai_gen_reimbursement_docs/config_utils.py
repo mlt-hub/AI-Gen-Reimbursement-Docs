@@ -19,6 +19,7 @@ DEFAULT_CONFIG_TEMPLATE_FILES = (
     (".env.example", ".env"),
     ("system_config.yaml.example", "system_config.yaml"),
     ("fpa_config.yaml.example", "fpa_config.yaml"),
+    ("fpa_judgement_rules.yaml.example", "fpa_judgement_rules.yaml"),
     ("domain_context.json.example", "domain_context.json"),
 )
 
@@ -396,8 +397,10 @@ def load_fpa_excel_recalc_check() -> bool:
 
 FPA_CONFIG_FILENAME = "fpa_config.yaml"
 FPA_DOMAIN_CONTEXT_FILENAME = "domain_context.json"
+FPA_JUDGEMENT_RULES_FILENAME = "fpa_judgement_rules.yaml"
 VALID_FPA_PROFILE_NAMES = {"custom_rules", "strict_fpa"}
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
+VALID_FPA_JUDGEMENT_RULES_SOURCES = {"config", "template"}
 VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_FPA_TRANSACTION_TYPES = {"EI", "EQ", "EO"}
 VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
@@ -791,6 +794,10 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     if not isinstance(cfg, dict) or not cfg:
         raise FpaConfigError(f"FPA 配置为空：配置目录/{FPA_CONFIG_FILENAME}")
 
+    judgement_rules_source = cfg.get("judgement_rules_source", "config")
+    if not isinstance(judgement_rules_source, str) or judgement_rules_source.strip() not in VALID_FPA_JUDGEMENT_RULES_SOURCES:
+        raise FpaConfigError(f"未知 FPA judgement_rules_source: {judgement_rules_source}")
+
     profiles = _require_mapping(cfg.get("profiles"), "profiles")
     core_rules = _require_mapping(cfg.get("core_rules"), "core_rules")
     system_prompt_sets = _require_mapping(cfg.get("system_prompt_sets"), "system_prompt_sets")
@@ -901,6 +908,39 @@ def load_fpa_config() -> dict[str, object]:
         raise FpaConfigError(f"FPA 配置为空：配置目录/{FPA_CONFIG_FILENAME}")
     validate_fpa_config(cfg)
     return cfg
+
+
+def load_fpa_judgement_rules_source() -> str:
+    """读取 FPA 计算依据归类判定原则来源。"""
+    cfg = load_fpa_config()
+    value = cfg.get("judgement_rules_source", "config")
+    if not isinstance(value, str) or value.strip() not in VALID_FPA_JUDGEMENT_RULES_SOURCES:
+        raise FpaConfigError(f"未知 FPA judgement_rules_source: {value}")
+    return value.strip()
+
+
+def load_fpa_judgement_rules_config() -> list[str]:
+    """严格读取独立 FPA 计算依据归类判定原则配置。"""
+    yaml_path = config_dir() / FPA_JUDGEMENT_RULES_FILENAME
+    if not yaml_path.exists():
+        raise FpaConfigError(f"未找到 FPA 判定原则配置文件：配置目录/{FPA_JUDGEMENT_RULES_FILENAME}")
+    try:
+        cfg = _load_yaml_file(yaml_path)
+    except Exception as exc:
+        raise FpaConfigError(f"读取 FPA 判定原则配置失败：配置目录/{FPA_JUDGEMENT_RULES_FILENAME}") from exc
+    rules = cfg.get("judgement_rules") if isinstance(cfg, dict) else None
+    if not isinstance(rules, list) or not rules:
+        raise FpaConfigError(
+            f"FPA 判定原则配置无效：配置目录/{FPA_JUDGEMENT_RULES_FILENAME} 中的 judgement_rules 必须是非空字符串列表"
+        )
+    normalized: list[str] = []
+    for index, rule in enumerate(rules):
+        if not isinstance(rule, str) or not rule.strip():
+            raise FpaConfigError(
+                f"FPA 判定原则配置无效：配置目录/{FPA_JUDGEMENT_RULES_FILENAME} 中的 judgement_rules[{index}] 必须是非空字符串"
+            )
+        normalized.append(rule.strip())
+    return normalized
 
 
 def load_fpa_profiles_config() -> dict[str, object]:

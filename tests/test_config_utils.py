@@ -21,6 +21,8 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_strategy,
     load_fpa_check_columns,
     load_fpa_core_rules_config,
+    load_fpa_judgement_rules_config,
+    load_fpa_judgement_rules_source,
     load_fpa_rule_sets_config,
     FpaConfigError,
     load_fpa_system_prompt_config,
@@ -41,6 +43,7 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
         ".env.example",
         "system_config.yaml.example",
         "fpa_config.yaml.example",
+        "fpa_judgement_rules.yaml.example",
         "domain_context.json.example",
     ]:
         (source / name).write_text(f"{name}\n", encoding="utf-8")
@@ -52,11 +55,13 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
     assert sorted(path.name for path in created) == [
         "domain_context.json",
         "fpa_config.yaml",
+        "fpa_judgement_rules.yaml",
         "system_config.yaml",
     ]
     assert (target / ".env").read_text(encoding="utf-8") == "existing\n"
     assert (target / "system_config.yaml").exists()
     assert (target / "fpa_config.yaml").exists()
+    assert (target / "fpa_judgement_rules.yaml").exists()
     assert (target / "domain_context.json").exists()
 
 
@@ -355,6 +360,63 @@ class TestLoadFpaExecutionOptions:
         _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_rule_sets_config()["client_a_rules"]["extends"] == "strict_fpa_default"
+
+    def test_judgement_rules_source_defaults_to_config(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_judgement_rules_source() == "config"
+
+    def test_judgement_rules_source_accepts_template(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        path = tmp_path / "fpa_config.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("profile: custom_rules", "profile: custom_rules\njudgement_rules_source: template"),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_judgement_rules_source() == "template"
+
+    def test_judgement_rules_source_rejects_unknown_value(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        path = tmp_path / "fpa_config.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("profile: custom_rules", "profile: custom_rules\njudgement_rules_source: xxx"),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match="未知 FPA judgement_rules_source: xxx"):
+                load_fpa_judgement_rules_source()
+
+    def test_load_fpa_judgement_rules_config(self, tmp_path):
+        (tmp_path / "fpa_judgement_rules.yaml").write_text(
+            """
+judgement_rules:
+  -  规则一
+  - 规则二
+""",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_judgement_rules_config() == ["规则一", "规则二"]
+
+    def test_missing_fpa_judgement_rules_config_is_rejected(self, tmp_path):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match="未找到 FPA 判定原则配置文件"):
+                load_fpa_judgement_rules_config()
+
+    @pytest.mark.parametrize(
+        "content, message",
+        [
+            ("judgement_rules: []\n", "judgement_rules 必须是非空字符串列表"),
+            ("judgement_rules: 规则一\n", "judgement_rules 必须是非空字符串列表"),
+            ("judgement_rules:\n  - 规则一\n  - ''\n", r"judgement_rules\[1\] 必须是非空字符串"),
+        ],
+    )
+    def test_invalid_fpa_judgement_rules_config_is_rejected(self, tmp_path, content, message):
+        (tmp_path / "fpa_judgement_rules.yaml").write_text(content, encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=message):
+                load_fpa_judgement_rules_config()
 
     def test_missing_profile_reference_is_rejected(self, tmp_path):
         _write_fpa_config(tmp_path)
