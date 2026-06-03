@@ -612,6 +612,197 @@ profiles:
 行怎么生成、先后顺序、文本抽取、边界推理、fallback/补齐算法、审核保护逻辑。
 ```
 
+## 行规划规则配置化讨论
+
+当前 `custom_rules` 的纯规则兜底行规划仍有一部分规则写在代码中。关键词和类型判断已经配置化，但“生成哪些行、命名后缀是什么、说明模板怎么写”仍由 `fallback_rows_for_l3()` 和 `logic_point_name()` 固定执行。
+
+### 当前仍硬编码的内容
+
+1. 固定生成 UI 行。
+   - 每个三级模块先生成 1 条“界面开发”行。
+   - 行名称为 `{三级模块路径}-界面开发`。
+   - 类型固定为 `EI`。
+
+2. UI 行名称后缀。
+   - 当前固定为 `界面开发`。
+
+3. UI 行类型。
+   - 当前固定为 `EI`。
+
+4. UI 行说明格式。
+   - 当前格式为：
+     ```text
+     {tag}-界面开发，具体为以下：
+     1、...
+     2、...
+     ```
+
+5. 没有功能过程时的 UI 行默认说明。
+   - 当前固定为：
+     ```text
+     完成三级模块页面交互能力
+     ```
+
+6. 逻辑行后缀映射。
+   - 关键词已经配置化，但命中类型后的后缀仍固定在代码中：
+     ```text
+     EQ -> 查询处理开发
+     EO -> 导出处理开发
+     EI -> 导入处理开发
+     其他 -> 逻辑处理开发
+     ```
+
+7. 逻辑行说明格式。
+   - 当前格式为：
+     ```text
+     {point_name}，具体为以下：
+     1、{desc or name}
+     ```
+
+8. Excel 行默认字段。
+   - 例如：
+     ```text
+     生成方式 = fallback
+     要素数量 = 1
+     计算依据归类 = ""
+     后处理警告 = ""
+     ```
+
+### 建议新增配置段
+
+建议在 `rule_sets.<name>` 下新增 `row_planning_rules`，先用于配置 `custom_rules_default` 的行规划策略。
+
+示例：
+
+```yaml
+rule_sets:
+  custom_rules_default:
+    row_planning_rules:
+      ui_row:
+        enabled: true
+        scope: l3
+        merge: single_row
+        name_suffix: "界面开发"
+        type: EI
+        reason: "三级模块兜底合并界面能力。"
+        empty_process_text: "完成三级模块页面交互能力"
+        explanation_template: "{name}，具体为以下：\n{items}"
+
+      process_rows:
+        enabled: true
+        one_row_per_process: true
+        default_name_suffix: "逻辑处理开发"
+        type_suffixes:
+          EQ: "查询处理开发"
+          EO: "导出处理开发"
+          EI: "导入处理开发"
+        explanation_template: "{name}，具体为以下：\n1、{description}"
+```
+
+含义：
+
+```text
+ui_row.enabled：是否生成三级模块 UI 行。
+ui_row.scope：UI 行粒度，当前只建议支持 l3。
+ui_row.merge：同一三级模块是否合并为 single_row。
+ui_row.name_suffix：UI 行名称后缀。
+ui_row.type：UI 行类型。
+ui_row.reason：UI 行类型理由。
+ui_row.empty_process_text：没有功能过程时的默认说明。
+ui_row.explanation_template：UI 行说明模板。
+process_rows.enabled：是否按功能过程生成行。
+process_rows.one_row_per_process：是否一功能过程一行。
+process_rows.default_name_suffix：未命中特定类型后缀时的默认后缀。
+process_rows.type_suffixes：FPA 类型到命名后缀的映射。
+process_rows.explanation_template：功能过程行说明模板。
+```
+
+### strict_fpa 不配置 row_planning_rules
+
+`strict_fpa_default` 建议直接不配置 `row_planning_rules`。
+
+原因：
+
+```text
+strict_fpa 不走“界面开发 / 逻辑处理开发”这种模板友好行规划。
+strict_fpa 的行规划是标准 FPA 算法：先识别 ILF/EIF 数据功能，再识别 EI/EQ/EO 事务功能。
+不配置 row_planning_rules 比配置 ui_row.enabled=false 更干净，避免让人误以为 strict_fpa 也参与开发工作项式行规划。
+```
+
+因此建议：
+
+```yaml
+rule_sets:
+  custom_rules_default:
+    row_planning_rules:
+      ...
+
+  strict_fpa_default:
+    keyword_rules:
+      ...
+    external_data_rules:
+      ...
+```
+
+### 建议边界
+
+适合放进 `row_planning_rules`：
+
+```text
+是否生成 UI 行。
+UI 行粒度和合并方式。
+UI 行名称后缀、类型、类型理由。
+UI 行空过程兜底文案。
+是否按功能过程生成过程行。
+过程行默认后缀。
+FPA 类型到过程行后缀的映射。
+UI 行和过程行的说明模板。
+```
+
+继续留在代码：
+
+```text
+如何遍历三级模块和功能过程。
+如何填序号、子系统、资产标识、变更状态、调整值、要素数量等 Excel 结构字段。
+如何根据 FPA 类型计算调整值。
+如何读取和应用 keyword_rules / type_mapping_rules。
+如何保证 source_processes、warnings、rule_hits 等审核字段结构。
+```
+
+## 待决策：行规划规则配置化
+
+1. 是否新增 `row_planning_rules` 配置段？
+   - 建议：是。
+   - 影响：将 custom_rules 中“三级模块界面行 + 功能过程行”的行规划策略从代码固定逻辑迁移为配置。
+
+2. `row_planning_rules` 是否只在 `custom_rules_default` 中配置，`strict_fpa_default` 不配置？
+   - 建议：是。
+   - 影响：strict_fpa 继续使用标准 FPA 行规划算法，不进入“界面开发 / 逻辑处理开发”配置体系。
+
+3. UI 行是否通过配置控制是否生成？
+   - 建议：是。
+   - 影响：客户可通过 `ui_row.enabled: false` 关闭 custom_rules 的三级模块界面行。
+
+4. UI 行的名称后缀、类型、类型理由、空过程文案和说明模板是否配置化？
+   - 建议：是。
+   - 影响：`界面开发`、`EI`、`三级模块兜底合并界面能力。`、`完成三级模块页面交互能力` 不再固定在代码中。
+
+5. 功能过程行的默认后缀和 type -> suffix 映射是否配置化？
+   - 建议：是。
+   - 影响：`查询处理开发`、`导出处理开发`、`导入处理开发`、`逻辑处理开发` 不再固定在代码中。
+
+6. 功能过程行说明模板是否配置化？
+   - 建议：是。
+   - 影响：`{point_name}，具体为以下：\n1、{desc or name}` 不再固定在代码中。
+
+7. Excel 结构字段是否继续留在代码中？
+   - 建议：是。
+   - 影响：`序号`、`子系统(模块)`、`资产标识`、`变更状态`、`调整值`、`要素数量`、审核字段等仍由代码统一构造。
+
+8. `row_planning_rules` 第一版是否只支持当前需要的有限能力，不做通用 DSL？
+   - 建议：是。
+   - 影响：降低配置复杂度，避免把 YAML 变成半个程序。
+
 ## 迁移影响范围
 
 预计需要同步调整：
