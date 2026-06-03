@@ -32,6 +32,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     CustomRulesProfile,
     FpaRuleSetConfig,
     adjust_value_for_type as _adjust_value_for_type,
+    current_fpa_rule_set_config,
     get_fpa_profile,
     group_tag as _group_tag,
     module_change_status as _module_change_status,
@@ -239,6 +240,14 @@ def _build_fpa_rule_rows(
     profile: CustomRulesProfile = FPA_PROFILE,
 ) -> list[dict[str, object]]:
     """从功能清单行构建 FPA 模板行（三级模块兜底骨架）。"""
+    if current_fpa_rule_set_config() is None:
+        execution = resolve_fpa_execution_config(profile.name)
+        token = set_current_fpa_rule_set_config(execution.rule_set_config)
+        try:
+            return _build_fpa_rule_rows(rows, meta, profile=profile)
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
     fpa_rows: list[dict[str, object]] = []
     seq = 1
     for group in _group_rows_by_l3(rows):

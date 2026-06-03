@@ -70,13 +70,15 @@ profiles.<name>：
   仅允许 custom_rules / strict_fpa 两个 profile 名称。
   strategy 必填，且必须是 rules_first / ai_first / rules_only / ai_only。
   rule_set 必填，且必须能在 rule_sets 中找到。
-  system_prompt 必填，且必须能在 prompt_sets 中找到 system。
-  user_prompt 必填，且必须能在 prompt_sets 中找到 user。
+  system_prompt 必填，且必须能在 system_prompt_sets 中找到对应文本。
+  user_prompt 必填，且必须能在 user_prompt_sets 中找到对应模板。
 
-prompt_sets.<name>：
-  system 必须是非空字符串。
-  user 必须是非空字符串。
-  user 只允许并且必须包含 ${core_rules} / ${judgement_rules} / ${payload_json}。
+system_prompt_sets.<name>：
+  必须是非空字符串。
+
+user_prompt_sets.<name>：
+  必须是非空字符串。
+  只允许并且必须包含 ${core_rules} / ${judgement_rules} / ${payload_json}。
 
 rule_sets.<name>：
   允许任意新增名称。
@@ -272,7 +274,7 @@ web_app
 ```text
 config/fpa_config.yaml.example
   新增统一 FPA 配置示例文件。
-  合并 profile、profiles、prompt_sets、rule_sets。
+  合并 profile、profiles、system_prompt_sets、user_prompt_sets、rule_sets。
   内置 custom_rules_default、strict_fpa_default。
   示例 strict_fpa_conservative 展示 extends、keyword_rules、type_mapping_rules、ai_type_conflict_rules、internal_data_rules、external_data_rules。
 

@@ -54,16 +54,6 @@ EXTERNAL_DATA_NEGATION_HINTS = [
     "不作为外部数据组", "不是外部数据组", "不按外部数据组",
 ]
 
-STRICT_EO_ACTIONS = ("导出", "报表", "下载", "生成文件")
-STRICT_EQ_ACTIONS = ("查询", "查看", "详情", "检索", "列表")
-STRICT_EI_ACTIONS = (
-    "新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用",
-    "导入", "同步", "发起", "写入", "选择", "引用", "关联",
-)
-STRICT_EI_BOUNDARY_ACTIONS = (
-    "新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用",
-    "导入", "同步", "发起", "写入",
-)
 EXTERNAL_SERVICE_CALL_HINTS = ("外部接口", "外部服务", "调用", "平台发送", "网关", "服务上传")
 ORDINARY_EXTERNAL_SERVICE_ALIASES = (
     "短信平台", "短信服务", "短信网关",
@@ -183,19 +173,6 @@ _CURRENT_RULE_SET_CONFIG: ContextVar[FpaRuleSetConfig | None] = ContextVar(
     "fpa_rule_set_config",
     default=None,
 )
-
-
-DEFAULT_EXTERNAL_DATA_GROUP_RULES = [
-    ExternalDataGroupRule(("统一用户中心", "用户中心"), "统一用户中心账号", ("账号", "账户", "人员", "组织", "机构", "信息")),
-    ExternalDataGroupRule(("CRM", "客户关系管理系统"), "CRM客户档案", ("客户", "档案", "信息", "记录", "主数据")),
-    ExternalDataGroupRule(("客户中心", "客户主数据平台"), "客户中心客户档案", ("客户", "档案", "信息", "记录", "主数据")),
-    ExternalDataGroupRule(("财务核算系统",), "财务核算单据", ("单据", "报账", "凭证", "记录", "信息")),
-    ExternalDataGroupRule(("财务系统",), "财务系统单据", ("单据", "报账", "凭证", "记录", "信息")),
-    ExternalDataGroupRule(("ERP", "ERP系统"), "ERP业务单据", ("单据", "订单", "物料", "供应商", "记录", "信息")),
-    ExternalDataGroupRule(("OA", "OA系统"), "OA流程单据", ("单据", "流程", "审批", "记录", "信息")),
-    ExternalDataGroupRule(("主数据平台", "外部主数据"), "组织主数据", ("组织", "机构")),
-    ExternalDataGroupRule(("主数据平台", "外部主数据"), "外部主数据", ("主数据", "基础数据", "数据组", "信息")),
-]
 
 
 def group_tag(group: dict[str, object]) -> str:
@@ -552,20 +529,15 @@ class CustomRulesProfile:
     def infer_type(self, name: str, desc: str = "") -> tuple[str, str]:
         """按当前项目关键词规则给出类型兜底。"""
         text = f"{name} {desc}"
-        if "界面开发" in text or "页面" in text:
-            return "EI", "关键词命中界面/页面能力，按 EI 兜底。"
-        if any(k in text for k in ["外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据"]):
-            return "EIF", "描述明确引用外部应用维护的数据组，按 EIF 兜底。"
-        if any(k in text for k in ["导出", "报表输出", "生成文件", "下载模板", "下载文件"]) or ("下载" in text and "模板" in text):
-            return "EO", "关键词命中导出/输出能力，按 EO 兜底。"
-        if any(k in text for k in ["查询", "查看", "详情", "列表检索", "检索"]):
-            return "EQ", "关键词命中查询/查看能力，按 EQ 兜底。"
-        if "导入" in text:
-            return "EI", "关键词命中导入能力，通常表示外部数据进入系统，按 EI 兜底。"
-        if any(k in text for k in ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新"]):
-            return "ILF", "关键词命中内部数据维护能力，按 ILF 兜底。"
-        if "外部接口" in text or "外部数据" in text:
-            return "ILF", "仅出现外部接口不足以判定 EIF，按 ILF 兜底。"
+        type_mapping = self._configured_type_mapping(text, include_types={"EI", "EQ", "EO", "EIF"})
+        if type_mapping:
+            return type_mapping
+        for rule in self._configured_keyword_rules():
+            if rule.matches(text):
+                return rule.fpa_type, rule.reason or f"命中 rule_set 关键词规则，按 {rule.fpa_type}。"
+        type_mapping = self._configured_type_mapping(text)
+        if type_mapping:
+            return type_mapping
         return "ILF", "未命中明确类型关键词，按 ILF 兜底。"
 
     def has_obvious_conflict(self, name: str, desc: str, ai_type: str) -> bool:
@@ -582,12 +554,15 @@ class CustomRulesProfile:
 
     def logic_point_name(self, name: str, desc: str = "") -> str:
         text = f"{name} {desc}"
-        if any(k in text for k in ["查询", "查看", "详情", "列表检索", "检索"]):
-            return f"{name}-查询处理开发"
-        if any(k in text for k in ["导出", "报表输出", "生成文件", "下载模板", "下载文件"]) or ("下载" in text and "模板" in text):
-            return f"{name}-导出处理开发"
-        if "导入" in text:
-            return f"{name}-导入处理开发"
+        for rule in self._configured_keyword_rules():
+            if not rule.matches(text):
+                continue
+            if rule.fpa_type == "EQ":
+                return f"{name}-查询处理开发"
+            if rule.fpa_type == "EO":
+                return f"{name}-导出处理开发"
+            if rule.fpa_type == "EI" and any(keyword in text for keyword in rule.keywords):
+                return f"{name}-导入处理开发"
         return f"{name}-逻辑处理开发"
 
     def normalize_output_name(self, name: str, desc: str = "") -> str:
@@ -671,6 +646,26 @@ class CustomRulesProfile:
     ) -> str:
         return _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
 
+    def _configured_keyword_rules(self) -> tuple[KeywordTypeRule, ...]:
+        current_rule_set = current_fpa_rule_set_config()
+        return current_rule_set.keyword_rules if current_rule_set is not None else ()
+
+    def _configured_type_mapping_rules(self) -> tuple[TypeMappingRule, ...]:
+        current_rule_set = current_fpa_rule_set_config()
+        return current_rule_set.type_mapping_rules if current_rule_set is not None else ()
+
+    def _configured_type_mapping(
+        self,
+        text: str,
+        include_types: set[str] | None = None,
+    ) -> tuple[str, str] | None:
+        for rule in self._configured_type_mapping_rules():
+            if include_types is not None and rule.fpa_type not in include_types:
+                continue
+            if rule.matches(text):
+                return rule.fpa_type, rule.reason or f"命中 rule_set 类型映射规则，按 {rule.fpa_type}。"
+        return None
+
 
 @dataclass(frozen=True)
 class StrictFpaProfile(CustomRulesProfile):
@@ -706,29 +701,41 @@ class StrictFpaProfile(CustomRulesProfile):
         return "EI", "未命中明确数据功能关键词，按事务功能 EI 兜底。"
 
     def _explicit_transaction_type(self, text: str) -> tuple[str, str] | None:
-        for rule in self._configured_keyword_rules():
-            if rule.matches(text):
-                return rule.fpa_type, rule.reason or f"命中 rule_set 关键词规则，按 {rule.fpa_type}。"
-        if any(k in text for k in STRICT_EO_ACTIONS):
-            return "EO", "事务功能产生派生或格式化输出，按 EO。"
-        if self._starts_with_any_action(text, STRICT_EQ_ACTIONS):
-            return "EQ", "事务功能读取数据且无派生输出，按 EQ。"
-        if any(k in text for k in STRICT_EI_BOUNDARY_ACTIONS):
-            return "EI", "事务功能进入或改变系统边界内数据，按 EI。"
-        if any(k in text for k in STRICT_EQ_ACTIONS):
-            return "EQ", "事务功能读取数据且无派生输出，按 EQ。"
-        if any(k in text for k in STRICT_EI_ACTIONS):
-            return "EI", "事务功能进入或改变系统边界内数据，按 EI。"
+        eo_match = self._matching_keyword_rule(text, "EO")
+        if eo_match is not None:
+            return eo_match.fpa_type, eo_match.reason or "事务功能产生派生或格式化输出，按 EO。"
+        eq_start_match = self._matching_keyword_rule(text, "EQ", startswith=True)
+        if eq_start_match is not None:
+            return eq_start_match.fpa_type, eq_start_match.reason or "事务功能读取数据且无派生输出，按 EQ。"
+        ei_match = self._matching_keyword_rule(text, "EI")
+        if ei_match is not None:
+            return ei_match.fpa_type, ei_match.reason or "事务功能进入或改变系统边界内数据，按 EI。"
+        eq_match = self._matching_keyword_rule(text, "EQ")
+        if eq_match is not None:
+            return eq_match.fpa_type, eq_match.reason or "事务功能读取数据且无派生输出，按 EQ。"
         return None
 
-    def _starts_with_any_action(self, text: str, actions: tuple[str, ...]) -> bool:
+    def _matching_keyword_rule(
+        self,
+        text: str,
+        fpa_type: str,
+        startswith: bool = False,
+    ) -> KeywordTypeRule | None:
         stripped = text.strip()
-        return any(stripped.startswith(action) for action in actions)
+        for rule in self._configured_keyword_rules():
+            if rule.fpa_type != fpa_type:
+                continue
+            if startswith and any(stripped.startswith(keyword) for keyword in rule.keywords):
+                return rule
+            if not startswith and rule.matches(text):
+                return rule
+        return None
 
     def _looks_like_external_data_function_name(self, name: str) -> bool:
+        action_keywords = self._configured_transaction_keywords()
         return (
             any(noun in name for noun in EXTERNAL_DATA_GROUP_NOUNS)
-            and not any(action in name for action in STRICT_EI_ACTIONS + STRICT_EQ_ACTIONS + STRICT_EO_ACTIONS)
+            and not any(action in name for action in action_keywords)
         )
 
     def has_obvious_conflict(self, name: str, desc: str, ai_type: str) -> bool:
@@ -763,8 +770,7 @@ class StrictFpaProfile(CustomRulesProfile):
             return "ILF"
         desc_action = self._explicit_transaction_type(desc)
         if desc_action:
-            if desc_action[0] != "EI" or any(k in desc for k in STRICT_EI_BOUNDARY_ACTIONS):
-                return desc_action[0]
+            return desc_action[0]
         return None
 
     def _type_conflicts(self, expected_type: str, ai_type: str) -> bool:
@@ -999,25 +1005,27 @@ class StrictFpaProfile(CustomRulesProfile):
         ])
 
     def _external_data_group_rules(self) -> list[ExternalDataGroupRule]:
-        rules = list(DEFAULT_EXTERNAL_DATA_GROUP_RULES)
         current_rule_set = current_fpa_rule_set_config()
-        if current_rule_set is not None:
-            rules.extend(current_rule_set.external_data_rules)
-        return rules
+        return list(current_rule_set.external_data_rules) if current_rule_set is not None else []
 
     def _configured_keyword_rules(self) -> tuple[KeywordTypeRule, ...]:
-        current_rule_set = current_fpa_rule_set_config()
-        return current_rule_set.keyword_rules if current_rule_set is not None else ()
+        return super()._configured_keyword_rules()
+
+    def _configured_transaction_keywords(self) -> tuple[str, ...]:
+        keywords: list[str] = []
+        for rule in self._configured_keyword_rules():
+            keywords.extend(rule.keywords)
+        return tuple(keywords)
 
     def _configured_type_mapping_rules(self) -> tuple[TypeMappingRule, ...]:
-        current_rule_set = current_fpa_rule_set_config()
-        return current_rule_set.type_mapping_rules if current_rule_set is not None else ()
+        return super()._configured_type_mapping_rules()
 
-    def _configured_type_mapping(self, text: str) -> tuple[str, str] | None:
-        for rule in self._configured_type_mapping_rules():
-            if rule.matches(text):
-                return rule.fpa_type, rule.reason or f"命中 rule_set 类型映射规则，按 {rule.fpa_type}。"
-        return None
+    def _configured_type_mapping(
+        self,
+        text: str,
+        include_types: set[str] | None = None,
+    ) -> tuple[str, str] | None:
+        return super()._configured_type_mapping(text, include_types)
 
     def _configured_ai_type_conflict_rules(self) -> tuple[AiTypeConflictRule, ...]:
         current_rule_set = current_fpa_rule_set_config()

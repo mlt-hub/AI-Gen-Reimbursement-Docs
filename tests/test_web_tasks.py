@@ -106,16 +106,21 @@ profiles:
     rule_set: strict_fpa_default
     system_prompt: strict_fpa
     user_prompt: strict_fpa
-prompt_sets:
-  custom_rules:
-    system: custom system secret
-    user: custom user secret ${core_rules} ${judgement_rules} ${payload_json}
-  strict_fpa:
-    system: strict system secret
-    user: strict user secret ${core_rules} ${judgement_rules} ${payload_json}
+system_prompt_sets:
+  custom_rules: custom system secret
+  strict_fpa: strict system secret
+user_prompt_sets:
+  custom_rules: custom user secret ${core_rules} ${judgement_rules} ${payload_json}
+  strict_fpa: strict user secret ${core_rules} ${judgement_rules} ${payload_json}
 rule_sets:
-  custom_rules_default: {}
-  strict_fpa_default: {}
+  custom_rules_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
+  strict_fpa_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
   client_a_rules:
     extends: strict_fpa_default
     external_data_rules:
@@ -176,16 +181,21 @@ profiles:
     rule_set: strict_fpa_default
     system_prompt: strict_fpa
     user_prompt: strict_fpa
-prompt_sets:
-  custom_rules:
-    system: custom system
-    user: ${core_rules} ${judgement_rules} ${payload_json}
-  strict_fpa:
-    system: strict system
-    user: ${core_rules} ${judgement_rules} ${payload_json} ${unknown_placeholder}
+system_prompt_sets:
+  custom_rules: custom system
+  strict_fpa: strict system
+user_prompt_sets:
+  custom_rules: ${core_rules} ${judgement_rules} ${payload_json}
+  strict_fpa: ${core_rules} ${judgement_rules} ${payload_json} ${unknown_placeholder}
 rule_sets:
-  custom_rules_default: {}
-  strict_fpa_default: {}
+  custom_rules_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
+  strict_fpa_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
 """.lstrip(),
         encoding="utf-8",
     )
@@ -197,7 +207,7 @@ rule_sets:
     resp = client.get("/api/fpa/options")
 
     assert resp.status_code == 400
-    assert "prompt_sets.strict_fpa.user 包含未知占位符" in resp.json()["detail"]
+    assert "user_prompt_sets.strict_fpa 包含未知占位符" in resp.json()["detail"]
     assert "${unknown_placeholder}" in resp.json()["detail"]
 
 

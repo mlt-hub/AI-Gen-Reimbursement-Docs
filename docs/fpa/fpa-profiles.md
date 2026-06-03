@@ -137,8 +137,9 @@ config/fpa_config.yaml.example
 ```text
 profile：默认 FPA 方案，只允许 custom_rules / strict_fpa。
 profiles：为每个 profile 绑定默认 strategy、rule_set、system_prompt、user_prompt。
-prompt_sets：维护系统提示词和用户提示词模板。
-rule_sets：维护可扩展规则集。
+system_prompt_sets：维护系统提示词文本。
+user_prompt_sets：维护用户提示词模板。
+rule_sets：维护可扩展规则集；默认规则集也显式写出可配置规则数据。
 extends：继承另一套规则集。
 keyword_rules：为 strict_fpa 配置 EI / EQ / EO 事务功能关键词规则。
 type_mapping_rules：为 strict_fpa 配置 EI / EQ / EO / ILF / EIF 通用类型映射规则。
@@ -298,25 +299,31 @@ profiles:
     system_prompt: strict_fpa
     user_prompt: strict_fpa
 
-prompt_sets:
-  custom_rules:
-    system: |-
-      ...
-    user: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
-  strict_fpa:
-    system: |-
-      ...
-    user: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
+system_prompt_sets:
+  custom_rules: |-
+    ...
+  strict_fpa: |-
+    ...
+
+user_prompt_sets:
+  custom_rules: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
+  strict_fpa: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
 
 rule_sets:
-  custom_rules_default: {}
-  strict_fpa_default: {}
+  custom_rules_default:
+    keyword_rules:
+      merge: append
+      items: []
+  strict_fpa_default:
+    keyword_rules:
+      merge: append
+      items: []
 ```
 
 可改为：
@@ -332,20 +339,18 @@ profile: strict_fpa
 FPA 用户提示词模板统一在 `fpa_config.yaml` 中维护：
 
 ```yaml
-prompt_sets:
-  custom_rules:
-    user: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
-  strict_fpa:
-    user: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
+user_prompt_sets:
+  custom_rules: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
+  strict_fpa: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
 ```
 
-如果 `fpa_config.yaml` 缺失、profile 未配置 prompt 绑定，或 prompt_sets 中缺少对应 system/user 文本，FPA AI 预览和正式生成都会直接报错，不使用 `fpa_profiles.py` 中的内置模板兜底。
+如果 `fpa_config.yaml` 缺失、profile 未配置 prompt 绑定，或 `system_prompt_sets` / `user_prompt_sets` 中缺少对应文本，FPA AI 预览和正式生成都会直接报错，不使用 `fpa_profiles.py` 中的内置模板兜底。
 
 ### 配置结构
 
@@ -355,14 +360,15 @@ profiles:
     system_prompt: strict_fpa
     user_prompt: strict_fpa
 
-prompt_sets:
-  strict_fpa:
-    system: |-
-      你是资深 FPA 专家...
-    user: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
+system_prompt_sets:
+  strict_fpa: |-
+    你是资深 FPA 专家...
+
+user_prompt_sets:
+  strict_fpa: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
 ```
 
 ### 占位符

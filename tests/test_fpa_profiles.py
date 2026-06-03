@@ -4,11 +4,39 @@ from unittest.mock import patch
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
+    ExternalDataGroupRule,
+    FpaRuleSetConfig,
+    KeywordTypeRule,
     get_fpa_profile,
     resolve_fpa_execution_config,
     set_current_fpa_rule_set_config,
     reset_current_fpa_rule_set_config,
 )
+
+
+@pytest.fixture(autouse=True)
+def strict_default_rule_context():
+    config = FpaRuleSetConfig(
+        name="strict_fpa_default",
+        keyword_rules=(
+            KeywordTypeRule("EO", ("导出", "报表", "下载", "生成文件"), "事务功能产生派生或格式化输出，按 EO。"),
+            KeywordTypeRule("EQ", ("查询", "查看", "详情", "检索", "列表"), "事务功能读取数据且无派生输出，按 EQ。"),
+            KeywordTypeRule(
+                "EI",
+                ("新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联"),
+                "事务功能进入或改变系统边界内数据，按 EI。",
+            ),
+        ),
+        external_data_rules=(
+            ExternalDataGroupRule(("统一用户中心", "用户中心"), "统一用户中心账号", ("账号", "账户", "人员", "组织", "机构", "信息")),
+            ExternalDataGroupRule(("主数据平台", "外部主数据"), "组织主数据", ("组织", "机构")),
+        ),
+    )
+    token = set_current_fpa_rule_set_config(config)
+    try:
+        yield
+    finally:
+        reset_current_fpa_rule_set_config(token)
 
 
 def _write_fpa_config(tmp_path):
@@ -26,28 +54,42 @@ profiles:
     rule_set: strict_fpa_default
     system_prompt: strict_fpa
     user_prompt: strict_fpa
-prompt_sets:
-  custom_rules:
-    system: CUSTOM SYSTEM
-    user: |-
-      自定义 custom 模板
-      ${core_rules}
-      CUSTOM_RULES:
-      ${judgement_rules}
-      PAYLOAD:
-      ${payload_json}
-  strict_fpa:
-    system: STRICT SYSTEM
-    user: |-
-      自定义 strict 模板
-      ${core_rules}
-      RULES:
-      ${judgement_rules}
-      PAYLOAD:
-      ${payload_json}
+system_prompt_sets:
+  custom_rules: CUSTOM SYSTEM
+  strict_fpa: STRICT SYSTEM
+user_prompt_sets:
+  custom_rules: |-
+    自定义 custom 模板
+    ${core_rules}
+    CUSTOM_RULES:
+    ${judgement_rules}
+    PAYLOAD:
+    ${payload_json}
+  strict_fpa: |-
+    自定义 strict 模板
+    ${core_rules}
+    RULES:
+    ${judgement_rules}
+    PAYLOAD:
+    ${payload_json}
 rule_sets:
-  custom_rules_default: {}
-  strict_fpa_default: {}
+  custom_rules_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
+  strict_fpa_default:
+    keyword_rules:
+      merge: append
+      items:
+        - type: EO
+          keywords: ["导出", "报表", "下载", "生成文件"]
+          reason: "事务功能产生派生或格式化输出，按 EO。"
+        - type: EQ
+          keywords: ["查询", "查看", "详情", "检索", "列表"]
+          reason: "事务功能读取数据且无派生输出，按 EQ。"
+        - type: EI
+          keywords: ["新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联"]
+          reason: "事务功能进入或改变系统边界内数据，按 EI。"
   telecom_rules:
     extends: strict_fpa_default
     keyword_rules:

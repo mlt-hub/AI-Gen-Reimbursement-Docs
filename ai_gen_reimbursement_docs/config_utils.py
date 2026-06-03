@@ -666,7 +666,8 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         raise FpaConfigError(f"FPA 配置为空：配置目录/{FPA_CONFIG_FILENAME}")
 
     profiles = _require_mapping(cfg.get("profiles"), "profiles")
-    prompt_sets = _require_mapping(cfg.get("prompt_sets"), "prompt_sets")
+    system_prompt_sets = _require_mapping(cfg.get("system_prompt_sets"), "system_prompt_sets")
+    user_prompt_sets = _require_mapping(cfg.get("user_prompt_sets"), "user_prompt_sets")
     rule_sets = _require_mapping(cfg.get("rule_sets"), "rule_sets")
 
     profile = _require_non_empty_string(cfg.get("profile"), "profile")
@@ -679,12 +680,14 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     if unknown_profiles:
         raise FpaConfigError(f"未知 FPA profile 配置：{', '.join(unknown_profiles)}")
 
-    for prompt_name, prompt_set in prompt_sets.items():
-        prompt_path = _fpa_key_path("prompt_sets", prompt_name)
-        prompt_entry = _require_mapping(prompt_set, prompt_path)
-        _require_non_empty_string(prompt_entry.get("system"), f"{prompt_path}.system")
-        user_template = _require_non_empty_string(prompt_entry.get("user"), f"{prompt_path}.user")
-        _validate_fpa_user_prompt_template(user_template, f"{prompt_path}.user")
+    for prompt_name, prompt_text in system_prompt_sets.items():
+        prompt_path = _fpa_key_path("system_prompt_sets", prompt_name)
+        _require_non_empty_string(prompt_text, prompt_path)
+
+    for prompt_name, prompt_text in user_prompt_sets.items():
+        prompt_path = _fpa_key_path("user_prompt_sets", prompt_name)
+        user_template = _require_non_empty_string(prompt_text, prompt_path)
+        _validate_fpa_user_prompt_template(user_template, prompt_path)
 
     for rule_set_name, rule_set in rule_sets.items():
         rule_set_path = _fpa_key_path("rule_sets", rule_set_name)
@@ -737,14 +740,14 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
                 f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.rule_set 指向不存在的 rule_set: {rule_set}"
             )
         system_prompt = _require_non_empty_string(entry.get("system_prompt"), f"{profile_path}.system_prompt")
-        if system_prompt not in prompt_sets:
+        if system_prompt not in system_prompt_sets:
             raise FpaConfigError(
-                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.system_prompt 指向不存在的 prompt_set: {system_prompt}"
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.system_prompt 指向不存在的 system_prompt_set: {system_prompt}"
             )
         user_prompt = _require_non_empty_string(entry.get("user_prompt"), f"{profile_path}.user_prompt")
-        if user_prompt not in prompt_sets:
+        if user_prompt not in user_prompt_sets:
             raise FpaConfigError(
-                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.user_prompt 指向不存在的 prompt_set: {user_prompt}"
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.user_prompt 指向不存在的 user_prompt_set: {user_prompt}"
             )
 
 
@@ -995,12 +998,12 @@ def _load_yaml_file(yaml_path: Path) -> dict:
 
 def _load_fpa_prompt_text(prompt_key: str, prompt_type: str) -> PromptConfig:
     cfg = load_fpa_config()
-    prompt_sets = cfg.get("prompt_sets", {})
+    set_key = "system_prompt_sets" if prompt_type == "system" else "user_prompt_sets"
+    prompt_sets = cfg.get(set_key, {})
     if not isinstance(prompt_sets, dict):
-        raise FpaPromptConfigError(f"FPA prompt_sets 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 prompt_sets")
-    prompt_set = prompt_sets.get(prompt_key)
-    key_path = f"prompt_sets.{prompt_key}.{prompt_type}"
-    val = prompt_set.get(prompt_type, "") if isinstance(prompt_set, dict) else ""
+        raise FpaPromptConfigError(f"FPA {set_key} 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {set_key}")
+    key_path = f"{set_key}.{prompt_key}"
+    val = prompt_sets.get(prompt_key, "")
     if not isinstance(val, str) or not val.strip():
         label = "系统提示词" if prompt_type == "system" else "用户提示词"
         raise FpaPromptConfigError(f"未找到 FPA {label}配置：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}")

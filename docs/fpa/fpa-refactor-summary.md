@@ -8,7 +8,7 @@
 profile：支持 custom_rules 和 strict_fpa。
 strategy：支持 rules_first、ai_first、rules_only、ai_only。
 rule_set：支持在 fpa_config.yaml 中配置项目级规则集，并通过 extends 继承默认规则。
-prompt_sets：FPA prompt 已集中到 fpa_config.yaml，不再使用旧拆分 prompt 配置文件。
+system_prompt_sets / user_prompt_sets：FPA prompt 已集中到 fpa_config.yaml，不再使用旧拆分 prompt 配置文件。
 domain_context：支持在 domain_context.json 中配置系统边界、本系统数据组、外部数据组和普通外部服务。
 Web 预览：支持选择 profile、strategy、rule_set，并返回 audit 审核信息。
 正式生成：生成正式 FPA 工作量评估 Excel，同时生成审核副本。

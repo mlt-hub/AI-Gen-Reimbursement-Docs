@@ -74,16 +74,21 @@ profiles:
     rule_set: strict_fpa_default
     system_prompt: strict_fpa
     user_prompt: strict_fpa
-prompt_sets:
-  custom_rules:
-    system: CUSTOM SYSTEM
-    user: CUSTOM ${core_rules} ${judgement_rules} ${payload_json}
-  strict_fpa:
-    system: STRICT SYSTEM
-    user: STRICT ${core_rules} ${judgement_rules} ${payload_json}
+system_prompt_sets:
+  custom_rules: CUSTOM SYSTEM
+  strict_fpa: STRICT SYSTEM
+user_prompt_sets:
+  custom_rules: CUSTOM ${core_rules} ${judgement_rules} ${payload_json}
+  strict_fpa: STRICT ${core_rules} ${judgement_rules} ${payload_json}
 rule_sets:
-  custom_rules_default: {}
-  strict_fpa_default: {}
+  custom_rules_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
+  strict_fpa_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
   client_a_rules:
     extends: strict_fpa_default
     keyword_rules:
@@ -346,12 +351,12 @@ class TestLoadFpaExecutionOptions:
         _write_fpa_config(tmp_path)
         (tmp_path / "fpa_config.yaml").write_text(
             (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
-                "system: CUSTOM SYSTEM", 'system: ""'
+                "custom_rules: CUSTOM SYSTEM", 'custom_rules: ""'
             ),
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match=r"prompt_sets\.custom_rules\.system 必须是非空字符串"):
+            with pytest.raises(FpaConfigError, match=r"system_prompt_sets\.custom_rules 必须是非空字符串"):
                 load_fpa_profile()
 
     def test_user_prompt_unknown_placeholder_is_rejected(self, tmp_path):
@@ -364,7 +369,7 @@ class TestLoadFpaExecutionOptions:
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match=r"prompt_sets\.strict_fpa\.user 包含未知占位符: \$\{unknown_placeholder\}"):
+            with pytest.raises(FpaConfigError, match=r"user_prompt_sets\.strict_fpa 包含未知占位符: \$\{unknown_placeholder\}"):
                 load_fpa_profile()
 
     def test_user_prompt_missing_required_placeholder_is_rejected(self, tmp_path):
@@ -377,7 +382,7 @@ class TestLoadFpaExecutionOptions:
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match=r"prompt_sets\.strict_fpa\.user 必须包含占位符: \$\{judgement_rules\}"):
+            with pytest.raises(FpaConfigError, match=r"user_prompt_sets\.strict_fpa 必须包含占位符: \$\{judgement_rules\}"):
                 load_fpa_profile()
 
     def test_user_prompt_invalid_placeholder_is_rejected(self, tmp_path):
@@ -390,7 +395,7 @@ class TestLoadFpaExecutionOptions:
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match=r"prompt_sets\.strict_fpa\.user 包含非法占位符"):
+            with pytest.raises(FpaConfigError, match=r"user_prompt_sets\.strict_fpa 包含非法占位符"):
                 load_fpa_profile()
 
     def test_rule_set_extends_missing_parent_is_rejected(self, tmp_path):
@@ -408,7 +413,10 @@ class TestLoadFpaExecutionOptions:
     def test_rule_set_extends_cycle_is_rejected(self, tmp_path):
         _write_fpa_config(tmp_path)
         content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
-        content = content.replace("custom_rules_default: {}", "custom_rules_default:\n    extends: client_a_rules")
+        content = content.replace(
+            "custom_rules_default:\n    coverage_rules:",
+            "custom_rules_default:\n    extends: client_a_rules\n    coverage_rules:",
+        )
         content = content.replace("extends: strict_fpa_default", "extends: custom_rules_default")
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -612,7 +620,7 @@ class TestLoadFpaUserPromptTemplate:
             result = load_fpa_user_prompt_config("strict_fpa")
 
         assert result.text == "STRICT ${core_rules} ${judgement_rules} ${payload_json}"
-        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: prompt_sets.strict_fpa.user）"
+        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.strict_fpa）"
 
     def test_default_fpa_prompt_example_contains_calculation_explanation_rules(self, tmp_path):
         source = Path(__file__).resolve().parents[1] / "config"
@@ -642,7 +650,7 @@ class TestLoadFpaUserPromptTemplate:
             result = load_fpa_system_prompt_config("strict_fpa")
 
         assert result.text == "STRICT SYSTEM"
-        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: prompt_sets.strict_fpa.system）"
+        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: system_prompt_sets.strict_fpa）"
 
 
 class TestLoadModelName:

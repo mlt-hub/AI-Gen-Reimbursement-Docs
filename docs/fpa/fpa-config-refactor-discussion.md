@@ -53,8 +53,14 @@ user_prompt_sets:
     ${payload_json}
 
 rule_sets:
-  custom_rules_default: {}
-  strict_fpa_default: {}
+  custom_rules_default:
+    keyword_rules:
+      merge: append
+      items: []
+  strict_fpa_default:
+    keyword_rules:
+      merge: append
+      items: []
 ```
 
 ## 决策记录
@@ -102,8 +108,14 @@ profiles:
 
 ```yaml
 rule_sets:
-  custom_rules_default: {}
-  strict_fpa_default: {}
+  custom_rules_default:
+    keyword_rules:
+      merge: append
+      items: []
+  strict_fpa_default:
+    keyword_rules:
+      merge: append
+      items: []
   strict_fpa_conservative:
     extends: strict_fpa_default
     ...
@@ -114,8 +126,8 @@ rule_sets:
 
 每个一级 key 都是一套规则集名称：
 
-- `custom_rules_default`：给 `custom_rules` profile 用的默认规则集。空对象表示使用代码内置的 custom_rules 基础逻辑，不额外加项目级规则。
-- `strict_fpa_default`：给 `strict_fpa` profile 用的默认规则集。空对象表示使用 strict_fpa 的默认规则逻辑，不额外加配置规则。
+- `custom_rules_default`：给 `custom_rules` profile 用的默认规则集。实施后显式写出关键词、类型映射和覆盖补齐等默认规则数据。
+- `strict_fpa_default`：给 `strict_fpa` profile 用的默认规则集。实施后显式写出事务关键词、外部数据组识别和覆盖补齐等默认规则数据。
 - `strict_fpa_conservative`：示例扩展规则集，继承 `strict_fpa_default`，再追加更保守、更项目化的规则。
 - `client_a_rules`：客户 A 的项目级规则集，继承 `strict_fpa_default`，只追加客户 A 自己的外部数据组识别规则。
 
@@ -305,9 +317,9 @@ profiles:
 
 一句话总结：`rule_sets` 不是 prompt，它是 FPA 规则引擎的项目级配置。`extends` 管继承，`merge` 管追加/替换，各段规则分别负责类型关键词、数据组识别、AI 冲突告警和 AI 结果补齐。
 
-## 默认 rule_set 为空的原因
+## 历史背景：默认 rule_set 曾为空
 
-当前默认配置中：
+改造前默认配置中：
 
 ```yaml
 rule_sets:
@@ -315,9 +327,9 @@ rule_sets:
   strict_fpa_default: {}
 ```
 
-这两个空对象不是表示“没有规则可用”，而是表示“没有额外配置规则”。真正的基础规则目前仍在代码里的 profile 默认逻辑中。
+这两个空对象不是表示“没有规则可用”，而是表示“没有额外配置规则”。真正的基础规则当时仍在代码里的 profile 默认逻辑中。
 
-当前执行含义大致是：
+改造前执行含义大致是：
 
 ```text
 profile = custom_rules
@@ -340,7 +352,9 @@ rule_set = strict_fpa_default
 3. 区分“默认规则”和“客户/项目规则”。
 4. 避免把代码内置基础规则全部塞进 YAML，导致配置过长或基础口径被误改。
 
-因此，`custom_rules_default: {}` 和 `strict_fpa_default: {}` 当前更像“默认规则集名称”，不是“空规则系统”。
+因此，改造前的 `custom_rules_default: {}` 和 `strict_fpa_default: {}` 更像“默认规则集名称”，不是“空规则系统”。
+
+实施后，这两个默认规则集已不再为空；可表达为规则数据的默认关键词、类型映射、外部数据组识别和覆盖补齐开关已写入 `config/fpa_config.yaml.example` 的 `rule_sets.<default>`。
 
 ## 默认规则配置化讨论
 

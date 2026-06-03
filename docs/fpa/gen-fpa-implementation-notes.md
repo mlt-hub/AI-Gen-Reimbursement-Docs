@@ -16,7 +16,8 @@ config/fpa_config.yaml.example
 ```text
 profile
 profiles
-prompt_sets
+system_prompt_sets
+user_prompt_sets
 rule_sets
 ```
 
@@ -322,8 +323,8 @@ AI 输出要求为 JSON：
 
 | 内容 | 当前来源 | 维护方式 |
 |---|---|---|
-| 系统提示词 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.system_prompt` 指向的 `prompt_sets.<name>.system` | FPA 专用配置文件；缺失时报错 |
-| 用户提示词模板 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.user_prompt` 指向的 `prompt_sets.<name>.user` | FPA 专用配置文件；缺失时报错 |
+| 系统提示词 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.system_prompt` 指向的 `system_prompt_sets.<name>` | FPA 专用配置文件；缺失时报错 |
+| 用户提示词模板 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.user_prompt` 指向的 `user_prompt_sets.<name>` | FPA 专用配置文件；缺失时报错 |
 | 默认 profile / strategy / rule_set | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `profile` 与 `profiles` | FPA 专用配置文件 |
 | 事务关键词扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.keyword_rules` | FPA 专用配置文件 |
 | 内部数据组扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.internal_data_rules` | FPA 专用配置文件 |
@@ -357,13 +358,12 @@ profiles:
   custom_rules:
     system_prompt: custom_rules
 
-prompt_sets:
-  custom_rules:
-    system: |-
-      ...
+system_prompt_sets:
+  custom_rules: |-
+    ...
 ```
 
-如果配置文件中没有对应的 `prompt_sets.<name>.system`，FPA AI 预览和正式生成都会直接报错。
+如果配置文件中没有对应的 `system_prompt_sets.<name>`，FPA AI 预览和正式生成都会直接报错。
 
 ### 用户提示词
 
@@ -388,17 +388,15 @@ profiles:
   strict_fpa:
     user_prompt: strict_fpa
 
-prompt_sets:
-  custom_rules:
-    user: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
-  strict_fpa:
-    user: |-
-      ${core_rules}
-      ${judgement_rules}
-      ${payload_json}
+user_prompt_sets:
+  custom_rules: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
+  strict_fpa: |-
+    ${core_rules}
+    ${judgement_rules}
+    ${payload_json}
 ```
 
 可用占位符：
@@ -414,30 +412,28 @@ ${payload_json}
 #### 配置结构
 
 ```yaml
-prompt_sets:
-  custom_rules:
-    user: |-
-      ${core_rules}
+user_prompt_sets:
+  custom_rules: |-
+    ${core_rules}
 
-      计算依据归类判定原则列表：
-      ${judgement_rules}
+    计算依据归类判定原则列表：
+    ${judgement_rules}
 
-      模块输入 JSON：
-      ${payload_json}
+    模块输入 JSON：
+    ${payload_json}
 
-      请直接输出 JSON，不要输出其他内容。
+    请直接输出 JSON，不要输出其他内容。
 
-  strict_fpa:
-    user: |-
-      ${core_rules}
+  strict_fpa: |-
+    ${core_rules}
 
-      计算依据归类判定原则列表：
-      ${judgement_rules}
+    计算依据归类判定原则列表：
+    ${judgement_rules}
 
-      模块输入 JSON：
-      ${payload_json}
+    模块输入 JSON：
+    ${payload_json}
 
-      请直接输出 JSON，不要输出其他内容。
+    请直接输出 JSON，不要输出其他内容。
 ```
 
 #### 占位符含义
@@ -459,7 +455,7 @@ ${payload_json}
 fpa_config.yaml 不存在 -> 报错。
 profile 未配置模板 -> 报错。
 配置文件读取失败 -> 报错。
-未知占位符 -> 报错，错误信息指向 prompt_sets.<name>.user。
+未知占位符 -> 报错，错误信息指向 user_prompt_sets.<name>。
 缺少 ${core_rules} / ${judgement_rules} / ${payload_json} 任一核心占位符 -> 报错。
 ```
 
@@ -3053,7 +3049,7 @@ C5 已增加确定性 Excel 公式投影校验：
 
 ```text
 D1. 已完成：为 fpa_config.yaml 增加统一结构校验入口。
-D2. 已完成：校验 profile / profiles / prompt_sets / rule_sets 的必填项和引用关系。
+D2. 已完成：校验 profile / profiles / system_prompt_sets / user_prompt_sets / rule_sets 的必填项和引用关系。
 D3. 已完成：校验 rule_set extends 不存在和循环继承，并给出明确错误。
 D4. 已完成：校验 external_data_rules 的 source_aliases / data_name / data_nouns 结构。
 D4a. 已完成：校验 keyword_rules 的 type / keywords / reason 结构。
@@ -3070,7 +3066,7 @@ D6. 已完成：普通外部服务被配置为数据组时记录 warning。
 ```text
 config_utils.py 新增 validate_fpa_config()，load_fpa_config() 读取后立即校验。
 结构错误统一抛 FpaConfigError，并尽量包含配置文件名和键路径。
-测试覆盖 profile 引用、rule_set 引用、prompt_set 空值、extends 不存在、extends 循环、废弃 version、三类规则段旧列表结构、非法 merge、external_data_rules / keyword_rules / internal_data_rules 非法结构。
+测试覆盖 profile 引用、rule_set 引用、system/user prompt set 空值、extends 不存在、extends 循环、废弃 version、三类规则段旧列表结构、非法 merge、external_data_rules / keyword_rules / internal_data_rules 非法结构。
 普通外部服务误配为 external_data_rules 时不抛 FpaConfigError；resolve_fpa_rule_set_config() 会在 FpaRuleSetConfig.config_warnings 中记录 warning。
 当前覆盖短信平台、支付网关、OCR、文件存储、对象存储、地图服务等普通外部服务别名。
 预览 preview_fpa_module 返回的 warnings / audit.warnings 会包含该配置 warning。

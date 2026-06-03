@@ -21,8 +21,13 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
     CustomRulesProfile,
+    ExternalDataGroupRule,
     FpaCoverageRules,
     FpaRuleSetConfig,
+    KeywordTypeRule,
+    TypeMappingRule,
+    reset_current_fpa_rule_set_config,
+    set_current_fpa_rule_set_config,
 )
 
 
@@ -55,6 +60,41 @@ def _rows():
     ]
 
 
+def _custom_default_rule_set() -> FpaRuleSetConfig:
+    return FpaRuleSetConfig(
+        name="custom_rules_default",
+        type_mapping_rules=(
+            TypeMappingRule("EI", ("界面开发", "页面")),
+            TypeMappingRule("EIF", ("外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据")),
+            TypeMappingRule("ILF", ("添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新")),
+            TypeMappingRule("ILF", ("外部接口", "外部数据")),
+        ),
+        keyword_rules=(
+            KeywordTypeRule("EO", ("导出", "报表输出", "生成文件", "下载", "下载模板", "下载文件")),
+            KeywordTypeRule("EQ", ("查询", "查看", "详情", "列表检索", "检索")),
+            KeywordTypeRule("EI", ("导入",)),
+        ),
+    )
+
+
+def _strict_default_rule_set() -> FpaRuleSetConfig:
+    return FpaRuleSetConfig(
+        name="strict_fpa_default",
+        keyword_rules=(
+            KeywordTypeRule("EO", ("导出", "报表", "下载", "生成文件"), "事务功能产生派生或格式化输出，按 EO。"),
+            KeywordTypeRule("EQ", ("查询", "查看", "详情", "检索", "列表"), "事务功能读取数据且无派生输出，按 EQ。"),
+            KeywordTypeRule(
+                "EI",
+                ("新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联"),
+                "事务功能进入或改变系统边界内数据，按 EI。",
+            ),
+        ),
+        external_data_rules=(
+            ExternalDataGroupRule(("统一用户中心", "用户中心"), "统一用户中心账号", ("账号", "账户", "人员", "组织", "机构", "信息")),
+        ),
+    )
+
+
 def _structured_explanation(process: str = "添加垂直行业", fpa_type: str = "EI") -> str:
     return (
         f"来源场景：来自“【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-{process}”，"
@@ -80,26 +120,31 @@ profiles:
     rule_set: strict_fpa_default
     system_prompt: strict_fpa
     user_prompt: strict_fpa
-prompt_sets:
-  custom_rules:
-    system: 系统提示词
-    user: |-
-      ${core_rules}
-      模块输入 JSON：
-      ${payload_json}
-      判定原则：
-      ${judgement_rules}
-  strict_fpa:
-    system: 严格系统提示词
-    user: |-
-      ${core_rules}
-      模块输入 JSON：
-      ${payload_json}
-      判定原则：
-      ${judgement_rules}
+system_prompt_sets:
+  custom_rules: 系统提示词
+  strict_fpa: 严格系统提示词
+user_prompt_sets:
+  custom_rules: |-
+    ${core_rules}
+    模块输入 JSON：
+    ${payload_json}
+    判定原则：
+    ${judgement_rules}
+  strict_fpa: |-
+    ${core_rules}
+    模块输入 JSON：
+    ${payload_json}
+    判定原则：
+    ${judgement_rules}
 rule_sets:
-  custom_rules_default: {}
-  strict_fpa_default: {}
+  custom_rules_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
+  strict_fpa_default:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
 """,
         encoding="utf-8",
     )
@@ -153,28 +198,32 @@ def test_markdown_code_block_json_is_parsed():
 
 def test_normalize_ai_rows_maps_basis_and_types():
     group = _group_rows_by_l3(_rows())[0]
-    rows, warnings = _normalize_ai_fpa_rows_for_l3(
-        group=group,
-        meta=_meta(),
-        judgement_rules=["规则一", "规则二"],
-        start_seq=1,
-        ai_rows=[
-            {
-                "name": "垂直行业管理界面开发",
-                "type": "EI",
-                "type_reason": "页面交互能力",
-                "classification_basis_index": 1,
-                "explanation": "垂直行业管理界面开发，具体为以下：1、新增列表和查询条件。",
-            },
-            {
-                "name": "添加垂直行业-逻辑处理开发",
-                "type": "ILF",
-                "classification_basis_index": 2,
-                "explanation": "保存垂直行业基础信息。",
-                "source_processes": ["添加垂直行业"],
-            },
-        ],
-    )
+    token = set_current_fpa_rule_set_config(_custom_default_rule_set())
+    try:
+        rows, warnings = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=["规则一", "规则二"],
+            start_seq=1,
+            ai_rows=[
+                {
+                    "name": "垂直行业管理界面开发",
+                    "type": "EI",
+                    "type_reason": "页面交互能力",
+                    "classification_basis_index": 1,
+                    "explanation": "垂直行业管理界面开发，具体为以下：1、新增列表和查询条件。",
+                },
+                {
+                    "name": "添加垂直行业-逻辑处理开发",
+                    "type": "ILF",
+                    "classification_basis_index": 2,
+                    "explanation": "保存垂直行业基础信息。",
+                    "source_processes": ["添加垂直行业"],
+                },
+            ],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
     assert any("AI 行名称前缀已按源功能清单规范化" in w for w in warnings)
     assert [r["类型"] for r in rows] == ["EI", "ILF"]
     assert rows[0]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业管理界面开发"
@@ -362,20 +411,24 @@ def test_multiple_ui_rows_without_split_reason_are_merged():
 
 def test_strict_profile_normalizes_ai_development_work_item_names():
     group = _group_rows_by_l3(_rows())[0]
-    rows, warnings = _normalize_ai_fpa_rows_for_l3(
-        group=group,
-        meta=_meta(),
-        judgement_rules=[],
-        start_seq=1,
-        profile=STRICT_FPA_PROFILE,
-        ai_rows=[
-            {
-                "name": "添加垂直行业-逻辑处理开发",
-                "type": "ILF",
-                "explanation": "输入垂直行业名称并保存。",
-            },
-        ],
-    )
+    token = set_current_fpa_rule_set_config(_strict_default_rule_set())
+    try:
+        rows, warnings = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            profile=STRICT_FPA_PROFILE,
+            ai_rows=[
+                {
+                    "name": "添加垂直行业-逻辑处理开发",
+                    "type": "ILF",
+                    "explanation": "输入垂直行业名称并保存。",
+                },
+            ],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
 
     assert rows[0]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-添加垂直行业"
     assert rows[0]["类型"] == "EI"
@@ -654,20 +707,24 @@ def test_coverage_rules_can_disable_missing_process_supplement():
             "功能过程描述": "导出客户列表。",
         },
     ])[0]
-    ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
-        group=group,
-        meta=_meta(),
-        judgement_rules=[],
-        start_seq=1,
-        profile=CUSTOM_RULES_PROFILE,
-        strategy="ai_first",
-        ai_rows=[{
-            "name": "查询客户-查询处理开发",
-            "type": "EQ",
-            "explanation": "按客户名称查询客户列表。",
-            "source_processes": ["查询客户"],
-        }],
-    )
+    token = set_current_fpa_rule_set_config(_custom_default_rule_set())
+    try:
+        ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            profile=CUSTOM_RULES_PROFILE,
+            strategy="ai_first",
+            ai_rows=[{
+                "name": "查询客户-查询处理开发",
+                "type": "EQ",
+                "explanation": "按客户名称查询客户列表。",
+                "source_processes": ["查询客户"],
+            }],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
 
     combined, warnings = _supplement_ai_rows_with_rules(
         group=group,
@@ -677,7 +734,7 @@ def test_coverage_rules_can_disable_missing_process_supplement():
         strategy="ai_first",
         rule_set_config=FpaRuleSetConfig(
             name="no_process_supplement",
-            coverage_rules=FpaCoverageRules(require_process_coverage=False),
+            coverage_rules=FpaCoverageRules(require_process_coverage=False, require_data_function=False),
         ),
     )
 
@@ -698,20 +755,24 @@ def test_strict_profile_keeps_real_external_data_group_eif():
             "功能过程描述": "统一用户中心维护的人员账号，本系统只引用。",
         },
     ])[0]
-    rows, warnings = _normalize_ai_fpa_rows_for_l3(
-        group=group,
-        meta=_meta(),
-        judgement_rules=[],
-        start_seq=1,
-        profile=STRICT_FPA_PROFILE,
-        ai_rows=[
-            {
-                "name": "统一用户中心账号",
-                "type": "EIF",
-                "explanation": "统一用户中心维护的人员账号，本系统只引用。",
-            },
-        ],
-    )
+    token = set_current_fpa_rule_set_config(_strict_default_rule_set())
+    try:
+        rows, warnings = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            profile=STRICT_FPA_PROFILE,
+            ai_rows=[
+                {
+                    "name": "统一用户中心账号",
+                    "type": "EIF",
+                    "explanation": "统一用户中心维护的人员账号，本系统只引用。",
+                },
+            ],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
 
     assert rows[0]["类型"] == "EIF"
     assert not any("明显冲突" in w for w in warnings)
@@ -830,13 +891,17 @@ def test_strict_profile_data_group_review_survives_unrelated_ai_warning():
 
 
 def test_keyword_type_fallbacks():
-    assert CUSTOM_RULES_PROFILE.infer_type("客户界面开发")[0] == "EI"
-    assert CUSTOM_RULES_PROFILE.infer_type("添加客户-逻辑处理开发")[0] == "ILF"
-    assert CUSTOM_RULES_PROFILE.infer_type("查询客户-查询处理开发")[0] == "EQ"
-    assert CUSTOM_RULES_PROFILE.infer_type("导出客户-导出处理开发")[0] == "EO"
-    assert CUSTOM_RULES_PROFILE.infer_type("导入客户-导入处理开发")[0] == "EI"
-    assert CUSTOM_RULES_PROFILE.infer_type("同步外部接口数据-逻辑处理开发")[0] == "ILF"
-    assert CUSTOM_RULES_PROFILE.infer_type("引用统一用户中心账号-外部接口处理开发")[0] == "EIF"
+    token = set_current_fpa_rule_set_config(_custom_default_rule_set())
+    try:
+        assert CUSTOM_RULES_PROFILE.infer_type("客户界面开发")[0] == "EI"
+        assert CUSTOM_RULES_PROFILE.infer_type("添加客户-逻辑处理开发")[0] == "ILF"
+        assert CUSTOM_RULES_PROFILE.infer_type("查询客户-查询处理开发")[0] == "EQ"
+        assert CUSTOM_RULES_PROFILE.infer_type("导出客户-导出处理开发")[0] == "EO"
+        assert CUSTOM_RULES_PROFILE.infer_type("导入客户-导入处理开发")[0] == "EI"
+        assert CUSTOM_RULES_PROFILE.infer_type("同步外部接口数据-逻辑处理开发")[0] == "ILF"
+        assert CUSTOM_RULES_PROFILE.infer_type("引用统一用户中心账号-外部接口处理开发")[0] == "EIF"
+    finally:
+        reset_current_fpa_rule_set_config(token)
 
 
 class LowConfidenceRulesProfile(CustomRulesProfile):
@@ -1033,8 +1098,8 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["ai_called"] is True
     assert debug["model"] == "test-model"
     assert debug["system_prompt"] == "系统提示词"
-    assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: prompt_sets.custom_rules.system）"
-    assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: prompt_sets.custom_rules.user）"
+    assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: system_prompt_sets.custom_rules）"
+    assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.custom_rules）"
     assert "垂直行业管理" in debug["user_prompt"]
     assert "[system]" in debug["ai_prompt"]
     assert "垂直行业数据维护" in debug["raw_response"]
