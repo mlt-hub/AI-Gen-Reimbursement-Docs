@@ -136,15 +136,18 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
-    core_rules: CUSTOM CORE RULES
+    core_rules: custom_rules
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
-    core_rules: STRICT CORE RULES
+    core_rules: strict_fpa
     system_prompt: strict_fpa
     user_prompt: strict_fpa
+core_rules:
+  custom_rules: CUSTOM CORE RULES
+  strict_fpa: STRICT CORE RULES
 system_prompt_sets:
   custom_rules: 系统提示词
   strict_fpa: 严格系统提示词
@@ -1162,7 +1165,7 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["ai_called"] is True
     assert debug["model"] == "test-model"
     assert debug["system_prompt"] == "系统提示词"
-    assert debug["core_rules_source"] == "用户配置（配置目录/fpa_config.yaml: profiles.custom_rules.core_rules）"
+    assert debug["core_rules_source"] == "用户配置（配置目录/fpa_config.yaml: core_rules.custom_rules）"
     assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: system_prompt_sets.custom_rules）"
     assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.custom_rules）"
     assert "垂直行业管理" in debug["user_prompt"]

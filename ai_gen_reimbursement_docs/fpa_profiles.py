@@ -15,8 +15,8 @@ VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_TRANSACTION_FPA_TYPES = {"EI", "EQ", "EO"}
 VALID_RULE_MERGE_MODES = {"append", "replace"}
 
-CUSTOM_RULES_CORE_RULES = "请在 fpa_config.yaml 的 profiles.custom_rules.core_rules 配置 custom_rules 核心口径。"
-STRICT_FPA_CORE_RULES = "请在 fpa_config.yaml 的 profiles.strict_fpa.core_rules 配置 strict_fpa 核心口径。"
+CUSTOM_RULES_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.custom_rules 配置 custom_rules 核心口径。"
+STRICT_FPA_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.strict_fpa 配置 strict_fpa 核心口径。"
 
 
 EXTERNAL_DATA_GROUP_NOUNS = [

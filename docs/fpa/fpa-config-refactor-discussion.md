@@ -812,7 +812,8 @@ UI 行和过程行的说明模板。
 本轮继续推进 profile 特殊逻辑清理，结论如下：
 
 1. 已实施：`CUSTOM_RULES_CORE_RULES` / `STRICT_FPA_CORE_RULES` 对应的核心口径迁移到配置文件。
-   - 新位置：`profiles.<profile>.core_rules`。
+   - 新位置：顶层 `core_rules.<name>`。
+   - profile 绑定：`profiles.<profile>.core_rules` 只保存引用名，指向顶层 `core_rules.<name>`。
    - 原因：core rules 是 Prompt 语义文本，适合由用户配置维护。
    - 边界：`system_prompt_sets` / `user_prompt_sets` 仍只维护提示词模板；`rule_sets` 仍只维护可执行规则数据。
 

@@ -87,15 +87,18 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
-    core_rules: CUSTOM CORE RULES
+    core_rules: custom_rules
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_auth
-    core_rules: STRICT CORE RULES
+    core_rules: strict_fpa
     system_prompt: strict_fpa
     user_prompt: strict_fpa
+core_rules:
+  custom_rules: CUSTOM CORE RULES
+  strict_fpa: STRICT CORE RULES
 system_prompt_sets:
   custom_rules: "CUSTOM SYSTEM"
   strict_fpa: "STRICT SYSTEM"
@@ -143,15 +146,18 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
-    core_rules: CUSTOM CORE RULES
+    core_rules: custom_rules
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: rules_only
     rule_set: strict_fpa_sms
-    core_rules: STRICT CORE RULES
+    core_rules: strict_fpa
     system_prompt: strict_fpa
     user_prompt: strict_fpa
+core_rules:
+  custom_rules: CUSTOM CORE RULES
+  strict_fpa: STRICT CORE RULES
 system_prompt_sets:
   custom_rules: "CUSTOM SYSTEM"
   strict_fpa: "STRICT SYSTEM"

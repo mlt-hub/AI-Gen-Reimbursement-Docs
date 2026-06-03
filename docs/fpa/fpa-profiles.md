@@ -137,6 +137,7 @@ config/fpa_config.yaml.example
 ```text
 profile：默认 FPA 方案，只允许 custom_rules / strict_fpa。
 profiles：为每个 profile 绑定默认 strategy、rule_set、core_rules、system_prompt、user_prompt。
+core_rules：维护可复用核心口径文本。
 system_prompt_sets：维护系统提示词文本。
 user_prompt_sets：维护用户提示词模板。
 rule_sets：维护可扩展规则集；默认规则集也显式写出可配置规则数据。
@@ -301,19 +302,23 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
-    core_rules: |-
-      FPA 核心口径：
-      ...
+    core_rules: custom_rules
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
-    core_rules: |-
-      严格 FPA 核心口径：
-      ...
+    core_rules: strict_fpa
     system_prompt: strict_fpa
     user_prompt: strict_fpa
+
+core_rules:
+  custom_rules: |-
+    FPA 核心口径：
+    ...
+  strict_fpa: |-
+    严格 FPA 核心口径：
+    ...
 
 system_prompt_sets:
   custom_rules: |-

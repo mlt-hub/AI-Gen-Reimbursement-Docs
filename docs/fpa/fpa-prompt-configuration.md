@@ -35,20 +35,24 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
-    core_rules: |-
-      FPA 核心口径：
-      ...
+    core_rules: custom_rules
     system_prompt: custom_rules
     user_prompt: custom_rules
 
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
-    core_rules: |-
-      严格 FPA 核心口径：
-      ...
+    core_rules: strict_fpa
     system_prompt: strict_fpa
     user_prompt: strict_fpa
+
+core_rules:
+  custom_rules: |-
+    FPA 核心口径：
+    ...
+  strict_fpa: |-
+    严格 FPA 核心口径：
+    ...
 
 system_prompt_sets:
   custom_rules: |-
@@ -107,13 +111,14 @@ rule_sets:
 ```text
 profile：默认 FPA 方案，只允许 custom_rules 或 strict_fpa。
 profiles：每个 profile 绑定默认 strategy、rule_set、core_rules、system_prompt、user_prompt。
+core_rules：可复用的核心口径文本。
 system_prompt_sets：可复用的系统提示词文本。
 user_prompt_sets：可复用的用户提示词模板。
 rule_sets：可新增任意规则集，可用 extends 继承其他规则集。
 row_planning_rules：配置 custom_rules 纯规则兜底时的三级模块界面行和功能过程行规划。
 ```
 
-`profiles.<profile>.core_rules` 是该 profile 的核心口径文本，会注入用户提示词模板中的 `${core_rules}`。
+`profiles.<profile>.core_rules` 是引用名，指向 `core_rules.<name>`。该文本会注入用户提示词模板中的 `${core_rules}`。
 
 `profiles.<profile>.system_prompt` 是引用名，指向 `system_prompt_sets.<name>`。
 
@@ -136,12 +141,12 @@ profiles:
 
 用户提示词模板由当前 profile 的 `user_prompt` 指向 `user_prompt_sets.<name>`。
 
-核心口径由当前 profile 的 `core_rules` 直接提供。
+核心口径由当前 profile 的 `core_rules` 引用顶层 `core_rules.<name>` 提供。
 
 页面展示来源时使用安全标签，不展示完整本机路径：
 
 ```text
-核心口径：用户配置（配置目录/fpa_config.yaml: profiles.custom_rules.core_rules）
+核心口径：用户配置（配置目录/fpa_config.yaml: core_rules.custom_rules）
 系统提示词：用户配置（配置目录/fpa_config.yaml: system_prompt_sets.custom_rules）
 用户提示词：用户配置（配置目录/fpa_config.yaml: user_prompt_sets.custom_rules）
 ```
@@ -152,7 +157,7 @@ profiles:
 
 | 变量 | 作用 |
 |---|---|
-| `core_rules` | 当前 FPA profile 的 `profiles.<profile>.core_rules` 核心口径文本 |
+| `core_rules` | 当前 FPA profile 的 `core_rules.<name>` 核心口径文本 |
 | `judgement_rules` | 从 FPA 模板中读取的计算依据归类判定原则 |
 | `payload_json` | 当前三级模块、功能过程和领域上下文的结构化 JSON |
 
@@ -207,7 +212,7 @@ postprocess 审核规则、warning 来源追踪和审计字段结构。
 
 ```text
 未找到 FPA 配置文件：配置目录/fpa_config.yaml
-未找到 FPA 核心口径配置：配置目录/fpa_config.yaml 中的 profiles.custom_rules.core_rules
+未找到 FPA 核心口径配置：配置目录/fpa_config.yaml 中的 core_rules.custom_rules
 未找到 FPA 系统提示词配置：配置目录/fpa_config.yaml 中的 system_prompt_sets.custom_rules
 未找到 FPA 用户提示词配置：配置目录/fpa_config.yaml 中的 user_prompt_sets.custom_rules
 FPA 配置无效：配置目录/fpa_config.yaml 中的 user_prompt_sets.strict_fpa 包含未知占位符: ${unknown_placeholder}

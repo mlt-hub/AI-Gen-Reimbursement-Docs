@@ -68,15 +68,18 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
-    core_rules: CUSTOM CORE RULES
+    core_rules: custom_rules
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
-    core_rules: STRICT CORE RULES
+    core_rules: strict_fpa
     system_prompt: strict_fpa
     user_prompt: strict_fpa
+core_rules:
+  custom_rules: CUSTOM CORE RULES
+  strict_fpa: STRICT CORE RULES
 system_prompt_sets:
   custom_rules: CUSTOM SYSTEM
   strict_fpa: STRICT SYSTEM
@@ -346,7 +349,7 @@ class TestLoadFpaExecutionOptions:
             result = load_fpa_core_rules_config("strict_fpa")
 
         assert result.text == "STRICT CORE RULES"
-        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: profiles.strict_fpa.core_rules）"
+        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: core_rules.strict_fpa）"
 
     def test_rule_sets_config_from_fpa_config(self, tmp_path):
         _write_fpa_config(tmp_path)

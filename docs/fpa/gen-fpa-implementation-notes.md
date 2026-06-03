@@ -325,7 +325,7 @@ AI 输出要求为 JSON：
 |---|---|---|
 | 系统提示词 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.system_prompt` 指向的 `system_prompt_sets.<name>` | FPA 专用配置文件；缺失时报错 |
 | 用户提示词模板 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.user_prompt` 指向的 `user_prompt_sets.<name>` | FPA 专用配置文件；缺失时报错 |
-| FPA 核心规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.core_rules` | FPA 专用配置文件；缺失时报错 |
+| FPA 核心规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.core_rules` 指向的 `core_rules.<name>` | FPA 专用配置文件；缺失时报错 |
 | 默认 profile / strategy / rule_set | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `profile` 与 `profiles` | FPA 专用配置文件 |
 | 事务关键词扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.keyword_rules` | FPA 专用配置文件 |
 | 内部数据组扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.internal_data_rules` | FPA 专用配置文件 |

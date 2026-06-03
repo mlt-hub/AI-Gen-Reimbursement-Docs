@@ -99,15 +99,18 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
-    core_rules: custom core rules
+    core_rules: custom_rules
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
-    core_rules: strict core rules
+    core_rules: strict_fpa
     system_prompt: strict_fpa
     user_prompt: strict_fpa
+core_rules:
+  custom_rules: custom core rules
+  strict_fpa: strict core rules
 system_prompt_sets:
   custom_rules: custom system secret
   strict_fpa: strict system secret
@@ -176,15 +179,18 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
-    core_rules: custom core rules
+    core_rules: custom_rules
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
-    core_rules: strict core rules
+    core_rules: strict_fpa
     system_prompt: strict_fpa
     user_prompt: strict_fpa
+core_rules:
+  custom_rules: custom core rules
+  strict_fpa: strict core rules
 system_prompt_sets:
   custom_rules: custom system
   strict_fpa: strict system
