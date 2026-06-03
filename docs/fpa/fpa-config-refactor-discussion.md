@@ -460,6 +460,101 @@ rule_sets:
 
 实施后，关键词、类型映射、内外部数据组规则、AI 类型冲突特例和覆盖补齐开关已经配置化到 `rule_sets`。仍保留在代码中的部分主要是算法、行生成结构、文本抽取和边界推理。
 
+## 纯规则兜底入口与默认 rule_set
+
+实施后，纯规则兜底入口也会自动使用当前 profile 绑定的默认 `rule_set`。
+
+这里的“纯规则兜底入口”主要指不调用 AI、直接按规则生成 FPA 行的路径，例如 `_build_fpa_rule_rows(...)`。这类路径会被 rules_only、AI 不可用、AI 失败后的规则兜底以及部分测试/预览场景使用。
+
+### 改造前的问题
+
+改造前，基础规则主要写在 profile 代码逻辑中，纯规则路径直接调用：
+
+```text
+custom_rules profile -> infer_type / fallback_rows_for_l3
+strict_fpa profile -> infer_type / fallback_rows_for_l3
+```
+
+将默认规则迁移到 `rule_sets.<default>` 后，如果纯规则入口不加载 rule_set，就会出现两套来源不一致：
+
+```text
+AI / execution 路径：使用 fpa_config.yaml 中的 rule_set 规则。
+纯规则兜底路径：绕过 rule_set，只执行 profile 代码算法。
+```
+
+这样会导致 `custom_rules_default` / `strict_fpa_default` 中配置化的关键词、类型映射、外部数据组规则在纯规则生成时不生效。
+
+### 当前行为
+
+当前 `_build_fpa_rule_rows(...)` 的行为是：
+
+```text
+如果外层已经设置了当前 rule_set 上下文：
+  直接使用外层 rule_set。
+
+如果外层没有设置当前 rule_set 上下文：
+  根据 profile.name 解析 profiles.<profile>.rule_set。
+  加载 rule_sets.<default> 的实际配置。
+  临时设置为当前 rule_set。
+  再执行 fallback_rows_for_l3 / infer_type。
+```
+
+例如：
+
+```yaml
+profiles:
+  custom_rules:
+    rule_set: custom_rules_default
+
+rule_sets:
+  custom_rules_default:
+    keyword_rules:
+      ...
+```
+
+调用：
+
+```python
+_build_fpa_rule_rows(rows, meta, profile=CUSTOM_RULES_PROFILE)
+```
+
+会自动使用 `custom_rules_default` 中的规则数据。
+
+### 设计目的
+
+这个行为保证所有规则生成路径使用同一套规则来源：
+
+```text
+AI 路径。
+AI 失败 fallback。
+rules_only。
+纯规则兜底。
+单模块预览。
+正式生成。
+```
+
+也就是说，默认规则配置化后，不存在“只有 AI 路径读 YAML，纯规则路径仍读旧硬编码”的分叉。
+
+### 边界
+
+如果调用方已经显式设置了当前 rule_set 上下文，纯规则入口不会覆盖它。
+
+这保证了显式选择的客户规则集仍然优先，例如：
+
+```yaml
+profiles:
+  strict_fpa:
+    rule_set: client_a_rules
+```
+
+或运行时显式传入：
+
+```text
+--fpa-rule-set client_a_rules
+```
+
+此时规则兜底会使用 `client_a_rules`，而不是重新回到 profile 默认规则集。
+
 ### custom_rules
 
 1. 三级模块默认生成一条“界面开发”行。
