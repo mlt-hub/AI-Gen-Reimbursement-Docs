@@ -82,6 +82,25 @@ user_prompt_sets:
   strict_fpa: STRICT ${core_rules} ${judgement_rules} ${payload_json}
 rule_sets:
   custom_rules_default:
+    row_planning_rules:
+      ui_row:
+        enabled: true
+        scope: l3
+        merge: single_row
+        name_suffix: "界面开发"
+        type: EI
+        reason: "三级模块兜底合并界面能力。"
+        empty_process_text: "完成三级模块页面交互能力"
+        explanation_template: "{name}，具体为以下：\n{items}"
+      process_rows:
+        enabled: true
+        one_row_per_process: true
+        default_name_suffix: "逻辑处理开发"
+        type_suffixes:
+          EQ: "查询处理开发"
+          EO: "导出处理开发"
+          EI: "导入处理开发"
+        explanation_template: "{name}，具体为以下：\n1、{description}"
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
@@ -414,8 +433,8 @@ class TestLoadFpaExecutionOptions:
         _write_fpa_config(tmp_path)
         content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
         content = content.replace(
-            "custom_rules_default:\n    coverage_rules:",
-            "custom_rules_default:\n    extends: client_a_rules\n    coverage_rules:",
+            "custom_rules_default:\n    row_planning_rules:",
+            "custom_rules_default:\n    extends: client_a_rules\n    row_planning_rules:",
         )
         content = content.replace("extends: strict_fpa_default", "extends: custom_rules_default")
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
@@ -581,6 +600,36 @@ class TestLoadFpaExecutionOptions:
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             with pytest.raises(FpaConfigError, match=r"coverage_rules\.require_process_coverage 必须是布尔值"):
+                load_fpa_rule_sets_config()
+
+    def test_row_planning_rules_required_fields_are_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace('        name_suffix: "界面开发"\n', "")
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"row_planning_rules\.ui_row\.name_suffix 为必填项"):
+                load_fpa_rule_sets_config()
+
+    def test_row_planning_rules_type_suffixes_are_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace('          EQ: "查询处理开发"', '          UNKNOWN: "查询处理开发"')
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"type_suffixes 包含非法类型: UNKNOWN"):
+                load_fpa_rule_sets_config()
+
+    def test_row_planning_rules_template_placeholders_are_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace("{items}", "{unknown}")
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"ui_row\.explanation_template 包含未知占位符: \{unknown\}"):
                 load_fpa_rule_sets_config()
 
     def test_fpa_check_columns_are_normalized(self, tmp_path):

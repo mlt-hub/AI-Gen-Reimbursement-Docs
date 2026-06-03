@@ -74,9 +74,44 @@ user_prompt_sets:
     ${payload_json}
 rule_sets:
   custom_rules_default:
+    row_planning_rules:
+      ui_row:
+        enabled: true
+        scope: l3
+        merge: single_row
+        name_suffix: "界面开发"
+        type: EI
+        reason: "三级模块兜底合并界面能力。"
+        empty_process_text: "完成三级模块页面交互能力"
+        explanation_template: "{name}，具体为以下：\n{items}"
+      process_rows:
+        enabled: true
+        one_row_per_process: true
+        default_name_suffix: "逻辑处理开发"
+        type_suffixes:
+          EQ: "查询处理开发"
+          EO: "导出处理开发"
+          EI: "导入处理开发"
+        explanation_template: "{name}，具体为以下：\n1、{description}"
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
+    type_mapping_rules:
+      merge: append
+      items:
+        - type: EI
+          keywords: ["界面开发", "页面"]
+        - type: ILF
+          keywords: ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新"]
+    keyword_rules:
+      merge: append
+      items:
+        - type: EO
+          keywords: ["导出", "报表输出", "生成文件", "下载", "下载模板", "下载文件"]
+        - type: EQ
+          keywords: ["查询", "查看", "详情", "列表检索", "检索"]
+        - type: EI
+          keywords: ["导入"]
   strict_fpa_default:
     keyword_rules:
       merge: append
@@ -219,6 +254,74 @@ def test_rule_set_extends_are_loaded(tmp_path):
     assert config.rule_set_config.external_data_rules[0].data_name == "行业平台客户档案"
     assert config.rule_set_config.coverage_rules.require_process_coverage is False
     assert config.rule_set_config.coverage_rules.require_data_function is True
+
+
+def test_custom_rule_set_row_planning_rules_are_loaded(tmp_path):
+    _write_fpa_config(tmp_path)
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("custom_rules")
+
+    row_planning = config.rule_set_config.row_planning_rules
+    assert row_planning.ui_row is not None
+    assert row_planning.ui_row.name_suffix == "界面开发"
+    assert row_planning.ui_row.fpa_type == "EI"
+    assert row_planning.process_rows is not None
+    assert row_planning.process_rows.type_suffixes["EQ"] == "查询处理开发"
+
+
+def test_custom_rule_set_row_planning_rules_affect_fallback_rows(tmp_path):
+    _write_fpa_config(tmp_path)
+    content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+    content = content.replace('name_suffix: "界面开发"', 'name_suffix: "页面交互开发"')
+    content = content.replace('EQ: "查询处理开发"', 'EQ: "读取处理开发"')
+    (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+    group = {
+        "client_type": "后台",
+        "l1": "业务",
+        "l2": "管理",
+        "l3": "客户管理",
+        "processes": [
+            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
+        ],
+    }
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("custom_rules")
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            rows = CUSTOM_RULES_PROFILE.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
+    names = [str(row["新增/修改功能点"]) for row in rows]
+    assert names[0].endswith("-页面交互开发")
+    assert names[1] == "查询客户-读取处理开发"
+
+
+def test_custom_rule_set_can_disable_ui_fallback_row(tmp_path):
+    _write_fpa_config(tmp_path)
+    content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+    content = content.replace("        enabled: true\n        scope: l3", "        enabled: false\n        scope: l3")
+    (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+    group = {
+        "client_type": "后台",
+        "l1": "业务",
+        "l2": "管理",
+        "l3": "客户管理",
+        "processes": [
+            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
+        ],
+    }
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("custom_rules")
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            rows = CUSTOM_RULES_PROFILE.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
+    assert [str(row["新增/修改功能点"]) for row in rows] == ["查询客户-查询处理开发"]
 
 
 def test_rule_set_external_data_rules_affect_strict_profile(tmp_path):

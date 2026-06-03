@@ -668,9 +668,9 @@ profiles:
      后处理警告 = ""
      ```
 
-### 建议新增配置段
+### 已实施配置段
 
-建议在 `rule_sets.<name>` 下新增 `row_planning_rules`，先用于配置 `custom_rules_default` 的行规划策略。
+已在 `rule_sets.<name>` 下新增 `row_planning_rules`，第一版用于配置 `custom_rules_default` 的行规划策略。
 
 示例：
 
@@ -719,7 +719,7 @@ process_rows.explanation_template：功能过程行说明模板。
 
 ### strict_fpa 不配置 row_planning_rules
 
-`strict_fpa_default` 建议直接不配置 `row_planning_rules`。
+`strict_fpa_default` 直接不配置 `row_planning_rules`。
 
 原因：
 
@@ -769,43 +769,35 @@ UI 行和过程行的说明模板。
 如何保证 source_processes、warnings、rule_hits 等审核字段结构。
 ```
 
-## 待决策：行规划规则配置化
+## 已确认并实施：行规划规则配置化
 
-1. 是否新增 `row_planning_rules` 配置段？
-   - 建议：是。
+1. 新增 `row_planning_rules` 配置段。
    - 影响：将 custom_rules 中“三级模块界面行 + 功能过程行”的行规划策略从代码固定逻辑迁移为配置。
 
-2. `row_planning_rules` 是否只在 `custom_rules_default` 中配置，`strict_fpa_default` 不配置？
-   - 建议：是。
+2. `row_planning_rules` 只在 `custom_rules_default` 中配置，`strict_fpa_default` 不配置。
    - 影响：strict_fpa 继续使用标准 FPA 行规划算法，不进入“界面开发 / 逻辑处理开发”配置体系。
 
-3. UI 行是否通过配置控制是否生成？
-   - 建议：是。
+3. UI 行通过配置控制是否生成。
    - 影响：客户可通过 `ui_row.enabled: false` 关闭 custom_rules 的三级模块界面行。
 
-4. UI 行的名称后缀、类型、类型理由、空过程文案和说明模板是否配置化？
-   - 建议：是。
+4. UI 行的名称后缀、类型、类型理由、空过程文案和说明模板已配置化。
    - 影响：`界面开发`、`EI`、`三级模块兜底合并界面能力。`、`完成三级模块页面交互能力` 不再固定在代码中。
 
-5. 功能过程行的默认后缀和 type -> suffix 映射是否配置化？
-   - 建议：是。
+5. 功能过程行的默认后缀和 type -> suffix 映射已配置化。
    - 影响：`查询处理开发`、`导出处理开发`、`导入处理开发`、`逻辑处理开发` 不再固定在代码中。
 
-6. 功能过程行说明模板是否配置化？
-   - 建议：是。
+6. 功能过程行说明模板已配置化。
    - 影响：`{point_name}，具体为以下：\n1、{desc or name}` 不再固定在代码中。
 
-7. Excel 结构字段是否继续留在代码中？
-   - 建议：是。
+7. Excel 结构字段继续留在代码中。
    - 影响：`序号`、`子系统(模块)`、`资产标识`、`变更状态`、`调整值`、`要素数量`、审核字段等仍由代码统一构造。
 
-8. `row_planning_rules` 第一版是否只支持当前需要的有限能力，不做通用 DSL？
-   - 建议：是。
+8. `row_planning_rules` 第一版只支持当前需要的有限能力，不做通用 DSL。
    - 影响：降低配置复杂度，避免把 YAML 变成半个程序。
 
 ## 迁移影响范围
 
-预计需要同步调整：
+已同步调整：
 
 1. `config/fpa_config.yaml.example`
 2. `ai_gen_reimbursement_docs/config_utils.py`
@@ -815,6 +807,10 @@ UI 行和过程行的说明模板。
 6. `docs/fpa/gen-fpa-implementation-notes.md`
 7. README 中引用 FPA Prompt 配置结构的内容
 
-## 后续实施计划
+## 当前待决策
 
-讨论敲定后再一次性更新正式文档、配置示例、代码和测试，并运行相关 Python 测试验证。
+本轮行规划配置化没有新的待决策项。后续如果要继续清理 profile 特殊逻辑，建议另起决策清单评估以下方向：
+
+1. `CUSTOM_RULES_CORE_RULES` / `STRICT_FPA_CORE_RULES` 是否继续留在 profile 代码中，还是进一步迁移到配置文件。
+2. strict_fpa 的标准数据功能识别流程是否保持代码算法，还是拆出更细的可配置开关。
+3. postprocess 审核规则、warning 文案是否需要配置化；当前仍由代码统一维护。

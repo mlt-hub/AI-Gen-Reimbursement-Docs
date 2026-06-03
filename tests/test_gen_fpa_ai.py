@@ -23,7 +23,10 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     CustomRulesProfile,
     ExternalDataGroupRule,
     FpaCoverageRules,
+    FpaProcessRowsPlanningRule,
+    FpaRowPlanningRules,
     FpaRuleSetConfig,
+    FpaUiRowPlanningRule,
     KeywordTypeRule,
     TypeMappingRule,
     reset_current_fpa_rule_set_config,
@@ -63,6 +66,25 @@ def _rows():
 def _custom_default_rule_set() -> FpaRuleSetConfig:
     return FpaRuleSetConfig(
         name="custom_rules_default",
+        row_planning_rules=FpaRowPlanningRules(
+            ui_row=FpaUiRowPlanningRule(
+                enabled=True,
+                scope="l3",
+                merge="single_row",
+                name_suffix="界面开发",
+                fpa_type="EI",
+                reason="三级模块兜底合并界面能力。",
+                empty_process_text="完成三级模块页面交互能力",
+                explanation_template="{name}，具体为以下：\n{items}",
+            ),
+            process_rows=FpaProcessRowsPlanningRule(
+                enabled=True,
+                one_row_per_process=True,
+                default_name_suffix="逻辑处理开发",
+                type_suffixes={"EQ": "查询处理开发", "EO": "导出处理开发", "EI": "导入处理开发"},
+                explanation_template="{name}，具体为以下：\n1、{description}",
+            ),
+        ),
         type_mapping_rules=(
             TypeMappingRule("EI", ("界面开发", "页面")),
             TypeMappingRule("EIF", ("外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据")),
@@ -138,6 +160,41 @@ user_prompt_sets:
     ${judgement_rules}
 rule_sets:
   custom_rules_default:
+    row_planning_rules:
+      ui_row:
+        enabled: true
+        scope: l3
+        merge: single_row
+        name_suffix: "界面开发"
+        type: EI
+        reason: "三级模块兜底合并界面能力。"
+        empty_process_text: "完成三级模块页面交互能力"
+        explanation_template: "{name}，具体为以下：\n{items}"
+      process_rows:
+        enabled: true
+        one_row_per_process: true
+        default_name_suffix: "逻辑处理开发"
+        type_suffixes:
+          EQ: "查询处理开发"
+          EO: "导出处理开发"
+          EI: "导入处理开发"
+        explanation_template: "{name}，具体为以下：\n1、{description}"
+    type_mapping_rules:
+      merge: append
+      items:
+        - type: EI
+          keywords: ["界面开发", "页面"]
+        - type: ILF
+          keywords: ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新"]
+    keyword_rules:
+      merge: append
+      items:
+        - type: EO
+          keywords: ["导出", "报表输出", "生成文件", "下载", "下载模板", "下载文件"]
+        - type: EQ
+          keywords: ["查询", "查看", "详情", "列表检索", "检索"]
+        - type: EI
+          keywords: ["导入"]
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
@@ -394,17 +451,21 @@ def test_unstructured_explanation_records_quality_warning():
 
 def test_multiple_ui_rows_without_split_reason_are_merged():
     group = _group_rows_by_l3(_rows())[0]
-    rows, warnings = _normalize_ai_fpa_rows_for_l3(
-        group=group,
-        meta=_meta(),
-        judgement_rules=[],
-        start_seq=1,
-        ai_rows=[
-            {"name": "垂直行业列表界面开发", "type": "EI", "explanation": "列表。"},
-            {"name": "垂直行业查询界面开发", "type": "EI", "explanation": "查询。"},
-            {"name": "添加垂直行业-逻辑处理开发", "type": "ILF", "explanation": "保存。"},
-        ],
-    )
+    token = set_current_fpa_rule_set_config(_custom_default_rule_set())
+    try:
+        rows, warnings = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            ai_rows=[
+                {"name": "垂直行业列表界面开发", "type": "EI", "explanation": "列表。"},
+                {"name": "垂直行业查询界面开发", "type": "EI", "explanation": "查询。"},
+                {"name": "添加垂直行业-逻辑处理开发", "type": "ILF", "explanation": "保存。"},
+            ],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
     assert sum(1 for r in rows if "界面开发" in r["新增/修改功能点"]) == 1
     assert any("split_reason" in w for w in warnings)
 

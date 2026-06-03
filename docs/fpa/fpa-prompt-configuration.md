@@ -62,6 +62,25 @@ user_prompt_sets:
 
 rule_sets:
   custom_rules_default:
+    row_planning_rules:
+      ui_row:
+        enabled: true
+        scope: l3
+        merge: single_row
+        name_suffix: "界面开发"
+        type: EI
+        reason: "三级模块兜底合并界面能力。"
+        empty_process_text: "完成三级模块页面交互能力"
+        explanation_template: "{name}，具体为以下：\n{items}"
+      process_rows:
+        enabled: true
+        one_row_per_process: true
+        default_name_suffix: "逻辑处理开发"
+        type_suffixes:
+          EQ: "查询处理开发"
+          EO: "导出处理开发"
+          EI: "导入处理开发"
+        explanation_template: "{name}，具体为以下：\n1、{description}"
     keyword_rules:
       merge: append
       items:
@@ -85,6 +104,7 @@ profiles：每个 profile 绑定默认 strategy、rule_set、system_prompt、use
 system_prompt_sets：可复用的系统提示词文本。
 user_prompt_sets：可复用的用户提示词模板。
 rule_sets：可新增任意规则集，可用 extends 继承其他规则集。
+row_planning_rules：配置 custom_rules 纯规则兜底时的三级模块界面行和功能过程行规划。
 ```
 
 `profiles.<profile>.system_prompt` 是引用名，指向 `system_prompt_sets.<name>`。
@@ -137,7 +157,16 @@ ${payload_json}
 
 ## 默认规则配置
 
-`custom_rules_default` 和 `strict_fpa_default` 不再是空对象。可表达为规则数据的默认类型判断、关键词、外部数据组识别和覆盖补齐开关已经写入 `rule_sets.<default>`。
+`custom_rules_default` 和 `strict_fpa_default` 不再是空对象。可表达为规则数据的默认类型判断、关键词、外部数据组识别、覆盖补齐开关和 custom_rules 行规划策略已经写入 `rule_sets.<default>`。
+
+`custom_rules_default.row_planning_rules` 控制纯规则兜底行：
+
+```text
+ui_row：是否生成三级模块级界面行，以及行名后缀、类型、类型理由、空过程文案和说明模板。
+process_rows：是否按功能过程生成行，以及默认后缀、FPA 类型到后缀的映射和说明模板。
+```
+
+`strict_fpa_default` 不配置 `row_planning_rules`。strict_fpa 使用标准 FPA 算法识别数据功能和事务功能，不进入“界面开发 / 逻辑处理开发”这种开发工作项式行规划。
 
 保留在代码中的内容是执行机制：
 
@@ -145,6 +174,7 @@ ${payload_json}
 rules_first / ai_first 的执行流程。
 AI 失败、返回非法 JSON、返回非法类型时如何 fallback。
 行覆盖检查和补齐算法。
+Excel 结构字段构造，包括序号、子系统、资产标识、变更状态、调整值、要素数量和审核字段。
 Prompt 渲染、JSON 解析和输出合法性校验。
 规则集继承、合并、循环检测和配置结构校验。
 ```

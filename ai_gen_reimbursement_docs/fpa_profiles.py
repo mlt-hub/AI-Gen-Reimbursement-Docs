@@ -149,6 +149,39 @@ class FpaCoverageRules:
 
 
 @dataclass(frozen=True)
+class FpaUiRowPlanningRule:
+    """三级模块界面兜底行生成策略。"""
+
+    enabled: bool | None = None
+    scope: str = ""
+    merge: str = ""
+    name_suffix: str = ""
+    fpa_type: str = ""
+    reason: str = ""
+    empty_process_text: str = ""
+    explanation_template: str = ""
+
+
+@dataclass(frozen=True)
+class FpaProcessRowsPlanningRule:
+    """功能过程兜底行生成策略。"""
+
+    enabled: bool | None = None
+    one_row_per_process: bool | None = None
+    default_name_suffix: str = ""
+    type_suffixes: dict[str, str] = field(default_factory=dict)
+    explanation_template: str = ""
+
+
+@dataclass(frozen=True)
+class FpaRowPlanningRules:
+    """一套 rule_set 中的兜底行规划规则。"""
+
+    ui_row: FpaUiRowPlanningRule | None = None
+    process_rows: FpaProcessRowsPlanningRule | None = None
+
+
+@dataclass(frozen=True)
 class FpaRuleSetConfig:
     """一套可配置 FPA 规则集。"""
 
@@ -165,6 +198,7 @@ class FpaRuleSetConfig:
     internal_data_rules: tuple[InternalDataGroupRule, ...] = field(default_factory=tuple)
     internal_data_rules_merge: str = "append"
     coverage_rules: FpaCoverageRules = field(default_factory=FpaCoverageRules)
+    row_planning_rules: FpaRowPlanningRules = field(default_factory=FpaRowPlanningRules)
     config_warnings: tuple[str, ...] = field(default_factory=tuple)
     raw: dict[str, object] = field(default_factory=dict)
 
@@ -331,6 +365,53 @@ def _coverage_rules_from_dict(data: dict[str, object]) -> FpaCoverageRules:
     )
 
 
+def _ui_row_planning_rule_from_dict(section: object) -> FpaUiRowPlanningRule | None:
+    if not isinstance(section, dict):
+        return None
+    return FpaUiRowPlanningRule(
+        enabled=section.get("enabled") if isinstance(section.get("enabled"), bool) else None,
+        scope=str(section.get("scope") or "").strip(),
+        merge=str(section.get("merge") or "").strip(),
+        name_suffix=str(section.get("name_suffix") or "").strip(),
+        fpa_type=str(section.get("type") or "").strip().upper(),
+        reason=str(section.get("reason") or "").strip(),
+        empty_process_text=str(section.get("empty_process_text") or "").strip(),
+        explanation_template=str(section.get("explanation_template") or "").strip(),
+    )
+
+
+def _process_rows_planning_rule_from_dict(section: object) -> FpaProcessRowsPlanningRule | None:
+    if not isinstance(section, dict):
+        return None
+    raw_suffixes = section.get("type_suffixes")
+    suffixes: dict[str, str] = {}
+    if isinstance(raw_suffixes, dict):
+        suffixes = {
+            str(fpa_type).strip().upper(): str(suffix).strip()
+            for fpa_type, suffix in raw_suffixes.items()
+            if str(fpa_type).strip() and str(suffix).strip()
+        }
+    return FpaProcessRowsPlanningRule(
+        enabled=section.get("enabled") if isinstance(section.get("enabled"), bool) else None,
+        one_row_per_process=section.get("one_row_per_process")
+        if isinstance(section.get("one_row_per_process"), bool)
+        else None,
+        default_name_suffix=str(section.get("default_name_suffix") or "").strip(),
+        type_suffixes=suffixes,
+        explanation_template=str(section.get("explanation_template") or "").strip(),
+    )
+
+
+def _row_planning_rules_from_dict(data: dict[str, object]) -> FpaRowPlanningRules:
+    section = data.get("row_planning_rules")
+    if not isinstance(section, dict):
+        return FpaRowPlanningRules()
+    return FpaRowPlanningRules(
+        ui_row=_ui_row_planning_rule_from_dict(section.get("ui_row")),
+        process_rows=_process_rows_planning_rule_from_dict(section.get("process_rows")),
+    )
+
+
 def _looks_like_ordinary_external_service(text: str) -> bool:
     upper_text = text.upper()
     return any(alias.upper() in upper_text for alias in ORDINARY_EXTERNAL_SERVICE_ALIASES)
@@ -404,6 +485,7 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
         internal_data_rules=tuple(internal_rules),
         internal_data_rules_merge=internal_merge,
         coverage_rules=_coverage_rules_from_dict(data),
+        row_planning_rules=_row_planning_rules_from_dict(data),
         config_warnings=_external_data_rule_config_warnings(name, tuple(external_rules)),
         raw=dict(data),
     )
@@ -421,6 +503,58 @@ def _merge_coverage_rules(parent: FpaCoverageRules, child: FpaCoverageRules) -> 
             if child.require_data_function is not None
             else parent.require_data_function
         ),
+    )
+
+
+def _choose_configured_text(parent_value: str, child_value: str) -> str:
+    return child_value if child_value else parent_value
+
+
+def _merge_ui_row_planning_rule(
+    parent: FpaUiRowPlanningRule | None,
+    child: FpaUiRowPlanningRule | None,
+) -> FpaUiRowPlanningRule | None:
+    if child is None:
+        return parent
+    if parent is None:
+        return child
+    return FpaUiRowPlanningRule(
+        enabled=child.enabled if child.enabled is not None else parent.enabled,
+        scope=_choose_configured_text(parent.scope, child.scope),
+        merge=_choose_configured_text(parent.merge, child.merge),
+        name_suffix=_choose_configured_text(parent.name_suffix, child.name_suffix),
+        fpa_type=_choose_configured_text(parent.fpa_type, child.fpa_type),
+        reason=_choose_configured_text(parent.reason, child.reason),
+        empty_process_text=_choose_configured_text(parent.empty_process_text, child.empty_process_text),
+        explanation_template=_choose_configured_text(parent.explanation_template, child.explanation_template),
+    )
+
+
+def _merge_process_rows_planning_rule(
+    parent: FpaProcessRowsPlanningRule | None,
+    child: FpaProcessRowsPlanningRule | None,
+) -> FpaProcessRowsPlanningRule | None:
+    if child is None:
+        return parent
+    if parent is None:
+        return child
+    type_suffixes = dict(parent.type_suffixes)
+    type_suffixes.update(child.type_suffixes)
+    return FpaProcessRowsPlanningRule(
+        enabled=child.enabled if child.enabled is not None else parent.enabled,
+        one_row_per_process=(
+            child.one_row_per_process if child.one_row_per_process is not None else parent.one_row_per_process
+        ),
+        default_name_suffix=_choose_configured_text(parent.default_name_suffix, child.default_name_suffix),
+        type_suffixes=type_suffixes,
+        explanation_template=_choose_configured_text(parent.explanation_template, child.explanation_template),
+    )
+
+
+def _merge_row_planning_rules(parent: FpaRowPlanningRules, child: FpaRowPlanningRules) -> FpaRowPlanningRules:
+    return FpaRowPlanningRules(
+        ui_row=_merge_ui_row_planning_rule(parent.ui_row, child.ui_row),
+        process_rows=_merge_process_rows_planning_rule(parent.process_rows, child.process_rows),
     )
 
 
@@ -458,6 +592,7 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
         ),
         internal_data_rules_merge=child.internal_data_rules_merge,
         coverage_rules=_merge_coverage_rules(parent.coverage_rules, child.coverage_rules),
+        row_planning_rules=_merge_row_planning_rules(parent.row_planning_rules, child.row_planning_rules),
         config_warnings=_external_data_rule_config_warnings(child.name, external_data_rules),
         raw=raw,
     )
@@ -554,16 +689,16 @@ class CustomRulesProfile:
 
     def logic_point_name(self, name: str, desc: str = "") -> str:
         text = f"{name} {desc}"
+        process_rule = self._configured_process_row_planning_rule()
+        if process_rule is None or process_rule.enabled is False:
+            return name
         for rule in self._configured_keyword_rules():
             if not rule.matches(text):
                 continue
-            if rule.fpa_type == "EQ":
-                return f"{name}-查询处理开发"
-            if rule.fpa_type == "EO":
-                return f"{name}-导出处理开发"
-            if rule.fpa_type == "EI" and any(keyword in text for keyword in rule.keywords):
-                return f"{name}-导入处理开发"
-        return f"{name}-逻辑处理开发"
+            suffix = process_rule.type_suffixes.get(rule.fpa_type)
+            if suffix:
+                return f"{name}-{suffix}"
+        return f"{name}-{process_rule.default_name_suffix}" if process_rule.default_name_suffix else name
 
     def normalize_output_name(self, name: str, desc: str = "") -> str:
         return name
@@ -583,33 +718,41 @@ class CustomRulesProfile:
         rows: list[dict[str, object]] = []
         seq = start_seq
 
-        ui_items = []
-        for p in process_list:
-            if not isinstance(p, dict):
-                continue
-            name = str(p.get("name", "") or "").strip()
-            desc = str(p.get("desc", "") or "").strip()
-            if name or desc:
-                ui_items.append(desc or name)
-        ui_detail = "\n".join(f"{i}、{item}" for i, item in enumerate(ui_items or ["完成三级模块页面交互能力"], 1))
-        rows.append({
-            "序号": seq,
-            "子系统(模块)": subsystem,
-            "资产标识": asset,
-            "新增/修改功能点": f"{tag}-界面开发",
-            "类型": "EI",
-            "计算依据归类": "",
-            "计算依据说明": f"{tag}-界面开发，具体为以下：\n{ui_detail}",
-            "变更状态": module_change_status(process_list),
-            "调整值": 2,
-            "要素数量": 1,
-            "生成方式": "fallback",
-            "类型理由": "三级模块兜底合并界面能力。",
-            "源功能过程": "、".join(str(p.get("name", "")) for p in process_list if isinstance(p, dict)),
-            "后处理警告": "",
-        })
-        seq += 1
+        ui_rule = self._configured_ui_row_planning_rule()
+        if ui_rule is not None and ui_rule.enabled is not False:
+            ui_items = []
+            for p in process_list:
+                if not isinstance(p, dict):
+                    continue
+                name = str(p.get("name", "") or "").strip()
+                desc = str(p.get("desc", "") or "").strip()
+                if name or desc:
+                    ui_items.append(desc or name)
+            ui_detail = "\n".join(
+                f"{i}、{item}" for i, item in enumerate(ui_items or [ui_rule.empty_process_text], 1) if item
+            )
+            ui_name = f"{tag}-{ui_rule.name_suffix}" if ui_rule.name_suffix else tag
+            rows.append({
+                "序号": seq,
+                "子系统(模块)": subsystem,
+                "资产标识": asset,
+                "新增/修改功能点": ui_name,
+                "类型": ui_rule.fpa_type,
+                "计算依据归类": "",
+                "计算依据说明": ui_rule.explanation_template.format(name=ui_name, items=ui_detail),
+                "变更状态": module_change_status(process_list),
+                "调整值": adjust_value_for_type(ui_rule.fpa_type),
+                "要素数量": 1,
+                "生成方式": "fallback",
+                "类型理由": ui_rule.reason,
+                "源功能过程": "、".join(str(p.get("name", "")) for p in process_list if isinstance(p, dict)),
+                "后处理警告": "",
+            })
+            seq += 1
 
+        process_rule = self._configured_process_row_planning_rule()
+        if process_rule is None or process_rule.enabled is False:
+            return rows
         for p in process_list:
             if not isinstance(p, dict):
                 continue
@@ -626,7 +769,10 @@ class CustomRulesProfile:
                 "新增/修改功能点": point_name,
                 "类型": fpa_type,
                 "计算依据归类": "",
-                "计算依据说明": f"{point_name}，具体为以下：\n1、{desc or name}",
+                "计算依据说明": process_rule.explanation_template.format(
+                    name=point_name,
+                    description=desc or name,
+                ),
                 "变更状态": str(p.get("type", "") or module_change_status(process_list)),
                 "调整值": adjust_value_for_type(fpa_type),
                 "要素数量": 1,
@@ -653,6 +799,14 @@ class CustomRulesProfile:
     def _configured_type_mapping_rules(self) -> tuple[TypeMappingRule, ...]:
         current_rule_set = current_fpa_rule_set_config()
         return current_rule_set.type_mapping_rules if current_rule_set is not None else ()
+
+    def _configured_ui_row_planning_rule(self) -> FpaUiRowPlanningRule | None:
+        current_rule_set = current_fpa_rule_set_config()
+        return current_rule_set.row_planning_rules.ui_row if current_rule_set is not None else None
+
+    def _configured_process_row_planning_rule(self) -> FpaProcessRowsPlanningRule | None:
+        current_rule_set = current_fpa_rule_set_config()
+        return current_rule_set.row_planning_rules.process_rows if current_rule_set is not None else None
 
     def _configured_type_mapping(
         self,

@@ -8,7 +8,7 @@ import shutil
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from string import Template
+from string import Formatter, Template
 
 DEFAULT_CFP_FORMULA = (
     'IF(OR(L{row}="新增",L{row}="修改"),1,'
@@ -638,6 +638,132 @@ def _validate_coverage_rules(value: object, key_path: str) -> None:
             )
 
 
+def _validate_row_planning_bool(value: dict[str, object], key: str, key_path: str) -> None:
+    if key in value and not isinstance(value.get(key), bool):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}.{key} 必须是布尔值")
+
+
+def _validate_format_template(
+    value: object,
+    key_path: str,
+    allowed_fields: set[str],
+    required_fields: set[str],
+) -> None:
+    template_text = _require_non_empty_string(value, key_path)
+    fields: set[str] = set()
+    try:
+        parsed = Formatter().parse(template_text)
+        for _, field_name, _, _ in parsed:
+            if not field_name:
+                continue
+            fields.add(field_name.split(".", 1)[0].split("[", 1)[0])
+    except ValueError as exc:
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 格式化模板非法") from exc
+    unknown = sorted(fields - allowed_fields)
+    if unknown:
+        raise FpaConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 包含未知占位符: "
+            f"{', '.join('{' + name + '}' for name in unknown)}"
+        )
+    missing = sorted(required_fields - fields)
+    if missing:
+        raise FpaConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须包含占位符: "
+            f"{', '.join('{' + name + '}' for name in missing)}"
+        )
+
+
+def _validate_row_planning_rules(value: object, key_path: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须是对象")
+
+    ui_row = value.get("ui_row")
+    if ui_row is not None:
+        if not isinstance(ui_row, dict):
+            raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}.ui_row 必须是对象")
+        ui_path = f"{key_path}.ui_row"
+        _validate_row_planning_bool(ui_row, "enabled", ui_path)
+        if ui_row.get("enabled") is not False:
+            for required_key in ("scope", "merge", "name_suffix", "type", "reason", "empty_process_text", "explanation_template"):
+                if required_key not in ui_row:
+                    raise FpaConfigError(
+                        f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {ui_path}.{required_key} 为必填项"
+                    )
+        if "scope" in ui_row:
+            scope = _require_non_empty_string(ui_row.get("scope"), f"{ui_path}.scope")
+            if scope != "l3":
+                raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {ui_path}.scope 必须是 l3")
+        if "merge" in ui_row:
+            merge = _require_non_empty_string(ui_row.get("merge"), f"{ui_path}.merge")
+            if merge != "single_row":
+                raise FpaConfigError(
+                    f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {ui_path}.merge 必须是 single_row"
+                )
+        if "name_suffix" in ui_row:
+            _require_non_empty_string(ui_row.get("name_suffix"), f"{ui_path}.name_suffix")
+        if "type" in ui_row:
+            fpa_type = _require_non_empty_string(ui_row.get("type"), f"{ui_path}.type").upper()
+            if fpa_type not in VALID_FPA_TYPES:
+                raise FpaConfigError(
+                    f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {ui_path}.type 必须是 EI / EQ / EO / ILF / EIF"
+                )
+        if "reason" in ui_row:
+            _require_non_empty_string(ui_row.get("reason"), f"{ui_path}.reason")
+        if "empty_process_text" in ui_row:
+            _require_non_empty_string(ui_row.get("empty_process_text"), f"{ui_path}.empty_process_text")
+        if "explanation_template" in ui_row:
+            _validate_format_template(
+                ui_row.get("explanation_template"),
+                f"{ui_path}.explanation_template",
+                {"name", "items"},
+                {"name", "items"},
+            )
+
+    process_rows = value.get("process_rows")
+    if process_rows is not None:
+        if not isinstance(process_rows, dict):
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}.process_rows 必须是对象"
+            )
+        process_path = f"{key_path}.process_rows"
+        _validate_row_planning_bool(process_rows, "enabled", process_path)
+        _validate_row_planning_bool(process_rows, "one_row_per_process", process_path)
+        if process_rows.get("enabled") is not False:
+            for required_key in ("one_row_per_process", "default_name_suffix", "type_suffixes", "explanation_template"):
+                if required_key not in process_rows:
+                    raise FpaConfigError(
+                        f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {process_path}.{required_key} 为必填项"
+                    )
+            if process_rows.get("one_row_per_process") is not True:
+                raise FpaConfigError(
+                    f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {process_path}.one_row_per_process 第一版必须为 true"
+                )
+        if "default_name_suffix" in process_rows:
+            _require_non_empty_string(process_rows.get("default_name_suffix"), f"{process_path}.default_name_suffix")
+        type_suffixes = process_rows.get("type_suffixes")
+        if type_suffixes is not None:
+            if not isinstance(type_suffixes, dict):
+                raise FpaConfigError(
+                    f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {process_path}.type_suffixes 必须是对象"
+                )
+            for fpa_type, suffix in type_suffixes.items():
+                type_key = str(fpa_type).strip().upper()
+                if type_key not in VALID_FPA_TYPES:
+                    raise FpaConfigError(
+                        f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {process_path}.type_suffixes 包含非法类型: {fpa_type}"
+                    )
+                _require_non_empty_string(suffix, f"{process_path}.type_suffixes.{fpa_type}")
+        if "explanation_template" in process_rows:
+            _validate_format_template(
+                process_rows.get("explanation_template"),
+                f"{process_path}.explanation_template",
+                {"name", "description"},
+                {"name", "description"},
+            )
+
+
 def _validate_fpa_user_prompt_template(template_text: str, key_path: str) -> None:
     template = Template(template_text)
     if not template.is_valid():
@@ -707,6 +833,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         _validate_ai_type_conflict_rules(rule_entry.get("ai_type_conflict_rules"), f"{rule_set_path}.ai_type_conflict_rules")
         _validate_internal_data_rules(rule_entry.get("internal_data_rules"), f"{rule_set_path}.internal_data_rules")
         _validate_coverage_rules(rule_entry.get("coverage_rules"), f"{rule_set_path}.coverage_rules")
+        _validate_row_planning_rules(rule_entry.get("row_planning_rules"), f"{rule_set_path}.row_planning_rules")
 
     visited: set[str] = set()
     visiting: set[str] = set()

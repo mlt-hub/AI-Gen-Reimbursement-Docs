@@ -329,12 +329,13 @@ AI 输出要求为 JSON：
 | 事务关键词扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.keyword_rules` | FPA 专用配置文件 |
 | 内部数据组扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.internal_data_rules` | FPA 专用配置文件 |
 | 外部数据组扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.external_data_rules` | FPA 专用配置文件 |
+| custom_rules 兜底行规划 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.row_planning_rules` | FPA 专用配置文件 |
 | FPA 核心规则 | `fpa_profiles.py` 中的 `CUSTOM_RULES_CORE_RULES` / `STRICT_FPA_CORE_RULES` | 代码 |
 | 领域上下文 | `gen_fpa.py` 的 `_build_domain_context(meta)` 从元数据 MD 提取 | 代码 + Excel/MD 数据 |
 | 功能过程上下文 | `parse_module_tree_md()` 读取模块树 MD 后按三级模块聚合 | Excel -> MD -> 代码 |
 | 计算依据归类判定原则 | FPA 输出模板 Excel 的附录 Sheet | Excel 模板 |
 | 类型兜底规则 | `fpa_profiles.py` 中各 profile 的 `infer_type()` | 代码 |
-| AI 失败兜底拆分规则 | `fpa_profiles.py` 中各 profile 的 `fallback_rows_for_l3()` | 代码 |
+| AI 失败兜底拆分规则 | `fpa_profiles.py` 中各 profile 的 `fallback_rows_for_l3()`；custom_rules 的行名、类型理由和说明模板来自 `row_planning_rules` | 代码 + FPA 专用配置文件 |
 | 多界面合并规则 | `gen_fpa.py` 的 `_normalize_ai_fpa_rows_for_l3()` | 代码 |
 
 ### 系统提示词
@@ -2000,6 +2001,7 @@ client_b_rules:
 已完成：ILF / EIF 判定规则第一版，使用 internal_data_rules 追加 ILF 内部数据组规则，EIF 继续使用 external_data_rules。
 已完成：规则段继承策略，keyword_rules / internal_data_rules / external_data_rules 均支持 merge: append / replace。
 已完成第一版：功能过程覆盖检查规则，使用 coverage_rules 配置 ai_first 下 rules_fallback 是否补未覆盖功能过程、是否补数据功能行。
+已完成第一版：custom_rules 兜底行规划规则，使用 row_planning_rules 配置三级模块 UI 行、功能过程行、名称后缀和说明模板。
 ```
 
 后续可扩展：
