@@ -55,6 +55,16 @@ def _rows():
     ]
 
 
+def _structured_explanation(process: str = "添加垂直行业", fpa_type: str = "EI") -> str:
+    return (
+        f"来源场景：来自“【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-{process}”，"
+        "后台用户输入垂直行业名称并保存。"
+        "\n业务数据：涉及垂直行业数据，输入字段为垂直行业名称。"
+        "\n业务规则：系统根据用户提交动作创建或处理对应垂直行业记录。"
+        f"\n计算说明：该功能过程体现后台用户维护垂直行业业务数据，可支撑 FPA 功能点计量，并按 {fpa_type} 识别。"
+    )
+
+
 def _write_fpa_prompt_config(tmp_path, monkeypatch):
     (tmp_path / "fpa_config.yaml").write_text(
         """
@@ -192,6 +202,52 @@ def test_invalid_index_warns_and_leaves_basis_empty():
     rule_hits = rows[0]["_规则命中详情"]
     assert any(hit["rule_id"] == "postprocess.classification_basis_index" for hit in rule_hits)
     assert any("越界" in warning for hit in rule_hits for warning in hit["warnings"])
+
+
+def test_structured_explanation_passes_quality_check():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        ai_rows=[{
+            "name": "添加垂直行业-逻辑处理开发",
+            "type": "ILF",
+            "classification_basis_index": 1,
+            "explanation": _structured_explanation("添加垂直行业", "ILF"),
+        }],
+    )
+
+    assert not any("计算依据说明" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_unstructured_explanation_records_quality_warning():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        ai_rows=[{
+            "name": "添加垂直行业-逻辑处理开发",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": "保存垂直行业基础信息。",
+        }],
+    )
+
+    assert any("计算依据说明格式不完整" in warning for warning in warnings)
+    assert any("未使用完整路径格式" in warning for warning in warnings)
+    assert any("未明确当前 FPA 类型: ILF" in warning for warning in warnings)
+    rule_hits = rows[0]["_规则命中详情"]
+    quality_hit = next(hit for hit in rule_hits if hit["rule_id"] == "postprocess.explanation_quality")
+    assert "结构化证据说明规则" in quality_hit["rule_desc"]
+    assert "计算依据说明格式不完整" in "；".join(quality_hit["warnings"])
 
 
 def test_multiple_ui_rows_without_split_reason_are_merged():

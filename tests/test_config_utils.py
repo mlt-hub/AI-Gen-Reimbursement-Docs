@@ -614,6 +614,24 @@ class TestLoadFpaUserPromptTemplate:
         assert result.text == "STRICT ${core_rules} ${judgement_rules} ${payload_json}"
         assert result.source_label == "用户配置（配置目录/fpa_config.yaml: prompt_sets.strict_fpa.user）"
 
+    def test_default_fpa_prompt_example_contains_calculation_explanation_rules(self, tmp_path):
+        source = Path(__file__).resolve().parents[1] / "config"
+        copy_default_config_files(tmp_path, source)
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            custom = load_fpa_user_prompt_template("custom_rules")
+            strict = load_fpa_user_prompt_template("strict_fpa")
+
+        for template in (custom, strict):
+            assert "计算依据说明生成规则" in template
+            assert "来源场景" in template
+            assert "业务数据" in template
+            assert "业务规则" in template
+            assert "系统元素" in template
+            assert "计算说明" in template
+            assert "不得把数据库表直接等同为 ILF" in template
+            assert "不要写“未识别到”" in template
+
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
         _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):

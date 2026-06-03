@@ -47,6 +47,8 @@ VALID_FPA_TYPES = {"EI", "ILF", "EQ", "EO", "EIF"}
 FPA_PROFILE = CUSTOM_RULES_PROFILE
 RULE_HITS_KEY = "_规则命中详情"
 CONFIG_WARNING_PREFIX = "FPA 配置 warning:"
+EXPLANATION_REQUIRED_LABELS = ("来源场景：", "业务数据：", "业务规则：", "计算说明：")
+EXPLANATION_MISSING_HINTS = ("未识别到", "未明确说明", "需求未明确说明")
 
 
 @dataclass(frozen=True)
@@ -107,6 +109,43 @@ def parse_meta_md(meta_md_path: str) -> dict[str, str]:
     """解析文档元数据.md 为扁平字典。支持跨多行的表格值。"""
     from ai_gen_reimbursement_docs.gen_spec import parse_meta_md
     return parse_meta_md(meta_md_path)
+
+
+def _explanation_quality_warnings(
+    *,
+    group: dict[str, object],
+    name: str,
+    fpa_type: str,
+    explanation: str,
+) -> list[str]:
+    """Check formal FPA calculation explanation quality without changing output."""
+    text = str(explanation or "").strip()
+    if not text:
+        return []
+
+    warnings: list[str] = []
+    missing_labels = [label.rstrip("：") for label in EXPLANATION_REQUIRED_LABELS if label not in text]
+    if missing_labels:
+        warnings.append(
+            f"{name} 计算依据说明格式不完整，缺少结构化项: {'、'.join(missing_labels)}"
+        )
+
+    source_prefix = (
+        f"【{group.get('client_type', '')}】"
+        f"{group.get('l1', '')}-{group.get('l2', '')}-{group.get('l3', '')}-"
+    )
+    if source_prefix.strip("-") and source_prefix not in text:
+        warnings.append(
+            f"{name} 计算依据说明来源场景未使用完整路径格式: {source_prefix}<功能过程>"
+        )
+
+    if fpa_type and fpa_type not in text:
+        warnings.append(f"{name} 计算依据说明的计算说明未明确当前 FPA 类型: {fpa_type}")
+
+    if any(hint in text for hint in EXPLANATION_MISSING_HINTS):
+        warnings.append(f"{name} 正式计算依据说明包含缺失提示，应移入 check/debug 输出")
+
+    return warnings
 
 
 def _receiver_from_client_type(client_type: str, rules_text: str) -> str:
@@ -592,6 +631,24 @@ def _normalize_ai_fpa_rows_for_l3(
                 "suggested_type": fpa_type,
                 "adopted": "是",
                 "warnings": [review_warning],
+            })
+
+        explanation_warnings = _explanation_quality_warnings(
+            group=group,
+            name=name,
+            fpa_type=fpa_type,
+            explanation=explanation,
+        )
+        if explanation_warnings:
+            warnings.extend(explanation_warnings)
+            row_warnings.extend(explanation_warnings)
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.explanation_quality",
+                "rule_desc": "计算依据说明应符合结构化证据说明规则，并将缺失信息放入 check/debug。",
+                "suggested_type": fpa_type,
+                "adopted": "是",
+                "warnings": explanation_warnings,
             })
 
         source_processes = raw.get("source_processes", [])
