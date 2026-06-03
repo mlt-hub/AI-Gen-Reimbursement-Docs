@@ -631,6 +631,8 @@ class TestLoadFpaUserPromptTemplate:
             assert "计算说明" in template
             assert "不得把数据库表直接等同为 ILF" in template
             assert "不要写“未识别到”" in template
+            assert "按后台数据库变更的表个数计量" in template
+            assert "不要把" in template
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
         _write_fpa_config(tmp_path)

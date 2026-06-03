@@ -49,6 +49,7 @@ RULE_HITS_KEY = "_规则命中详情"
 CONFIG_WARNING_PREFIX = "FPA 配置 warning:"
 EXPLANATION_REQUIRED_LABELS = ("来源场景：", "业务数据：", "业务规则：", "计算说明：")
 EXPLANATION_MISSING_HINTS = ("未识别到", "未明确说明", "需求未明确说明")
+EXPLANATION_TABLE_COUNT_HINTS = ("按后台数据库变更的表个数计量", "按数据库表个数计量", "按表个数计量")
 
 
 @dataclass(frozen=True)
@@ -145,6 +146,11 @@ def _explanation_quality_warnings(
 
     if any(hint in text for hint in EXPLANATION_MISSING_HINTS):
         warnings.append(f"{name} 正式计算依据说明包含缺失提示，应移入 check/debug 输出")
+
+    if any(hint in text for hint in EXPLANATION_TABLE_COUNT_HINTS):
+        warnings.append(
+            f"{name} 计算依据说明疑似将数据库表个数作为详细计量解释，应保留在计算依据归类而非计算依据说明"
+        )
 
     return warnings
 

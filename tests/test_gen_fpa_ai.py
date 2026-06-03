@@ -288,6 +288,37 @@ def test_data_function_source_path_warning_mentions_data_group_name():
     assert any("<数据组名称>" in warning for warning in quality_hit["warnings"])
 
 
+def test_explanation_warns_when_table_count_basis_is_used_as_detail():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["按后台数据库变更的表个数计量"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "垂直行业数据组",
+            "type": "ILF",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：来自“【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组”，"
+                "本系统维护垂直行业基础信息。"
+                "\n业务数据：涉及垂直行业数据，字段包括行业名称。"
+                "\n业务规则：系统保存并持续维护垂直行业逻辑数据组。"
+                "\n计算说明：该数据组由本系统维护，符合 ILF 定义，按后台数据库变更的表个数计量。"
+            ),
+        }],
+    )
+
+    assert rows[0]["计算依据归类"] == "按后台数据库变更的表个数计量"
+    assert any("应保留在计算依据归类而非计算依据说明" in warning for warning in warnings)
+    quality_hit = next(
+        hit for hit in rows[0]["_规则命中详情"]
+        if hit["rule_id"] == "postprocess.explanation_quality"
+    )
+    assert any("数据库表个数" in warning for warning in quality_hit["warnings"])
+
+
 def test_unstructured_explanation_records_quality_warning():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(
