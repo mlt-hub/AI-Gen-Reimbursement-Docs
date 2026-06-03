@@ -57,14 +57,253 @@ rule_sets:
   strict_fpa_default: {}
 ```
 
-## 待确认问题
+## 决策记录
 
-1. 是否保留字段名 `system_prompt` / `user_prompt`，还是改为更明确的 `system_prompt_set` / `user_prompt_set`。
-2. 错误提示和来源标签是否使用：
+1. 保留 `profiles.<profile>.system_prompt` / `profiles.<profile>.user_prompt` 字段名。
+   - 理由：它们表达的是当前 profile 绑定哪套 system/user prompt；虽然目标配置区改为 `system_prompt_sets` / `user_prompt_sets`，但 profile 内字段继续叫 `system_prompt` / `user_prompt` 足够直观。
+   - 暂不改为 `system_prompt_set` / `user_prompt_set`，避免字段名过长。
+
+2. 错误提示和来源标签使用新的顶层路径：
    - `system_prompt_sets.custom_rules`
    - `user_prompt_sets.custom_rules`
-3. 是否需要迁移脚本，或因系统尚未上线而直接替换旧结构。
-4. 是否允许 system prompt 和 user prompt 使用不同名称，例如 `system_prompt: default_fpa`、`user_prompt: custom_rules_v2`。
+   - 示例：
+     - `用户配置（配置目录/fpa_config.yaml: system_prompt_sets.custom_rules）`
+     - `用户配置（配置目录/fpa_config.yaml: user_prompt_sets.custom_rules）`
+
+3. 不做迁移脚本，直接替换旧结构。
+   - 理由：系统尚未上线，仓库约束允许移除旧逻辑和旧分支；实施时同步更新配置示例、正式文档和测试即可。
+
+4. 允许 system prompt 和 user prompt 使用不同名称。`system_prompt` 和 `user_prompt` 是引用名，不是内联 Prompt 文本。
+   - 示例：
+     ```yaml
+     profiles:
+       custom_rules:
+         system_prompt: default_fpa
+         user_prompt: custom_rules_v2
+     ```
+   - 理由：这正是拆成两个 prompt set 的价值之一，便于复用 system prompt 或单独迭代 user prompt。
+
+## rule_sets 结构解析
+
+`rule_sets` 可以理解为：给某个 FPA profile 使用的一组“规则补充包”。profile 决定口径，rule_set 决定这套口径下有哪些可配置规则参与判断、兜底、补齐和告警。
+
+它和 `profiles` 的关系是：
+
+```yaml
+profiles:
+  strict_fpa:
+    strategy: ai_first
+    rule_set: strict_fpa_default
+```
+
+含义是：`strict_fpa` 默认使用 `strict_fpa_default` 这套规则。也可以在 CLI/Web 显式选择别的 rule_set，例如 `strict_fpa_conservative` 或 `client_a_rules`。
+
+### 整体结构
+
+```yaml
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
+  strict_fpa_conservative:
+    extends: strict_fpa_default
+    ...
+  client_a_rules:
+    extends: strict_fpa_default
+    ...
+```
+
+每个一级 key 都是一套规则集名称：
+
+- `custom_rules_default`：给 `custom_rules` profile 用的默认规则集。空对象表示使用代码内置的 custom_rules 基础逻辑，不额外加项目级规则。
+- `strict_fpa_default`：给 `strict_fpa` profile 用的默认规则集。空对象表示使用 strict_fpa 的默认规则逻辑，不额外加配置规则。
+- `strict_fpa_conservative`：示例扩展规则集，继承 `strict_fpa_default`，再追加更保守、更项目化的规则。
+- `client_a_rules`：客户 A 的项目级规则集，继承 `strict_fpa_default`，只追加客户 A 自己的外部数据组识别规则。
+
+### extends
+
+```yaml
+strict_fpa_conservative:
+  extends: strict_fpa_default
+```
+
+`extends` 表示继承父规则集。最终执行时会先解析 `strict_fpa_default`，再把 `strict_fpa_conservative` 里的规则合并进去。
+
+如果父规则里已有某类规则，子规则可以通过 `merge` 决定是追加还是替换。
+
+### merge
+
+```yaml
+keyword_rules:
+  merge: append
+  items:
+    ...
+```
+
+- `merge: append`：继承父规则后，把当前 `items` 追加进去。
+- `merge: replace`：不用父规则的这一段，直接用当前 `items` 替换。
+
+如果不写，代码默认按 `append` 处理。
+
+### keyword_rules
+
+```yaml
+keyword_rules:
+  merge: append
+  items:
+    - type: EO
+      keywords: ["打印清单", "打印报表"]
+      reason: "打印清单或报表属于格式化输出，按 EO。"
+```
+
+这是事务功能关键词规则。命中关键词时，给出建议类型。
+
+这个例子表示：如果功能过程或相关文本里出现“打印清单”“打印报表”，规则建议类型为 `EO`，因为打印清单/报表通常属于格式化输出。
+
+适合配置：
+
+```text
+导出、打印、下载、生成报表 -> EO
+查询、查看、检索 -> EQ
+新增、提交、保存、导入 -> EI
+```
+
+### type_mapping_rules
+
+```yaml
+type_mapping_rules:
+  merge: append
+  items:
+    - type: ILF
+      keywords: ["本地报表快照"]
+      reason: "本系统持久化报表快照，按 ILF。"
+```
+
+这是更通用的“关键词到 FPA 类型”的映射。它不只限 EI/EQ/EO，也支持 `ILF/EIF`。
+
+这个例子表示：只要识别到“本地报表快照”这个业务对象，规则建议它是 `ILF`，因为本系统持久化维护这个数据组。
+
+和 `keyword_rules` 的区别可以粗略理解为：
+
+- `keyword_rules` 更偏事务动作，例如“打印报表”。
+- `type_mapping_rules` 更偏业务对象或项目口径，例如“本地报表快照”。
+
+### ai_type_conflict_rules
+
+```yaml
+ai_type_conflict_rules:
+  merge: append
+  items:
+    - expected_type: ILF
+      ai_type: EO
+      keywords: ["本地报表快照"]
+      conflict: false
+      reason: "示例：已确认项目口径允许 AI 按格式化输出复核时，不提示类型冲突。"
+```
+
+这是 AI 类型冲突告警规则，不是直接改 AI 输出的主规则。
+
+含义是：规则侧期望 `ILF`，AI 返回 `EO`，而且文本命中“本地报表快照”时，是否认为这是冲突。
+
+- `conflict: false` 表示：这个差异已经被项目确认可以接受，不提示类型冲突 warning。
+- `conflict: true` 表示：这是需要提示人工关注的冲突。
+
+它适合处理“AI 和规则都说得通，但项目已经定了口径”的情况。
+
+### internal_data_rules
+
+```yaml
+internal_data_rules:
+  merge: append
+  items:
+    - keywords: ["认证授权关系", "角色授权关系"]
+      data_name: "认证授权关系"
+      reason: "本系统维护认证授权关系，按 ILF。"
+```
+
+这是内部数据组识别规则，用于识别 `ILF`。
+
+含义是：如果文本里出现“认证授权关系”或“角色授权关系”，就识别出一个内部逻辑数据组，名称统一为“认证授权关系”。
+
+因为“本系统维护”，所以按 `ILF`。
+
+适合配置本系统自己维护的数据：
+
+```text
+客户档案
+订单主数据
+角色授权关系
+报表快照
+配置参数
+```
+
+### external_data_rules
+
+```yaml
+external_data_rules:
+  merge: append
+  items:
+    - source_aliases: ["统一认证平台", "统一认证"]
+      data_name: "统一认证账号"
+      data_nouns: ["账号", "账户", "人员"]
+```
+
+这是外部数据组识别规则，用于识别 `EIF`。
+
+含义是：如果文本里同时体现外部来源和被引用的数据对象，就把它识别成外部数据组。例如：
+
+- 外部来源：`统一认证平台` / `统一认证`
+- 数据名词：`账号` / `账户` / `人员`
+- 识别结果：`统一认证账号`
+
+因为这个数据由外部系统维护，本系统只是引用，所以按 `EIF`。
+
+这个规则比简单关键词更严格，因为它区分“外部系统名称”和“被引用的数据对象”。例如“调用统一认证平台登录接口”不一定是 EIF；但“引用统一认证平台维护的人员账号”更像 EIF。
+
+### coverage_rules
+
+```yaml
+coverage_rules:
+  require_process_coverage: true
+  require_data_function: true
+```
+
+这是 AI 结果的覆盖补齐策略。不配置时两个默认都是 `true`。
+
+- `require_process_coverage: true`：如果 AI 没覆盖某些功能过程，就追加 rules_fallback 行补齐。
+- `require_data_function: true`：在 `strict_fpa / ai_first` 下，如果 AI 没有识别出必要的 `ILF/EIF` 数据功能，规则会补齐数据功能行。
+
+例如输入有“新增、编辑、删除、查询”，AI 只返回了“查询”，规则会补上缺失的过程。
+
+例如 strict_fpa 下输入明显描述“本系统维护客户档案”，但 AI 只给了 EI/EQ，没有给 ILF，规则会补一条“客户档案：ILF”。
+
+### client_a_rules
+
+```yaml
+client_a_rules:
+  extends: strict_fpa_default
+  external_data_rules:
+    merge: append
+    items:
+      - source_aliases: ["供应商平台"]
+        data_name: "供应商平台供应商档案"
+        data_nouns: ["供应商", "档案", "信息"]
+```
+
+这是一个典型的客户级规则集。
+
+它表示：客户 A 的项目里，如果文本提到引用“供应商平台”维护的供应商、档案、信息，就识别为外部数据组“供应商平台供应商档案”，按 `EIF`。
+
+以后可以在 profile 或运行参数里选择：
+
+```yaml
+profiles:
+  strict_fpa:
+    rule_set: client_a_rules
+```
+
+这样 strict_fpa 就使用客户 A 的规则集。
+
+一句话总结：`rule_sets` 不是 prompt，它是 FPA 规则引擎的项目级配置。`extends` 管继承，`merge` 管追加/替换，各段规则分别负责类型关键词、数据组识别、AI 冲突告警和 AI 结果补齐。
 
 ## 迁移影响范围
 
