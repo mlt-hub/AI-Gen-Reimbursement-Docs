@@ -94,7 +94,7 @@ def test_fpa_options_returns_config_metadata(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="alice")
     (tmp_path / "fpa_config.yaml").write_text(
         """
-profile: strict_fpa
+default-profile: strict_fpa
 profiles:
   custom_rules:
     strategy: rules_first
@@ -174,7 +174,7 @@ def test_fpa_options_returns_400_for_invalid_prompt_placeholder(monkeypatch, tmp
     client = _client(monkeypatch, user="alice")
     (tmp_path / "fpa_config.yaml").write_text(
         """
-profile: strict_fpa
+default-profile: strict_fpa
 profiles:
   custom_rules:
     strategy: rules_first

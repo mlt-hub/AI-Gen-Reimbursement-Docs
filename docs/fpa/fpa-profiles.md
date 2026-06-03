@@ -296,7 +296,7 @@ ard --from-excel 功能清单.xlsx --gen-all --fpa-profile strict_fpa
 `~/.ai-gen-reimbursement-docs/fpa_config.yaml`：
 
 ```yaml
-profile: custom_rules
+default-profile: custom_rules
 
 profiles:
   custom_rules:
@@ -369,7 +369,7 @@ rule_sets:
 可改为：
 
 ```yaml
-profile: strict_fpa
+default-profile: strict_fpa
 ```
 
 旧版 `system_config.yaml` 中的 `fpa_profile`、`fpa_strategy`、`fpa_rule_set` 已移除。CLI / Web 显式传入的 profile、strategy、rule_set 仍然优先于配置默认值。

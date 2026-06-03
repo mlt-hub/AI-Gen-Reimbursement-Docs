@@ -147,7 +147,7 @@ def create_router(
             ]
 
             return {
-                "default_profile": str(cfg.get("profile") or ""),
+                "default_profile": str(cfg.get("default-profile") or ""),
                 "profiles": profile_options,
                 "strategies": strategy_options,
                 "rule_sets": rule_set_options,

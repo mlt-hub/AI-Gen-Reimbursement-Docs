@@ -804,7 +804,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     user_prompt_sets = _require_mapping(cfg.get("user_prompt_sets"), "user_prompt_sets")
     rule_sets = _require_mapping(cfg.get("rule_sets"), "rule_sets")
 
-    profile = _require_non_empty_string(cfg.get("profile"), "profile")
+    profile = _require_non_empty_string(cfg.get("default-profile"), "default-profile")
     if profile not in VALID_FPA_PROFILE_NAMES:
         raise FpaConfigError(f"未知 FPA profile: {profile}")
     if profile not in profiles:
@@ -966,7 +966,7 @@ def load_fpa_profile_entry(profile_name: str) -> dict[str, object]:
 def load_fpa_profile(default: str = "custom_rules") -> str:
     """读取默认 FPA 规划口径名称。"""
     cfg = load_fpa_config()
-    value = str(cfg.get("profile", default) or "").strip()
+    value = str(cfg.get("default-profile", default) or "").strip()
     if value not in VALID_FPA_PROFILE_NAMES:
         raise FpaConfigError(f"未知 FPA profile: {value}")
     load_fpa_profile_entry(value)

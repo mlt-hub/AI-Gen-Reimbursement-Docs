@@ -1,9 +1,9 @@
 # FPA 专用配置
 # 复制到 ~/.ai-gen-reimbursement-docs/fpa_config.yaml 后生效
 #
-# profile 决定默认 FPA 方案；CLI/Web/API 显式传入 fpa_profile 时优先使用显式值。
+# default-profile 决定默认 FPA 方案；CLI/Web/API 显式传入 fpa_profile 时优先使用显式值。
 
-profile: custom_rules
+default-profile: custom_rules
 judgement_rules_source: config
 
 profiles:

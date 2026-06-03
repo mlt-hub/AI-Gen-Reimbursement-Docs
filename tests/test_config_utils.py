@@ -68,7 +68,7 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
 def _write_fpa_config(tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
-profile: custom_rules
+default-profile: custom_rules
 profiles:
   custom_rules:
     strategy: rules_first
@@ -324,7 +324,7 @@ class TestLoadFpaProfile:
     def test_configured_profile(self, tmp_path):
         _write_fpa_config(tmp_path)
         (tmp_path / "fpa_config.yaml").write_text(
-            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace("profile: custom_rules", "profile: strict_fpa"),
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace("default-profile: custom_rules", "default-profile: strict_fpa"),
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -333,7 +333,7 @@ class TestLoadFpaProfile:
     def test_invalid_configured_profile_raises(self, tmp_path):
         _write_fpa_config(tmp_path)
         (tmp_path / "fpa_config.yaml").write_text(
-            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace("profile: custom_rules", "profile: fpa_profile"),
+            (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace("default-profile: custom_rules", "default-profile: fpa_profile"),
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -370,7 +370,7 @@ class TestLoadFpaExecutionOptions:
         _write_fpa_config(tmp_path)
         path = tmp_path / "fpa_config.yaml"
         path.write_text(
-            path.read_text(encoding="utf-8").replace("profile: custom_rules", "profile: custom_rules\njudgement_rules_source: template"),
+            path.read_text(encoding="utf-8").replace("default-profile: custom_rules", "default-profile: custom_rules\njudgement_rules_source: template"),
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -380,7 +380,7 @@ class TestLoadFpaExecutionOptions:
         _write_fpa_config(tmp_path)
         path = tmp_path / "fpa_config.yaml"
         path.write_text(
-            path.read_text(encoding="utf-8").replace("profile: custom_rules", "profile: custom_rules\njudgement_rules_source: xxx"),
+            path.read_text(encoding="utf-8").replace("default-profile: custom_rules", "default-profile: custom_rules\njudgement_rules_source: xxx"),
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -422,7 +422,7 @@ judgement_rules:
         _write_fpa_config(tmp_path)
         (tmp_path / "fpa_config.yaml").write_text(
             (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
-                "profile: custom_rules", "profile: missing_profile"
+                "default-profile: custom_rules", "default-profile: missing_profile"
             ),
             encoding="utf-8",
         )

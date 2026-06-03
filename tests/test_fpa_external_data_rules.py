@@ -82,7 +82,7 @@ def test_strict_fpa_external_data_rules_can_be_extended_from_config(tmp_path):
     yaml_file = tmp_path / "fpa_config.yaml"
     yaml_file.write_text(
         """
-profile: strict_fpa
+default-profile: strict_fpa
 profiles:
   custom_rules:
     strategy: rules_first
@@ -141,7 +141,7 @@ def test_rule_set_warns_when_external_data_rule_looks_like_ordinary_service(tmp_
     yaml_file = tmp_path / "fpa_config.yaml"
     yaml_file.write_text(
         """
-profile: strict_fpa
+default-profile: strict_fpa
 profiles:
   custom_rules:
     strategy: rules_first

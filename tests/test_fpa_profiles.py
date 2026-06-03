@@ -42,7 +42,7 @@ def strict_default_rule_context():
 def _write_fpa_config(tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
-profile: custom_rules
+default-profile: custom_rules
 profiles:
   custom_rules:
     strategy: rules_first

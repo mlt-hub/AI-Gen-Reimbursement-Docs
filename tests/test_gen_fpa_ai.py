@@ -131,7 +131,7 @@ def _structured_explanation(process: str = "添加垂直行业", fpa_type: str =
 def _write_fpa_prompt_config(tmp_path, monkeypatch):
     (tmp_path / "fpa_config.yaml").write_text(
         """
-profile: custom_rules
+default-profile: custom_rules
 profiles:
   custom_rules:
     strategy: rules_first
