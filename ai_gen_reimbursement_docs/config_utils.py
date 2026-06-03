@@ -866,6 +866,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
             raise FpaConfigError(
                 f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.rule_set 指向不存在的 rule_set: {rule_set}"
             )
+        _require_non_empty_string(entry.get("core_rules"), f"{profile_path}.core_rules")
         system_prompt = _require_non_empty_string(entry.get("system_prompt"), f"{profile_path}.system_prompt")
         if system_prompt not in system_prompt_sets:
             raise FpaConfigError(
@@ -941,6 +942,17 @@ def load_fpa_rule_set(profile_name: str = "") -> str:
     if not value:
         raise FpaConfigError(f"未找到 FPA rule_set 配置：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_key}.rule_set")
     return value
+
+
+def load_fpa_core_rules_config(profile_name: str) -> PromptConfig:
+    """严格读取当前 profile 的 FPA 核心口径文本。"""
+    profile_key = str(profile_name or "").strip()
+    entry = load_fpa_profile_entry(profile_key)
+    key_path = f"profiles.{profile_key}.core_rules"
+    value = entry.get("core_rules", "")
+    if not isinstance(value, str) or not value.strip():
+        raise FpaPromptConfigError(f"未找到 FPA 核心口径配置：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}")
+    return PromptConfig(text=value.strip(), source_label=_user_config_key_source_label(FPA_CONFIG_FILENAME, key_path))
 
 
 def load_fpa_check_columns() -> dict[str, list[str]]:

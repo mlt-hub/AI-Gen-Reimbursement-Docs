@@ -59,6 +59,8 @@ class FpaPromptContext:
 
     system_prompt: str
     user_prompt: str
+    core_rules: str
+    core_rules_source: str
     system_prompt_source: str
     user_prompt_source: str
 
@@ -996,14 +998,21 @@ def _build_fpa_ai_prompt_context(
     domain_context: dict[str, object] | None,
     profile: CustomRulesProfile = FPA_PROFILE,
 ) -> FpaPromptContext:
-    from ai_gen_reimbursement_docs.config_utils import load_fpa_system_prompt_config, load_fpa_user_prompt_config
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_fpa_core_rules_config,
+        load_fpa_system_prompt_config,
+        load_fpa_user_prompt_config,
+    )
 
+    core_rules_config = load_fpa_core_rules_config(profile.name)
     system_config = load_fpa_system_prompt_config(profile.name)
     user_config = load_fpa_user_prompt_config(profile.name)
     prompt = profile.build_prompt(group, judgement_rules, domain_context)
     return FpaPromptContext(
         system_prompt=system_config.text,
         user_prompt=prompt,
+        core_rules=core_rules_config.text,
+        core_rules_source=core_rules_config.source_label,
         system_prompt_source=system_config.source_label,
         user_prompt_source=user_config.source_label,
     )
@@ -1029,6 +1038,7 @@ def _ai_plan_fpa_rows_for_l3_debug(
         "system_prompt_source": prompt_context.system_prompt_source,
         "user_prompt": prompt_context.user_prompt,
         "user_prompt_source": prompt_context.user_prompt_source,
+        "core_rules_source": prompt_context.core_rules_source,
         "ai_prompt": f"[system]\n{prompt_context.system_prompt}\n\n[user]\n{prompt_context.user_prompt}",
         "raw_response": "",
         "thinking": "",
@@ -1111,6 +1121,7 @@ def _fpa_ai_cache_key(
     strategy: str = "",
     rule_set: str = "",
     rule_set_config: object | None = None,
+    core_rules: str = "",
     system_prompt: str = "",
     user_prompt: str = "",
 ) -> str:
@@ -1123,7 +1134,7 @@ def _fpa_ai_cache_key(
         "strategy": strategy,
         "rule_set": rule_set,
         "rule_set_config": serializable_rule_set_config,
-        "core_rules": profile.core_rules,
+        "core_rules": core_rules,
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
         "domain_context": domain_context,
@@ -1514,6 +1525,7 @@ def _plan_fpa_rows_with_execution(
             strategy=strategy,
             rule_set=rule_set,
             rule_set_config=rule_set_config.raw if isinstance(rule_set_config, FpaRuleSetConfig) else rule_set_config or {},
+            core_rules=prompt_context.core_rules,
             system_prompt=prompt_context.system_prompt,
             user_prompt=prompt_context.user_prompt,
         )
@@ -2480,6 +2492,7 @@ def preview_fpa_module(
             "system_prompt_source": "未配置",
             "user_prompt": "",
             "user_prompt_source": "未配置",
+            "core_rules_source": "未配置",
             "ai_prompt": "",
             "raw_response": "",
             "thinking": "",

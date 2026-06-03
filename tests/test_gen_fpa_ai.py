@@ -7,6 +7,7 @@ import pytest
 from ai_gen_reimbursement_docs.config_utils import FpaConfigError, FpaPromptConfigError
 from ai_gen_reimbursement_docs.gen_fpa import (
     _extract_json_obj,
+    _fpa_ai_cache_key,
     _group_rows_for_audit,
     _group_rows_by_l3,
     _normalize_ai_fpa_rows_for_l3,
@@ -135,11 +136,13 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
+    core_rules: CUSTOM CORE RULES
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
+    core_rules: STRICT CORE RULES
     system_prompt: strict_fpa
     user_prompt: strict_fpa
 system_prompt_sets:
@@ -1159,6 +1162,7 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["ai_called"] is True
     assert debug["model"] == "test-model"
     assert debug["system_prompt"] == "系统提示词"
+    assert debug["core_rules_source"] == "用户配置（配置目录/fpa_config.yaml: profiles.custom_rules.core_rules）"
     assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: system_prompt_sets.custom_rules）"
     assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.custom_rules）"
     assert "垂直行业管理" in debug["user_prompt"]
@@ -1443,6 +1447,26 @@ def test_ai_cache_is_invalidated_when_project_domain_context_changes(monkeypatch
     )
 
     assert calls["count"] == 2
+
+
+def test_ai_cache_key_includes_configured_core_rules():
+    base_kwargs = {
+        "group": _group_rows_by_l3(_rows())[0],
+        "judgement_rules": ["规则一"],
+        "domain_context": {},
+        "model": "test-model",
+        "profile": CUSTOM_RULES_PROFILE,
+        "strategy": "ai_first",
+        "rule_set": "custom_rules_default",
+        "rule_set_config": {},
+        "system_prompt": "system",
+        "user_prompt": "user",
+    }
+
+    first = _fpa_ai_cache_key(core_rules="custom core v1", **base_kwargs)
+    second = _fpa_ai_cache_key(core_rules="custom core v2", **base_kwargs)
+
+    assert first != second
 
 
 def test_fpa_check_xlsx_columns_can_be_configured(monkeypatch, tmp_path):

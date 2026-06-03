@@ -20,6 +20,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_rule_set,
     load_fpa_strategy,
     load_fpa_check_columns,
+    load_fpa_core_rules_config,
     load_fpa_rule_sets_config,
     FpaConfigError,
     load_fpa_system_prompt_config,
@@ -67,11 +68,13 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
+    core_rules: CUSTOM CORE RULES
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
+    core_rules: STRICT CORE RULES
     system_prompt: strict_fpa
     user_prompt: strict_fpa
 system_prompt_sets:
@@ -336,6 +339,14 @@ class TestLoadFpaExecutionOptions:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             assert load_fpa_strategy("strict_fpa") == "ai_first"
             assert load_fpa_rule_set("strict_fpa") == "strict_fpa_default"
+
+    def test_core_rules_from_profile_config(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            result = load_fpa_core_rules_config("strict_fpa")
+
+        assert result.text == "STRICT CORE RULES"
+        assert result.source_label == "用户配置（配置目录/fpa_config.yaml: profiles.strict_fpa.core_rules）"
 
     def test_rule_sets_config_from_fpa_config(self, tmp_path):
         _write_fpa_config(tmp_path)

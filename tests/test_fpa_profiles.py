@@ -47,11 +47,13 @@ profiles:
   custom_rules:
     strategy: rules_first
     rule_set: custom_rules_default
+    core_rules: CUSTOM CORE RULES
     system_prompt: custom_rules
     user_prompt: custom_rules
   strict_fpa:
     strategy: ai_first
     rule_set: strict_fpa_default
+    core_rules: STRICT CORE RULES
     system_prompt: strict_fpa
     user_prompt: strict_fpa
 system_prompt_sets:
@@ -449,7 +451,7 @@ def test_custom_rules_prompt_is_rendered_from_config(tmp_path):
             ["规则一"],
         )
 
-    assert CUSTOM_RULES_PROFILE.core_rules in prompt
+    assert "CUSTOM CORE RULES" in prompt
     assert "自定义 custom 模板" in prompt
     assert "1) 规则一" in prompt
 
@@ -486,7 +488,7 @@ def test_fpa_user_prompt_template_can_be_loaded_from_separate_config(tmp_path):
         )
 
     assert "自定义 strict 模板" in prompt
-    assert STRICT_FPA_PROFILE.core_rules in prompt
+    assert "STRICT CORE RULES" in prompt
     assert "1) 规则一" in prompt
     assert '"l3": "客户管理"' in prompt
     assert "${" not in prompt

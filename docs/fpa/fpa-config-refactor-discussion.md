@@ -807,10 +807,21 @@ UI 行和过程行的说明模板。
 6. `docs/fpa/gen-fpa-implementation-notes.md`
 7. README 中引用 FPA Prompt 配置结构的内容
 
-## 当前待决策
+## 当前决策推进：profile 特殊逻辑
 
-本轮行规划配置化没有新的待决策项。后续如果要继续清理 profile 特殊逻辑，建议另起决策清单评估以下方向：
+本轮继续推进 profile 特殊逻辑清理，结论如下：
 
-1. `CUSTOM_RULES_CORE_RULES` / `STRICT_FPA_CORE_RULES` 是否继续留在 profile 代码中，还是进一步迁移到配置文件。
-2. strict_fpa 的标准数据功能识别流程是否保持代码算法，还是拆出更细的可配置开关。
-3. postprocess 审核规则、warning 文案是否需要配置化；当前仍由代码统一维护。
+1. 已实施：`CUSTOM_RULES_CORE_RULES` / `STRICT_FPA_CORE_RULES` 对应的核心口径迁移到配置文件。
+   - 新位置：`profiles.<profile>.core_rules`。
+   - 原因：core rules 是 Prompt 语义文本，适合由用户配置维护。
+   - 边界：`system_prompt_sets` / `user_prompt_sets` 仍只维护提示词模板；`rule_sets` 仍只维护可执行规则数据。
+
+2. 本轮不拆：strict_fpa 的标准数据功能识别流程继续保持代码算法。
+   - 原因：这部分不是简单文案或规则列表，而是标准 FPA 判定流程，包含数据功能优先级、事务功能优先级、外部服务非 EIF、防误判和 fallback 顺序。
+   - 当前可配置部分：`keyword_rules`、`type_mapping_rules`、`internal_data_rules`、`external_data_rules`、`ai_type_conflict_rules`、`coverage_rules`。
+   - 后续触发条件：只有当多个项目都需要改变同一类算法开关，且能命名为稳定业务概念时，再新增配置项。
+
+3. 本轮不拆：postprocess 审核规则、warning 文案和 warning 来源追踪继续由代码统一维护。
+   - 原因：postprocess 是审计契约，直接影响预览 audit、正式 check workbook、Warnings Sheet 和规则命中详情；过早配置化会削弱可追溯性。
+   - 当前可配置部分：AI type 冲突是否提示可通过 `ai_type_conflict_rules.conflict` 调整；覆盖补齐可通过 `coverage_rules` 调整。
+   - 后续触发条件：如果客户只要求改 warning 显示文案，而不改变审计规则，可考虑新增展示层文案映射；如果要求改变审计规则，应先形成独立 ADR。

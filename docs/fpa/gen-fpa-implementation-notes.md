@@ -325,12 +325,12 @@ AI 输出要求为 JSON：
 |---|---|---|
 | 系统提示词 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.system_prompt` 指向的 `system_prompt_sets.<name>` | FPA 专用配置文件；缺失时报错 |
 | 用户提示词模板 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.user_prompt` 指向的 `user_prompt_sets.<name>` | FPA 专用配置文件；缺失时报错 |
+| FPA 核心规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中 `profiles.<profile>.core_rules` | FPA 专用配置文件；缺失时报错 |
 | 默认 profile / strategy / rule_set | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `profile` 与 `profiles` | FPA 专用配置文件 |
 | 事务关键词扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.keyword_rules` | FPA 专用配置文件 |
 | 内部数据组扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.internal_data_rules` | FPA 专用配置文件 |
 | 外部数据组扩展规则 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.external_data_rules` | FPA 专用配置文件 |
 | custom_rules 兜底行规划 | `~/.ai-gen-reimbursement-docs/fpa_config.yaml` 中的 `rule_sets.<name>.row_planning_rules` | FPA 专用配置文件 |
-| FPA 核心规则 | `fpa_profiles.py` 中的 `CUSTOM_RULES_CORE_RULES` / `STRICT_FPA_CORE_RULES` | 代码 |
 | 领域上下文 | `gen_fpa.py` 的 `_build_domain_context(meta)` 从元数据 MD 提取 | 代码 + Excel/MD 数据 |
 | 功能过程上下文 | `parse_module_tree_md()` 读取模块树 MD 后按三级模块聚合 | Excel -> MD -> 代码 |
 | 计算依据归类判定原则 | FPA 输出模板 Excel 的附录 Sheet | Excel 模板 |

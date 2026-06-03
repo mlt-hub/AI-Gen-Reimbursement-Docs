@@ -15,29 +15,8 @@ VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_TRANSACTION_FPA_TYPES = {"EI", "EQ", "EO"}
 VALID_RULE_MERGE_MODES = {"append", "replace"}
 
-CUSTOM_RULES_CORE_RULES = """
-FPA 核心口径：
-1. 拆分先按业务能力粒度，不按按钮、弹窗、数据库表、字段或技术实现拆分。
-2. 同一三级模块中的列表、查询条件、按钮、新增/编辑弹窗、状态切换等界面能力默认合并为 1 条界面开发行。
-3. 只有独立页面、独立业务对象、独立业务流程或独立用户端，才允许拆成多条界面开发行；多条界面行必须给出 split_reason。
-4. 非界面类后端逻辑按功能动作拆分，一行表示一个业务动作或数据处理能力。
-5. 新增表、保存表、字段维护等不要单独生成 FPA 行，应归属到对应功能动作中。
-6. 类型可使用 EI、ILF、EQ、EO、EIF：界面交互通常为 EI；内部数据维护通常为 ILF；查询读取通常为 EQ；导出/报表输出通常为 EO；EIF 仅用于引用其他应用维护的数据组。
-7. 计算依据归类只能从给定判定原则列表中选择，不要自造分类。
-""".strip()
-
-
-STRICT_FPA_CORE_RULES = """
-严格 FPA 核心口径：
-1. 按标准 FPA 的数据功能和事务功能拆分，不按开发工作项、页面、按钮、弹窗、接口或数据库表字段拆分。
-2. 不生成“界面开发”“接口开发”“逻辑处理开发”等开发工作项行。
-3. 本系统维护的逻辑数据组生成 ILF；外部系统维护、本系统引用的数据组生成 EIF。
-4. 新增、修改、删除、保存、提交、审批、启用、停用、导入等进入或改变系统边界内数据的事务功能为 EI。
-5. 查询、查看、详情、检索等无派生输出的读取事务功能为 EQ。
-6. 导出、报表、下载文件、生成文件等有派生或格式化输出的事务功能为 EO。
-7. 普通外部服务调用不等于 EIF；只有明确引用外部维护的数据组时才生成 EIF。
-8. 计算依据归类只能从给定判定原则列表中选择，不要自造分类。
-""".strip()
+CUSTOM_RULES_CORE_RULES = "请在 fpa_config.yaml 的 profiles.custom_rules.core_rules 配置 custom_rules 核心口径。"
+STRICT_FPA_CORE_RULES = "请在 fpa_config.yaml 的 profiles.strict_fpa.core_rules 配置 strict_fpa 核心口径。"
 
 
 EXTERNAL_DATA_GROUP_NOUNS = [
@@ -262,11 +241,12 @@ def _render_configured_fpa_prompt(
     domain_context: dict[str, object] | None = None,
 ) -> str:
     import json
-    from ai_gen_reimbursement_docs.config_utils import load_fpa_user_prompt_template
+    from ai_gen_reimbursement_docs.config_utils import load_fpa_core_rules_config, load_fpa_user_prompt_template
 
     template = load_fpa_user_prompt_template(profile_name)
+    configured_core_rules = load_fpa_core_rules_config(profile_name).text
     return Template(template).substitute({
-        "core_rules": core_rules,
+        "core_rules": configured_core_rules or core_rules,
         "judgement_rules": _numbered_judgement_rules(judgement_rules),
         "payload_json": json.dumps(_prompt_payload(group, domain_context), ensure_ascii=False, indent=2),
     })
