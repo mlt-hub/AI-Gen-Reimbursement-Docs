@@ -1,5 +1,28 @@
 # FPA Prompt 配置化方案
 
+## 完成记录
+
+- 状态：已完成
+- 关键实现提交：`f154da1 feat: configure FPA judgement rules source`
+- 完成确认时间：2026-06-03
+
+完成范围：
+
+1. FPA Prompt、profile、rule_set 和核心口径已统一收敛到 `fpa_config.yaml`。
+2. 配置缺失或非法时直接报错，不再静默降级到代码内置完整 Prompt。
+3. FPA 预览和正式生成共用同一套 Prompt 来源规则。
+4. 预览 AI 调试信息已展示安全 Prompt 来源标签，不暴露完整本机路径。
+5. AI cache key 已包含实际渲染后的 system prompt、user prompt 和 rule_set 配置内容。
+6. `judgement_rules_source` 与独立 `fpa_judgement_rules.yaml` 配置已补充到当前方案中。
+
+验证结果：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_gen_fpa_ai.py tests/test_gen_fpa_preview.py tests/test_pipeline.py tests/test_web_tasks.py
+```
+
+结果：`168 passed`
+
 ## 背景
 
 FPA AI 生成的 Prompt、profile 默认值和 rule_set 规则统一收敛到一份 FPA 专用配置：
