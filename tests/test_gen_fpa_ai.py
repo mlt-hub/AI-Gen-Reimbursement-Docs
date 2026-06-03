@@ -211,11 +211,12 @@ def test_structured_explanation_passes_quality_check():
         meta=_meta(),
         judgement_rules=["规则一"],
         start_seq=1,
+        profile=STRICT_FPA_PROFILE,
         ai_rows=[{
-            "name": "添加垂直行业-逻辑处理开发",
-            "type": "ILF",
+            "name": "添加垂直行业",
+            "type": "EI",
             "classification_basis_index": 1,
-            "explanation": _structured_explanation("添加垂直行业", "ILF"),
+            "explanation": _structured_explanation("添加垂直行业", "EI"),
         }],
     )
 
@@ -224,6 +225,67 @@ def test_structured_explanation_passes_quality_check():
         hit["rule_id"] == "postprocess.explanation_quality"
         for hit in rows[0]["_规则命中详情"]
     )
+
+
+def test_data_function_explanation_accepts_data_group_source_path():
+    group = _group_rows_by_l3(_rows())[0]
+    explanation = (
+        "来源场景：来自“【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组”，"
+        "本系统维护垂直行业基础信息。"
+        "\n业务数据：涉及垂直行业数据，字段包括行业名称。"
+        "\n业务规则：系统保存并持续维护垂直行业逻辑数据组。"
+        "\n计算说明：该数据组由本系统维护，可支撑 FPA 功能点计量，并按 ILF 识别。"
+    )
+
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "垂直行业数据组",
+            "type": "ILF",
+            "classification_basis_index": 1,
+            "explanation": explanation,
+        }],
+    )
+
+    assert not any("来源场景未使用完整路径格式" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_data_function_source_path_warning_mentions_data_group_name():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "垂直行业数据组",
+            "type": "ILF",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：来自“垂直行业管理”，本系统维护垂直行业基础信息。"
+                "\n业务数据：涉及垂直行业数据，字段包括行业名称。"
+                "\n业务规则：系统保存并持续维护垂直行业逻辑数据组。"
+                "\n计算说明：该数据组由本系统维护，可支撑 FPA 功能点计量，并按 ILF 识别。"
+            ),
+        }],
+    )
+
+    assert any("<数据组名称>" in warning for warning in warnings)
+    assert not any("<功能过程>" in warning for warning in warnings)
+    quality_hit = next(
+        hit for hit in rows[0]["_规则命中详情"]
+        if hit["rule_id"] == "postprocess.explanation_quality"
+    )
+    assert any("<数据组名称>" in warning for warning in quality_hit["warnings"])
 
 
 def test_unstructured_explanation_records_quality_warning():
