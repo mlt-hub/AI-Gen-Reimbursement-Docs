@@ -305,6 +305,143 @@ profiles:
 
 一句话总结：`rule_sets` 不是 prompt，它是 FPA 规则引擎的项目级配置。`extends` 管继承，`merge` 管追加/替换，各段规则分别负责类型关键词、数据组识别、AI 冲突告警和 AI 结果补齐。
 
+## 默认 rule_set 为空的原因
+
+当前默认配置中：
+
+```yaml
+rule_sets:
+  custom_rules_default: {}
+  strict_fpa_default: {}
+```
+
+这两个空对象不是表示“没有规则可用”，而是表示“没有额外配置规则”。真正的基础规则目前仍在代码里的 profile 默认逻辑中。
+
+当前执行含义大致是：
+
+```text
+profile = custom_rules
+rule_set = custom_rules_default
+=> 使用 custom_rules 代码内置基础逻辑
+=> rule_set 里没有追加项目级规则
+```
+
+```text
+profile = strict_fpa
+rule_set = strict_fpa_default
+=> 使用 strict_fpa 代码内置基础逻辑
+=> rule_set 里没有追加项目级规则
+```
+
+保留两个空对象的作用：
+
+1. 让 `profiles.<profile>.rule_set` 永远有明确引用目标。
+2. 给扩展规则提供继承基线，例如 `strict_fpa_conservative.extends: strict_fpa_default`。
+3. 区分“默认规则”和“客户/项目规则”。
+4. 避免把代码内置基础规则全部塞进 YAML，导致配置过长或基础口径被误改。
+
+因此，`custom_rules_default: {}` 和 `strict_fpa_default: {}` 当前更像“默认规则集名称”，不是“空规则系统”。
+
+## 默认规则配置化讨论
+
+倾向上，把硬编码规则摘出来会更好，尤其本系统尚未上线，不需要保留旧版本兼容路径。
+
+但建议分层摘取，而不是一次把所有 profile 行为都塞进 YAML。
+
+### 建议迁移到 rule_sets 的规则数据
+
+这些规则本来就像配置，适合迁移到 `rule_sets.<name>`：
+
+1. `keyword_rules`
+2. `type_mapping_rules`
+3. `internal_data_rules`
+4. `external_data_rules`
+5. `ai_type_conflict_rules`
+6. `coverage_rules`
+
+迁移后，`custom_rules_default` 和 `strict_fpa_default` 可以从空对象变成显式默认规则包，例如：
+
+```yaml
+rule_sets:
+  custom_rules_default:
+    keyword_rules:
+      merge: append
+      items:
+        - type: EQ
+          keywords: ["查询", "查看", "检索"]
+          reason: "查询类功能按 EQ。"
+        - type: EO
+          keywords: ["导出", "打印", "报表"]
+          reason: "格式化输出按 EO。"
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
+
+  strict_fpa_default:
+    keyword_rules:
+      merge: append
+      items:
+        - type: EI
+          keywords: ["新增", "修改", "删除", "保存", "提交", "导入"]
+          reason: "维护系统数据的输入处理按 EI。"
+        - type: EQ
+          keywords: ["查询", "查看", "详情"]
+          reason: "无派生计算的查询按 EQ。"
+        - type: EO
+          keywords: ["导出", "报表", "下载", "打印"]
+          reason: "格式化输出或派生输出按 EO。"
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
+```
+
+这样默认规则不再只存在于代码中，而是可读、可审、可改。
+
+### 建议继续保留在代码中的执行机制
+
+这些属于执行算法，不建议配置化：
+
+1. `rules_first` / `ai_first` 的执行流程。
+2. AI 失败、返回非法 JSON、返回非法类型时如何 fallback。
+3. 行覆盖检查和补齐的具体算法。
+4. Prompt 渲染、JSON 解析、输出合法性校验。
+5. 规则集继承、合并、循环检测、配置结构校验。
+
+边界建议：
+
+```text
+规则数据放进 YAML。
+执行算法留在代码。
+```
+
+这样既能减少硬编码，又不会让 YAML 变成半个程序。
+
+## 待决策清单
+
+1. 是否将 profile 中可表达为规则表的硬编码默认规则迁移到 `rule_sets.<default>`？
+   - 建议：是。
+   - 影响：`custom_rules_default` 和 `strict_fpa_default` 不再为空对象，默认规则可读、可审、可改。
+
+2. 默认规则配置化的范围是否限定为规则数据，不迁移执行算法？
+   - 建议：是。
+   - 影响：`strategy` 执行流程、AI fallback、覆盖补齐算法、解析和校验仍由代码负责。
+
+3. `custom_rules_default` 是否也要显式写出默认规则？
+   - 建议：是，但只写能清晰表达的规则数据。
+   - 影响：继续保留 custom_rules 的模板友好表达，同时让关键词、类型映射等规则来源更透明。
+
+4. `strict_fpa_default` 是否要显式写出默认规则？
+   - 建议：是。
+   - 影响：strict_fpa 的 EI / EQ / EO / ILF / EIF 默认判断规则更容易复核和调整。
+
+5. 默认规则集配置化后，是否仍允许客户规则通过 `extends` 继承默认规则？
+   - 建议：是。
+   - 影响：`client_a_rules.extends: strict_fpa_default` 仍然成立，客户规则只需要追加差异。
+
+6. 对于无法自然表达成配置项的 profile 特殊逻辑，是否允许暂时保留在代码中？
+   - 建议：是。
+   - 影响：先迁移清晰规则，避免为了“全配置化”引入难读、难测的复杂配置结构。
+
 ## 迁移影响范围
 
 预计需要同步调整：
