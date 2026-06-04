@@ -515,9 +515,10 @@ JSON 输出格式要求
 资产标识
 新增/修改功能点前缀生成规则
 功能用户-接收者判定
+工单标题 / 工单内容 -> domain_context.project_description
 ```
 
-这些字段由功能清单 Excel 的元数据 Sheet 生成到 MD 后，再由代码读取；项目级 domain_context.json 额外补充系统边界、本系统维护数据组、外部引用数据组和普通外部服务。
+这些字段由功能清单 Excel 的元数据 Sheet 生成到 MD 后，再由代码读取。`工单标题` 和 `工单内容` 会被拼成 `domain_context.project_description`，用于给 FPA AI 提供项目说明；`建设目标`、`建设必要性` 等 AI 生成字段不会进入 FPA prompt。项目级 domain_context.json 额外补充系统边界、本系统维护数据组、外部引用数据组和普通外部服务，不维护 project_description。
 
 ### 计算依据归类判定原则
 
@@ -3094,8 +3095,9 @@ E1/E2 已增加项目级 FPA 领域上下文文件：
 4. external_data_groups 额外要求 source，用于明确外部引用数据组由哪个外部系统维护。
 5. 新增 load_fpa_domain_context() 严格加载入口；缺文件、JSON 解析失败或结构错误均抛出明确的 FpaConfigError。
 6. load_optional_fpa_domain_context() 在文件缺失时返回空对象，已有配置目录仍可使用元数据上下文继续生成；文件存在但 JSON 或结构非法时仍明确失败。
-7. _build_domain_context(meta) 会将项目级 domain_context.json 合并到已有元数据上下文，统一传入正式生成和预览 prompt。
-8. AI cache key 已包含合并后的 domain_context；领域边界发生变化时会自动失效旧缓存。
+7. _build_domain_context(meta) 会将项目级 domain_context.json 合并到已有元数据上下文，并从工单标题/工单内容生成 project_description，统一传入正式生成和预览 prompt。
+8. domain_context.json 中的 project_description 会被忽略；FPA 项目说明只取功能清单录入模板中的工单标题和工单内容。
+9. AI cache key 已包含合并后的 domain_context；领域边界或工单标题/工单内容变化时会自动失效旧缓存。
 ```
 
 ### F. 验收

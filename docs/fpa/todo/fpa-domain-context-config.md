@@ -283,9 +283,10 @@ ${payload_json}
    - `资产标识`
    - `新增/修改功能点前缀生成规则`
    - `功能用户-接收者判定`
-2. 再读取 `domain_context.json`。
-3. 使用 `domain_context.json` 的内容覆盖或补充元数据上下文。
-4. 合并后的对象写入 prompt payload：
+2. 从元数据 MD 中读取 `工单标题` 和 `工单内容`，拼成 `project_description`。不读取 `建设目标`、`建设必要性` 等 AI 生成字段。
+3. 再读取 `domain_context.json`。
+4. 使用 `domain_context.json` 的内容覆盖或补充元数据上下文，但忽略其中的 `project_description`；项目说明只来自功能清单录入模板中的工单标题和工单内容。
+5. 合并后的对象写入 prompt payload：
 
 ```json
 {
@@ -308,6 +309,8 @@ ${payload_json}
 
 优先记录稳定的项目边界和跨模块共用数据组，不建议把每个页面、按钮、接口都写入 `domain_context.json`。
 
+`domain_context.json` 不维护 `project_description`。FPA prompt 中的 `project_description` 由功能清单录入模板中的工单标题和工单内容自动生成，最长 5000 字符，超出后截断。
+
 推荐维护内容：
 
 - 本系统负责维护的核心业务对象。
@@ -318,6 +321,7 @@ ${payload_json}
 不推荐维护内容：
 
 - 单个功能过程的临时描述。
+- 工单标题、工单内容或 `project_description`。
 - 数据库物理表字段清单。
 - 普通接口清单，除非它们用于说明外部服务不是外部数据组。
 
