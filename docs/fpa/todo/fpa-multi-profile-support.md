@@ -175,6 +175,22 @@ system_prompt: <profile>_sp
 user_prompt: <profile>_up
 ```
 
+旧配置键迁移：
+
+```text
+custom_rules_default -> unified_ui_rs
+core_rules.custom_rules -> core_rules.unified_ui_cr
+system_prompt_sets.custom_rules -> system_prompt_sets.unified_ui_sp
+user_prompt_sets.custom_rules -> user_prompt_sets.unified_ui_up
+
+strict_fpa_default -> strict_fpa_rs
+core_rules.strict_fpa -> core_rules.strict_fpa_cr
+system_prompt_sets.strict_fpa -> system_prompt_sets.strict_fpa_sp
+user_prompt_sets.strict_fpa -> user_prompt_sets.strict_fpa_up
+```
+
+`custom_rules` 的规则、core_rules、system_prompt、user_prompt 内容迁移到 `unified_ui_rs/_cr/_sp/_up` 后删除旧键；不是直接丢弃原内容。`strict_fpa` 现有配置内容也迁移到 `strict_fpa_rs/_cr/_sp/_up`，保持行为不回退。
+
 ## 实施切片
 
 1. 放宽 profile 名称校验
@@ -222,6 +238,7 @@ ui_api_mapping：界面接口映射口径
 - 初始化配置保留完整 4 个 profile，用户可直接切换默认 profile。
 - 默认 strategy：`strict_fpa` 使用 `ai_first`，`unified_ui`、`multi_uis`、`ui_api_mapping` 使用 `rules_first`。
 - 配置键命名采用 `<profile>_rs`、`<profile>_cr`、`<profile>_sp`、`<profile>_up`。
+- 旧 `custom_rules` 配置内容迁移到 `unified_ui_rs/_cr/_sp/_up` 后删除旧键；旧 `strict_fpa_default` 和同名 prompt/core_rules 键迁移到 `strict_fpa_rs/_cr/_sp/_up`。
 - `strict_fpa` 允许 rule_set 扩展；扩展为空时仍走内置 strict_fpa 默认规则和 AI 约束，不等于 AI-only。
 - `ui_api_mapping` 的明确接口/后端调用行只包含输入中明确出现的接口、服务、调用、同步或外部系统交互；普通保存、提交、删除、审批等后端动作不额外生成第二条后端处理行。
 - `ui_api_mapping` 类型规则：界面开发行统一 EI，接口开发行统一 ILF，明确接口/后端调用行统一 ILF。
@@ -249,6 +266,7 @@ ui_api_mapping：界面接口映射口径
 - `multi_uis` 拆分理由出现在 check/review 元数据中，不新增正式结果列。
 - `strict_fpa` 数据功能行、`unified_ui`/`multi_uis` 非界面业务动作行、`ui_api_mapping` 所有行均使用完整模块路径前缀。
 - 示例配置使用 `_rs/_cr/_sp/_up` 命名，不再使用 `_default` 作为默认 rule_set 后缀。
+- 实施后的示例配置、测试 fixture、常规配置说明不得再引用旧 profile/config 键：`profiles.custom_rules`、`custom_rules_default`、`core_rules.custom_rules`、`system_prompt_sets.custom_rules`、`user_prompt_sets.custom_rules`、`strict_fpa_default`、`core_rules.strict_fpa`、`system_prompt_sets.strict_fpa`、`user_prompt_sets.strict_fpa`。迁移说明和错误提示测试可以引用旧键。
 
 ## 测试建议
 
