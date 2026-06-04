@@ -5,7 +5,7 @@
 ## 当前可用能力
 
 ```text
-profile：支持 custom_rules 和 strict_fpa。
+profile：支持 strict_fpa、unified_ui、multi_uis、ui_api_mapping，并允许通过 kind 配置项目自定义 profile。
 strategy：支持 rules_first、ai_first、rules_only、ai_only。
 rule_set：支持在 fpa_config.yaml 中配置项目级规则集，并通过 extends 继承默认规则。
 system_prompt_sets / user_prompt_sets：FPA prompt 已集中到 fpa_config.yaml，不再使用旧拆分 prompt 配置文件。
@@ -17,8 +17,10 @@ Web 预览：支持选择 profile、strategy、rule_set，并返回 audit 审核
 默认组合：
 
 ```text
-custom_rules = rules_first + custom_rules_default
-strict_fpa   = ai_first    + strict_fpa_default
+strict_fpa     = ai_first    + strict_fpa_rs
+unified_ui     = rules_first + unified_ui_rs
+multi_uis      = rules_first + multi_uis_rs
+ui_api_mapping = ai_first    + ui_api_mapping_rs
 ```
 
 ## 用户怎么用
@@ -27,8 +29,8 @@ CLI 示例：
 
 ```bash
 ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa
-ard --from-excel 功能清单.xlsx --gen-all --fpa-profile custom_rules
-ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa --fpa-strategy ai_first --fpa-rule-set strict_fpa_default
+ard --from-excel 功能清单.xlsx --gen-all --fpa-profile unified_ui
+ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa --fpa-strategy ai_first --fpa-rule-set strict_fpa_rs
 ```
 
 配置入口：

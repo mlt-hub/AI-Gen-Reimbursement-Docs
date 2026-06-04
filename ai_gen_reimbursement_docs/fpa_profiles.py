@@ -15,8 +15,9 @@ VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_TRANSACTION_FPA_TYPES = {"EI", "EQ", "EO"}
 VALID_RULE_MERGE_MODES = {"append", "replace"}
 
-CUSTOM_RULES_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.custom_rules 配置 custom_rules 核心口径。"
-STRICT_FPA_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.strict_fpa 配置 strict_fpa 核心口径。"
+UNIFIED_UI_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.unified_ui_cr 配置 unified_ui 核心口径。"
+STRICT_FPA_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.strict_fpa_cr 配置 strict_fpa 核心口径。"
+UI_API_MAPPING_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.ui_api_mapping_cr 配置 ui_api_mapping 核心口径。"
 
 
 EXTERNAL_DATA_GROUP_NOUNS = [
@@ -636,10 +637,10 @@ def reset_current_fpa_rule_set_config(token) -> None:
 class CustomRulesProfile:
     """用户自定义规则口径。"""
 
-    name: str = "custom_rules"
+    name: str = "unified_ui"
     version: str = "1"
-    description: str = "用户自定义规则口径：三级模块合并界面能力，非界面逻辑按动作拆分。"
-    core_rules: str = CUSTOM_RULES_CORE_RULES
+    description: str = "统一界面口径：三级模块合并界面能力，非界面逻辑按动作拆分。"
+    core_rules: str = UNIFIED_UI_CORE_RULES
 
     def infer_type(self, name: str, desc: str = "") -> tuple[str, str]:
         """按当前项目关键词规则给出类型兜底。"""
@@ -1292,24 +1293,160 @@ class StrictFpaProfile(CustomRulesProfile):
         return name.replace("-逻辑处理开发", "").replace("-接口处理开发", "").replace("-界面开发", "").strip()
 
 
-CUSTOM_RULES_PROFILE = CustomRulesProfile()
+@dataclass(frozen=True)
+class UiApiMappingProfile(CustomRulesProfile):
+    """界面接口映射口径。"""
+
+    name: str = "ui_api_mapping"
+    version: str = "1"
+    description: str = "界面接口映射口径：每个功能过程生成界面开发和接口开发行，显式接口/后端调用单独补充。"
+    core_rules: str = UI_API_MAPPING_CORE_RULES
+
+    def infer_type(self, name: str, desc: str = "") -> tuple[str, str]:
+        if "界面开发" in name:
+            return "EI", "功能过程界面开发行固定按 EI。"
+        return "ILF", "功能过程接口开发或明确接口/后端调用行固定按 ILF。"
+
+    def fallback_rows_for_l3(
+        self,
+        group: dict[str, object],
+        meta: dict[str, str],
+        start_seq: int = 1,
+    ) -> list[dict[str, object]]:
+        subsystem = meta.get("子系统（模块）", "")
+        asset = meta.get("资产标识", "")
+        tag = group_tag(group)
+        processes = group.get("processes", [])
+        process_list = processes if isinstance(processes, list) else []
+        rows: list[dict[str, object]] = []
+        seq = start_seq
+
+        explicit_rows: dict[str, dict[str, object]] = {}
+        for p in process_list:
+            if not isinstance(p, dict):
+                continue
+            raw_name = str(p.get("name", "") or "").strip()
+            desc = str(p.get("desc", "") or "").strip()
+            if not raw_name:
+                continue
+            status = str(p.get("type", "") or module_change_status(process_list))
+            for suffix, fpa_type, reason in (
+                ("界面开发", "EI", "功能过程默认生成 1 条界面开发行。"),
+                ("接口开发", "ILF", "功能过程默认生成 1 条接口开发行。"),
+            ):
+                point_name = f"{tag}-{raw_name}-{suffix}"
+                rows.append({
+                    "序号": seq,
+                    "子系统(模块)": subsystem,
+                    "资产标识": asset,
+                    "新增/修改功能点": point_name,
+                    "类型": fpa_type,
+                    "计算依据归类": "",
+                    "计算依据说明": f"{point_name}，来源功能过程：{desc or raw_name}",
+                    "变更状态": status,
+                    "调整值": adjust_value_for_type(fpa_type),
+                    "要素数量": 1,
+                    "生成方式": "fallback",
+                    "类型理由": reason,
+                    "源功能过程": raw_name,
+                    "后处理警告": "",
+                })
+                seq += 1
+
+            for explicit_name in self._explicit_backend_interactions(raw_name, desc):
+                point_name = f"{tag}-{explicit_name}"
+                existing = explicit_rows.get(point_name)
+                if existing is not None:
+                    existing_sources = str(existing.get("源功能过程", "") or "")
+                    if raw_name and raw_name not in existing_sources.split("、"):
+                        existing["源功能过程"] = "、".join([part for part in [existing_sources, raw_name] if part])
+                    continue
+                row = {
+                    "序号": seq,
+                    "子系统(模块)": subsystem,
+                    "资产标识": asset,
+                    "新增/修改功能点": point_name,
+                    "类型": "ILF",
+                    "计算依据归类": "",
+                    "计算依据说明": f"{point_name}，来源功能过程：{desc or raw_name}",
+                    "变更状态": status,
+                    "调整值": adjust_value_for_type("ILF"),
+                    "要素数量": 1,
+                    "生成方式": "fallback",
+                    "类型理由": "输入材料明确出现接口、服务、调用或同步等后端交互，按明确接口/后端调用行固定 ILF。",
+                    "源功能过程": raw_name,
+                    "后处理警告": "",
+                }
+                explicit_rows[point_name] = row
+                rows.append(row)
+                seq += 1
+        return rows
+
+    def _explicit_backend_interactions(self, name: str, desc: str) -> list[str]:
+        text = f"{name}，{desc}"
+        trigger_pattern = r"(?:接口|服务|调用|请求|对接|同步|外部系统|第三方|API)"
+        if not re.search(trigger_pattern, text, re.IGNORECASE):
+            return []
+        candidates: list[str] = []
+        primary_patterns = [
+            r"调用\s*([^，。；、]{1,32}(?:接口|服务|API))",
+            r"请求\s*([^，。；、]{1,32}(?:接口|服务|API))",
+            r"对接\s*([^，。；、]{1,32}(?:平台|系统|接口|服务|API))",
+            r"([^，。；、]{1,32}(?:接口|服务|API))",
+        ]
+        for pattern in primary_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                value = match.group(1).strip(" 的。；，、")
+                if value and value not in candidates:
+                    candidates.append(value)
+        if candidates:
+            return candidates
+        for match in re.finditer(r"同步\s*([^，。；、]{1,32}(?:信息|数据|档案|记录)?)", text, re.IGNORECASE):
+            value = match.group(1).strip(" 的。；，、")
+            if value and value not in candidates:
+                candidates.append(value)
+        if candidates:
+            return candidates
+        phrase = re.split(r"[，。；、]", text, maxsplit=1)[0].strip()
+        return [phrase] if phrase else []
+
+
+UNIFIED_UI_PROFILE = CustomRulesProfile()
+CUSTOM_RULES_PROFILE = UNIFIED_UI_PROFILE
 STRICT_FPA_PROFILE = StrictFpaProfile()
+UI_API_MAPPING_PROFILE = UiApiMappingProfile()
 FPA_PROFILES = {
-    CUSTOM_RULES_PROFILE.name: CUSTOM_RULES_PROFILE,
+    UNIFIED_UI_PROFILE.name: UNIFIED_UI_PROFILE,
     STRICT_FPA_PROFILE.name: STRICT_FPA_PROFILE,
+    UI_API_MAPPING_PROFILE.name: UI_API_MAPPING_PROFILE,
 }
 
 
-def get_fpa_profile(name: str = "custom_rules") -> CustomRulesProfile:
-    profile = FPA_PROFILES.get(name or CUSTOM_RULES_PROFILE.name)
+def _profile_from_kind(profile_name: str, kind: str) -> CustomRulesProfile:
+    if kind == "strict_fpa":
+        return StrictFpaProfile(name=profile_name)
+    if kind == "unified_ui":
+        return CustomRulesProfile(name=profile_name)
+    if kind == "ui_api_mapping":
+        return UiApiMappingProfile(name=profile_name)
+    raise ValueError(f"未知 FPA profile kind: {kind}")
+
+
+def get_fpa_profile(name: str = "unified_ui") -> CustomRulesProfile:
+    profile_name = (name or "unified_ui").strip()
+    profile = FPA_PROFILES.get(profile_name)
     if profile is not None:
         return profile
-    raise ValueError(f"未知 FPA profile: {name}")
+    try:
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_profile_kind
+        return _profile_from_kind(profile_name, load_fpa_profile_kind(profile_name))
+    except Exception as exc:
+        raise ValueError(f"未知 FPA profile: {name}") from exc
 
 
 def resolve_fpa_strategy(profile_name: str = "", strategy: str = "") -> str:
     """解析 FPA 执行策略。空值使用 profile 默认策略。"""
-    profile_key = (profile_name or CUSTOM_RULES_PROFILE.name).strip()
+    profile_key = (profile_name or "unified_ui").strip()
     value = (strategy or "").strip()
     if not value:
         from ai_gen_reimbursement_docs.config_utils import load_fpa_strategy
@@ -1321,7 +1458,7 @@ def resolve_fpa_strategy(profile_name: str = "", strategy: str = "") -> str:
 
 def resolve_fpa_rule_set(profile_name: str = "", rule_set: str = "") -> str:
     """解析 FPA 规则集名称。空值使用 profile 默认规则集。"""
-    profile_key = (profile_name or CUSTOM_RULES_PROFILE.name).strip()
+    profile_key = (profile_name or "unified_ui").strip()
     value = (rule_set or "").strip()
     if not value:
         from ai_gen_reimbursement_docs.config_utils import load_fpa_rule_set

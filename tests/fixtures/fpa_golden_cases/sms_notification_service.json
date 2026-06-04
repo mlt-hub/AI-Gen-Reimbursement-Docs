@@ -38,7 +38,7 @@
     }
   ],
   "expected": {
-    "custom_rules": [
+    "unified_ui": [
       {
         "name": "【地市后台】消息管理-通知发送-短信通知-界面开发",
         "type": "EI"

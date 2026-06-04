@@ -361,8 +361,8 @@ def _attach_profile_rule_hits(
         rule_id = "profile.fallback"
         if row_generation == "rules_fallback":
             rule_id = "coverage.rules_fallback"
-        elif profile.name == "custom_rules" and "界面开发" in name:
-            rule_id = "custom_rules.ui_merge"
+        elif profile.name in {"unified_ui", "multi_uis"} and "界面开发" in name:
+            rule_id = f"{profile.name}.ui_merge"
         elif profile.name == "strict_fpa" and fpa_type == "EIF":
             rule_id = "strict_fpa.external_data_group"
         elif profile.name == "strict_fpa" and fpa_type == "ILF":
@@ -370,7 +370,7 @@ def _attach_profile_rule_hits(
         elif profile.name == "strict_fpa":
             rule_id = f"strict_fpa.transaction.{fpa_type.lower()}"
         elif "关键词" in reason or fpa_type:
-            rule_id = f"custom_rules.keyword.{fpa_type.lower()}"
+            rule_id = f"{profile.name}.keyword.{fpa_type.lower()}"
         _add_rule_hit(
             row,
             hit_object=str(row.get("源功能过程", "") or name),
@@ -483,6 +483,7 @@ def _normalize_ai_fpa_rows_for_l3(
         ]
 
     normalized: list[dict[str, object]] = []
+    multi_ui_names: set[str] = set()
     seq = start_seq
     for raw in ai_rows:
         if not isinstance(raw, dict):
@@ -700,6 +701,33 @@ def _normalize_ai_fpa_rows_for_l3(
                 "adopted": "是",
                 "warnings": [warning],
             })
+
+        if profile.name == "multi_uis" and "界面开发" in output_name:
+            split_reason = str(raw.get("split_reason", "") or "").strip()
+            if split_reason:
+                reason_warning = f"{output_name} multi_uis 拆分理由: {split_reason}"
+                row_warnings.append(reason_warning)
+                row_hits.append({
+                    "hit_object": output_name,
+                    "rule_id": "multi_uis.split_reason",
+                    "rule_desc": "multi_uis 多界面开发行的拆分理由记录到 check/review 元数据。",
+                    "suggested_type": fpa_type,
+                    "adopted": "是",
+                    "warnings": [reason_warning],
+                })
+            if output_name in multi_ui_names:
+                duplicate_warning = f"{output_name} multi_uis 存在同名多界面开发行，已保留并提示人工审阅。"
+                warnings.append(duplicate_warning)
+                row_warnings.append(duplicate_warning)
+                row_hits.append({
+                    "hit_object": output_name,
+                    "rule_id": "multi_uis.duplicate_ui_name",
+                    "rule_desc": "multi_uis 同名多界面开发行不自动合并，保留冲突行并进入 check/review。",
+                    "suggested_type": fpa_type,
+                    "adopted": "是",
+                    "warnings": [duplicate_warning],
+                })
+            multi_ui_names.add(output_name)
 
         row = {
             "序号": seq,
@@ -1858,7 +1886,7 @@ def _rule_hit_for_audit(row: dict[str, object]) -> tuple[str, str]:
     if generation == "rules_fallback":
         return "coverage.rules_fallback", reason or "AI 未覆盖功能过程时，按规则集补齐。"
     if "界面开发" in name:
-        return "custom_rules.ui_merge", reason or "同一三级模块界面能力默认合并为一条。"
+        return "unified_ui.ui_merge", reason or "同一三级模块界面能力默认合并为一条。"
     if "外部系统维护" in text or "外部应用维护" in text or "引用外部" in text:
         return "strict_fpa.external_data_group", reason or "命中外部维护数据组规则。"
     if "本系统维护" in text or "逻辑数据组" in text:
@@ -1866,7 +1894,7 @@ def _rule_hit_for_audit(row: dict[str, object]) -> tuple[str, str]:
     if "事务功能" in text:
         return f"strict_fpa.transaction.{fpa_type.lower()}", reason or "命中事务功能类型规则。"
     if "关键词命中" in text:
-        return f"custom_rules.keyword.{fpa_type.lower()}", reason or "命中关键词类型兜底规则。"
+        return f"unified_ui.keyword.{fpa_type.lower()}", reason or "命中关键词类型兜底规则。"
     if generation in {"ai", "ai_cache"}:
         return "postprocess.ai_type_validation", reason or "AI 输出经类型合法性和业务冲突规则校验后采用。"
     return "profile.fallback", reason or "按当前 profile 兜底规则生成。"
@@ -1998,7 +2026,7 @@ def generate_fpa_check_xlsx_from_md(
             if warning not in module_warnings:
                 module_warnings.append(warning)
         warnings_by_module_idx[idx] = module_warnings
-    profile = get_fpa_profile(execution_meta.get("profile", "") or "custom_rules")
+    profile = get_fpa_profile(execution_meta.get("profile", "") or "unified_ui")
     audit_reports = _build_fpa_audit_reports_for_groups(
         groups=groups,
         rows_by_module=rows_by_module,

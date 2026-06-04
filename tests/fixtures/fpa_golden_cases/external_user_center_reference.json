@@ -28,7 +28,7 @@
     }
   ],
   "expected": {
-    "custom_rules": [
+    "unified_ui": [
       {
         "name": "【地市后台】权限管理-账号权限-用户中心账号引用-界面开发",
         "type": "EI"

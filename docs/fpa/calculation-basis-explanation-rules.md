@@ -32,7 +32,7 @@
 
 已完成：
 
-- 已更新默认 FPA prompt：`config/fpa_config.yaml.example` 中 `custom_rules` 和 `strict_fpa` 的用户提示词均已加入结构化`计算依据说明`生成规则。
+- 已更新默认 FPA prompt：`config/fpa_config.yaml.example` 中 `unified_ui` 和 `strict_fpa` 的用户提示词均已加入结构化`计算依据说明`生成规则。
 - 已实现后处理质量检查：`ai_gen_reimbursement_docs/gen_fpa.py` 中 `postprocess.explanation_quality` 会检查结构化项、来源场景完整路径、FPA 类型、正式输出缺失提示、以及“按后台数据库变更的表个数计量”等归类依据误入说明的问题。
 - 已区分事务功能和数据功能来源路径：`EI/EQ/EO` 检查 `【客户端类型】一级模块-二级模块-三级模块-功能过程`，`ILF/EIF` 检查 `【客户端类型】一级模块-二级模块-三级模块-数据组名称`。
 - 已保持非阻断策略：质量问题只记录 warning，进入`后处理警告`、`Warnings` 和规则命中详情，不阻断 gen-fpa 生成。

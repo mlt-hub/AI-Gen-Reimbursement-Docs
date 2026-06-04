@@ -112,7 +112,7 @@ def test_fpa_acceptance_formula_projection_matches_summary_across_type_strategie
 
     totals: dict[str, float] = {}
     projections: dict[str, float] = {}
-    for profile_name in ("custom_rules", "strict_fpa"):
+    for profile_name in ("unified_ui", "strict_fpa"):
         fpa_md = tmp_path / f"{profile_name}.md"
         summary_md = tmp_path / f"{profile_name}-summary.md"
         fpa_xlsx = tmp_path / f"{profile_name}.xlsx"
@@ -124,14 +124,14 @@ def test_fpa_acceptance_formula_projection_matches_summary_across_type_strategie
             summary_md_path=str(summary_md),
             profile_name=profile_name,
             strategy="rules_only",
-            rule_set=f"{profile_name}_default",
+            rule_set={"unified_ui": "unified_ui_rs", "strict_fpa": "strict_fpa_rs"}[profile_name],
         )
         generate_fpa_xlsx_from_md(str(fpa_md), str(meta_md), str(template), str(fpa_xlsx))
 
         totals[profile_name] = _summary_total(summary_md)
         projections[profile_name] = calculate_fpa_excel_formula_projection(str(fpa_xlsx))
 
-    assert totals == {"custom_rules": 8.0, "strict_fpa": 13.0}
+    assert totals == {"unified_ui": 8.0, "strict_fpa": 13.0}
     assert projections == totals
 
 
@@ -154,7 +154,7 @@ def test_fpa_acceptance_strict_rules_formal_check_workbook_from_golden_case(tmp_
         summary_md_path=str(summary_md),
         profile_name="strict_fpa",
         strategy="rules_only",
-        rule_set="strict_fpa_default",
+        rule_set="strict_fpa_rs",
         audit_trace_path=str(audit_trace),
     )
     generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx), str(audit_trace))
@@ -207,7 +207,7 @@ def test_fpa_acceptance_preview_and_formal_rules_use_same_rows(tmp_path):
     preview = preview_fpa_module(
         file_path=str(input_xlsx),
         module_index=1,
-        profile_name="custom_rules",
+        profile_name="unified_ui",
         strategy="rules_only",
         work_dir=str(tmp_path / "preview"),
     )
@@ -215,7 +215,7 @@ def test_fpa_acceptance_preview_and_formal_rules_use_same_rows(tmp_path):
         str(tree_md),
         str(meta_md),
         str(fpa_md),
-        profile_name="custom_rules",
+        profile_name="unified_ui",
         strategy="rules_only",
     )
     _, formal_rows = _read_fpa_rows_md_for_audit(str(fpa_md))
@@ -228,7 +228,7 @@ def test_fpa_acceptance_preview_and_formal_rules_use_same_rows(tmp_path):
         {"name": row["新增/修改功能点"], "type": row["类型"]}
         for row in formal_rows
     ]
-    assert preview_summary == formal_summary == case["expected"]["custom_rules"]
+    assert preview_summary == formal_summary == case["expected"]["unified_ui"]
     assert preview["audit"]["coverage"]["missing_count"] == 0
 
     generate_fpa_check_xlsx_from_md(str(fpa_md), str(tree_md), str(check_xlsx))
@@ -336,7 +336,7 @@ def test_fpa_acceptance_mock_ai_warning_source_reaches_check_workbook(monkeypatc
         str(fpa_md),
         api_key="sk-test",
         model="mock-model",
-        profile_name="custom_rules",
+        profile_name="unified_ui",
         strategy="ai_first",
         audit_trace_path=str(audit_trace),
     )
@@ -604,7 +604,7 @@ def test_fpa_acceptance_check_workbook_reports_missing_process_supplement(monkey
         str(fpa_md),
         api_key="sk-test",
         model="mock-model",
-        profile_name="custom_rules",
+        profile_name="unified_ui",
         strategy="ai_first",
         audit_trace_path=str(audit_trace),
     )
@@ -658,7 +658,7 @@ def test_fpa_acceptance_rules_first_check_workbook_explains_rules_without_ai(mon
         str(fpa_md),
         api_key="sk-test",
         model="mock-model",
-        profile_name="custom_rules",
+        profile_name="unified_ui",
         strategy="rules_first",
         audit_trace_path=str(audit_trace),
     )
@@ -734,7 +734,7 @@ def test_fpa_acceptance_rules_first_low_confidence_check_workbook_explains_ai_re
         str(fpa_md),
         api_key="sk-test",
         model="mock-model",
-        profile_name="custom_rules",
+        profile_name="unified_ui",
         strategy="rules_first",
         audit_trace_path=str(audit_trace),
     )
@@ -796,7 +796,7 @@ def test_fpa_acceptance_ai_cache_hit_is_visible_in_audit_and_check(monkeypatch, 
         str(first_fpa_md),
         api_key="sk-test",
         model="mock-model",
-        profile_name="custom_rules",
+        profile_name="unified_ui",
         strategy="ai_first",
         audit_trace_path=str(audit_trace),
     )
@@ -806,7 +806,7 @@ def test_fpa_acceptance_ai_cache_hit_is_visible_in_audit_and_check(monkeypatch, 
         str(second_fpa_md),
         api_key="sk-test",
         model="mock-model",
-        profile_name="custom_rules",
+        profile_name="unified_ui",
         strategy="ai_first",
         audit_trace_path=str(audit_trace),
     )

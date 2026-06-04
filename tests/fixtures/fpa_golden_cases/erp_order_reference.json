@@ -28,7 +28,7 @@
     }
   ],
   "expected": {
-    "custom_rules": [
+    "unified_ui": [
       {
         "name": "【地市后台】采购管理-供应商协同-ERP订单引用-界面开发",
         "type": "EI"

@@ -4,6 +4,7 @@ import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 export interface FpaProfileOption {
   name: string
   label: string
+  kind: string
   strategy: string
   rule_set: string
 }
@@ -21,20 +22,28 @@ export interface FpaOptions {
   default_profile: string
   profiles: FpaProfileOption[]
   strategies: FpaNamedOption[]
+  kinds: FpaNamedOption[]
   rule_sets: FpaRuleSetOption[]
 }
 
 const fallbackOptions: FpaOptions = {
-  default_profile: 'custom_rules',
+  default_profile: 'strict_fpa',
   profiles: [
-    { name: 'custom_rules', label: '用户自定义规则口径', strategy: 'rules_first', rule_set: 'custom_rules_default' },
-    { name: 'strict_fpa', label: '严格 FPA 口径', strategy: 'ai_first', rule_set: 'strict_fpa_default' },
+    { name: 'strict_fpa', label: '严格 FPA 口径', kind: 'strict_fpa', strategy: 'ai_first', rule_set: 'strict_fpa_rs' },
+    { name: 'unified_ui', label: '统一界面口径', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'unified_ui_rs' },
+    { name: 'multi_uis', label: '多界面口径', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'multi_uis_rs' },
+    { name: 'ui_api_mapping', label: '界面接口映射口径', kind: 'ui_api_mapping', strategy: 'rules_first', rule_set: 'ui_api_mapping_rs' },
   ],
   strategies: [
     { name: 'rules_first', label: '规则优先' },
     { name: 'ai_first', label: 'AI 优先' },
     { name: 'rules_only', label: '仅规则' },
     { name: 'ai_only', label: '仅 AI' },
+  ],
+  kinds: [
+    { name: 'strict_fpa', label: 'strict_fpa' },
+    { name: 'unified_ui', label: 'unified_ui' },
+    { name: 'ui_api_mapping', label: 'ui_api_mapping' },
   ],
   rule_sets: [],
 }
@@ -58,6 +67,7 @@ export function useFpaOptions() {
           default_profile: data.default_profile || fallbackOptions.default_profile,
           profiles: data.profiles?.length ? data.profiles : fallbackOptions.profiles,
           strategies: data.strategies?.length ? data.strategies : fallbackOptions.strategies,
+          kinds: data.kinds?.length ? data.kinds : fallbackOptions.kinds,
           rule_sets: data.rule_sets ?? [],
         }
       })
@@ -79,4 +89,3 @@ export function useFpaOptions() {
     loadFpaOptions,
   }
 }
-

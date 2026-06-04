@@ -28,7 +28,7 @@
     }
   ],
   "expected": {
-    "custom_rules": [
+    "unified_ui": [
       {
         "name": "【地市后台】客户运营-客户关系-CRM客户档案引用-界面开发",
         "type": "EI"

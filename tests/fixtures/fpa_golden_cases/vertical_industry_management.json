@@ -68,7 +68,7 @@
     }
   ],
   "expected": {
-    "custom_rules": [
+    "unified_ui": [
       {
         "name": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-界面开发",
         "type": "EI"

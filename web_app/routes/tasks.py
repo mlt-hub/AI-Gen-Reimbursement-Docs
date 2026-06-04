@@ -57,8 +57,10 @@ def _session_status_payload(session_id: str, state) -> dict:
 
 
 FPA_PROFILE_LABELS = {
-    "custom_rules": "用户自定义规则口径",
     "strict_fpa": "严格 FPA 口径",
+    "unified_ui": "统一界面口径",
+    "multi_uis": "多界面口径",
+    "ui_api_mapping": "界面接口映射口径",
 }
 
 FPA_STRATEGY_LABELS = {
@@ -104,6 +106,7 @@ def create_router(
     async def api_fpa_options(user: str = Depends(require_auth)):
         """Return user-safe FPA option metadata for Web selectors."""
         from ai_gen_reimbursement_docs.config_utils import (
+            VALID_FPA_PROFILE_KINDS,
             VALID_FPA_STRATEGIES,
             load_fpa_config,
         )
@@ -123,6 +126,7 @@ def create_router(
                 profile_options.append({
                     "name": profile_name,
                     "label": FPA_PROFILE_LABELS.get(profile_name, profile_name),
+                    "kind": str(entry.get("kind") or ""),
                     "strategy": str(entry.get("strategy") or ""),
                     "rule_set": str(entry.get("rule_set") or ""),
                 })
@@ -150,6 +154,7 @@ def create_router(
                 "default_profile": str(cfg.get("default-profile") or ""),
                 "profiles": profile_options,
                 "strategies": strategy_options,
+                "kinds": [{"name": name, "label": name} for name in sorted(VALID_FPA_PROFILE_KINDS)],
                 "rule_sets": rule_set_options,
             }
         except Exception as exc:

@@ -66,7 +66,7 @@ def _rows():
 
 def _custom_default_rule_set() -> FpaRuleSetConfig:
     return FpaRuleSetConfig(
-        name="custom_rules_default",
+        name="unified_ui_rs",
         row_planning_rules=FpaRowPlanningRules(
             ui_row=FpaUiRowPlanningRule(
                 enabled=True,
@@ -102,7 +102,7 @@ def _custom_default_rule_set() -> FpaRuleSetConfig:
 
 def _strict_default_rule_set() -> FpaRuleSetConfig:
     return FpaRuleSetConfig(
-        name="strict_fpa_default",
+        name="strict_fpa_rs",
         keyword_rules=(
             KeywordTypeRule("EO", ("导出", "报表", "下载", "生成文件"), "事务功能产生派生或格式化输出，按 EO。"),
             KeywordTypeRule("EQ", ("查询", "查看", "详情", "检索", "列表"), "事务功能读取数据且无派生输出，按 EQ。"),
@@ -131,41 +131,43 @@ def _structured_explanation(process: str = "添加垂直行业", fpa_type: str =
 def _write_fpa_prompt_config(tmp_path, monkeypatch):
     (tmp_path / "fpa_config.yaml").write_text(
         """
-default-profile: custom_rules
+default-profile: unified_ui
 profiles:
-  custom_rules:
+  unified_ui:
+    kind: unified_ui
     strategy: rules_first
-    rule_set: custom_rules_default
-    core_rules: custom_rules
-    system_prompt: custom_rules
-    user_prompt: custom_rules
+    rule_set: unified_ui_rs
+    core_rules: unified_ui_cr
+    system_prompt: unified_ui_sp
+    user_prompt: unified_ui_up
   strict_fpa:
+    kind: strict_fpa
     strategy: ai_first
-    rule_set: strict_fpa_default
-    core_rules: strict_fpa
-    system_prompt: strict_fpa
-    user_prompt: strict_fpa
+    rule_set: strict_fpa_rs
+    core_rules: strict_fpa_cr
+    system_prompt: strict_fpa_sp
+    user_prompt: strict_fpa_up
 core_rules:
-  custom_rules: CUSTOM CORE RULES
-  strict_fpa: STRICT CORE RULES
+  unified_ui_cr: CUSTOM CORE RULES
+  strict_fpa_cr: STRICT CORE RULES
 system_prompt_sets:
-  custom_rules: 系统提示词
-  strict_fpa: 严格系统提示词
+  unified_ui_sp: 系统提示词
+  strict_fpa_sp: 严格系统提示词
 user_prompt_sets:
-  custom_rules: |-
+  unified_ui_up: |-
     ${core_rules}
     模块输入 JSON：
     ${payload_json}
     判定原则：
     ${judgement_rules}
-  strict_fpa: |-
+  strict_fpa_up: |-
     ${core_rules}
     模块输入 JSON：
     ${payload_json}
     判定原则：
     ${judgement_rules}
 rule_sets:
-  custom_rules_default:
+  unified_ui_rs:
     row_planning_rules:
       ui_row:
         enabled: true
@@ -204,7 +206,7 @@ rule_sets:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
-  strict_fpa_default:
+  strict_fpa_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
@@ -478,6 +480,51 @@ def test_multiple_ui_rows_without_split_reason_are_merged():
         reset_current_fpa_rule_set_config(token)
     assert sum(1 for r in rows if "界面开发" in r["新增/修改功能点"]) == 1
     assert any("split_reason" in w for w in warnings)
+
+
+def test_multi_uis_duplicate_ui_rows_are_kept_with_review_metadata():
+    group = {
+        "client_type": "地市后台",
+        "l1": "客户管理",
+        "l2": "客户中心",
+        "l3": "客户档案",
+        "processes": [
+            {"name": "维护客户档案", "type": "新增", "desc": "维护客户档案。"},
+        ],
+    }
+    ai_rows = [
+        {
+            "name": "客户档案-界面开发",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": _structured_explanation("维护客户档案", "EI"),
+            "source_processes": ["维护客户档案"],
+            "split_reason": "独立页面：基础信息维护页。",
+        },
+        {
+            "name": "客户档案-界面开发",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": _structured_explanation("维护客户档案", "EI"),
+            "source_processes": ["维护客户档案"],
+            "split_reason": "独立业务对象：联系人维护区。",
+        },
+    ]
+
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        ai_rows=ai_rows,
+        judgement_rules=["规则一"],
+        profile=CustomRulesProfile(name="multi_uis"),
+    )
+
+    ui_rows = [row for row in rows if "界面开发" in str(row["新增/修改功能点"])]
+    assert len(ui_rows) == 2
+    assert "拆分理由" in str(ui_rows[0]["后处理警告"])
+    assert "独立页面" in str(ui_rows[0]["后处理警告"])
+    assert "同名多界面开发行" in str(ui_rows[1]["后处理警告"])
+    assert any("同名多界面开发行" in warning for warning in warnings)
 
 
 def test_strict_profile_normalizes_ai_development_work_item_names():
@@ -1045,7 +1092,7 @@ def test_rules_first_calls_ai_when_rule_rows_are_low_confidence(monkeypatch, tmp
         base_url="",
         profile=LowConfidenceRulesProfile(),
         strategy="rules_first",
-        rule_set="custom_rules_default",
+        rule_set="unified_ui_rs",
     )
 
     assert calls["count"] == 1
@@ -1066,7 +1113,7 @@ def test_rules_first_without_api_keeps_low_confidence_rules_and_audit_warning(mo
         base_url="",
         profile=LowConfidenceRulesProfile(),
         strategy="rules_first",
-        rule_set="custom_rules_default",
+        rule_set="unified_ui_rs",
         audit_trace_path=str(audit_trace),
     )
 
@@ -1169,9 +1216,9 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["ai_called"] is True
     assert debug["model"] == "test-model"
     assert debug["system_prompt"] == "系统提示词"
-    assert debug["core_rules_source"] == "用户配置（配置目录/fpa_config.yaml: core_rules.custom_rules）"
-    assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: system_prompt_sets.custom_rules）"
-    assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.custom_rules）"
+    assert debug["core_rules_source"] == "用户配置（配置目录/fpa_config.yaml: core_rules.unified_ui_cr）"
+    assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: system_prompt_sets.unified_ui_sp）"
+    assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.unified_ui_up）"
     assert "垂直行业管理" in debug["user_prompt"]
     assert "1) 规则一" in debug["user_prompt"]
     assert "2) 规则二" in debug["user_prompt"]
@@ -1367,10 +1414,10 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
     assert first[0]["生成方式"] == "ai"
     cache = json.loads(cache_path.read_text(encoding="utf-8"))
     entry = next(iter(cache["entries"].values()))
-    assert entry["profile"] == "custom_rules"
+    assert entry["profile"] == "unified_ui"
     assert entry["profile_version"] == "1"
     assert entry["strategy"] == "ai_first"
-    assert entry["rule_set"] == "custom_rules_default"
+    assert entry["rule_set"] == "unified_ui_rs"
     trace = json.loads(audit_trace_path.read_text(encoding="utf-8"))
     assert trace["modules"][0]["source"] == "ai"
     assert trace["modules"][0]["raw_rows"] == response["rows"]
@@ -1467,7 +1514,7 @@ def test_ai_cache_key_includes_configured_core_rules():
         "model": "test-model",
         "profile": CUSTOM_RULES_PROFILE,
         "strategy": "ai_first",
-        "rule_set": "custom_rules_default",
+        "rule_set": "unified_ui_rs",
         "rule_set_config": {},
         "system_prompt": "system",
         "user_prompt": "user",
@@ -1495,9 +1542,9 @@ fpa_check_columns:
     fpa_md.write_text(
         """# FPA 工作量评估
 
-**profile**: custom_rules
+**profile**: unified_ui
 **strategy**: rules_first
-**rule_set**: custom_rules_default
+**rule_set**: unified_ui_rs
 
 | 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |
 |------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|
@@ -1549,7 +1596,7 @@ def test_fpa_check_xlsx_includes_rule_set_config_warning(tmp_path):
     fpa_md.write_text(
         """# FPA 工作量评估
 
-**profile**: custom_rules
+**profile**: unified_ui
 **strategy**: rules_first
 **rule_set**: sms_service_rules
 

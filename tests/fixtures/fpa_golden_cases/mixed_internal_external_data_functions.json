@@ -48,7 +48,7 @@
     }
   ],
   "expected": {
-    "custom_rules": [
+    "unified_ui": [
       {
         "name": "【地市后台】供应商管理-准入协同-供应商准入协同-界面开发",
         "type": "EI"

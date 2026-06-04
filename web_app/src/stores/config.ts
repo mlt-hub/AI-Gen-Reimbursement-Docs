@@ -86,7 +86,7 @@ export const useConfigStore = defineStore('config', () => {
   const baseUrl = ref(loadStr('baseUrl', ''))
   const maxTokens = ref(loadStr('maxTokens', ''))
   const projectName = ref(loadStr('projectName', ''))
-  const fpaProfile = ref(normalizeFpaProfile(loadStr('fpaProfile', 'custom_rules')))
+  const fpaProfile = ref(normalizeFpaProfile(loadStr('fpaProfile', 'strict_fpa')))
   const fpaStrategy = ref(normalizeFpaStrategy(loadStr('fpaStrategy', '')))
   const fpaRuleSet = ref(loadStr('fpaRuleSet', ''))
   const clean = ref(loadBool('clean', false))
@@ -116,7 +116,7 @@ export const useConfigStore = defineStore('config', () => {
     baseUrl.value = ''
     maxTokens.value = ''
     projectName.value = ''
-    fpaProfile.value = 'custom_rules'
+    fpaProfile.value = 'strict_fpa'
     fpaStrategy.value = ''
     fpaRuleSet.value = ''
     clean.value = false
@@ -167,7 +167,8 @@ export const useConfigStore = defineStore('config', () => {
 })
 
 function normalizeFpaProfile(value: string): string {
-  return value === 'strict_fpa' ? 'strict_fpa' : 'custom_rules'
+  const v = value.trim()
+  return v || 'strict_fpa'
 }
 
 function normalizeFpaStrategy(value: string): string {

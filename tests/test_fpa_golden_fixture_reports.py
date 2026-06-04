@@ -42,7 +42,7 @@ def _load_cases():
 
 
 @pytest.mark.parametrize("case", _load_cases(), ids=lambda c: c["case_id"])
-@pytest.mark.parametrize("profile_name", ["custom_rules", "strict_fpa"])
+@pytest.mark.parametrize("profile_name", ["unified_ui", "strict_fpa"])
 def test_fpa_golden_fixture_matches_expected_output(case, profile_name):
     profile = get_fpa_profile(profile_name)
     actual = _summarize(

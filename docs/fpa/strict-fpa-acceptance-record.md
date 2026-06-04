@@ -9,7 +9,7 @@
 ```text
 profile: strict_fpa
 默认策略: ai_first
-默认 rule_set: strict_fpa_default
+默认 rule_set: strict_fpa_rs
 关注点:
 - 不按界面开发 / 接口开发旧口径拆分。
 - 本系统维护数据组按 ILF。

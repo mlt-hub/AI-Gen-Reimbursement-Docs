@@ -7,6 +7,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     ExternalDataGroupRule,
     FpaRuleSetConfig,
     KeywordTypeRule,
+    UiApiMappingProfile,
     get_fpa_profile,
     resolve_fpa_execution_config,
     set_current_fpa_rule_set_config,
@@ -17,7 +18,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
 @pytest.fixture(autouse=True)
 def strict_default_rule_context():
     config = FpaRuleSetConfig(
-        name="strict_fpa_default",
+        name="strict_fpa_rs",
         keyword_rules=(
             KeywordTypeRule("EO", ("导出", "报表", "下载", "生成文件"), "事务功能产生派生或格式化输出，按 EO。"),
             KeywordTypeRule("EQ", ("查询", "查看", "详情", "检索", "列表"), "事务功能读取数据且无派生输出，按 EQ。"),
@@ -42,35 +43,37 @@ def strict_default_rule_context():
 def _write_fpa_config(tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
-default-profile: custom_rules
+default-profile: unified_ui
 profiles:
-  custom_rules:
+  unified_ui:
+    kind: unified_ui
     strategy: rules_first
-    rule_set: custom_rules_default
-    core_rules: custom_rules
-    system_prompt: custom_rules
-    user_prompt: custom_rules
+    rule_set: unified_ui_rs
+    core_rules: unified_ui_cr
+    system_prompt: unified_ui_sp
+    user_prompt: unified_ui_up
   strict_fpa:
+    kind: strict_fpa
     strategy: ai_first
-    rule_set: strict_fpa_default
-    core_rules: strict_fpa
-    system_prompt: strict_fpa
-    user_prompt: strict_fpa
+    rule_set: strict_fpa_rs
+    core_rules: strict_fpa_cr
+    system_prompt: strict_fpa_sp
+    user_prompt: strict_fpa_up
 core_rules:
-  custom_rules: CUSTOM CORE RULES
-  strict_fpa: STRICT CORE RULES
+  unified_ui_cr: CUSTOM CORE RULES
+  strict_fpa_cr: STRICT CORE RULES
 system_prompt_sets:
-  custom_rules: CUSTOM SYSTEM
-  strict_fpa: STRICT SYSTEM
+  unified_ui_sp: CUSTOM SYSTEM
+  strict_fpa_sp: STRICT SYSTEM
 user_prompt_sets:
-  custom_rules: |-
+  unified_ui_up: |-
     自定义 custom 模板
     ${core_rules}
     CUSTOM_RULES:
     ${judgement_rules}
     PAYLOAD:
     ${payload_json}
-  strict_fpa: |-
+  strict_fpa_up: |-
     自定义 strict 模板
     ${core_rules}
     RULES:
@@ -78,7 +81,7 @@ user_prompt_sets:
     PAYLOAD:
     ${payload_json}
 rule_sets:
-  custom_rules_default:
+  unified_ui_rs:
     row_planning_rules:
       ui_row:
         enabled: true
@@ -117,7 +120,7 @@ rule_sets:
           keywords: ["查询", "查看", "详情", "列表检索", "检索"]
         - type: EI
           keywords: ["导入"]
-  strict_fpa_default:
+  strict_fpa_rs:
     keyword_rules:
       merge: append
       items:
@@ -131,7 +134,7 @@ rule_sets:
           keywords: ["新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联"]
           reason: "事务功能进入或改变系统边界内数据，按 EI。"
   telecom_rules:
-    extends: strict_fpa_default
+    extends: strict_fpa_rs
     keyword_rules:
       merge: append
       items:
@@ -212,9 +215,9 @@ rule_sets:
     )
 
 
-def test_default_profile_is_custom_rules():
+def test_default_profile_is_unified_ui():
     assert get_fpa_profile() is CUSTOM_RULES_PROFILE
-    assert get_fpa_profile("custom_rules") is CUSTOM_RULES_PROFILE
+    assert get_fpa_profile("unified_ui") is CUSTOM_RULES_PROFILE
     assert get_fpa_profile("strict_fpa") is STRICT_FPA_PROFILE
 
 
@@ -226,23 +229,77 @@ def test_unknown_profile_is_rejected():
 def test_execution_config_uses_profile_defaults(tmp_path):
     _write_fpa_config(tmp_path)
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        custom = resolve_fpa_execution_config("custom_rules")
+        custom = resolve_fpa_execution_config("unified_ui")
         assert custom.profile is CUSTOM_RULES_PROFILE
         assert custom.strategy == "rules_first"
-        assert custom.rule_set == "custom_rules_default"
+        assert custom.rule_set == "unified_ui_rs"
 
         strict = resolve_fpa_execution_config("strict_fpa")
         assert strict.profile is STRICT_FPA_PROFILE
         assert strict.strategy == "ai_first"
-        assert strict.rule_set == "strict_fpa_default"
+        assert strict.rule_set == "strict_fpa_rs"
 
 
 def test_execution_config_accepts_explicit_strategy_and_rule_set(tmp_path):
     _write_fpa_config(tmp_path)
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        config = resolve_fpa_execution_config("strict_fpa", "ai_only", "strict_fpa_default")
+        config = resolve_fpa_execution_config("strict_fpa", "ai_only", "strict_fpa_rs")
         assert config.strategy == "ai_only"
-        assert config.rule_set == "strict_fpa_default"
+        assert config.rule_set == "strict_fpa_rs"
+
+
+def test_custom_profile_can_reuse_supported_kind(tmp_path):
+    _write_fpa_config(tmp_path)
+    path = tmp_path / "fpa_config.yaml"
+    content = path.read_text(encoding="utf-8")
+    content = content.replace(
+        "  strict_fpa:\n    kind: strict_fpa",
+        "  contract_api:\n    kind: ui_api_mapping\n    strategy: rules_first\n    rule_set: unified_ui_rs\n    core_rules: unified_ui_cr\n    system_prompt: unified_ui_sp\n    user_prompt: unified_ui_up\n  strict_fpa:\n    kind: strict_fpa",
+    )
+    path.write_text(content, encoding="utf-8")
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("contract_api")
+
+    assert isinstance(config.profile, UiApiMappingProfile)
+    assert config.profile.name == "contract_api"
+    assert config.strategy == "rules_first"
+    assert config.rule_set == "unified_ui_rs"
+
+
+def test_ui_api_mapping_fallback_generates_default_and_explicit_backend_rows():
+    profile = UiApiMappingProfile()
+    group = {
+        "client_type": "业务端",
+        "l1": "销售管理",
+        "l2": "合同中心",
+        "l3": "合同管理",
+        "processes": [
+            {"name": "查询合同列表", "type": "新增", "desc": "查询合同列表。"},
+            {"name": "提交合同审批", "type": "新增", "desc": "提交合同审批，调用 OA 审批接口。"},
+            {"name": "再次提交合同审批", "type": "新增", "desc": "再次提交合同审批，调用 OA 审批接口。"},
+            {"name": "同步客户信息", "type": "新增", "desc": "同步客户信息，调用 CRM 客户查询服务。"},
+        ],
+    }
+
+    rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    names = [str(row["新增/修改功能点"]) for row in rows]
+    types = {str(row["新增/修改功能点"]): str(row["类型"]) for row in rows}
+
+    assert "【业务端】销售管理-合同中心-合同管理-查询合同列表-界面开发" in names
+    assert "【业务端】销售管理-合同中心-合同管理-查询合同列表-接口开发" in names
+    assert "【业务端】销售管理-合同中心-合同管理-OA 审批接口" in names
+    assert names.count("【业务端】销售管理-合同中心-合同管理-OA 审批接口") == 1
+    assert "提交合同审批、再次提交合同审批" == next(
+        str(row["源功能过程"])
+        for row in rows
+        if row["新增/修改功能点"] == "【业务端】销售管理-合同中心-合同管理-OA 审批接口"
+    )
+    assert "【业务端】销售管理-合同中心-合同管理-CRM 客户查询服务" in names
+    assert "【业务端】销售管理-合同中心-合同管理-客户信息" not in names
+    assert types["【业务端】销售管理-合同中心-合同管理-查询合同列表-界面开发"] == "EI"
+    assert types["【业务端】销售管理-合同中心-合同管理-查询合同列表-接口开发"] == "ILF"
+    assert types["【业务端】销售管理-合同中心-合同管理-OA 审批接口"] == "ILF"
 
 
 def test_rule_set_extends_are_loaded(tmp_path):
@@ -251,7 +308,7 @@ def test_rule_set_extends_are_loaded(tmp_path):
         config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_rules")
 
     assert config.rule_set == "telecom_rules"
-    assert config.rule_set_config.extends == "strict_fpa_default"
+    assert config.rule_set_config.extends == "strict_fpa_rs"
     assert config.rule_set_config.keyword_rules[0].fpa_type == "EO"
     assert config.rule_set_config.type_mapping_rules[0].fpa_type == "ILF"
     assert config.rule_set_config.ai_type_conflict_rules[0].expected_type == "ILF"
@@ -264,7 +321,7 @@ def test_rule_set_extends_are_loaded(tmp_path):
 def test_custom_rule_set_row_planning_rules_are_loaded(tmp_path):
     _write_fpa_config(tmp_path)
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        config = resolve_fpa_execution_config("custom_rules")
+        config = resolve_fpa_execution_config("unified_ui")
 
     row_planning = config.rule_set_config.row_planning_rules
     assert row_planning.ui_row is not None
@@ -291,7 +348,7 @@ def test_custom_rule_set_row_planning_rules_affect_fallback_rows(tmp_path):
     }
 
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        config = resolve_fpa_execution_config("custom_rules")
+        config = resolve_fpa_execution_config("unified_ui")
         token = set_current_fpa_rule_set_config(config.rule_set_config)
         try:
             rows = CUSTOM_RULES_PROFILE.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
@@ -319,7 +376,7 @@ def test_custom_rule_set_can_disable_ui_fallback_row(tmp_path):
     }
 
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        config = resolve_fpa_execution_config("custom_rules")
+        config = resolve_fpa_execution_config("unified_ui")
         token = set_current_fpa_rule_set_config(config.rule_set_config)
         try:
             rows = CUSTOM_RULES_PROFILE.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
@@ -440,7 +497,7 @@ def test_rule_set_internal_data_rules_affect_strict_profile(tmp_path):
     assert types["认证授权关系"] == "ILF"
 
 
-def test_custom_rules_prompt_is_rendered_from_config(tmp_path):
+def test_unified_ui_prompt_is_rendered_from_config(tmp_path):
     _write_fpa_config(tmp_path)
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         prompt = CUSTOM_RULES_PROFILE.build_prompt(

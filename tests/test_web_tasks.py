@@ -46,7 +46,7 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
             "mode": "from-excel-gen-fpa",
             "fpa_profile": "strict_fpa",
             "fpa_strategy": "ai_first",
-            "fpa_rule_set": "strict_fpa_default",
+            "fpa_rule_set": "strict_fpa_rs",
         },
     )
 
@@ -61,7 +61,7 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     assert calls
     assert calls[0]["args"][10] == "strict_fpa"
     assert calls[0]["args"][11] == "ai_first"
-    assert calls[0]["args"][12] == "strict_fpa_default"
+    assert calls[0]["args"][12] == "strict_fpa_rs"
     server.session_manager.cleanup_download(data["session_id"])
 
 
@@ -96,38 +96,40 @@ def test_fpa_options_returns_config_metadata(monkeypatch, tmp_path):
         """
 default-profile: strict_fpa
 profiles:
-  custom_rules:
+  unified_ui:
+    kind: unified_ui
     strategy: rules_first
-    rule_set: custom_rules_default
-    core_rules: custom_rules
-    system_prompt: custom_rules
-    user_prompt: custom_rules
+    rule_set: unified_ui_rs
+    core_rules: unified_ui_cr
+    system_prompt: unified_ui_sp
+    user_prompt: unified_ui_up
   strict_fpa:
+    kind: strict_fpa
     strategy: ai_first
-    rule_set: strict_fpa_default
-    core_rules: strict_fpa
-    system_prompt: strict_fpa
-    user_prompt: strict_fpa
+    rule_set: strict_fpa_rs
+    core_rules: strict_fpa_cr
+    system_prompt: strict_fpa_sp
+    user_prompt: strict_fpa_up
 core_rules:
-  custom_rules: custom core rules
-  strict_fpa: strict core rules
+  unified_ui_cr: CUSTOM CORE RULES
+  strict_fpa_cr: STRICT CORE RULES
 system_prompt_sets:
-  custom_rules: custom system secret
-  strict_fpa: strict system secret
+  unified_ui_sp: CUSTOM SYSTEM secret
+  strict_fpa_sp: STRICT SYSTEM secret
 user_prompt_sets:
-  custom_rules: custom user secret ${core_rules} ${judgement_rules} ${payload_json}
-  strict_fpa: strict user secret ${core_rules} ${judgement_rules} ${payload_json}
+  unified_ui_up: custom user secret ${core_rules} ${judgement_rules} ${payload_json}
+  strict_fpa_up: strict user secret ${core_rules} ${judgement_rules} ${payload_json}
 rule_sets:
-  custom_rules_default:
+  unified_ui_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
-  strict_fpa_default:
+  strict_fpa_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
   client_a_rules:
-    extends: strict_fpa_default
+    extends: strict_fpa_rs
     external_data_rules:
       merge: append
       items:
@@ -149,25 +151,79 @@ rule_sets:
     assert data["default_profile"] == "strict_fpa"
     assert data["profiles"] == [
         {
-            "name": "custom_rules",
-            "label": "用户自定义规则口径",
+            "name": "unified_ui",
+            "label": "统一界面口径",
+            "kind": "unified_ui",
             "strategy": "rules_first",
-            "rule_set": "custom_rules_default",
+            "rule_set": "unified_ui_rs",
         },
         {
             "name": "strict_fpa",
             "label": "严格 FPA 口径",
+            "kind": "strict_fpa",
             "strategy": "ai_first",
-            "rule_set": "strict_fpa_default",
+            "rule_set": "strict_fpa_rs",
         },
     ]
     assert {item["name"] for item in data["rule_sets"]} == {
-        "custom_rules_default",
-        "strict_fpa_default",
+        "unified_ui_rs",
+        "strict_fpa_rs",
         "client_a_rules",
     }
-    assert data["rule_sets"][2]["extends"] == "strict_fpa_default"
+    assert data["rule_sets"][2]["extends"] == "strict_fpa_rs"
     assert "secret" not in resp.text
+
+
+def test_fpa_options_preserves_custom_profile_order_and_label_fallback(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    (tmp_path / "fpa_config.yaml").write_text(
+        """
+default-profile: client_api
+profiles:
+  client_api:
+    kind: ui_api_mapping
+    strategy: rules_first
+    rule_set: shared_rs
+    core_rules: shared_cr
+    system_prompt: shared_sp
+    user_prompt: shared_up
+  strict_fpa:
+    kind: strict_fpa
+    strategy: ai_first
+    rule_set: shared_rs
+    core_rules: shared_cr
+    system_prompt: shared_sp
+    user_prompt: shared_up
+core_rules:
+  shared_cr: SHARED CORE RULES
+system_prompt_sets:
+  shared_sp: SHARED SYSTEM
+user_prompt_sets:
+  shared_up: ${core_rules} ${judgement_rules} ${payload_json}
+rule_sets:
+  shared_rs:
+    coverage_rules:
+      require_process_coverage: true
+      require_data_function: true
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.config_utils.config_dir",
+        lambda: tmp_path,
+    )
+
+    resp = client.get("/api/fpa/options")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [profile["name"] for profile in data["profiles"]] == ["client_api", "strict_fpa"]
+    assert data["profiles"][0]["label"] == "client_api"
+    assert data["profiles"][0]["kind"] == "ui_api_mapping"
+    assert {kind["name"] for kind in data["kinds"]} == {"strict_fpa", "unified_ui", "ui_api_mapping"}
+    assert "core_rules" not in resp.text
+    assert "system_prompt" not in resp.text
+    assert "user_prompt" not in resp.text
 
 
 def test_fpa_options_returns_400_for_invalid_prompt_placeholder(monkeypatch, tmp_path):
@@ -176,33 +232,35 @@ def test_fpa_options_returns_400_for_invalid_prompt_placeholder(monkeypatch, tmp
         """
 default-profile: strict_fpa
 profiles:
-  custom_rules:
+  unified_ui:
+    kind: unified_ui
     strategy: rules_first
-    rule_set: custom_rules_default
-    core_rules: custom_rules
-    system_prompt: custom_rules
-    user_prompt: custom_rules
+    rule_set: unified_ui_rs
+    core_rules: unified_ui_cr
+    system_prompt: unified_ui_sp
+    user_prompt: unified_ui_up
   strict_fpa:
+    kind: strict_fpa
     strategy: ai_first
-    rule_set: strict_fpa_default
-    core_rules: strict_fpa
-    system_prompt: strict_fpa
-    user_prompt: strict_fpa
+    rule_set: strict_fpa_rs
+    core_rules: strict_fpa_cr
+    system_prompt: strict_fpa_sp
+    user_prompt: strict_fpa_up
 core_rules:
-  custom_rules: custom core rules
-  strict_fpa: strict core rules
+  unified_ui_cr: CUSTOM CORE RULES
+  strict_fpa_cr: STRICT CORE RULES
 system_prompt_sets:
-  custom_rules: custom system
-  strict_fpa: strict system
+  unified_ui_sp: CUSTOM SYSTEM
+  strict_fpa_sp: STRICT SYSTEM
 user_prompt_sets:
-  custom_rules: ${core_rules} ${judgement_rules} ${payload_json}
-  strict_fpa: ${core_rules} ${judgement_rules} ${payload_json} ${unknown_placeholder}
+  unified_ui_up: ${core_rules} ${judgement_rules} ${payload_json}
+  strict_fpa_up: ${core_rules} ${judgement_rules} ${payload_json} ${unknown_placeholder}
 rule_sets:
-  custom_rules_default:
+  unified_ui_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
-  strict_fpa_default:
+  strict_fpa_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
@@ -217,7 +275,7 @@ rule_sets:
     resp = client.get("/api/fpa/options")
 
     assert resp.status_code == 400
-    assert "user_prompt_sets.strict_fpa 包含未知占位符" in resp.json()["detail"]
+    assert "user_prompt_sets.strict_fpa_up 包含未知占位符" in resp.json()["detail"]
     assert "${unknown_placeholder}" in resp.json()["detail"]
 
 
@@ -237,7 +295,7 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
             "mode": "from-excel-gen-fpa",
             "fpa_profile": "strict_fpa",
             "fpa_strategy": "ai_first",
-            "fpa_rule_set": "strict_fpa_default",
+            "fpa_rule_set": "strict_fpa_rs",
         },
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
@@ -255,7 +313,7 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
     assert calls
     assert calls[0]["args"][10] == "strict_fpa"
     assert calls[0]["args"][11] == "ai_first"
-    assert calls[0]["args"][12] == "strict_fpa_default"
+    assert calls[0]["args"][12] == "strict_fpa_rs"
     server.session_manager.cleanup_download(data["session_id"])
 
 
@@ -297,9 +355,9 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
         data={
             "module_name": "垂直行业管理",
             "api_key": "sk-test",
-            "fpa_profile": "custom_rules",
+            "fpa_profile": "unified_ui",
             "fpa_strategy": "rules_first",
-            "fpa_rule_set": "custom_rules_default",
+            "fpa_rule_set": "unified_ui_rs",
         },
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
@@ -311,9 +369,9 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
     assert calls
     assert calls[0]["module_name"] == "垂直行业管理"
     assert calls[0]["api_key"] == "sk-test"
-    assert calls[0]["profile_name"] == "custom_rules"
+    assert calls[0]["profile_name"] == "unified_ui"
     assert calls[0]["strategy"] == "rules_first"
-    assert calls[0]["rule_set"] == "custom_rules_default"
+    assert calls[0]["rule_set"] == "unified_ui_rs"
 
 
 def test_fpa_preview_modules_upload_returns_selectable_modules(monkeypatch):

@@ -18,7 +18,7 @@
     }
   ],
   "expected": {
-    "custom_rules": [
+    "unified_ui": [
       {
         "name": "【地市后台】组织管理-归属组织-归属组织选择-界面开发",
         "type": "EI"

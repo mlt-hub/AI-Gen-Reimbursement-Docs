@@ -398,7 +398,7 @@ def load_fpa_excel_recalc_check() -> bool:
 FPA_CONFIG_FILENAME = "fpa_config.yaml"
 FPA_DOMAIN_CONTEXT_FILENAME = "domain_context.json"
 FPA_JUDGEMENT_RULES_FILENAME = "fpa_judgement_rules.yaml"
-VALID_FPA_PROFILE_NAMES = {"custom_rules", "strict_fpa"}
+VALID_FPA_PROFILE_KINDS = {"strict_fpa", "unified_ui", "ui_api_mapping"}
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_FPA_JUDGEMENT_RULES_SOURCES = {"config", "template"}
 VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
@@ -798,21 +798,21 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     if not isinstance(judgement_rules_source, str) or judgement_rules_source.strip() not in VALID_FPA_JUDGEMENT_RULES_SOURCES:
         raise FpaConfigError(f"未知 FPA judgement_rules_source: {judgement_rules_source}")
 
+    raw_default_profile = cfg.get("default-profile")
+    if isinstance(raw_default_profile, str) and raw_default_profile.strip() == "custom_rules":
+        raise FpaConfigError("custom_rules 已替换为 unified_ui，请更新 fpa_config.yaml")
+
     profiles = _require_mapping(cfg.get("profiles"), "profiles")
+    if "custom_rules" in profiles:
+        raise FpaConfigError("profiles.custom_rules 已废弃，请迁移到 profiles.unified_ui")
     core_rules = _require_mapping(cfg.get("core_rules"), "core_rules")
     system_prompt_sets = _require_mapping(cfg.get("system_prompt_sets"), "system_prompt_sets")
     user_prompt_sets = _require_mapping(cfg.get("user_prompt_sets"), "user_prompt_sets")
     rule_sets = _require_mapping(cfg.get("rule_sets"), "rule_sets")
 
     profile = _require_non_empty_string(cfg.get("default-profile"), "default-profile")
-    if profile not in VALID_FPA_PROFILE_NAMES:
-        raise FpaConfigError(f"未知 FPA profile: {profile}")
     if profile not in profiles:
         raise FpaConfigError(f"未找到 FPA profile 配置：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile}")
-
-    unknown_profiles = sorted(str(name) for name in profiles if str(name) not in VALID_FPA_PROFILE_NAMES)
-    if unknown_profiles:
-        raise FpaConfigError(f"未知 FPA profile 配置：{', '.join(unknown_profiles)}")
 
     for core_rule_name, core_rule_text in core_rules.items():
         core_rule_path = _fpa_key_path("core_rules", core_rule_name)
@@ -870,6 +870,21 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     for profile_name, profile_entry in profiles.items():
         profile_path = _fpa_key_path("profiles", profile_name)
         entry = _require_mapping(profile_entry, profile_path)
+        unknown_fields = sorted(
+            str(key)
+            for key in entry
+            if str(key) not in {"kind", "strategy", "rule_set", "core_rules", "system_prompt", "user_prompt"}
+        )
+        if unknown_fields:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path} 包含未知字段: "
+                f"{', '.join(unknown_fields)}"
+            )
+        kind = _require_non_empty_string(entry.get("kind"), f"{profile_path}.kind")
+        if kind not in VALID_FPA_PROFILE_KINDS:
+            raise FpaConfigError(
+                f"未知 FPA profile kind: {kind}，支持的 kind: {', '.join(sorted(VALID_FPA_PROFILE_KINDS))}"
+            )
         strategy = _require_non_empty_string(entry.get("strategy"), f"{profile_path}.strategy")
         if strategy not in VALID_FPA_STRATEGIES:
             raise FpaConfigError(f"未知 FPA strategy: {strategy}")
@@ -948,9 +963,6 @@ def load_fpa_profiles_config() -> dict[str, object]:
     profiles = cfg.get("profiles", {})
     if not isinstance(profiles, dict):
         raise FpaConfigError(f"FPA profiles 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles")
-    unknown = sorted(str(name) for name in profiles if str(name) not in VALID_FPA_PROFILE_NAMES)
-    if unknown:
-        raise FpaConfigError(f"未知 FPA profile 配置：{', '.join(unknown)}")
     return profiles
 
 
@@ -963,13 +975,21 @@ def load_fpa_profile_entry(profile_name: str) -> dict[str, object]:
     return entry
 
 
-def load_fpa_profile(default: str = "custom_rules") -> str:
+def load_fpa_profile(default: str = "") -> str:
     """读取默认 FPA 规划口径名称。"""
     cfg = load_fpa_config()
     value = str(cfg.get("default-profile", default) or "").strip()
-    if value not in VALID_FPA_PROFILE_NAMES:
-        raise FpaConfigError(f"未知 FPA profile: {value}")
     load_fpa_profile_entry(value)
+    return value
+
+
+def load_fpa_profile_kind(profile_name: str) -> str:
+    """读取指定 profile 绑定的行为 kind。"""
+    profile_key = str(profile_name or "").strip()
+    entry = load_fpa_profile_entry(profile_key)
+    value = str(entry.get("kind", "") or "").strip()
+    if not value:
+        raise FpaConfigError(f"未找到 FPA kind 配置：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_key}.kind")
     return value
 
 

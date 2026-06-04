@@ -14,7 +14,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
 @pytest.fixture
 def strict_default_rule_context():
     config = FpaRuleSetConfig(
-        name="strict_fpa_default",
+        name="strict_fpa_rs",
         external_data_rules=(
             ExternalDataGroupRule(("统一用户中心", "用户中心"), "统一用户中心账号", ("账号", "账户", "人员", "组织", "机构", "信息")),
             ExternalDataGroupRule(("CRM", "客户关系管理系统"), "CRM客户档案", ("客户", "档案", "信息", "记录", "主数据")),
@@ -84,38 +84,40 @@ def test_strict_fpa_external_data_rules_can_be_extended_from_config(tmp_path):
         """
 default-profile: strict_fpa
 profiles:
-  custom_rules:
+  unified_ui:
+    kind: unified_ui
     strategy: rules_first
-    rule_set: custom_rules_default
-    core_rules: custom_rules
-    system_prompt: custom_rules
-    user_prompt: custom_rules
+    rule_set: unified_ui_rs
+    core_rules: unified_ui_cr
+    system_prompt: unified_ui_sp
+    user_prompt: unified_ui_up
   strict_fpa:
+    kind: strict_fpa
     strategy: ai_first
     rule_set: strict_fpa_auth
-    core_rules: strict_fpa
-    system_prompt: strict_fpa
-    user_prompt: strict_fpa
+    core_rules: strict_fpa_cr
+    system_prompt: strict_fpa_sp
+    user_prompt: strict_fpa_up
 core_rules:
-  custom_rules: CUSTOM CORE RULES
-  strict_fpa: STRICT CORE RULES
+  unified_ui_cr: CUSTOM CORE RULES
+  strict_fpa_cr: STRICT CORE RULES
 system_prompt_sets:
-  custom_rules: "CUSTOM SYSTEM"
-  strict_fpa: "STRICT SYSTEM"
+  unified_ui_sp: "CUSTOM SYSTEM"
+  strict_fpa_sp: "STRICT SYSTEM"
 user_prompt_sets:
-  custom_rules: "${core_rules} ${judgement_rules} ${payload_json}"
-  strict_fpa: "${core_rules} ${judgement_rules} ${payload_json}"
+  unified_ui_up: "${core_rules} ${judgement_rules} ${payload_json}"
+  strict_fpa_up: "${core_rules} ${judgement_rules} ${payload_json}"
 rule_sets:
-  custom_rules_default:
+  unified_ui_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
-  strict_fpa_default:
+  strict_fpa_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
   strict_fpa_auth:
-    extends: strict_fpa_default
+    extends: strict_fpa_rs
     external_data_rules:
       merge: append
       items:
@@ -143,38 +145,40 @@ def test_rule_set_warns_when_external_data_rule_looks_like_ordinary_service(tmp_
         """
 default-profile: strict_fpa
 profiles:
-  custom_rules:
+  unified_ui:
+    kind: unified_ui
     strategy: rules_first
-    rule_set: custom_rules_default
-    core_rules: custom_rules
-    system_prompt: custom_rules
-    user_prompt: custom_rules
+    rule_set: unified_ui_rs
+    core_rules: unified_ui_cr
+    system_prompt: unified_ui_sp
+    user_prompt: unified_ui_up
   strict_fpa:
+    kind: strict_fpa
     strategy: rules_only
     rule_set: strict_fpa_sms
-    core_rules: strict_fpa
-    system_prompt: strict_fpa
-    user_prompt: strict_fpa
+    core_rules: strict_fpa_cr
+    system_prompt: strict_fpa_sp
+    user_prompt: strict_fpa_up
 core_rules:
-  custom_rules: CUSTOM CORE RULES
-  strict_fpa: STRICT CORE RULES
+  unified_ui_cr: CUSTOM CORE RULES
+  strict_fpa_cr: STRICT CORE RULES
 system_prompt_sets:
-  custom_rules: "CUSTOM SYSTEM"
-  strict_fpa: "STRICT SYSTEM"
+  unified_ui_sp: "CUSTOM SYSTEM"
+  strict_fpa_sp: "STRICT SYSTEM"
 user_prompt_sets:
-  custom_rules: "${core_rules} ${judgement_rules} ${payload_json}"
-  strict_fpa: "${core_rules} ${judgement_rules} ${payload_json}"
+  unified_ui_up: "${core_rules} ${judgement_rules} ${payload_json}"
+  strict_fpa_up: "${core_rules} ${judgement_rules} ${payload_json}"
 rule_sets:
-  custom_rules_default:
+  unified_ui_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
-  strict_fpa_default:
+  strict_fpa_rs:
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
   strict_fpa_sms:
-    extends: strict_fpa_default
+    extends: strict_fpa_rs
     external_data_rules:
       merge: append
       items:

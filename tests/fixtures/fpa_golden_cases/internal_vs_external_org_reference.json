@@ -48,7 +48,7 @@
     }
   ],
   "expected": {
-    "custom_rules": [
+    "unified_ui": [
       {
         "name": "【地市后台】组织管理-内部组织-内部组织维护-界面开发",
         "type": "EI"

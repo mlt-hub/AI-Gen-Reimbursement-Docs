@@ -55,11 +55,11 @@ def test_preview_fpa_module_by_index_uses_fallback(test_excel, tmp_path):
     assert result["module"]["index"] == 1
     assert result["rows"]
     assert result["used_ai"] is False
-    assert result["profile"] == "custom_rules"
+    assert result["profile"] == "unified_ui"
     assert result["profile_version"] == "1"
     assert result["strategy"] == "rules_first"
-    assert result["rule_set"] == "custom_rules_default"
-    assert result["audit"]["profile"] == "custom_rules"
+    assert result["rule_set"] == "unified_ui_rs"
+    assert result["audit"]["profile"] == "unified_ui"
     assert result["audit"]["coverage"]["process_total"] == result["module"]["process_count"]
     assert result["audit"]["coverage"]["covered_count"] > 0
     assert "fallback" in result["audit"]["generation_counts"]
@@ -200,14 +200,14 @@ def test_preview_fpa_module_includes_rule_set_config_warning(test_excel, default
     config_path = default_fpa_config / "fpa_config.yaml"
     config_path.write_text(
         config_path.read_text(encoding="utf-8").replace(
-            "rule_set: custom_rules_default",
+            "rule_set: unified_ui_rs",
             "rule_set: sms_service_rules",
             1,
         )
         + """
 
   sms_service_rules:
-    extends: custom_rules_default
+    extends: unified_ui_rs
     external_data_rules:
       merge: append
       items:
