@@ -233,6 +233,12 @@ ui_api_mapping
 
 `multi_uis` 暂时使用 `kind: unified_ui`，以后需要专门兜底拆分算法时再新增 `multi_uis` kind。
 
+自定义 profile 可以复用任意已支持 kind，包括 `strict_fpa`、`unified_ui`、`ui_api_mapping`；kind 与 profile 名不一致是正常配置能力，不需要额外 check/log 提示。
+
+多个 profile 允许共用同一个 `rule_set`、`core_rules`、`system_prompt` 或 `user_prompt` 配置键。profile entry 不允许额外未知字段，未知字段直接报错，保持配置干净。
+
+rule_set entry 允许额外未知字段，只有已识别字段生效，方便未来扩展。`core_rules`、`system_prompt`、`user_prompt` 内容必须非空，不回退内置内容。所有 user_prompt 必须包含 `${core_rules}`、`${judgement_rules}`、`${payload_json}`，缺失或出现未知占位符时报错。strategy 仍限制在 `rules_first`、`ai_first`、`rules_only`、`ai_only` 四个枚举值。
+
 如果配置中出现旧 `custom_rules`，不自动迁移、不保留别名，并使用专门错误提示：
 
 ```text
@@ -289,6 +295,12 @@ ui_api_mapping：界面接口映射口径
 - `default-profile` 必须是非空字符串并存在于 `profiles` 中，缺失或为空不自动默认 `strict_fpa`。
 - 用户配置可以只保留部分 profile，只要 `default-profile` 有效；初始化配置保留完整 4 个 profile，用户可直接切换默认 profile。
 - 允许新增自定义 profile 名称，只要 `kind` 是已支持 kind，且 `rule_set/core_rules/system_prompt/user_prompt` 引用有效；`default-profile` 可以指向有效自定义 profile。
+- 自定义 profile 可以复用 `strict_fpa`、`unified_ui`、`ui_api_mapping` 任一已支持 kind；kind 与 profile 名不一致不提示。
+- 多个 profile 允许共用同一个 `rule_set`、`core_rules`、`system_prompt` 或 `user_prompt`。
+- profile entry 不允许额外未知字段，未知字段报错；rule_set entry 允许额外未知字段，只有已识别字段生效。
+- `core_rules`、`system_prompt`、`user_prompt` 内容必须非空，不回退内置内容。
+- user_prompt 必须包含 `${core_rules}`、`${judgement_rules}`、`${payload_json}`，缺失或出现未知占位符时报错。
+- strategy 限制在 `rules_first`、`ai_first`、`rules_only`、`ai_only` 四个枚举值。
 - 默认 strategy：`strict_fpa` 使用 `ai_first`，`unified_ui`、`multi_uis`、`ui_api_mapping` 使用 `rules_first`。
 - 配置键命名采用 `<profile>_rs`、`<profile>_cr`、`<profile>_sp`、`<profile>_up`。
 - 旧 `custom_rules` 配置内容迁移到 `unified_ui_rs/_cr/_sp/_up` 后删除旧键；旧 `strict_fpa_default` 和同名 prompt/core_rules 键迁移到 `strict_fpa_rs/_cr/_sp/_up`。
@@ -325,6 +337,12 @@ ui_api_mapping：界面接口映射口径
 - `default-profile` 指向不存在的 profile 时抛出清晰错误。
 - profile entry 引用不存在的 `kind`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt` 时抛出清晰错误。
 - profile entry 缺失 `kind` 时抛出清晰错误；配置未知 `kind` 时抛出清晰错误并提示支持的 kind。
+- 自定义 profile 可以使用 `kind: strict_fpa`、`kind: unified_ui`、`kind: ui_api_mapping`，且 kind 与 profile 名不一致时不产生额外提示。
+- 多个 profile 共用同一个 `rule_set`、`core_rules`、`system_prompt` 或 `user_prompt` 时可以通过配置校验。
+- profile entry 出现未知字段时抛出清晰错误；rule_set entry 出现未知字段时不报错，未知字段不生效。
+- `core_rules`、`system_prompt`、`user_prompt` 内容为空时抛出清晰错误。
+- user_prompt 缺少 `${core_rules}`、`${judgement_rules}`、`${payload_json}` 或包含未知占位符时抛出清晰错误。
+- profile strategy 不在 `rules_first`、`ai_first`、`rules_only`、`ai_only` 时抛出清晰错误。
 - `default-profile: custom_rules` 时抛出专门错误：`custom_rules 已替换为 unified_ui，请更新 fpa_config.yaml`。
 - `profiles.custom_rules` 出现时抛出专门错误：`profiles.custom_rules 已废弃，请迁移到 profiles.unified_ui`。
 - Web options 接口返回 4 个 profile，且每个 profile 返回 `kind`。
