@@ -1,0 +1,1654 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARD GitHub Workbench Prototype</title>
+  <style>
+    :root {
+      --page: #f6f8fa;
+      --surface: #ffffff;
+      --surface-muted: #f6f8fa;
+      --surface-subtle: #eef2f6;
+      --ink: #1f2328;
+      --muted: #57606a;
+      --soft: #6e7781;
+      --rule: #d8dee4;
+      --rule-strong: #afb8c1;
+      --accent: #0969da;
+      --accent-soft: #ddf4ff;
+      --success: #1a7f37;
+      --success-soft: #dafbe1;
+      --warning: #9a6700;
+      --warning-soft: #fff8c5;
+      --danger: #cf222e;
+      --danger-soft: #ffebe9;
+      --purple: #8250df;
+      --purple-soft: #f0e7ff;
+      --teal: #178b8f;
+      --teal-soft: #dff7f6;
+      --shadow: 0 10px 30px rgba(31, 35, 40, 0.08);
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 10px;
+      --sidebar: 296px;
+      --rightbar: 320px;
+      --topbar: 56px;
+      --bottombar: 64px;
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      overflow-x: clip;
+      background: var(--page);
+      color: var(--ink);
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .prototype-note {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 34px;
+      padding: 7px 16px;
+      border-bottom: 1px solid var(--rule);
+      background: #fff8c5;
+      color: #5f4b00;
+      font-size: 12px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 34px;
+      z-index: 30;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      min-height: var(--topbar);
+      padding: 0 16px;
+      border-bottom: 1px solid var(--rule);
+      background: rgba(246, 248, 250, 0.94);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 12px;
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      flex: 0 0 auto;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .brand-title {
+      min-width: 0;
+    }
+
+    .brand-title strong {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 14px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .brand-title span {
+      display: block;
+      margin-top: 1px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search {
+      position: relative;
+      min-width: 280px;
+    }
+
+    .search input,
+    .field {
+      width: 100%;
+      min-width: 0;
+      height: 32px;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--ink);
+      padding: 0 10px;
+      font-size: 13px;
+    }
+
+    .search kbd {
+      position: absolute;
+      top: 7px;
+      right: 8px;
+      min-width: 18px;
+      border: 1px solid var(--rule);
+      border-radius: 4px;
+      background: var(--surface-muted);
+      color: var(--soft);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .app-tabs {
+      position: sticky;
+      top: calc(34px + var(--topbar));
+      z-index: 25;
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      min-height: 45px;
+      padding: 0 16px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--rule);
+      background: var(--surface);
+    }
+
+    .tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 44px;
+      flex: 0 0 auto;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      padding: 0 10px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .tab.active {
+      border-bottom-color: #fd8c73;
+      color: var(--ink);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      gap: 24px;
+      width: min(1390px, 100%);
+      margin: 0 auto;
+      padding: 24px 16px calc(var(--bottombar) + 24px);
+    }
+
+    .layout.with-right {
+      grid-template-columns: var(--sidebar) minmax(0, 1fr) var(--rightbar);
+    }
+
+    .sidebar {
+      min-width: 0;
+    }
+
+    .side-card,
+    .box,
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+
+    .side-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 0 12px;
+      color: var(--ink);
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .side-card {
+      padding: 12px;
+    }
+
+    .side-group + .side-group {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--rule);
+    }
+
+    .side-label {
+      margin: 0 0 8px;
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .side-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      min-height: 34px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--ink);
+      padding: 6px 8px;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    .side-link:hover,
+    .side-link.active {
+      background: var(--surface-subtle);
+    }
+
+    .side-link.active {
+      box-shadow: inset 3px 0 0 var(--accent);
+      font-weight: 700;
+    }
+
+    .content {
+      min-width: 0;
+    }
+
+    .page {
+      display: none;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .page-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .page-head h1 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 26px;
+      line-height: 1.2;
+    }
+
+    .page-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 32px;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--ink);
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .btn.primary {
+      border-color: #1f883d;
+      background: #1f883d;
+      color: #fff;
+    }
+
+    .btn.danger {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .btn.quiet {
+      border-color: transparent;
+      background: transparent;
+      color: var(--muted);
+    }
+
+    .box {
+      overflow: hidden;
+    }
+
+    .box-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 54px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--surface-muted);
+    }
+
+    .box-head strong,
+    .panel-title {
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .box-body {
+      padding: 16px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .summary-cell {
+      min-width: 0;
+      padding: 14px 16px;
+      border-right: 1px solid var(--rule);
+    }
+
+    .summary-cell:last-child {
+      border-right: 0;
+    }
+
+    .summary-cell span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .summary-cell strong {
+      display: block;
+      overflow: hidden;
+      margin-top: 7px;
+      color: var(--ink);
+      font-size: 15px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge.success {
+      background: var(--success-soft);
+      color: var(--success);
+    }
+
+    .badge.warning {
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
+
+    .badge.danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .badge.accent {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .badge.neutral {
+      background: var(--surface-subtle);
+      color: var(--muted);
+    }
+
+    .badge.purple {
+      background: var(--purple-soft);
+      color: var(--purple);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .annotations {
+      display: grid;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .annotation {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      padding: 12px 14px;
+    }
+
+    .annotation.warning {
+      border-color: #f0d98c;
+      background: var(--warning-soft);
+    }
+
+    .annotation.danger {
+      border-color: #ffb3ad;
+      background: var(--danger-soft);
+    }
+
+    .annotation.info {
+      border-color: #b6e3ff;
+      background: var(--accent-soft);
+    }
+
+    .annotation strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .annotation p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .step-list {
+      border-top: 1px solid var(--rule);
+    }
+
+    .step {
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .step-toggle {
+      display: grid;
+      grid-template-columns: 26px 22px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+      min-height: 48px;
+      border: 0;
+      background: var(--surface);
+      padding: 0 16px;
+      text-align: left;
+    }
+
+    .step-toggle:hover {
+      background: var(--surface-muted);
+    }
+
+    .chev {
+      color: var(--muted);
+      font-size: 16px;
+      transition: transform 140ms ease;
+    }
+
+    .step.open .chev {
+      transform: rotate(90deg);
+    }
+
+    .status-icon {
+      display: grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .status-icon.done {
+      background: var(--success);
+    }
+
+    .status-icon.run {
+      background: var(--accent);
+    }
+
+    .status-icon.wait {
+      background: var(--warning);
+    }
+
+    .status-icon.fail {
+      background: var(--danger);
+    }
+
+    .step-main {
+      min-width: 0;
+    }
+
+    .step-main strong {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 14px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .step-main span {
+      display: block;
+      margin-top: 2px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .step-time {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .step-detail {
+      display: none;
+      padding: 0 16px 14px 72px;
+      background: var(--surface);
+    }
+
+    .step.open .step-detail {
+      display: block;
+    }
+
+    .log {
+      max-height: 190px;
+      overflow: auto;
+      border: 1px solid #30363d;
+      border-radius: var(--radius-md);
+      background: #0d1117;
+      color: #c9d1d9;
+      padding: 12px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 310px;
+      gap: 16px;
+    }
+
+    .panel {
+      padding: 16px;
+    }
+
+    .panel + .panel {
+      margin-top: 16px;
+    }
+
+    .panel p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .run-list {
+      border-top: 1px solid var(--rule);
+    }
+
+    .run-row {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) 100px 180px 72px 34px;
+      gap: 12px;
+      align-items: center;
+      min-height: 76px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--surface);
+    }
+
+    .run-row:hover {
+      background: var(--surface-muted);
+    }
+
+    .run-title {
+      min-width: 0;
+    }
+
+    .run-title strong {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 15px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .run-title span {
+      display: block;
+      margin-top: 4px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .date {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: nowrap;
+    }
+
+    .review-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 336px;
+      gap: 16px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) repeat(3, auto);
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .select {
+      height: 32px;
+      min-width: 118px;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--ink);
+      padding: 0 8px;
+      font-size: 13px;
+    }
+
+    .review-list {
+      overflow: hidden;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+
+    .review-head,
+    .review-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1.6fr) 74px 94px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      padding: 10px 14px;
+    }
+
+    .review-head {
+      border-bottom: 1px solid var(--rule);
+      background: var(--surface-muted);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .review-row {
+      min-height: 58px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--surface);
+      font-size: 13px;
+    }
+
+    .review-row:last-child {
+      border-bottom: 0;
+    }
+
+    .review-row.active,
+    .review-row:hover {
+      background: #f0f6ff;
+    }
+
+    .review-row button {
+      overflow: hidden;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      padding: 0;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .basis {
+      overflow: hidden;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .drawer {
+      position: sticky;
+      top: 150px;
+      align-self: start;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .drawer-head {
+      padding: 16px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--surface-muted);
+    }
+
+    .drawer-head h2 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.35;
+    }
+
+    .drawer-body {
+      padding: 16px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .meta {
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-sm);
+      padding: 9px 10px;
+      background: var(--surface);
+    }
+
+    .meta span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .meta strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 13px;
+    }
+
+    .mobile-cards {
+      display: none;
+    }
+
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .template-card {
+      min-height: 160px;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      padding: 16px;
+    }
+
+    .template-card strong {
+      display: block;
+      font-size: 16px;
+    }
+
+    .template-card p {
+      min-height: 42px;
+      margin: 10px 0 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .bottom-switcher {
+      position: fixed;
+      right: 16px;
+      bottom: 14px;
+      left: 16px;
+      z-index: 50;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 48px;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: var(--shadow);
+      padding: 8px;
+      backdrop-filter: blur(14px);
+    }
+
+    .bottom-label {
+      overflow: hidden;
+      color: var(--muted);
+      padding-left: 8px;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .segmented {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+    }
+
+    .segmented button {
+      flex: 0 0 auto;
+      min-height: 32px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--muted);
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .segmented button.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    [data-density="compact"] .run-row {
+      min-height: 58px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+
+    [data-density="compact"] .step-toggle {
+      min-height: 40px;
+    }
+
+    [data-density="compact"] .summary-cell {
+      padding-top: 10px;
+      padding-bottom: 10px;
+    }
+
+    @media (max-width: 1120px) {
+      .layout,
+      .layout.with-right {
+        grid-template-columns: 250px minmax(0, 1fr);
+      }
+
+      .right-context,
+      .layout.with-right > .right-context {
+        display: none;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .summary-cell {
+        border-right: 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .summary-cell:nth-last-child(-n + 1) {
+        border-bottom: 0;
+      }
+
+      .split,
+      .review-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .drawer {
+        position: static;
+      }
+
+      .template-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .prototype-note {
+        position: static;
+      }
+
+      .topbar {
+        top: 0;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 10px 12px;
+      }
+
+      .top-actions {
+        width: 100%;
+      }
+
+      .search {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .app-tabs {
+        top: auto;
+        min-height: 42px;
+        padding: 0 8px;
+      }
+
+      .tab {
+        height: 41px;
+        font-size: 13px;
+      }
+
+      .layout,
+      .layout.with-right {
+        display: block;
+        padding: 16px 10px calc(var(--bottombar) + 28px);
+      }
+
+      .sidebar {
+        margin-bottom: 16px;
+      }
+
+      .side-card {
+        padding: 10px;
+      }
+
+      .side-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .side-group + .side-group {
+        margin-top: 10px;
+        padding-top: 10px;
+      }
+
+      .side-label {
+        grid-column: 1 / -1;
+      }
+
+      .page-head {
+        display: block;
+      }
+
+      .page-head h1 {
+        font-size: 22px;
+      }
+
+      .btn-row {
+        margin-top: 12px;
+      }
+
+      .summary-grid {
+        display: block;
+      }
+
+      .summary-cell {
+        border-right: 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .summary-cell:last-child {
+        border-bottom: 0;
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .toolbar .field {
+        grid-column: 1 / -1;
+      }
+
+      .review-list {
+        display: none;
+      }
+
+      .mobile-cards {
+        display: grid;
+        gap: 10px;
+      }
+
+      .review-card {
+        border: 1px solid var(--rule);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        padding: 14px;
+      }
+
+      .review-card strong {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 15px;
+      }
+
+      .review-card p {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .review-card details {
+        margin-top: 10px;
+      }
+
+      .review-card summary {
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .drawer {
+        display: none;
+      }
+
+      .run-row {
+        grid-template-columns: 24px minmax(0, 1fr) 72px;
+        gap: 10px;
+      }
+
+      .run-row .branch,
+      .run-row .date,
+      .run-row .more {
+        display: none;
+      }
+
+      .template-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .bottom-switcher {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .bottom-label {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body data-density="comfortable">
+  <div class="prototype-note">
+    <strong>PROTOTYPE</strong>
+    <span>一次性 HTML 原型，内置假数据，用于验证 GitHub 工作台化信息架构。</span>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">ARD</div>
+      <div class="brand-title">
+        <strong>AI 生成项目报账文档</strong>
+        <span>GitHub-inspired workbench prototype</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="search" aria-label="全局搜索">
+        <input id="globalSearch" type="search" placeholder="搜索任务、日志、功能点" />
+        <kbd>/</kbd>
+      </label>
+      <button class="btn quiet" id="resetButton">重置</button>
+    </div>
+  </header>
+
+  <nav class="app-tabs" aria-label="原型页面切换">
+    <button class="tab active" data-page="task">生成</button>
+    <button class="tab" data-page="steps">阶段日志</button>
+    <button class="tab" data-page="history">历史</button>
+    <button class="tab" data-page="fpa">FPA 审阅</button>
+    <button class="tab" data-page="templates">方案</button>
+  </nav>
+
+  <main class="layout with-right" id="shell">
+    <aside class="sidebar" id="leftNav"></aside>
+    <section class="content">
+      <section class="page active" id="page-task"></section>
+      <section class="page" id="page-steps"></section>
+      <section class="page" id="page-history"></section>
+      <section class="page" id="page-fpa"></section>
+      <section class="page" id="page-templates"></section>
+    </section>
+    <aside class="right-context" id="rightContext"></aside>
+  </main>
+
+  <div class="bottom-switcher">
+    <div class="bottom-label" id="bottomHint">底部切换栏：用来快速观察任务状态、密度和页面行为。</div>
+    <div class="segmented" aria-label="任务状态切换">
+      <button class="active" data-state="idle">就绪</button>
+      <button data-state="running">运行中</button>
+      <button data-state="waiting_input">等待确认</button>
+      <button data-state="ready_to_continue">待继续</button>
+      <button data-state="done">已完成</button>
+      <button data-state="error">出错</button>
+      <button data-state="compact">紧凑</button>
+    </div>
+  </div>
+
+  <script>
+    const stateMeta = {
+      idle: {
+        label: '就绪',
+        badge: 'neutral',
+        title: '等待任务启动',
+        message: '选择功能清单输入来源后即可开始生成。这里不显示运行中，避免空闲态误导。',
+        primary: '开始生成',
+        secondary: ['预览 FPA 功能点', '下载模板'],
+        step: '尚未启动',
+      },
+      running: {
+        label: '运行中',
+        badge: 'accent',
+        title: '生成任务正在执行',
+        message: '后台正在生成 FPA 工作量评估，日志按阶段折叠展示。',
+        primary: '停止',
+        danger: true,
+        secondary: ['查看 AI 交互'],
+        step: '生成 FPA 工作量评估',
+      },
+      waiting_input: {
+        label: '等待确认',
+        badge: 'warning',
+        title: '等待确认送审工作量',
+        message: '任务短时间阻塞在当前页面，需要输入 FPA 核减后的工作量后继续。',
+        primary: '提交确认',
+        secondary: ['打开交付物目录', '取消任务'],
+        step: '等待人工确认',
+      },
+      ready_to_continue: {
+        label: '待继续',
+        badge: 'purple',
+        title: 'FPA 已完成，等待继续生成 COSMIC',
+        message: '这是可长期停留的检查点。后台没有继续运行，用户可以几天后再回来继续。',
+        primary: '继续生成 COSMIC',
+        secondary: ['打开交付物目录', '新任务'],
+        step: '停在 gen-fpa checkpoint',
+      },
+      done: {
+        label: '已完成',
+        badge: 'success',
+        title: '交付物已生成',
+        message: '全部选择的生成阶段已完成，可打开目录或下载交付物。',
+        primary: '打开交付物目录',
+        secondary: ['查看 AI 交互', '新任务'],
+        step: '全部完成',
+      },
+      error: {
+        label: '出错',
+        badge: 'danger',
+        title: '任务失败于发布包检查',
+        message: '检查安装包数据保护时发现 data.enc 缺失。保留输入和中间产物，修正后可重新运行。',
+        primary: '查看失败日志',
+        secondary: ['打开交付物目录', '新任务'],
+        step: '失败于检查安装包数据保护',
+      },
+    };
+
+    const stepData = [
+      { key: 'base', label: '生成基础数据', status: 'done', time: '18s', action: '已解析功能清单和模块树', log: '读取功能清单-录入模板.xlsx\n解析三级模块 12 个\n写入 0.1.gen-basedata-功能清单-模块树.md' },
+      { key: 'fpa', label: '生成 FPA 工作量评估', status: 'done', time: '49s', action: '已生成 FPA 工作量评估', log: '规则判定 24 条\nAI 补充 6 条\n写入 FPA工作量评估-输出模板.xlsx' },
+      { key: 'review', label: '等待确认送审工作量', status: 'wait', time: '-', action: '等待用户确认 FPA 核减后的工作量', log: 'FPA 合计 48.5 人日\n建议核减后工作量 42.0 人日\n等待用户确认后继续 gen-cosmic' },
+      { key: 'cosmic', label: '生成 COSMIC', status: 'pending', time: '-', action: '待继续', log: '该阶段将在用户点击继续生成 COSMIC 后启动。' },
+      { key: 'spec', label: '生成需求说明书', status: 'pending', time: '-', action: '待后续流程', log: '等待前序阶段完成。' },
+      { key: 'package', label: '写入交付物', status: 'pending', time: '-', action: '待后续流程', log: '等待前序阶段完成。' },
+    ];
+
+    const runs = [
+      { status: 'success', title: '和乐业项目报账文档', desc: '本机任务 #39: 手动运行 by mlt-hub', branch: 'master', date: '6月4日 20:41', time: '5m 14s' },
+      { status: 'continue', title: '垂直行业营销 FPA 已完成', desc: '停在 gen-fpa checkpoint，等待继续 COSMIC', branch: 'ready', date: '6月3日 18:12', time: '49s' },
+      { status: 'success', title: '客户档案系统工作量评估', desc: '远程任务 #37: 上传功能清单 by alice', branch: 'remote', date: '6月2日 10:08', time: '3m 43s' },
+      { status: 'error', title: '支付退款项目报账文档', desc: '失败于发布包检查，缺少受保护数据文件', branch: 'master', date: '6月1日 22:33', time: '1m 36s' },
+      { status: 'cancelled', title: 'OA 审批系统需求说明书', desc: '用户停止于生成 SPEC 阶段', branch: 'local', date: '5月31日 09:52', time: '2m 05s' },
+    ];
+
+    const fpaRows = [
+      { id: 1, name: '新增垂直行业营销活动配置', type: 'EI', source: 'AI', basis: '维护业务对象并提交外部输入', detail: '用户通过页面新增营销活动配置，系统需要校验输入字段并持久化业务数据，符合 EI 的外部输入定义。', abnormal: false },
+      { id: 2, name: '查询垂直行业营销活动列表', type: 'EQ', source: '规则', basis: '查询条件输入并返回派生较少结果', detail: '该功能接收筛选条件并返回活动列表，不涉及复杂派生计算，按 EQ 计量。', abnormal: false },
+      { id: 3, name: '导出活动效果统计报表', type: 'EO', source: 'AI', basis: '输出含统计汇总和格式化结果', detail: '导出报表包含活动参与数、转化率、地市维度汇总等派生数据，符合 EO 输出特征。', abnormal: false },
+      { id: 4, name: '同步集团行业基础数据', type: 'EIF', source: '兜底', basis: '外部系统维护的数据引用', detail: '说明中未明确维护责任，当前按外部接口文件 EIF 兜底，建议人工复核是否应归为 ILF。', abnormal: true },
+      { id: 5, name: '维护地市行业客户白名单', type: 'ILF', source: '规则', basis: '系统内部维护的逻辑文件', detail: '白名单数据由本系统新增、修改和删除，并被多个交易功能引用，按 ILF 计量。', abnormal: false },
+    ];
+
+    const templates = [
+      { title: '严格 FPA', desc: '优先规则判定，AI 只补充说明。适合送审前保守估算。', tag: '推荐', kind: 'FPA' },
+      { title: 'AI 补充 FPA', desc: '规则先行，AI 对模糊项补充类型和计算依据。', tag: '常用', kind: 'FPA' },
+      { title: '快速预览', desc: '生成基础数据后快速预览新增/修改功能点，不写正式交付物。', tag: '预览', kind: 'Preview' },
+      { title: '继续 COSMIC', desc: '从 gen-fpa checkpoint 恢复，继续生成 COSMIC 工作量。', tag: '待继续', kind: 'COSMIC' },
+      { title: '仅生成 SPEC', desc: '跳过工作量评估，仅按功能清单生成需求章节。', tag: '高级', kind: 'SPEC' },
+      { title: '失败诊断', desc: '保留输入和日志，重新运行失败阶段并输出诊断摘要。', tag: '诊断', kind: 'Debug' },
+    ];
+
+    let currentPage = 'task';
+    let currentState = 'idle';
+    let currentFpaId = 4;
+
+    function badge(label, kind) {
+      return `<span class="badge ${kind}"><span class="dot"></span>${label}</span>`;
+    }
+
+    function iconFor(status) {
+      if (status === 'success') return '<span class="status-icon done">✓</span>';
+      if (status === 'continue') return '<span class="status-icon wait">!</span>';
+      if (status === 'error') return '<span class="status-icon fail">!</span>';
+      if (status === 'cancelled') return '<span class="status-icon wait">-</span>';
+      return '<span class="status-icon run">…</span>';
+    }
+
+    function renderLeftNav() {
+      const taskActive = currentPage === 'task' ? 'active' : '';
+      const historyActive = currentPage === 'history' ? 'active' : '';
+      const fpaActive = currentPage === 'fpa' ? 'active' : '';
+      const stepsActive = currentPage === 'steps' ? 'active' : '';
+      document.getElementById('leftNav').innerHTML = `
+        <h2 class="side-title">工作台 <button class="btn primary">新任务</button></h2>
+        <div class="side-card">
+          <div class="side-group">
+            <p class="side-label">主路径</p>
+            <button class="side-link ${taskActive}" data-jump="task"><span>生成任务</span><span>${currentState === 'running' ? '运行中' : ''}</span></button>
+            <button class="side-link ${stepsActive}" data-jump="steps"><span>阶段日志</span><span>6</span></button>
+            <button class="side-link ${historyActive}" data-jump="history"><span>历史记录</span><span>42</span></button>
+            <button class="side-link ${fpaActive}" data-jump="fpa"><span>FPA 审阅</span><span>5</span></button>
+          </div>
+          <div class="side-group">
+            <p class="side-label">检查点</p>
+            <button class="side-link"><span>gen-fpa 已完成</span><span>待继续</span></button>
+            <button class="side-link"><span>送审工作量确认</span><span>42.0</span></button>
+            <button class="side-link"><span>COSMIC</span><span>未开始</span></button>
+          </div>
+          <div class="side-group">
+            <p class="side-label">设置</p>
+            <button class="side-link"><span>AI 配置</span><span></span></button>
+            <button class="side-link"><span>FPA 策略</span><span>严格</span></button>
+            <button class="side-link"><span>运行与调试</span><span></span></button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderRightContext() {
+      const meta = stateMeta[currentState];
+      document.getElementById('rightContext').innerHTML = `
+        <div class="panel">
+          <div class="panel-title">当前状态</div>
+          <p>${badge(meta.label, meta.badge)}</p>
+          <p>${meta.message}</p>
+        </div>
+        <div class="panel">
+          <div class="panel-title">本轮验证点</div>
+          <p>1. gen-fpa 后是否应显示待继续。</p>
+          <p>2. 阶段日志是否比大块控制台更清楚。</p>
+          <p>3. FPA 详情是否应放右侧抽屉。</p>
+        </div>
+        <div class="panel">
+          <div class="panel-title">产物摘要</div>
+          <p>FPA 工作量评估.xlsx</p>
+          <p>项目需求清单.xlsx</p>
+          <p>日志与 AI 交互记录</p>
+        </div>
+      `;
+    }
+
+    function renderTask() {
+      const meta = stateMeta[currentState];
+      const primaryClass = meta.danger ? 'btn danger' : 'btn primary';
+      const secondary = meta.secondary.map(item => `<button class="btn">${item}</button>`).join('');
+      document.getElementById('page-task').innerHTML = `
+        <div class="page-head">
+          <div>
+            <h1>${meta.title}</h1>
+            <p>${meta.message}</p>
+          </div>
+          <div class="btn-row">
+            <button class="${primaryClass}">${meta.primary}</button>
+            ${secondary}
+          </div>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-cell"><span>状态</span><strong>${badge(meta.label, meta.badge)}</strong></div>
+          <div class="summary-cell"><span>触发方式</span><strong>本机任务</strong></div>
+          <div class="summary-cell"><span>输入来源</span><strong>功能清单-录入模板.xlsx</strong></div>
+          <div class="summary-cell"><span>总耗时</span><strong>${currentState === 'idle' ? '-' : '49s'}</strong></div>
+          <div class="summary-cell"><span>产物</span><strong>${currentState === 'idle' ? '-' : '3 个文件'}</strong></div>
+        </div>
+        <div class="annotations">
+          ${currentState === 'ready_to_continue' ? '<div class="annotation warning"><strong>!</strong><div><strong>停在 gen-fpa checkpoint</strong><p>后台没有继续执行。用户确认送审工作量后，可以继续生成 COSMIC。</p></div></div>' : ''}
+          ${currentState === 'error' ? '<div class="annotation danger"><strong>!</strong><div><strong>检查安装包数据保护失败</strong><p>data.enc 未被打包，建议先运行发布包检查脚本。</p></div></div>' : ''}
+          <div class="annotation info"><strong>i</strong><div><strong>当前 FPA 策略</strong><p>严格 FPA / 规则优先 / rule_set: default_strict。</p></div></div>
+        </div>
+        <div class="box" style="margin-top:16px">
+          <div class="box-head"><strong>阶段进展</strong><span class="date">${meta.step}</span></div>
+          <div class="step-list">${stepData.slice(0, 4).map(renderStep).join('')}</div>
+        </div>
+      `;
+    }
+
+    function renderStep(step, index) {
+      const open = step.status === 'wait' || (currentState === 'error' && index === 3);
+      const statusClass = step.status === 'done' ? 'done' : step.status === 'wait' ? 'wait' : step.status === 'fail' ? 'fail' : 'run';
+      const symbol = step.status === 'done' ? '✓' : step.status === 'wait' ? '!' : step.status === 'fail' ? '!' : '…';
+      return `
+        <div class="step ${open ? 'open' : ''}" data-step="${step.key}">
+          <button class="step-toggle">
+            <span class="chev">›</span>
+            <span class="status-icon ${statusClass}">${symbol}</span>
+            <span class="step-main"><strong>${step.label}</strong><span>${step.action}</span></span>
+            <span class="step-time">${step.time}</span>
+          </button>
+          <div class="step-detail">
+            <div class="log">${step.log}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSteps() {
+      document.getElementById('page-steps').innerHTML = `
+        <div class="page-head">
+          <div>
+            <h1>构建发布 #39</h1>
+            <p>阶段折叠日志：默认展示状态和耗时，展开后查看原始日志。</p>
+          </div>
+          <div class="btn-row">
+            <input class="field" id="logSearch" type="search" placeholder="搜索日志" />
+            <button class="btn">刷新</button>
+          </div>
+        </div>
+        <div class="box">
+          <div class="box-head">
+            <strong>build / 生成任务</strong>
+            <span>${badge(stateMeta[currentState].label, stateMeta[currentState].badge)}</span>
+          </div>
+          <div class="step-list">${stepData.map(renderStep).join('')}</div>
+        </div>
+      `;
+    }
+
+    function renderHistory() {
+      document.getElementById('page-history').innerHTML = `
+        <div class="page-head">
+          <div>
+            <h1>全部任务</h1>
+            <p>借鉴 Actions runs 列表：按状态、任务类型和关键字复盘历史任务。</p>
+          </div>
+          <input class="field" style="max-width:320px" type="search" placeholder="筛选运行记录" />
+        </div>
+        <div class="box">
+          <div class="box-head">
+            <strong>${runs.length} 次运行</strong>
+            <div class="btn-row">
+              <button class="btn">状态</button>
+              <button class="btn">模式</button>
+              <button class="btn">日期</button>
+            </div>
+          </div>
+          <div class="run-list">
+            ${runs.map(run => `
+              <div class="run-row">
+                ${iconFor(run.status)}
+                <div class="run-title"><strong>${run.title}</strong><span>${run.desc}</span></div>
+                <span class="badge ${run.status === 'success' ? 'success' : run.status === 'continue' ? 'purple' : run.status === 'error' ? 'danger' : 'warning'} branch">${run.branch}</span>
+                <span class="date">${run.date}<br>${run.time}</span>
+                <button class="btn">打开</button>
+                <button class="btn quiet more">...</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function selectedFpa() {
+      return fpaRows.find(row => row.id === currentFpaId) || fpaRows[0];
+    }
+
+    function renderFpa() {
+      const selected = selectedFpa();
+      document.getElementById('page-fpa').innerHTML = `
+        <div class="page-head">
+          <div>
+            <h1>FPA 审阅</h1>
+            <p>高密度列表扫读，右侧详情查看计算依据说明；移动端自动切成卡片。</p>
+          </div>
+          <div class="btn-row">
+            ${badge('1 个异常项', 'warning')}
+            ${badge('5 个新增/修改功能点', 'accent')}
+          </div>
+        </div>
+        <div class="review-layout">
+          <div>
+            <div class="toolbar">
+              <input class="field" type="search" placeholder="搜索新增/修改功能点" />
+              <select class="select"><option>全部类型</option><option>EI</option><option>EO</option><option>EQ</option><option>ILF</option><option>EIF</option></select>
+              <select class="select"><option>全部生成方式</option><option>规则</option><option>AI</option><option>兜底</option></select>
+              <button class="btn">只看异常</button>
+            </div>
+            <div class="review-list">
+              <div class="review-head"><span>#</span><span>新增/修改功能点</span><span>类型</span><span>生成方式</span><span>计算依据归类</span></div>
+              ${fpaRows.map(row => `
+                <div class="review-row ${row.id === currentFpaId ? 'active' : ''}" data-fpa="${row.id}">
+                  <span>${row.abnormal ? badge('!', 'warning') : row.id}</span>
+                  <button>${row.name}</button>
+                  <span>${badge(row.type, row.type === 'EIF' ? 'warning' : 'accent')}</span>
+                  <span>${badge(row.source, row.source === '兜底' ? 'warning' : 'neutral')}</span>
+                  <span class="basis">${row.basis}</span>
+                </div>
+              `).join('')}
+            </div>
+            <div class="mobile-cards">
+              ${fpaRows.map(row => `
+                <article class="review-card">
+                  <strong>${row.name}</strong>
+                  <div class="btn-row">${badge(row.type, 'accent')}${badge(row.source, row.source === '兜底' ? 'warning' : 'neutral')}</div>
+                  <p><b>计算依据归类</b><br>${row.basis}</p>
+                  <details><summary>展开计算依据说明</summary><p>${row.detail}</p></details>
+                </article>
+              `).join('')}
+            </div>
+          </div>
+          <aside class="drawer">
+            <div class="drawer-head">
+              <h2>${selected.name}</h2>
+            </div>
+            <div class="drawer-body">
+              <div class="meta-grid">
+                <div class="meta"><span>类型</span><strong>${selected.type}</strong></div>
+                <div class="meta"><span>生成方式</span><strong>${selected.source}</strong></div>
+              </div>
+              <div class="meta" style="margin-bottom:12px"><span>计算依据归类</span><strong>${selected.basis}</strong></div>
+              <div class="meta"><span>计算依据说明</span><strong style="line-height:1.55">${selected.detail}</strong></div>
+            </div>
+          </aside>
+        </div>
+      `;
+    }
+
+    function renderTemplates() {
+      document.getElementById('page-templates').innerHTML = `
+        <div class="page-head">
+          <div>
+            <h1>生成方案</h1>
+            <p>借鉴 Actions workflow templates：用卡片解释方案差异，不让用户只面对内部 id。</p>
+          </div>
+          <input class="field" style="max-width:320px" type="search" placeholder="搜索方案" />
+        </div>
+        <h2 class="side-title" style="font-size:18px">推荐方案</h2>
+        <div class="template-grid">
+          ${templates.map(item => `
+            <article class="template-card">
+              <strong>${item.title}</strong>
+              <p>${item.desc}</p>
+              <div class="btn-row">
+                <button class="btn primary">${item.title === '继续 COSMIC' ? '继续' : '选择'}</button>
+                ${badge(item.tag, item.tag === '待继续' ? 'purple' : 'neutral')}
+                ${badge(item.kind, 'accent')}
+              </div>
+            </article>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderAll() {
+      const shell = document.getElementById('shell');
+      shell.classList.toggle('with-right', currentPage === 'task');
+      renderLeftNav();
+      renderRightContext();
+      renderTask();
+      renderSteps();
+      renderHistory();
+      renderFpa();
+      renderTemplates();
+
+      document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+      document.getElementById(`page-${currentPage}`).classList.add('active');
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.toggle('active', tab.dataset.page === currentPage));
+      bindDynamicEvents();
+    }
+
+    function bindDynamicEvents() {
+      document.querySelectorAll('[data-jump]').forEach(button => {
+        button.onclick = () => {
+          currentPage = button.dataset.jump;
+          renderAll();
+        };
+      });
+      document.querySelectorAll('.step-toggle').forEach(button => {
+        button.onclick = () => button.closest('.step').classList.toggle('open');
+      });
+      document.querySelectorAll('[data-fpa]').forEach(row => {
+        row.onclick = () => {
+          currentFpaId = Number(row.dataset.fpa);
+          renderFpa();
+          bindDynamicEvents();
+        };
+      });
+      const logSearch = document.getElementById('logSearch');
+      if (logSearch) {
+        logSearch.oninput = () => {
+          const q = logSearch.value.trim();
+          document.querySelectorAll('#page-steps .step').forEach(step => {
+            const hit = !q || step.innerText.includes(q);
+            step.style.display = hit ? '' : 'none';
+            if (q && hit) step.classList.add('open');
+          });
+        };
+      }
+    }
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        currentPage = tab.dataset.page;
+        renderAll();
+      });
+    });
+
+    document.querySelectorAll('[data-state]').forEach(button => {
+      button.addEventListener('click', () => {
+        if (button.dataset.state === 'compact') {
+          const compact = document.body.dataset.density !== 'compact';
+          document.body.dataset.density = compact ? 'compact' : 'comfortable';
+          button.classList.toggle('active', compact);
+          return;
+        }
+        currentState = button.dataset.state;
+        document.querySelectorAll('[data-state]').forEach(item => {
+          if (item.dataset.state !== 'compact') item.classList.toggle('active', item === button);
+        });
+        renderAll();
+      });
+    });
+
+    document.getElementById('resetButton').addEventListener('click', () => {
+      currentPage = 'task';
+      currentState = 'idle';
+      currentFpaId = 4;
+      document.body.dataset.density = 'comfortable';
+      document.querySelectorAll('[data-state]').forEach(item => item.classList.toggle('active', item.dataset.state === 'idle'));
+      renderAll();
+    });
+
+    document.addEventListener('keydown', event => {
+      if (event.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        event.preventDefault();
+        document.getElementById('globalSearch').focus();
+      }
+      if (event.key >= '1' && event.key <= '5') {
+        const pages = ['task', 'steps', 'history', 'fpa', 'templates'];
+        currentPage = pages[Number(event.key) - 1];
+        renderAll();
+      }
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>
