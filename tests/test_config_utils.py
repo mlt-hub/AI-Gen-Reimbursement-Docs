@@ -342,31 +342,6 @@ class TestLoadFpaProfile:
             with pytest.raises(FpaConfigError, match="profiles\\.fpa_profile"):
                 load_fpa_profile()
 
-    def test_legacy_custom_rules_default_profile_has_dedicated_error(self, tmp_path):
-        _write_fpa_config(tmp_path)
-        path = tmp_path / "fpa_config.yaml"
-        path.write_text(
-            path.read_text(encoding="utf-8").replace("default-profile: unified_ui", "default-profile: custom_rules"),
-            encoding="utf-8",
-        )
-
-        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match="custom_rules 已替换为 unified_ui"):
-                load_fpa_profile()
-
-    def test_legacy_custom_rules_profile_entry_has_dedicated_error(self, tmp_path):
-        _write_fpa_config(tmp_path)
-        path = tmp_path / "fpa_config.yaml"
-        path.write_text(
-            path.read_text(encoding="utf-8").replace("  unified_ui:\n    kind: unified_ui", "  custom_rules:\n    kind: unified_ui"),
-            encoding="utf-8",
-        )
-
-        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match="profiles.custom_rules 已废弃"):
-                load_fpa_profile()
-
-
 class TestLoadFpaExecutionOptions:
     def test_strategy_and_rule_set_from_profile_config(self, tmp_path):
         _write_fpa_config(tmp_path)

@@ -110,29 +110,6 @@ ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile ui_api_mapping --fpa-
 
 CLI / Web / API 显式传入 profile、strategy 或 rule_set 时优先使用显式值；显式传入未知值会报错，不回退默认值。
 
-## 迁移提示
-
-`unified_ui` 已替代旧的用户自定义规则口径，不保留兼容别名。旧配置会得到专门错误：
-
-```text
-custom_rules 已替换为 unified_ui，请更新 fpa_config.yaml
-profiles.custom_rules 已废弃，请迁移到 profiles.unified_ui
-```
-
-旧配置键迁移关系：
-
-```text
-custom_rules_default -> unified_ui_rs
-core_rules.custom_rules -> core_rules.unified_ui_cr
-system_prompt_sets.custom_rules -> system_prompt_sets.unified_ui_sp
-user_prompt_sets.custom_rules -> user_prompt_sets.unified_ui_up
-
-strict_fpa_default -> strict_fpa_rs
-core_rules.strict_fpa -> core_rules.strict_fpa_cr
-system_prompt_sets.strict_fpa -> system_prompt_sets.strict_fpa_sp
-user_prompt_sets.strict_fpa -> user_prompt_sets.strict_fpa_up
-```
-
 ## 审核副本
 
 正式生成仍会额外输出：

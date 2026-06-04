@@ -798,13 +798,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     if not isinstance(judgement_rules_source, str) or judgement_rules_source.strip() not in VALID_FPA_JUDGEMENT_RULES_SOURCES:
         raise FpaConfigError(f"未知 FPA judgement_rules_source: {judgement_rules_source}")
 
-    raw_default_profile = cfg.get("default-profile")
-    if isinstance(raw_default_profile, str) and raw_default_profile.strip() == "custom_rules":
-        raise FpaConfigError("custom_rules 已替换为 unified_ui，请更新 fpa_config.yaml")
-
     profiles = _require_mapping(cfg.get("profiles"), "profiles")
-    if "custom_rules" in profiles:
-        raise FpaConfigError("profiles.custom_rules 已废弃，请迁移到 profiles.unified_ui")
     core_rules = _require_mapping(cfg.get("core_rules"), "core_rules")
     system_prompt_sets = _require_mapping(cfg.get("system_prompt_sets"), "system_prompt_sets")
     user_prompt_sets = _require_mapping(cfg.get("user_prompt_sets"), "user_prompt_sets")
