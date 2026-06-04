@@ -541,7 +541,10 @@ judgement_rules:
         content = content.replace("extends: strict_fpa_rs", "extends: unified_ui_rs")
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match="FPA rule_set 继承出现循环"):
+            with pytest.raises(
+                FpaConfigError,
+                match="FPA rule_set 继承出现循环: unified_ui_rs -> client_a_rules -> unified_ui_rs",
+            ):
                 load_fpa_rule_sets_config()
 
     def test_rule_set_version_field_is_rejected(self, tmp_path):

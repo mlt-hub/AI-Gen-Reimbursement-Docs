@@ -601,12 +601,14 @@ def load_configured_fpa_rule_sets() -> dict[str, FpaRuleSetConfig]:
 def resolve_fpa_rule_set_config(rule_set: str) -> FpaRuleSetConfig:
     """解析 rule_set 配置，支持 extends 继承。"""
     configured = load_configured_fpa_rule_sets()
-    resolving: set[str] = set()
+    resolving: list[str] = []
 
     def _resolve(name: str) -> FpaRuleSetConfig:
         if name in resolving:
-            raise ValueError(f"FPA rule_set 继承出现循环: {name}")
-        resolving.add(name)
+            start = resolving.index(name)
+            cycle_path = " -> ".join([*resolving[start:], name])
+            raise ValueError(f"FPA rule_set 继承出现循环: {cycle_path}")
+        resolving.append(name)
         try:
             current = configured.get(name)
             if current is None:
@@ -616,7 +618,7 @@ def resolve_fpa_rule_set_config(rule_set: str) -> FpaRuleSetConfig:
                 current = _merge_rule_sets(parent, current)
             return current
         finally:
-            resolving.remove(name)
+            resolving.pop()
 
     return _resolve(rule_set)
 
@@ -631,6 +633,48 @@ def set_current_fpa_rule_set_config(config: FpaRuleSetConfig):
 
 def reset_current_fpa_rule_set_config(token) -> None:
     _CURRENT_RULE_SET_CONFIG.reset(token)
+
+
+def _merge_source_process_text(existing: str, incoming: str) -> str:
+    parts: list[str] = []
+    for raw in [existing, incoming]:
+        for item in str(raw or "").split("、"):
+            value = item.strip()
+            if value and value not in parts:
+                parts.append(value)
+    return "、".join(parts)
+
+
+def _append_row_warning(row: dict[str, object], warning: str) -> None:
+    current = str(row.get("后处理警告", "") or "").strip()
+    if warning in current:
+        return
+    row["后处理警告"] = "；".join([part for part in [current, warning] if part])
+
+
+def _append_row_with_l3_name_policy(rows: list[dict[str, object]], row: dict[str, object]) -> bool:
+    """同一三级模块内，同名同类型合并来源；同名不同类型保留并提示。"""
+    name = str(row.get("新增/修改功能点", "") or "")
+    fpa_type = str(row.get("类型", "") or "")
+    same_name_rows = [
+        existing
+        for existing in rows
+        if str(existing.get("新增/修改功能点", "") or "") == name
+    ]
+    for existing in same_name_rows:
+        if str(existing.get("类型", "") or "") == fpa_type:
+            existing["源功能过程"] = _merge_source_process_text(
+                str(existing.get("源功能过程", "") or ""),
+                str(row.get("源功能过程", "") or ""),
+            )
+            return False
+    if same_name_rows:
+        warning = f"{name} 同名不同类型结果行，已保留并提示人工审阅。"
+        for existing in same_name_rows:
+            _append_row_warning(existing, warning)
+        _append_row_warning(row, warning)
+    rows.append(row)
+    return True
 
 
 @dataclass(frozen=True)
@@ -743,7 +787,7 @@ class CustomRulesProfile:
                 continue
             point_name = self.logic_point_name(name, desc)
             fpa_type, reason = self.infer_type(point_name, desc)
-            rows.append({
+            row = {
                 "序号": seq,
                 "子系统(模块)": subsystem,
                 "资产标识": asset,
@@ -761,8 +805,9 @@ class CustomRulesProfile:
                 "类型理由": reason,
                 "源功能过程": name,
                 "后处理警告": "",
-            })
-            seq += 1
+            }
+            if _append_row_with_l3_name_policy(rows, row):
+                seq += 1
         return rows
 
     def build_prompt(
@@ -987,7 +1032,7 @@ class StrictFpaProfile(CustomRulesProfile):
             if fpa_type in {"ILF", "EIF"}:
                 fpa_type = "EI"
                 reason = "功能过程按事务功能计量，数据功能已单独识别。"
-            rows.append({
+            row = {
                 "序号": seq,
                 "子系统(模块)": subsystem,
                 "资产标识": asset,
@@ -1002,8 +1047,9 @@ class StrictFpaProfile(CustomRulesProfile):
                 "类型理由": reason,
                 "源功能过程": raw_name,
                 "后处理警告": "",
-            })
-            seq += 1
+            }
+            if _append_row_with_l3_name_policy(rows, row):
+                seq += 1
         return rows
 
     def build_prompt(
@@ -1322,6 +1368,7 @@ class UiApiMappingProfile(CustomRulesProfile):
         seq = start_seq
 
         explicit_rows: dict[str, dict[str, object]] = {}
+        default_point_names: set[str] = set()
         for p in process_list:
             if not isinstance(p, dict):
                 continue
@@ -1335,6 +1382,10 @@ class UiApiMappingProfile(CustomRulesProfile):
                 ("接口开发", "ILF", "功能过程默认生成 1 条接口开发行。"),
             ):
                 point_name = f"{tag}-{raw_name}-{suffix}"
+                warning = ""
+                if point_name in default_point_names:
+                    warning = f"{point_name} ui_api_mapping 功能过程默认行同名，已保留并提示人工审阅。"
+                default_point_names.add(point_name)
                 rows.append({
                     "序号": seq,
                     "子系统(模块)": subsystem,
@@ -1349,7 +1400,7 @@ class UiApiMappingProfile(CustomRulesProfile):
                     "生成方式": "fallback",
                     "类型理由": reason,
                     "源功能过程": raw_name,
-                    "后处理警告": "",
+                    "后处理警告": warning,
                 })
                 seq += 1
 

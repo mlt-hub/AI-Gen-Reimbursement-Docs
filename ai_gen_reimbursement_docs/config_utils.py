@@ -848,20 +848,22 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         _validate_row_planning_rules(rule_entry.get("row_planning_rules"), f"{rule_set_path}.row_planning_rules")
 
     visited: set[str] = set()
-    visiting: set[str] = set()
+    visiting: list[str] = []
 
     def _visit_rule_set(name: str) -> None:
         if name in visiting:
-            raise FpaConfigError(f"FPA rule_set 继承出现循环: {name}")
+            start = visiting.index(name)
+            cycle_path = " -> ".join([*visiting[start:], name])
+            raise FpaConfigError(f"FPA rule_set 继承出现循环: {cycle_path}")
         if name in visited:
             return
-        visiting.add(name)
+        visiting.append(name)
         entry = rule_sets.get(name)
         if isinstance(entry, dict):
             parent = str(entry.get("extends") or "").strip()
             if parent:
                 _visit_rule_set(parent)
-        visiting.remove(name)
+        visiting.pop()
         visited.add(name)
 
     for rule_set_name in rule_sets:

@@ -2,6 +2,34 @@
 
 日期：2026-06-04
 
+状态：已完成主线实施，并完成二次收口。本文保留为需求与验收依据；当前用户文档入口见 [`../fpa-profiles.md`](../fpa-profiles.md)。
+
+## 实施收口记录
+
+提交记录：
+
+```text
+5f5affb Support configurable FPA profiles
+```
+
+已完成：
+
+- FPA profile 已从固定白名单改为配置驱动，支持 `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping` 和自定义 profile name + `kind`。
+- `custom_rules` 已由 `unified_ui` 完全替代；旧 `default-profile: custom_rules` 和 `profiles.custom_rules` 会给出专门迁移错误。
+- `config/fpa_config.yaml.example` 已补齐 4 个 profile 的 `profiles`、`rule_sets`、`core_rules`、`system_prompt_sets`、`user_prompt_sets` 示例，并使用 `_rs/_cr/_sp/_up` 命名。
+- `/api/fpa/options` 已按实际配置顺序返回 profile，包含 `kind/strategy/rule_set`，并隐藏内部 prompt 配置 key。
+- `ui_api_mapping` 已实现默认界面开发 EI、默认接口开发 ILF、明确接口/后端调用 ILF；明确接口同名按三级模块合并来源，默认行同名保留并提示。
+- `multi_uis` 已记录拆分理由到 check/review 元数据；同名多界面开发行保留并提示。
+- `strict_fpa`、`unified_ui` / `multi_uis` 的规则兜底行已补齐同名同类型来源合并、同名不同类型保留并提示。
+- `rule_set extends` 循环错误已提示循环路径。
+- 常规配置说明、Golden Case 说明、验收记录和计算依据说明文档已更新到新 profile/config 键；旧键只保留在迁移说明和错误提示测试中。
+
+后续可选增强：
+
+- 如真实项目中 `multi_uis` 需要稳定的规则兜底拆分算法，可新增独立 `kind: multi_uis`，不再主要依赖 prompt/rule_set。
+- 可继续扩充 `ui_api_mapping` 的明确接口/后端交互抽取词库，但必须保持“只来自输入材料显式信息”的边界。
+- 可用真实模型抽样复核 4 个 profile 的 prompt 稳定性，尤其是 `multi_uis.split_reason` 和 `ui_api_mapping` 固定 EI/ILF 类型规则。
+
 ## 目标
 
 将 FPA profile 从固定少量内置口径扩展为配置驱动的多 profile 机制。`default-profile` 指定默认方案，CLI / Web / API 显式传入 profile 时仍优先使用显式值。

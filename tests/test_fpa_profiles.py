@@ -302,6 +302,87 @@ def test_ui_api_mapping_fallback_generates_default_and_explicit_backend_rows():
     assert types["【业务端】销售管理-合同中心-合同管理-OA 审批接口"] == "ILF"
 
 
+def test_ui_api_mapping_keeps_multiple_explicit_backend_rows_and_duplicate_default_rows():
+    profile = UiApiMappingProfile()
+    group = {
+        "client_type": "业务端",
+        "l1": "销售管理",
+        "l2": "合同中心",
+        "l3": "合同管理",
+        "processes": [
+            {"name": "提交合同审批", "type": "新增", "desc": "调用 OA 审批接口，请求 风控校验服务。"},
+            {"name": "提交合同审批", "type": "新增", "desc": "再次提交合同审批。"},
+        ],
+    }
+
+    rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    names = [str(row["新增/修改功能点"]) for row in rows]
+
+    assert names.count("【业务端】销售管理-合同中心-合同管理-提交合同审批-界面开发") == 2
+    assert names.count("【业务端】销售管理-合同中心-合同管理-提交合同审批-接口开发") == 2
+    assert "【业务端】销售管理-合同中心-合同管理-OA 审批接口" in names
+    assert "【业务端】销售管理-合同中心-合同管理-风控校验服务" in names
+    duplicate_rows = [
+        row
+        for row in rows
+        if row["新增/修改功能点"] == "【业务端】销售管理-合同中心-合同管理-提交合同审批-界面开发"
+    ]
+    assert duplicate_rows[0]["后处理警告"] == ""
+    assert "功能过程默认行同名" in str(duplicate_rows[1]["后处理警告"])
+
+
+def test_strict_profile_merges_same_name_same_type_and_keeps_type_conflict():
+    group = {
+        "client_type": "业务端",
+        "l1": "客户管理",
+        "l2": "客户中心",
+        "l3": "客户查询",
+        "processes": [
+            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
+            {"name": "查询客户", "type": "新增", "desc": "按手机号查询客户列表。"},
+            {"name": "客户处理", "type": "新增", "desc": "导出客户报表。"},
+            {"name": "客户处理", "type": "新增", "desc": "查询客户列表。"},
+        ],
+    }
+
+    rows = STRICT_FPA_PROFILE.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    query_rows = [row for row in rows if row["新增/修改功能点"] == "查询客户"]
+    report_rows = [row for row in rows if row["新增/修改功能点"] == "客户处理"]
+
+    assert len(query_rows) == 1
+    assert query_rows[0]["类型"] == "EQ"
+    assert query_rows[0]["源功能过程"] == "查询客户"
+    assert len(report_rows) == 2
+    assert {str(row["类型"]) for row in report_rows} == {"EO", "EQ"}
+    assert all("同名不同类型结果行" in str(row["后处理警告"]) for row in report_rows)
+
+
+def test_unified_ui_fallback_merges_duplicate_non_ui_process_rows(tmp_path):
+    _write_fpa_config(tmp_path)
+    group = {
+        "client_type": "业务端",
+        "l1": "客户管理",
+        "l2": "客户中心",
+        "l3": "客户档案",
+        "processes": [
+            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
+            {"name": "查询客户", "type": "新增", "desc": "按手机号查询客户列表。"},
+        ],
+    }
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("unified_ui")
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            rows = config.profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
+    process_rows = [row for row in rows if row["新增/修改功能点"] == "查询客户-查询处理开发"]
+    assert len(process_rows) == 1
+    assert process_rows[0]["源功能过程"] == "查询客户"
+
+
 def test_rule_set_extends_are_loaded(tmp_path):
     _write_fpa_config(tmp_path)
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
