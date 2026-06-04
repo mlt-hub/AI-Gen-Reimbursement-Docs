@@ -51,6 +51,7 @@
       background: var(--page);
       color: var(--ink);
       letter-spacing: 0;
+      padding-bottom: 74px;
     }
 
     button,
@@ -673,6 +674,51 @@
       background: var(--surface-muted);
     }
 
+    .workflow-list {
+      display: grid;
+      gap: 8px;
+      margin: 0 0 16px;
+    }
+
+    .workflow-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) 150px 140px 120px 120px;
+      gap: 12px;
+      align-items: center;
+      min-height: 68px;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      padding: 12px 14px;
+      text-align: left;
+    }
+
+    .workflow-row:hover,
+    .workflow-row.active {
+      border-color: #8cbbff;
+      background: #f6faff;
+    }
+
+    .workflow-row strong,
+    .workflow-row span {
+      min-width: 0;
+    }
+
+    .workflow-main {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .workflow-main span,
+    .workflow-meta {
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .run-title {
       min-width: 0;
     }
@@ -1001,6 +1047,10 @@
         position: static;
       }
 
+      body {
+        padding-bottom: 0;
+      }
+
       .topbar {
         top: 0;
         grid-template-columns: 1fr;
@@ -1138,6 +1188,11 @@
         gap: 10px;
       }
 
+      .workflow-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
       .run-row .branch,
       .run-row .date,
       .run-row .more {
@@ -1214,16 +1269,15 @@
   </main>
 
   <div class="bottom-switcher">
-    <div class="bottom-label" id="bottomHint">底部切换栏：分开观察项目 workflow 阶段、当前 run 状态和密度。</div>
+    <div class="bottom-label" id="bottomHint">底部切换栏：快速切换多个 workflow、当前 run 状态和密度。</div>
     <div class="switcher-controls">
       <div class="switch-group">
         <span class="switch-label">Workflow</span>
-        <div class="segmented" aria-label="Workflow 阶段切换">
-          <button data-workflow="not_started">待 FPA</button>
-          <button data-workflow="fpa_review">待确认 FPA</button>
-          <button class="active" data-workflow="cosmic_ready">待 COSMIC</button>
-          <button data-workflow="list_ready">待需求清单</button>
-          <button data-workflow="completed">已完成</button>
+        <div class="segmented" aria-label="Workflow 切换">
+          <button class="active" data-workflow="vertical_marketing">垂直营销</button>
+          <button data-workflow="customer_profile">客户档案</button>
+          <button data-workflow="refunds">支付退款</button>
+          <button data-workflow="oa_approval">OA 审批</button>
         </div>
       </div>
       <div class="switch-group">
@@ -1252,21 +1306,21 @@
         next: 'gen-fpa',
       },
       fpa_review: {
-        label: '待确认 FPA',
+        label: 'FPA 审阅中',
         badge: 'warning',
         title: 'FPA 已生成，等待人工审阅',
-        message: '最近一次 run 已完成 gen-fpa。请审阅新增/修改功能点，并确认送审工作量。',
-        primary: '确认送审工作量',
-        secondary: ['打开 FPA 审阅', '打开交付物目录'],
-        next: 'review-fpa',
+        message: '最近一次 gen-fpa 已完成。可以确认当前 FPA 版本，也可以按新输入或新规则重新生成 FPA。',
+        primary: '确认 FPA',
+        secondary: ['重新生成 FPA', '查看 FPA 版本'],
+        next: 'confirm-fpa',
       },
       cosmic_ready: {
         label: '待生成 COSMIC',
         badge: 'purple',
         title: 'FPA 已确认，下一步生成 COSMIC',
-        message: '后台没有长期运行。几天后回来时，应看到 workflow 停在待生成 COSMIC，而不是 run 仍在运行中。',
+        message: '后台没有长期运行。几天后回来时，应看到 workflow 停在待生成 COSMIC，并明确基于哪个 FPA 版本继续。',
         primary: '生成 COSMIC',
-        secondary: ['打开交付物目录', '新任务'],
+        secondary: ['回到 FPA 审阅', '重新生成 FPA'],
         next: 'gen-cosmic',
       },
       list_ready: {
@@ -1288,6 +1342,61 @@
         next: 'open-artifacts',
       },
     };
+
+    const workflows = [
+      {
+        id: 'vertical_marketing',
+        name: '垂直行业营销',
+        stage: 'fpa_review',
+        runState: 'idle',
+        latestRun: 'gen-fpa #3 已完成',
+        latestMode: 'gen-fpa',
+        fpaVersion: 'FPA v3',
+        fpaVersions: ['FPA v1', 'FPA v2', 'FPA v3'],
+        next: '确认 FPA 或重新生成 FPA',
+        updated: '6月4日 21:10',
+        artifacts: 'FPA v1-v3 + 中间产物',
+      },
+      {
+        id: 'customer_profile',
+        name: '客户档案系统',
+        stage: 'cosmic_running',
+        runState: 'running',
+        latestRun: 'gen-cosmic #1 运行中',
+        latestMode: 'gen-cosmic',
+        fpaVersion: 'FPA v2',
+        fpaVersions: ['FPA v1', 'FPA v2'],
+        next: '等待 COSMIC 完成',
+        updated: '6月4日 20:42',
+        artifacts: 'FPA v2 + COSMIC 草稿',
+      },
+      {
+        id: 'refunds',
+        name: '支付退款项目',
+        stage: 'list_ready',
+        runState: 'error',
+        latestRun: 'gen-list #1 出错',
+        latestMode: 'gen-list',
+        fpaVersion: 'FPA v1',
+        fpaVersions: ['FPA v1'],
+        next: '修复后重跑 gen-list',
+        updated: '6月3日 22:33',
+        artifacts: 'FPA v1 + COSMIC v1',
+      },
+      {
+        id: 'oa_approval',
+        name: 'OA 审批系统',
+        stage: 'not_started',
+        runState: 'idle',
+        latestRun: '尚未运行',
+        latestMode: '-',
+        fpaVersion: '-',
+        fpaVersions: [],
+        next: '生成 FPA',
+        updated: '6月2日 09:52',
+        artifacts: '-',
+      },
+    ];
 
     const stateMeta = {
       idle: {
@@ -1337,8 +1446,10 @@
 
     const stepData = [
       { key: 'basedata-run', label: 'run: gen-basedata', status: 'done', time: '18s', action: '已解析功能清单和模块树', log: '读取功能清单-录入模板.xlsx\n解析三级模块 12 个\n写入 0.1.gen-basedata-功能清单-模块树.md' },
-      { key: 'fpa-run', label: 'run: gen-fpa', status: 'done', time: '49s', action: '已生成 FPA 工作量评估', log: '规则判定 24 条\nAI 补充 6 条\n写入 FPA工作量评估-输出模板.xlsx\n本次 run 已结束。' },
-      { key: 'fpa-review', label: 'workflow: 人工审阅 FPA', status: 'wait', time: '-', action: '长期业务阶段，不占用后台线程', log: 'FPA 合计 48.5 人日\n建议核减后工作量 42.0 人日\n人工确认后，workflow 进入待生成 COSMIC。' },
+      { key: 'fpa-run-1', label: 'run: gen-fpa #1', status: 'done', time: '49s', action: '已生成 FPA v1', log: '规则判定 24 条\nAI 补充 6 条\n写入 FPA v1\n本次 run 已结束。' },
+      { key: 'fpa-run-2', label: 'run: gen-fpa #2', status: 'done', time: '52s', action: '已生成 FPA v2', log: '更新输入模板后重新生成\n写入 FPA v2\n本次 run 已结束。' },
+      { key: 'fpa-run-3', label: 'run: gen-fpa #3', status: 'done', time: '46s', action: '当前审阅版本 FPA v3', log: '规则集 default_strict\n复核 EIF 兜底项\n写入 FPA v3\n本次 run 已结束。' },
+      { key: 'fpa-review', label: 'workflow: 人工审阅 FPA', status: 'wait', time: '-', action: '可确认当前版本，也可继续重新生成 FPA', log: '当前版本 FPA v3\nFPA 合计 48.5 人日\n建议核减后工作量 42.0 人日\n确认后 workflow 才进入待生成 COSMIC。' },
       { key: 'cosmic-run', label: 'run: gen-cosmic', status: 'pending', time: '-', action: '等待用户启动下一次 run', log: '用户点击“生成 COSMIC”后才会启动新的后台 run。' },
       { key: 'list-run', label: 'run: gen-list', status: 'pending', time: '-', action: '待 COSMIC 完成后启动', log: '等待前序阶段完成。' },
       { key: 'spec-run', label: 'run: gen-spec', status: 'pending', time: '-', action: '可按业务需要单独运行', log: 'SPEC 可以作为独立 run 运行，不强制绑在 gen-all。' },
@@ -1346,9 +1457,11 @@
 
     const runs = [
       { status: 'success', title: '和乐业项目 / gen-all', desc: '本机任务 #39: 一键生成路径，所有阶段一次完成', branch: 'gen-all', date: '6月4日 20:41', time: '5m 14s' },
-      { status: 'success', title: '垂直行业营销 / gen-fpa', desc: 'workflow: 垂直行业营销 · FPA 工作量评估已完成', branch: 'gen-fpa', date: '6月3日 18:12', time: '49s' },
-      { status: 'continue', title: '垂直行业营销 / 待生成 COSMIC', desc: 'workflow 阶段，不是后台 run；可隔几天后启动 gen-cosmic', branch: 'workflow', date: '6月3日 18:13', time: '-' },
-      { status: 'success', title: '客户档案系统 / gen-cosmic', desc: '远程任务 #37: 以已确认 FPA 产物为输入', branch: 'gen-cosmic', date: '6月2日 10:08', time: '3m 43s' },
+      { status: 'success', title: '垂直行业营销 / gen-fpa #1', desc: 'workflow: 垂直行业营销 · 输出 FPA v1', branch: 'gen-fpa', date: '6月3日 18:12', time: '49s' },
+      { status: 'success', title: '垂直行业营销 / gen-fpa #2', desc: '同一 workflow 重新生成 · 输出 FPA v2', branch: 'gen-fpa', date: '6月4日 10:05', time: '52s' },
+      { status: 'success', title: '垂直行业营销 / gen-fpa #3', desc: '当前审阅版本 · 输出 FPA v3', branch: 'gen-fpa', date: '6月4日 21:10', time: '46s' },
+      { status: 'continue', title: '垂直行业营销 / FPA 审阅中', desc: 'workflow 阶段，不是后台 run；可确认 FPA 或继续重新生成', branch: 'workflow', date: '6月4日 21:11', time: '-' },
+      { status: 'success', title: '客户档案系统 / gen-cosmic #1', desc: '以已确认 FPA v2 为输入', branch: 'gen-cosmic', date: '6月2日 10:08', time: '3m 43s' },
       { status: 'error', title: '支付退款项目 / gen-list', desc: '失败于发布包检查，缺少受保护数据文件', branch: 'gen-list', date: '6月1日 22:33', time: '1m 36s' },
       { status: 'cancelled', title: 'OA 审批系统 / gen-spec', desc: '用户停止于生成 SPEC 阶段', branch: 'gen-spec', date: '5月31日 09:52', time: '2m 05s' },
     ];
@@ -1371,9 +1484,17 @@
     ];
 
     let currentPage = 'task';
-    let currentWorkflow = 'cosmic_ready';
+    let currentWorkflow = 'vertical_marketing';
     let currentState = 'idle';
     let currentFpaId = 4;
+
+    function selectedWorkflow() {
+      return workflows.find(item => item.id === currentWorkflow) || workflows[0];
+    }
+
+    function selectedStage() {
+      return workflowMeta[selectedWorkflow().stage] || workflowMeta.not_started;
+    }
 
     function badge(label, kind) {
       return `<span class="badge ${kind}"><span class="dot"></span>${label}</span>`;
@@ -1392,7 +1513,8 @@
       const historyActive = currentPage === 'history' ? 'active' : '';
       const fpaActive = currentPage === 'fpa' ? 'active' : '';
       const stepsActive = currentPage === 'steps' ? 'active' : '';
-      const workflow = workflowMeta[currentWorkflow];
+      const workflow = selectedWorkflow();
+      const stage = selectedStage();
       document.getElementById('leftNav').innerHTML = `
         <h2 class="side-title">工作台 <button class="btn primary">新任务</button></h2>
         <div class="side-card">
@@ -1405,9 +1527,10 @@
           </div>
           <div class="side-group">
             <p class="side-label">Workflow</p>
-            <button class="side-link"><span>项目阶段</span><span>${workflow.label}</span></button>
-            <button class="side-link"><span>最近 run</span><span>${currentState === 'running' ? '执行中' : 'gen-fpa 已完成'}</span></button>
-            <button class="side-link"><span>下一步</span><span>${workflow.next}</span></button>
+            <button class="side-link"><span>当前项目</span><span>${workflow.name}</span></button>
+            <button class="side-link"><span>项目阶段</span><span>${stage.label}</span></button>
+            <button class="side-link"><span>最近 run</span><span>${workflow.latestRun}</span></button>
+            <button class="side-link"><span>FPA 版本</span><span>${workflow.fpaVersion}</span></button>
           </div>
           <div class="side-group">
             <p class="side-label">设置</p>
@@ -1420,13 +1543,14 @@
     }
 
     function renderRightContext() {
-      const workflow = workflowMeta[currentWorkflow];
+      const workflow = selectedWorkflow();
+      const stage = selectedStage();
       const run = stateMeta[currentState];
       document.getElementById('rightContext').innerHTML = `
         <div class="panel">
           <div class="panel-title">Workflow 阶段</div>
-          <p>${badge(workflow.label, workflow.badge)}</p>
-          <p>${workflow.message}</p>
+          <p>${badge(stage.label, stage.badge)}</p>
+          <p>${workflow.name}：${stage.message}</p>
         </div>
         <div class="panel">
           <div class="panel-title">当前 Run</div>
@@ -1435,13 +1559,13 @@
         </div>
         <div class="panel">
           <div class="panel-title">本轮验证点</div>
-          <p>1. gen-all 是快捷方式，分步 workflow 是主路径。</p>
-          <p>2. gen-fpa 完成后 run 结束，workflow 等待下一步。</p>
-          <p>3. 几天后启动 gen-cosmic 应创建新的 run。</p>
+          <p>1. 工作台同时存在多个 workflow。</p>
+          <p>2. 同一 workflow 可重复运行 gen-fpa。</p>
+          <p>3. gen-cosmic 必须引用已确认的 FPA 版本。</p>
         </div>
         <div class="panel">
           <div class="panel-title">产物摘要</div>
-          <p>FPA 工作量评估.xlsx</p>
+          <p>${workflow.fpaVersion}</p>
           <p>项目需求清单.xlsx</p>
           <p>日志与 AI 交互记录</p>
         </div>
@@ -1449,37 +1573,64 @@
     }
 
     function renderTask() {
-      const workflow = workflowMeta[currentWorkflow];
+      const workflow = selectedWorkflow();
+      const stage = selectedStage();
       const run = stateMeta[currentState];
-      const action = currentState === 'idle' ? workflow : run;
+      const action = currentState === 'idle' ? stage : run;
       const primaryClass = action.danger ? 'btn danger' : 'btn primary';
-      const secondary = (action.secondary || workflow.secondary).map(item => `<button class="btn">${item}</button>`).join('');
+      const secondary = (action.secondary || stage.secondary).map(item => `<button class="btn">${item}</button>`).join('');
       document.getElementById('page-task').innerHTML = `
         <div class="page-head">
           <div>
-            <h1>${action.title || workflow.title}</h1>
-            <p>${action.message || workflow.message}</p>
+            <h1>工作台</h1>
+            <p>多个 workflow 可以同时推进。选中一个 workflow 后，再查看它的 stage、重复 runs 和 FPA 版本。</p>
           </div>
           <div class="btn-row">
-            <button class="${primaryClass}">${action.primary || workflow.primary}</button>
+            ${badge(`${workflows.filter(item => item.runState === 'running').length} 个运行中`, 'accent')}
+            ${badge(`${workflows.filter(item => item.stage === 'fpa_review').length} 个 FPA 审阅中`, 'warning')}
+            ${badge(`${workflows.filter(item => item.runState === 'error').length} 个出错`, 'danger')}
+          </div>
+        </div>
+        <div class="workflow-list">
+          ${workflows.map(item => {
+            const itemStage = workflowMeta[item.stage] || workflowMeta.not_started;
+            return `
+              <button class="workflow-row ${item.id === currentWorkflow ? 'active' : ''}" data-workflow-pick="${item.id}">
+                <span class="workflow-main"><strong>${item.name}</strong><span>${item.latestRun}</span></span>
+                <span>${badge(itemStage.label, itemStage.badge)}</span>
+                <span class="workflow-meta">${item.fpaVersion}</span>
+                <span class="workflow-meta">${item.next}</span>
+                <span class="workflow-meta">${item.updated}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+        <div class="page-head">
+          <div>
+            <h1>${workflow.name} · ${action.title || stage.title}</h1>
+            <p>${action.message || stage.message}</p>
+          </div>
+          <div class="btn-row">
+            <button class="${primaryClass}">${action.primary || stage.primary}</button>
             ${secondary}
           </div>
         </div>
         <div class="summary-grid">
-          <div class="summary-cell"><span>Workflow</span><strong>${badge(workflow.label, workflow.badge)}</strong></div>
+          <div class="summary-cell"><span>Workflow</span><strong>${workflow.name}</strong></div>
+          <div class="summary-cell"><span>阶段</span><strong>${badge(stage.label, stage.badge)}</strong></div>
           <div class="summary-cell"><span>当前 Run</span><strong>${badge(run.label, run.badge)}</strong></div>
-          <div class="summary-cell"><span>下一步</span><strong>${workflow.next}</strong></div>
-          <div class="summary-cell"><span>最近运行</span><strong>${currentState === 'idle' ? 'gen-fpa · 已完成' : run.step}</strong></div>
-          <div class="summary-cell"><span>产物</span><strong>${currentWorkflow === 'not_started' ? '-' : 'FPA + 中间产物'}</strong></div>
+          <div class="summary-cell"><span>最近运行</span><strong>${workflow.latestRun}</strong></div>
+          <div class="summary-cell"><span>FPA 版本</span><strong>${workflow.fpaVersion}</strong></div>
         </div>
         <div class="annotations">
-          ${currentWorkflow === 'cosmic_ready' ? '<div class="annotation warning"><strong>!</strong><div><strong>等待下一次 run</strong><p>gen-fpa run 已结束。点击“生成 COSMIC”时应启动新的 gen-cosmic run，而不是让旧任务长期运行。</p></div></div>' : ''}
+          ${workflow.stage === 'fpa_review' ? '<div class="annotation warning"><strong>!</strong><div><strong>FPA 可重复生成</strong><p>gen-fpa #3 已结束并生成 FPA v3。用户可以确认当前版本，也可以继续重新生成 FPA v4。</p></div></div>' : ''}
+          ${workflow.stage === 'cosmic_ready' ? `<div class="annotation warning"><strong>!</strong><div><strong>等待下一次 run</strong><p>${workflow.fpaVersion} 已确认。点击“生成 COSMIC”时应启动新的 gen-cosmic run，而不是让旧任务长期运行。</p></div></div>` : ''}
           ${currentState === 'error' ? '<div class="annotation danger"><strong>!</strong><div><strong>检查安装包数据保护失败</strong><p>data.enc 未被打包，建议先运行发布包检查脚本。</p></div></div>' : ''}
           <div class="annotation info"><strong>i</strong><div><strong>当前 FPA 策略</strong><p>严格 FPA / 规则优先 / rule_set: default_strict。</p></div></div>
         </div>
         <div class="box" style="margin-top:16px">
-          <div class="box-head"><strong>Workflow 进展</strong><span class="date">${workflow.label} / ${run.label}</span></div>
-          <div class="step-list">${stepData.slice(0, 4).map(renderStep).join('')}</div>
+          <div class="box-head"><strong>${workflow.name} 进展</strong><span class="date">${stage.label} / ${workflow.fpaVersion}</span></div>
+          <div class="step-list">${stepData.slice(0, 6).map(renderStep).join('')}</div>
         </div>
       `;
     }
@@ -1504,11 +1655,13 @@
     }
 
     function renderSteps() {
+      const workflow = selectedWorkflow();
+      const stage = selectedStage();
       document.getElementById('page-steps').innerHTML = `
         <div class="page-head">
           <div>
-            <h1>垂直行业营销 workflow</h1>
-            <p>分步 runs 日志：每次 run 独立结束，人工审阅阶段可长期停留。</p>
+            <h1>${workflow.name} workflow</h1>
+            <p>分步 runs 日志：同一阶段允许重复运行，例如 gen-fpa #1、#2、#3。</p>
           </div>
           <div class="btn-row">
             <input class="field" id="logSearch" type="search" placeholder="搜索日志" />
@@ -1518,7 +1671,7 @@
         <div class="box">
           <div class="box-head">
             <strong>项目 workflow / 分步 runs</strong>
-            <span>${badge(workflowMeta[currentWorkflow].label, workflowMeta[currentWorkflow].badge)}</span>
+            <span>${badge(stage.label, stage.badge)}</span>
           </div>
           <div class="step-list">${stepData.map(renderStep).join('')}</div>
         </div>
@@ -1530,13 +1683,13 @@
         <div class="page-head">
           <div>
             <h1>全部 workflow 与 runs</h1>
-            <p>借鉴 Actions runs 列表：同一项目下聚合 gen-fpa、gen-cosmic、gen-list 等多次运行。</p>
+            <p>借鉴 Actions runs 列表：同一项目下聚合多次 gen-fpa、gen-cosmic、gen-list 等运行。</p>
           </div>
           <input class="field" style="max-width:320px" type="search" placeholder="筛选运行记录" />
         </div>
         <div class="box">
           <div class="box-head">
-            <strong>垂直行业营销 workflow · ${runs.length} 条记录</strong>
+            <strong>全部 workflow · ${runs.length} 条记录</strong>
             <div class="btn-row">
               <button class="btn">状态</button>
               <button class="btn">模式</button>
@@ -1565,13 +1718,15 @@
 
     function renderFpa() {
       const selected = selectedFpa();
+      const workflow = selectedWorkflow();
       document.getElementById('page-fpa').innerHTML = `
         <div class="page-head">
           <div>
             <h1>FPA 审阅</h1>
-            <p>高密度列表扫读，右侧详情查看计算依据说明；移动端自动切成卡片。</p>
+            <p>${workflow.name} · ${workflow.fpaVersion}。高密度列表扫读，右侧详情查看计算依据说明。</p>
           </div>
           <div class="btn-row">
+            ${workflow.fpaVersions.map(version => `<button class="btn ${version === workflow.fpaVersion ? 'primary' : ''}">${version}</button>`).join('')}
             ${badge('1 个异常项', 'warning')}
             ${badge('5 个新增/修改功能点', 'accent')}
           </div>
@@ -1684,6 +1839,15 @@
           bindDynamicEvents();
         };
       });
+      document.querySelectorAll('[data-workflow-pick]').forEach(button => {
+        button.onclick = () => {
+          currentWorkflow = button.dataset.workflowPick;
+          currentState = selectedWorkflow().runState;
+          document.querySelectorAll('[data-workflow]').forEach(item => item.classList.toggle('active', item.dataset.workflow === currentWorkflow));
+          document.querySelectorAll('[data-state]').forEach(item => item.classList.toggle('active', item.dataset.state === currentState));
+          renderAll();
+        };
+      });
       const logSearch = document.getElementById('logSearch');
       if (logSearch) {
         logSearch.oninput = () => {
@@ -1723,20 +1887,22 @@
     document.querySelectorAll('[data-workflow]').forEach(button => {
       button.addEventListener('click', () => {
         currentWorkflow = button.dataset.workflow;
+        currentState = selectedWorkflow().runState;
         document.querySelectorAll('[data-workflow]').forEach(item => {
           item.classList.toggle('active', item === button);
         });
+        document.querySelectorAll('[data-state]').forEach(item => item.classList.toggle('active', item.dataset.state === currentState));
         renderAll();
       });
     });
 
     document.getElementById('resetButton').addEventListener('click', () => {
       currentPage = 'task';
-      currentWorkflow = 'cosmic_ready';
+      currentWorkflow = 'vertical_marketing';
       currentState = 'idle';
       currentFpaId = 4;
       document.body.dataset.density = 'comfortable';
-      document.querySelectorAll('[data-workflow]').forEach(item => item.classList.toggle('active', item.dataset.workflow === 'cosmic_ready'));
+      document.querySelectorAll('[data-workflow]').forEach(item => item.classList.toggle('active', item.dataset.workflow === 'vertical_marketing'));
       document.querySelectorAll('[data-state]').forEach(item => item.classList.toggle('active', item.dataset.state === 'idle'));
       renderAll();
     });
