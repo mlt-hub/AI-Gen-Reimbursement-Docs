@@ -81,6 +81,16 @@ user_prompt: <profile>_up
 
 `default-profile` 必须是非空字符串并存在于 `profiles`。profile entry 必须显式配置 `kind`，且只允许 `strict_fpa`、`unified_ui`、`ui_api_mapping`。
 
+## Rule Set 规则段
+
+`keyword_rules` 和 `type_mapping_rules` 都是按关键词辅助判断 FPA 类型，但用途不同。
+
+`keyword_rules` 是事务动作关键词规则，主要用于 `EI/EQ/EO`：导出、报表、下载等通常映射为 `EO`；查询、查看、检索等通常映射为 `EQ`；新增、提交、保存、导入等通常映射为 `EI`。它适合描述“这个功能过程动作像哪类事务功能”。
+
+`type_mapping_rules` 是更通用的直接类型映射，支持 `EI/EQ/EO/ILF/EIF`。它适合项目级特例、业务对象或数据组边界，例如“本地报表快照”虽然包含“报表”，但如果本系统持久化维护它，可以直接映射为 `ILF`。
+
+在 `strict_fpa` 类型推断中，`type_mapping_rules` 会先于普通事务关键词判断生效，用来覆盖少量明确项目口径；普通动作词仍优先放在 `keyword_rules` 中维护。
+
 ## Strategy
 
 ```text

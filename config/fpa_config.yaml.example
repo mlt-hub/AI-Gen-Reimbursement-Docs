@@ -206,6 +206,9 @@ user_prompt_sets:
     {"rows":[{"name":"<功能点名称>","type":"EI/ILF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":""}]}
 
 rule_sets:
+  # type_mapping_rules：直接把关键词映射到 EI/EQ/EO/ILF/EIF，适合项目级特例、业务对象或数据组边界。
+  # keyword_rules：事务动作关键词规则，主要用于 EI/EQ/EO，例如新增/查询/导出。
+  # strict_fpa 类型推断中，type_mapping_rules 先于普通事务关键词判断，可用于覆盖明确特例。
   # unified_ui 的默认规则集。
   # 适合继续使用报账材料中的模板友好表达，例如界面开发、逻辑处理开发、查询处理开发。
   unified_ui_rs:
