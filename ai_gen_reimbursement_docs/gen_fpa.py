@@ -50,6 +50,7 @@ RULE_HITS_KEY = "_规则命中详情"
 CONFIG_WARNING_PREFIX = "FPA 配置 warning:"
 EXPLANATION_REQUIRED_LABELS = ("来源场景：", "业务数据：", "业务规则：", "计算说明：")
 EXPLANATION_MISSING_HINTS = ("未识别到", "未明确说明", "需求未明确说明")
+FPA_PROJECT_DESCRIPTION_MAX_CHARS = 5000
 EXPLANATION_TABLE_COUNT_HINTS = ("按后台数据库变更的表个数计量", "按数据库表个数计量", "按表个数计量")
 
 
@@ -1148,8 +1149,36 @@ def _build_domain_context(meta: dict[str, str]) -> dict[str, object]:
         "功能用户-接收者判定",
     ]
     context = {k: meta.get(k, "") for k in keys if meta.get(k)}
-    context.update(load_optional_fpa_domain_context())
+    configured_context = dict(load_optional_fpa_domain_context())
+    configured_context.pop("project_description", None)
+    context.update(configured_context)
+    project_description = _build_project_description_from_work_order(meta)
+    if project_description:
+        context["project_description"] = project_description
     return context
+
+
+def _first_meta_value(meta: dict[str, str], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = str(meta.get(key, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _build_project_description_from_work_order(meta: dict[str, str]) -> str:
+    title = _first_meta_value(meta, ("工单标题", "1、工单需求-元数据录入.工单标题"))
+    content = _first_meta_value(meta, ("工单内容", "1、工单需求-元数据录入.工单内容"))
+    parts: list[str] = []
+    if title:
+        parts.append(f"工单标题：{title}")
+    if content:
+        parts.append(f"工单内容：{content}")
+    description = "\n".join(parts).strip()
+    if len(description) <= FPA_PROJECT_DESCRIPTION_MAX_CHARS:
+        return description
+    truncated = description[:FPA_PROJECT_DESCRIPTION_MAX_CHARS].rstrip()
+    return f"{truncated}\n（工单内容已截断，完整内容以功能清单录入模板为准。）"
 
 
 def _fpa_ai_cache_key(

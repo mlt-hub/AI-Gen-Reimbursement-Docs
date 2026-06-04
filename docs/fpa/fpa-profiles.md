@@ -81,6 +81,12 @@ user_prompt: <profile>_up
 
 `default-profile` 必须是非空字符串并存在于 `profiles`。profile entry 必须显式配置 `kind`，且只允许 `strict_fpa`、`unified_ui`、`ui_api_mapping`。
 
+## Domain Context
+
+FPA AI prompt 会把部分上下文放入 `payload_json.domain_context`。其中 `project_description` 由功能清单录入模板中的 `工单标题` 和 `工单内容` 自动拼成；不读取 `建设目标`、`建设必要性` 等 AI 生成字段，避免把生成结果再次作为 FPA 输入。
+
+`fpa_domain_context.json` 只维护可复用的领域边界信息，例如 `system_boundary`、`internal_data_groups`、`external_data_groups`、`external_services`。不要在该配置文件中维护 `project_description`；即使出现同名字段，FPA prompt 也会忽略配置值，优先使用 Excel 工单标题和工单内容。
+
 ## Rule Set 规则段
 
 `keyword_rules` 和 `type_mapping_rules` 都是按关键词辅助判断 FPA 类型，但用途不同。

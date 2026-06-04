@@ -6,6 +6,8 @@ import pytest
 
 from ai_gen_reimbursement_docs.config_utils import FpaConfigError, FpaPromptConfigError
 from ai_gen_reimbursement_docs.gen_fpa import (
+    FPA_PROJECT_DESCRIPTION_MAX_CHARS,
+    _build_domain_context,
     _extract_json_obj,
     _fpa_ai_cache_key,
     _group_rows_for_audit,
@@ -62,6 +64,49 @@ def _rows():
             "功能过程描述": "按行业名称查询垂直行业列表。",
         },
     ]
+
+
+def test_build_domain_context_adds_project_description_from_work_order(monkeypatch):
+    monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.load_optional_fpa_domain_context", lambda: {})
+    context = _build_domain_context({
+        "工单标题": "供应商协同优化",
+        "工单内容": "围绕供应商协同关系维护和查询能力建设。",
+        "建设目标": "AI 生成目标不应进入 FPA 上下文。",
+        "建设必要性": "AI 生成必要性不应进入 FPA 上下文。",
+    })
+
+    assert context["project_description"] == "工单标题：供应商协同优化\n工单内容：围绕供应商协同关系维护和查询能力建设。"
+    assert "建设目标" not in context["project_description"]
+    assert "建设必要性" not in context["project_description"]
+
+
+def test_build_domain_context_uses_prefixed_work_order_keys(monkeypatch):
+    monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.load_optional_fpa_domain_context", lambda: {})
+    context = _build_domain_context({
+        "1、工单需求-元数据录入.工单标题": "行业管理建设",
+        "1、工单需求-元数据录入.工单内容": "建设行业管理配置能力。",
+    })
+
+    assert context["project_description"] == "工单标题：行业管理建设\n工单内容：建设行业管理配置能力。"
+
+
+def test_build_domain_context_ignores_configured_project_description(monkeypatch):
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.config_utils.load_optional_fpa_domain_context",
+        lambda: {"project_description": "配置文件不作为项目说明来源", "system_boundary": "本系统边界。"},
+    )
+    context = _build_domain_context({"工单标题": "模板工单标题"})
+
+    assert context["project_description"] == "工单标题：模板工单标题"
+    assert context["system_boundary"] == "本系统边界。"
+
+
+def test_build_domain_context_truncates_long_work_order_content(monkeypatch):
+    monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.load_optional_fpa_domain_context", lambda: {})
+    context = _build_domain_context({"工单内容": "长" * (FPA_PROJECT_DESCRIPTION_MAX_CHARS + 100)})
+
+    assert len(context["project_description"]) > FPA_PROJECT_DESCRIPTION_MAX_CHARS
+    assert context["project_description"].endswith("（工单内容已截断，完整内容以功能清单录入模板为准。）")
 
 
 def _custom_default_rule_set() -> FpaRuleSetConfig:
@@ -1278,7 +1323,14 @@ def test_fpa_preview_prompt_includes_project_domain_context(monkeypatch, tmp_pat
     xlsx.write_bytes(b"placeholder")
     monkeypatch.setattr(
         "ai_gen_reimbursement_docs.gen_fpa.read_base_data_from_excel",
-        lambda path: {"tree_rows": _rows(), "meta": _meta()},
+        lambda path: {
+            "tree_rows": _rows(),
+            "meta": {
+                **_meta(),
+                "工单标题": "供应商协同优化",
+                "工单内容": "围绕供应商协同关系维护和查询能力建设。",
+            },
+        },
     )
     monkeypatch.setattr(
         "ai_gen_reimbursement_docs.gen_fpa._call_llm",
@@ -1309,6 +1361,7 @@ def test_fpa_preview_prompt_includes_project_domain_context(monkeypatch, tmp_pat
 
     prompt = result["debug"]["user_prompt"]
     assert '"子系统（模块）": "测试系统"' in prompt
+    assert '"project_description": "工单标题：供应商协同优化\\n工单内容：围绕供应商协同关系维护和查询能力建设。"' in prompt
     assert '"system_boundary": "本系统维护供应商协同关系，不维护供应商主档。"' in prompt
     assert '"name": "供应商协同关系"' in prompt
     assert '"name": "供应商档案"' in prompt
