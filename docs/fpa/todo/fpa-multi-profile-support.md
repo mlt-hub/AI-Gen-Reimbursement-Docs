@@ -19,7 +19,7 @@ ui_api_mapping
 
 ### strict_fpa
 
-严格 FPA 口径。按数据功能和事务功能拆分，不按页面、按钮、弹窗、接口或数据库表字段拆分。对应现在的strict_fpa。
+严格 FPA 口径。按数据功能和事务功能拆分，不按页面、按钮、弹窗、接口或数据库表字段拆分。允许通过 rule_set 做项目级规则扩展；扩展为空时仍走内置 strict_fpa 默认规则和 AI 约束，不等于 AI-only。
 
 ### unified_ui
 
@@ -27,7 +27,7 @@ ui_api_mapping
 
 ### multi_uis
 
-多界面口径。允许同一三级模块按独立页面、独立业务对象、独立业务流程或独立用户端拆分为多条界面类功能点；每条多界面拆分行必须给出可审阅的拆分理由，拆分理由记录在 check 中，不强制进入用户可见 `split_reason` 字段。
+多界面口径。允许同一三级模块按独立页面、独立业务对象、独立业务流程或独立用户端拆分为多条界面类功能点；每条多界面拆分行必须给出可审阅的拆分理由，拆分理由记录在 check 中，不强制进入用户可见 `split_reason` 字段。界面开发行统一为 EI，并继续补充非界面业务动作行；非界面业务动作行沿用 `unified_ui` 的类型规则。
 
 ### ui_api_mapping
 
@@ -122,31 +122,40 @@ profiles:
   strict_fpa:
     kind: strict_fpa
     strategy: ai_first
-    rule_set: strict_fpa_default
-    core_rules: strict_fpa
-    system_prompt: strict_fpa
-    user_prompt: strict_fpa
+    rule_set: strict_fpa_rs
+    core_rules: strict_fpa_cr
+    system_prompt: strict_fpa_sp
+    user_prompt: strict_fpa_up
   unified_ui:
     kind: unified_ui
     strategy: rules_first
-    rule_set: unified_ui_default
-    core_rules: unified_ui
-    system_prompt: unified_ui
-    user_prompt: unified_ui
+    rule_set: unified_ui_rs
+    core_rules: unified_ui_cr
+    system_prompt: unified_ui_sp
+    user_prompt: unified_ui_up
   multi_uis:
     kind: unified_ui
     strategy: rules_first
-    rule_set: multi_uis_default
-    core_rules: multi_uis
-    system_prompt: multi_uis
-    user_prompt: multi_uis
+    rule_set: multi_uis_rs
+    core_rules: multi_uis_cr
+    system_prompt: multi_uis_sp
+    user_prompt: multi_uis_up
   ui_api_mapping:
     kind: ui_api_mapping
     strategy: rules_first
-    rule_set: ui_api_mapping_default
-    core_rules: ui_api_mapping
-    system_prompt: ui_api_mapping
-    user_prompt: ui_api_mapping
+    rule_set: ui_api_mapping_rs
+    core_rules: ui_api_mapping_cr
+    system_prompt: ui_api_mapping_sp
+    user_prompt: ui_api_mapping_up
+```
+
+命名约定：
+
+```text
+rule_set: <profile>_rs
+core_rules: <profile>_cr
+system_prompt: <profile>_sp
+user_prompt: <profile>_up
 ```
 
 ## 实施切片
@@ -194,9 +203,13 @@ ui_api_mapping：界面接口映射口径
 - `custom_rules` 由 `unified_ui` 完全替代，不保留兼容别名，不自动迁移旧配置。
 - `default-profile` 默认值为 `strict_fpa`。
 - 初始化配置保留完整 4 个 profile，用户可直接切换默认 profile。
+- 默认 strategy：`strict_fpa` 使用 `ai_first`，`unified_ui`、`multi_uis`、`ui_api_mapping` 使用 `rules_first`。
+- 配置键命名采用 `<profile>_rs`、`<profile>_cr`、`<profile>_sp`、`<profile>_up`。
+- `strict_fpa` 允许 rule_set 扩展；扩展为空时仍走内置 strict_fpa 默认规则和 AI 约束，不等于 AI-only。
 - `ui_api_mapping` 的明确接口/后端调用行只包含输入中明确出现的接口、服务、调用、同步或外部系统交互；普通保存、提交、删除、审批等后端动作不额外生成第二条后端处理行。
 - `ui_api_mapping` 类型规则：界面开发行统一 EI，接口开发行统一 ILF，明确接口/后端调用行统一 ILF。
 - `multi_uis` 保持四类拆分理由：独立页面、独立业务对象、独立业务流程、独立用户端；拆分理由记录在 check 中，不强制进入用户可见 `split_reason` 字段。
+- `multi_uis` 界面开发行统一 EI，并补充非界面业务动作行；非界面业务动作行沿用 `unified_ui` 的类型规则。
 - profile 实现采用“配置驱动 + 少量行为 kind”，保留已有独立类逻辑作为 kind 行为实现。
 
 ## 验收标准
@@ -209,6 +222,8 @@ ui_api_mapping：界面接口映射口径
 - Web options 接口返回 4 个 profile。
 - 现有 `strict_fpa` 行为不回退。
 - `ui_api_mapping` 生成的功能过程界面开发行为 EI，功能过程接口开发行为 ILF，明确接口/后端调用行为 ILF。
+- `multi_uis` 生成的界面开发行为 EI，并保留非界面业务动作行。
+- 示例配置使用 `_rs/_cr/_sp/_up` 命名，不再使用 `_default` 作为默认 rule_set 后缀。
 
 ## 测试建议
 
