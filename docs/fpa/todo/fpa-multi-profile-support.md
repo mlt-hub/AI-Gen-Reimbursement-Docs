@@ -140,7 +140,9 @@ ui_api_mapping
 
 - `strict_fpa` 的 EI/EQ/EO 事务功能行记录来源功能过程；ILF/EIF 数据功能行记录数据组识别来源，例如来自哪个功能过程、模块描述或外部系统描述。
 - `unified_ui` 和 `multi_uis` 的非界面业务动作行记录来源功能过程。
+- `unified_ui` 和 `multi_uis` 的非界面业务动作行在同一三级模块内同名时合并为 1 条，来源功能过程合并记录到 check/review 元数据；跨三级模块不合并。
 - `multi_uis` 的多界面拆分理由记录在 check/review 元数据中，不新增正式结果列。
+- `multi_uis` 的多界面开发行同名时不合并，在 check/review 元数据中提示同名多界面开发行。
 - `ui_api_mapping` 的功能过程默认界面开发行、功能过程默认接口开发行记录来源功能过程。
 - `ui_api_mapping` 的明确接口/后端调用行记录来源功能过程；同一三级模块内同名明确接口/后端调用行合并时，合并记录多个来源功能过程。
 - `ui_api_mapping` 的功能过程默认行不合并；同一三级模块内功能过程同名导致默认行同名时，在 check/review 元数据中提示输入存在同名功能过程或结果存在同名默认行。
@@ -264,6 +266,7 @@ ui_api_mapping：界面接口映射口径
 - `multi_uis` 保持四类拆分理由：独立页面、独立业务对象、独立业务流程、独立用户端；拆分理由记录在 check 中，不强制进入用户可见 `split_reason` 字段。
 - `multi_uis` 拆分理由使用现有 check/review 元数据记录，不新增正式结果列。
 - `multi_uis` 界面开发行统一 EI，并补充非界面业务动作行；非界面业务动作行沿用 `unified_ui` 的类型规则。
+- `multi_uis` 多界面开发行同名不合并，在 check/review 元数据中提示；`unified_ui` 和 `multi_uis` 非界面业务动作行同一三级模块内同名时合并，来源功能过程合并记录，跨三级模块不合并。
 - `ui_api_mapping` 的功能过程默认接口开发行与明确接口/后端调用行不去重，保留两类行。
 - `ui_api_mapping` 明确接口/后端调用行跨三级模块不去重；同一三级模块内同名明确接口/后端调用行合并为 1 条，来源功能过程合并记录。
 - `ui_api_mapping` 功能过程默认界面开发行和默认接口开发行不合并；同名功能过程导致默认行同名时，在 check/review 元数据中提示。
@@ -291,6 +294,8 @@ ui_api_mapping：界面接口映射口径
 - `ui_api_mapping` 显式后端交互词没有更具体接口名时，结果行主体保留原文动作短语。
 - `ui_api_mapping` 明确接口/后端调用行保留原文接口/服务名称主体，不主动追加“调用”后缀，也不主动删除原文已有的“调用/请求/对接/同步”等动词，并使用完整模块路径前缀。
 - `multi_uis` 生成的界面开发行为 EI，并保留非界面业务动作行。
+- `multi_uis` 同一三级模块内同名多界面开发行不合并，并在 check/review 元数据中提示。
+- `unified_ui` 和 `multi_uis` 同一三级模块内同名非界面业务动作行合并为 1 条，check/review 元数据合并来源功能过程；跨三级模块不合并。
 - `multi_uis` 拆分理由出现在 check/review 元数据中，不新增正式结果列。
 - `strict_fpa` 事务功能行、数据功能行，`unified_ui`/`multi_uis` 非界面业务动作行，`ui_api_mapping` 功能过程默认行和明确接口/后端调用行均记录来源到 check/review 元数据，不新增正式 Excel 列。
 - `strict_fpa` 数据功能行、`unified_ui`/`multi_uis` 非界面业务动作行、`ui_api_mapping` 所有行均使用完整模块路径前缀。
