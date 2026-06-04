@@ -130,6 +130,18 @@ ui_api_mapping
 - `multi_uis` 的多条界面开发行和非界面业务动作行。
 - `ui_api_mapping` 的功能过程界面开发行、功能过程接口开发行、明确接口/后端调用行。
 
+## 来源追溯元数据
+
+所有 profile 的结果行都必须记录来源信息到现有 check/review 元数据中，不新增正式 Excel 列。
+
+记录规则：
+
+- `strict_fpa` 的 EI/EQ/EO 事务功能行记录来源功能过程；ILF/EIF 数据功能行记录数据组识别来源，例如来自哪个功能过程、模块描述或外部系统描述。
+- `unified_ui` 和 `multi_uis` 的非界面业务动作行记录来源功能过程。
+- `multi_uis` 的多界面拆分理由记录在 check/review 元数据中，不新增正式结果列。
+- `ui_api_mapping` 的功能过程默认界面开发行、功能过程默认接口开发行记录来源功能过程。
+- `ui_api_mapping` 的明确接口/后端调用行记录来源功能过程；如果显式后端交互词没有更具体接口名，保留原文动作短语作为行名主体，例如“同步客户信息”“对接统一认证平台”。
+
 ## 配置目标
 
 `fpa_config.yaml` 示例结构：
@@ -250,6 +262,8 @@ ui_api_mapping：界面接口映射口径
 - `multi_uis` 界面开发行统一 EI，并补充非界面业务动作行；非界面业务动作行沿用 `unified_ui` 的类型规则。
 - `ui_api_mapping` 的功能过程默认接口开发行与明确接口/后端调用行不去重，保留两类行。
 - `ui_api_mapping` 的明确接口/后端调用行尽量保留原文接口/服务名称主体，不主动追加“调用”后缀，也不主动删除原文已有的“调用/请求/对接/同步”等动词，并加完整模块路径前缀。
+- `ui_api_mapping` 的显式后端交互词没有更具体接口名时，保留原文动作短语作为行名主体。
+- 所有 profile 的结果行来源信息记录在现有 check/review 元数据中，不新增正式 Excel 列。
 - 所有 profile、所有最终结果行名称都使用完整模块路径前缀：`【客户端类型】一级模块-二级模块-三级模块-功能点名称`。
 - profile 实现采用“配置驱动 + 少量行为 kind”，保留已有独立类逻辑作为 kind 行为实现。
 
@@ -266,9 +280,11 @@ ui_api_mapping：界面接口映射口径
 - `ui_api_mapping` 在功能过程明确写出接口调用时，仍同时保留默认接口开发行和明确接口/后端调用行。
 - `ui_api_mapping` 普通动作词“保存、提交、删除、审批、新增、修改”不会触发额外明确接口/后端调用行。
 - `ui_api_mapping` 同一功能过程出现多个明确接口/服务时，生成多条明确接口/后端调用行。
+- `ui_api_mapping` 显式后端交互词没有更具体接口名时，结果行主体保留原文动作短语。
 - `ui_api_mapping` 明确接口/后端调用行保留原文接口/服务名称主体，不主动追加“调用”后缀，也不主动删除原文已有的“调用/请求/对接/同步”等动词，并使用完整模块路径前缀。
 - `multi_uis` 生成的界面开发行为 EI，并保留非界面业务动作行。
 - `multi_uis` 拆分理由出现在 check/review 元数据中，不新增正式结果列。
+- `strict_fpa` 事务功能行、数据功能行，`unified_ui`/`multi_uis` 非界面业务动作行，`ui_api_mapping` 功能过程默认行和明确接口/后端调用行均记录来源到 check/review 元数据，不新增正式 Excel 列。
 - `strict_fpa` 数据功能行、`unified_ui`/`multi_uis` 非界面业务动作行、`ui_api_mapping` 所有行均使用完整模块路径前缀。
 - 示例配置使用 `_rs/_cr/_sp/_up` 命名，不再使用 `_default` 作为默认 rule_set 后缀。
 - 实施后的示例配置、测试 fixture、常规配置说明不得再引用旧 profile/config 键：`profiles.custom_rules`、`custom_rules_default`、`core_rules.custom_rules`、`system_prompt_sets.custom_rules`、`user_prompt_sets.custom_rules`、`strict_fpa_default`、`core_rules.strict_fpa`、`system_prompt_sets.strict_fpa`、`user_prompt_sets.strict_fpa`。迁移说明和错误提示测试可以引用旧键。
