@@ -899,6 +899,27 @@
       white-space: nowrap;
     }
 
+    .switcher-controls {
+      display: flex;
+      min-width: 0;
+      gap: 10px;
+      overflow-x: auto;
+    }
+
+    .switch-group {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .switch-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
     .segmented {
       display: flex;
       gap: 4px;
@@ -1130,10 +1151,21 @@
       .bottom-switcher {
         grid-template-columns: 1fr;
         gap: 6px;
+        position: static;
+        margin: 12px 10px 10px;
       }
 
       .bottom-label {
         display: none;
+      }
+
+      .switcher-controls {
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .switch-group {
+        min-width: 0;
       }
     }
   </style>
@@ -1182,70 +1214,120 @@
   </main>
 
   <div class="bottom-switcher">
-    <div class="bottom-label" id="bottomHint">底部切换栏：用来快速观察任务状态、密度和页面行为。</div>
-    <div class="segmented" aria-label="任务状态切换">
-      <button class="active" data-state="idle">就绪</button>
-      <button data-state="running">运行中</button>
-      <button data-state="waiting_input">等待确认</button>
-      <button data-state="ready_to_continue">待继续</button>
-      <button data-state="done">已完成</button>
-      <button data-state="error">出错</button>
-      <button data-state="compact">紧凑</button>
+    <div class="bottom-label" id="bottomHint">底部切换栏：分开观察项目 workflow 阶段、当前 run 状态和密度。</div>
+    <div class="switcher-controls">
+      <div class="switch-group">
+        <span class="switch-label">Workflow</span>
+        <div class="segmented" aria-label="Workflow 阶段切换">
+          <button data-workflow="not_started">待 FPA</button>
+          <button data-workflow="fpa_review">待确认 FPA</button>
+          <button class="active" data-workflow="cosmic_ready">待 COSMIC</button>
+          <button data-workflow="list_ready">待需求清单</button>
+          <button data-workflow="completed">已完成</button>
+        </div>
+      </div>
+      <div class="switch-group">
+        <span class="switch-label">Run</span>
+        <div class="segmented" aria-label="Run 状态切换">
+          <button class="active" data-state="idle">无运行</button>
+          <button data-state="running">运行中</button>
+          <button data-state="waiting_input">等待确认</button>
+          <button data-state="done">已完成</button>
+          <button data-state="error">出错</button>
+          <button data-state="compact">紧凑</button>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
+    const workflowMeta = {
+      not_started: {
+        label: '待生成 FPA',
+        badge: 'neutral',
+        title: '项目工作流尚未开始',
+        message: '真实业务通常先分步生成 FPA，而不是直接 gen-all。',
+        primary: '生成 FPA',
+        secondary: ['预览 FPA 功能点', '下载模板'],
+        next: 'gen-fpa',
+      },
+      fpa_review: {
+        label: '待确认 FPA',
+        badge: 'warning',
+        title: 'FPA 已生成，等待人工审阅',
+        message: '最近一次 run 已完成 gen-fpa。请审阅新增/修改功能点，并确认送审工作量。',
+        primary: '确认送审工作量',
+        secondary: ['打开 FPA 审阅', '打开交付物目录'],
+        next: 'review-fpa',
+      },
+      cosmic_ready: {
+        label: '待生成 COSMIC',
+        badge: 'purple',
+        title: 'FPA 已确认，下一步生成 COSMIC',
+        message: '后台没有长期运行。几天后回来时，应看到 workflow 停在待生成 COSMIC，而不是 run 仍在运行中。',
+        primary: '生成 COSMIC',
+        secondary: ['打开交付物目录', '新任务'],
+        next: 'gen-cosmic',
+      },
+      list_ready: {
+        label: '待生成需求清单',
+        badge: 'accent',
+        title: 'COSMIC 已完成，等待生成需求清单',
+        message: '同一个项目 workflow 下已有 gen-fpa 与 gen-cosmic 两次 run，下一步可生成项目需求清单。',
+        primary: '生成需求清单',
+        secondary: ['查看 COSMIC 产物', '生成需求说明书'],
+        next: 'gen-list',
+      },
+      completed: {
+        label: '已完成',
+        badge: 'success',
+        title: '项目工作流已完成',
+        message: '该项目需要的交付物已完成，历史记录中仍保留每一次分步 run。',
+        primary: '打开交付物目录',
+        secondary: ['下载交付物 .zip', '新任务'],
+        next: 'open-artifacts',
+      },
+    };
+
     const stateMeta = {
       idle: {
-        label: '就绪',
+        label: '无运行',
         badge: 'neutral',
-        title: '等待任务启动',
-        message: '选择功能清单输入来源后即可开始生成。这里不显示运行中，避免空闲态误导。',
-        primary: '开始生成',
-        secondary: ['预览 FPA 功能点', '下载模板'],
+        message: '当前没有后台 run，页面展示项目 workflow 的下一步。',
         step: '尚未启动',
       },
       running: {
         label: '运行中',
         badge: 'accent',
-        title: '生成任务正在执行',
-        message: '后台正在生成 FPA 工作量评估，日志按阶段折叠展示。',
+        title: '后台 run 正在执行',
+        message: '当前只表示这一次 run 正在运行，不跨天占用运行中状态。',
         primary: '停止',
         danger: true,
         secondary: ['查看 AI 交互'],
-        step: '生成 FPA 工作量评估',
+        step: '执行当前 run',
       },
       waiting_input: {
         label: '等待确认',
         badge: 'warning',
-        title: '等待确认送审工作量',
-        message: '任务短时间阻塞在当前页面，需要输入 FPA 核减后的工作量后继续。',
+        title: '当前 run 等待短时输入',
+        message: '仅用于当前页面内的短等待，例如确认数值后继续同一次 run。',
         primary: '提交确认',
         secondary: ['打开交付物目录', '取消任务'],
-        step: '等待人工确认',
-      },
-      ready_to_continue: {
-        label: '待继续',
-        badge: 'purple',
-        title: 'FPA 已完成，等待继续生成 COSMIC',
-        message: '这是可长期停留的检查点。后台没有继续运行，用户可以几天后再回来继续。',
-        primary: '继续生成 COSMIC',
-        secondary: ['打开交付物目录', '新任务'],
-        step: '停在 gen-fpa checkpoint',
+        step: '等待当前 run 输入',
       },
       done: {
         label: '已完成',
         badge: 'success',
-        title: '交付物已生成',
-        message: '全部选择的生成阶段已完成，可打开目录或下载交付物。',
+        title: '最近一次 run 已完成',
+        message: '当前后台 run 已结束，项目 workflow 可能还有下一步。',
         primary: '打开交付物目录',
         secondary: ['查看 AI 交互', '新任务'],
-        step: '全部完成',
+        step: '最近 run 完成',
       },
       error: {
         label: '出错',
         badge: 'danger',
-        title: '任务失败于发布包检查',
+        title: '最近一次 run 出错',
         message: '检查安装包数据保护时发现 data.enc 缺失。保留输入和中间产物，修正后可重新运行。',
         primary: '查看失败日志',
         secondary: ['打开交付物目录', '新任务'],
@@ -1254,20 +1336,21 @@
     };
 
     const stepData = [
-      { key: 'base', label: '生成基础数据', status: 'done', time: '18s', action: '已解析功能清单和模块树', log: '读取功能清单-录入模板.xlsx\n解析三级模块 12 个\n写入 0.1.gen-basedata-功能清单-模块树.md' },
-      { key: 'fpa', label: '生成 FPA 工作量评估', status: 'done', time: '49s', action: '已生成 FPA 工作量评估', log: '规则判定 24 条\nAI 补充 6 条\n写入 FPA工作量评估-输出模板.xlsx' },
-      { key: 'review', label: '等待确认送审工作量', status: 'wait', time: '-', action: '等待用户确认 FPA 核减后的工作量', log: 'FPA 合计 48.5 人日\n建议核减后工作量 42.0 人日\n等待用户确认后继续 gen-cosmic' },
-      { key: 'cosmic', label: '生成 COSMIC', status: 'pending', time: '-', action: '待继续', log: '该阶段将在用户点击继续生成 COSMIC 后启动。' },
-      { key: 'spec', label: '生成需求说明书', status: 'pending', time: '-', action: '待后续流程', log: '等待前序阶段完成。' },
-      { key: 'package', label: '写入交付物', status: 'pending', time: '-', action: '待后续流程', log: '等待前序阶段完成。' },
+      { key: 'basedata-run', label: 'run: gen-basedata', status: 'done', time: '18s', action: '已解析功能清单和模块树', log: '读取功能清单-录入模板.xlsx\n解析三级模块 12 个\n写入 0.1.gen-basedata-功能清单-模块树.md' },
+      { key: 'fpa-run', label: 'run: gen-fpa', status: 'done', time: '49s', action: '已生成 FPA 工作量评估', log: '规则判定 24 条\nAI 补充 6 条\n写入 FPA工作量评估-输出模板.xlsx\n本次 run 已结束。' },
+      { key: 'fpa-review', label: 'workflow: 人工审阅 FPA', status: 'wait', time: '-', action: '长期业务阶段，不占用后台线程', log: 'FPA 合计 48.5 人日\n建议核减后工作量 42.0 人日\n人工确认后，workflow 进入待生成 COSMIC。' },
+      { key: 'cosmic-run', label: 'run: gen-cosmic', status: 'pending', time: '-', action: '等待用户启动下一次 run', log: '用户点击“生成 COSMIC”后才会启动新的后台 run。' },
+      { key: 'list-run', label: 'run: gen-list', status: 'pending', time: '-', action: '待 COSMIC 完成后启动', log: '等待前序阶段完成。' },
+      { key: 'spec-run', label: 'run: gen-spec', status: 'pending', time: '-', action: '可按业务需要单独运行', log: 'SPEC 可以作为独立 run 运行，不强制绑在 gen-all。' },
     ];
 
     const runs = [
-      { status: 'success', title: '和乐业项目报账文档', desc: '本机任务 #39: 手动运行 by mlt-hub', branch: 'master', date: '6月4日 20:41', time: '5m 14s' },
-      { status: 'continue', title: '垂直行业营销 FPA 已完成', desc: '停在 gen-fpa checkpoint，等待继续 COSMIC', branch: 'ready', date: '6月3日 18:12', time: '49s' },
-      { status: 'success', title: '客户档案系统工作量评估', desc: '远程任务 #37: 上传功能清单 by alice', branch: 'remote', date: '6月2日 10:08', time: '3m 43s' },
-      { status: 'error', title: '支付退款项目报账文档', desc: '失败于发布包检查，缺少受保护数据文件', branch: 'master', date: '6月1日 22:33', time: '1m 36s' },
-      { status: 'cancelled', title: 'OA 审批系统需求说明书', desc: '用户停止于生成 SPEC 阶段', branch: 'local', date: '5月31日 09:52', time: '2m 05s' },
+      { status: 'success', title: '和乐业项目 / gen-all', desc: '本机任务 #39: 一键生成路径，所有阶段一次完成', branch: 'gen-all', date: '6月4日 20:41', time: '5m 14s' },
+      { status: 'success', title: '垂直行业营销 / gen-fpa', desc: 'workflow: 垂直行业营销 · FPA 工作量评估已完成', branch: 'gen-fpa', date: '6月3日 18:12', time: '49s' },
+      { status: 'continue', title: '垂直行业营销 / 待生成 COSMIC', desc: 'workflow 阶段，不是后台 run；可隔几天后启动 gen-cosmic', branch: 'workflow', date: '6月3日 18:13', time: '-' },
+      { status: 'success', title: '客户档案系统 / gen-cosmic', desc: '远程任务 #37: 以已确认 FPA 产物为输入', branch: 'gen-cosmic', date: '6月2日 10:08', time: '3m 43s' },
+      { status: 'error', title: '支付退款项目 / gen-list', desc: '失败于发布包检查，缺少受保护数据文件', branch: 'gen-list', date: '6月1日 22:33', time: '1m 36s' },
+      { status: 'cancelled', title: 'OA 审批系统 / gen-spec', desc: '用户停止于生成 SPEC 阶段', branch: 'gen-spec', date: '5月31日 09:52', time: '2m 05s' },
     ];
 
     const fpaRows = [
@@ -1282,12 +1365,13 @@
       { title: '严格 FPA', desc: '优先规则判定，AI 只补充说明。适合送审前保守估算。', tag: '推荐', kind: 'FPA' },
       { title: 'AI 补充 FPA', desc: '规则先行，AI 对模糊项补充类型和计算依据。', tag: '常用', kind: 'FPA' },
       { title: '快速预览', desc: '生成基础数据后快速预览新增/修改功能点，不写正式交付物。', tag: '预览', kind: 'Preview' },
-      { title: '继续 COSMIC', desc: '从 gen-fpa checkpoint 恢复，继续生成 COSMIC 工作量。', tag: '待继续', kind: 'COSMIC' },
+      { title: '生成 COSMIC', desc: '以同一项目 workflow 的 FPA 产物为输入，启动一次新的 gen-cosmic run。', tag: '下一步', kind: 'COSMIC' },
       { title: '仅生成 SPEC', desc: '跳过工作量评估，仅按功能清单生成需求章节。', tag: '高级', kind: 'SPEC' },
       { title: '失败诊断', desc: '保留输入和日志，重新运行失败阶段并输出诊断摘要。', tag: '诊断', kind: 'Debug' },
     ];
 
     let currentPage = 'task';
+    let currentWorkflow = 'cosmic_ready';
     let currentState = 'idle';
     let currentFpaId = 4;
 
@@ -1308,6 +1392,7 @@
       const historyActive = currentPage === 'history' ? 'active' : '';
       const fpaActive = currentPage === 'fpa' ? 'active' : '';
       const stepsActive = currentPage === 'steps' ? 'active' : '';
+      const workflow = workflowMeta[currentWorkflow];
       document.getElementById('leftNav').innerHTML = `
         <h2 class="side-title">工作台 <button class="btn primary">新任务</button></h2>
         <div class="side-card">
@@ -1319,10 +1404,10 @@
             <button class="side-link ${fpaActive}" data-jump="fpa"><span>FPA 审阅</span><span>5</span></button>
           </div>
           <div class="side-group">
-            <p class="side-label">检查点</p>
-            <button class="side-link"><span>gen-fpa 已完成</span><span>待继续</span></button>
-            <button class="side-link"><span>送审工作量确认</span><span>42.0</span></button>
-            <button class="side-link"><span>COSMIC</span><span>未开始</span></button>
+            <p class="side-label">Workflow</p>
+            <button class="side-link"><span>项目阶段</span><span>${workflow.label}</span></button>
+            <button class="side-link"><span>最近 run</span><span>${currentState === 'running' ? '执行中' : 'gen-fpa 已完成'}</span></button>
+            <button class="side-link"><span>下一步</span><span>${workflow.next}</span></button>
           </div>
           <div class="side-group">
             <p class="side-label">设置</p>
@@ -1335,18 +1420,24 @@
     }
 
     function renderRightContext() {
-      const meta = stateMeta[currentState];
+      const workflow = workflowMeta[currentWorkflow];
+      const run = stateMeta[currentState];
       document.getElementById('rightContext').innerHTML = `
         <div class="panel">
-          <div class="panel-title">当前状态</div>
-          <p>${badge(meta.label, meta.badge)}</p>
-          <p>${meta.message}</p>
+          <div class="panel-title">Workflow 阶段</div>
+          <p>${badge(workflow.label, workflow.badge)}</p>
+          <p>${workflow.message}</p>
+        </div>
+        <div class="panel">
+          <div class="panel-title">当前 Run</div>
+          <p>${badge(run.label, run.badge)}</p>
+          <p>${run.message}</p>
         </div>
         <div class="panel">
           <div class="panel-title">本轮验证点</div>
-          <p>1. gen-fpa 后是否应显示待继续。</p>
-          <p>2. 阶段日志是否比大块控制台更清楚。</p>
-          <p>3. FPA 详情是否应放右侧抽屉。</p>
+          <p>1. gen-all 是快捷方式，分步 workflow 是主路径。</p>
+          <p>2. gen-fpa 完成后 run 结束，workflow 等待下一步。</p>
+          <p>3. 几天后启动 gen-cosmic 应创建新的 run。</p>
         </div>
         <div class="panel">
           <div class="panel-title">产物摘要</div>
@@ -1358,34 +1449,36 @@
     }
 
     function renderTask() {
-      const meta = stateMeta[currentState];
-      const primaryClass = meta.danger ? 'btn danger' : 'btn primary';
-      const secondary = meta.secondary.map(item => `<button class="btn">${item}</button>`).join('');
+      const workflow = workflowMeta[currentWorkflow];
+      const run = stateMeta[currentState];
+      const action = currentState === 'idle' ? workflow : run;
+      const primaryClass = action.danger ? 'btn danger' : 'btn primary';
+      const secondary = (action.secondary || workflow.secondary).map(item => `<button class="btn">${item}</button>`).join('');
       document.getElementById('page-task').innerHTML = `
         <div class="page-head">
           <div>
-            <h1>${meta.title}</h1>
-            <p>${meta.message}</p>
+            <h1>${action.title || workflow.title}</h1>
+            <p>${action.message || workflow.message}</p>
           </div>
           <div class="btn-row">
-            <button class="${primaryClass}">${meta.primary}</button>
+            <button class="${primaryClass}">${action.primary || workflow.primary}</button>
             ${secondary}
           </div>
         </div>
         <div class="summary-grid">
-          <div class="summary-cell"><span>状态</span><strong>${badge(meta.label, meta.badge)}</strong></div>
-          <div class="summary-cell"><span>触发方式</span><strong>本机任务</strong></div>
-          <div class="summary-cell"><span>输入来源</span><strong>功能清单-录入模板.xlsx</strong></div>
-          <div class="summary-cell"><span>总耗时</span><strong>${currentState === 'idle' ? '-' : '49s'}</strong></div>
-          <div class="summary-cell"><span>产物</span><strong>${currentState === 'idle' ? '-' : '3 个文件'}</strong></div>
+          <div class="summary-cell"><span>Workflow</span><strong>${badge(workflow.label, workflow.badge)}</strong></div>
+          <div class="summary-cell"><span>当前 Run</span><strong>${badge(run.label, run.badge)}</strong></div>
+          <div class="summary-cell"><span>下一步</span><strong>${workflow.next}</strong></div>
+          <div class="summary-cell"><span>最近运行</span><strong>${currentState === 'idle' ? 'gen-fpa · 已完成' : run.step}</strong></div>
+          <div class="summary-cell"><span>产物</span><strong>${currentWorkflow === 'not_started' ? '-' : 'FPA + 中间产物'}</strong></div>
         </div>
         <div class="annotations">
-          ${currentState === 'ready_to_continue' ? '<div class="annotation warning"><strong>!</strong><div><strong>停在 gen-fpa checkpoint</strong><p>后台没有继续执行。用户确认送审工作量后，可以继续生成 COSMIC。</p></div></div>' : ''}
+          ${currentWorkflow === 'cosmic_ready' ? '<div class="annotation warning"><strong>!</strong><div><strong>等待下一次 run</strong><p>gen-fpa run 已结束。点击“生成 COSMIC”时应启动新的 gen-cosmic run，而不是让旧任务长期运行。</p></div></div>' : ''}
           ${currentState === 'error' ? '<div class="annotation danger"><strong>!</strong><div><strong>检查安装包数据保护失败</strong><p>data.enc 未被打包，建议先运行发布包检查脚本。</p></div></div>' : ''}
           <div class="annotation info"><strong>i</strong><div><strong>当前 FPA 策略</strong><p>严格 FPA / 规则优先 / rule_set: default_strict。</p></div></div>
         </div>
         <div class="box" style="margin-top:16px">
-          <div class="box-head"><strong>阶段进展</strong><span class="date">${meta.step}</span></div>
+          <div class="box-head"><strong>Workflow 进展</strong><span class="date">${workflow.label} / ${run.label}</span></div>
           <div class="step-list">${stepData.slice(0, 4).map(renderStep).join('')}</div>
         </div>
       `;
@@ -1414,8 +1507,8 @@
       document.getElementById('page-steps').innerHTML = `
         <div class="page-head">
           <div>
-            <h1>构建发布 #39</h1>
-            <p>阶段折叠日志：默认展示状态和耗时，展开后查看原始日志。</p>
+            <h1>垂直行业营销 workflow</h1>
+            <p>分步 runs 日志：每次 run 独立结束，人工审阅阶段可长期停留。</p>
           </div>
           <div class="btn-row">
             <input class="field" id="logSearch" type="search" placeholder="搜索日志" />
@@ -1424,8 +1517,8 @@
         </div>
         <div class="box">
           <div class="box-head">
-            <strong>build / 生成任务</strong>
-            <span>${badge(stateMeta[currentState].label, stateMeta[currentState].badge)}</span>
+            <strong>项目 workflow / 分步 runs</strong>
+            <span>${badge(workflowMeta[currentWorkflow].label, workflowMeta[currentWorkflow].badge)}</span>
           </div>
           <div class="step-list">${stepData.map(renderStep).join('')}</div>
         </div>
@@ -1436,14 +1529,14 @@
       document.getElementById('page-history').innerHTML = `
         <div class="page-head">
           <div>
-            <h1>全部任务</h1>
-            <p>借鉴 Actions runs 列表：按状态、任务类型和关键字复盘历史任务。</p>
+            <h1>全部 workflow 与 runs</h1>
+            <p>借鉴 Actions runs 列表：同一项目下聚合 gen-fpa、gen-cosmic、gen-list 等多次运行。</p>
           </div>
           <input class="field" style="max-width:320px" type="search" placeholder="筛选运行记录" />
         </div>
         <div class="box">
           <div class="box-head">
-            <strong>${runs.length} 次运行</strong>
+            <strong>垂直行业营销 workflow · ${runs.length} 条记录</strong>
             <div class="btn-row">
               <button class="btn">状态</button>
               <button class="btn">模式</button>
@@ -1536,7 +1629,7 @@
         <div class="page-head">
           <div>
             <h1>生成方案</h1>
-            <p>借鉴 Actions workflow templates：用卡片解释方案差异，不让用户只面对内部 id。</p>
+            <p>借鉴 Actions workflow templates：用卡片解释分步 run 与 gen-all 快捷路径的差异。</p>
           </div>
           <input class="field" style="max-width:320px" type="search" placeholder="搜索方案" />
         </div>
@@ -1547,8 +1640,8 @@
               <strong>${item.title}</strong>
               <p>${item.desc}</p>
               <div class="btn-row">
-                <button class="btn primary">${item.title === '继续 COSMIC' ? '继续' : '选择'}</button>
-                ${badge(item.tag, item.tag === '待继续' ? 'purple' : 'neutral')}
+                <button class="btn primary">${item.title === '生成 COSMIC' ? '启动' : '选择'}</button>
+                ${badge(item.tag, item.tag === '下一步' ? 'purple' : 'neutral')}
                 ${badge(item.kind, 'accent')}
               </div>
             </article>
@@ -1627,11 +1720,23 @@
       });
     });
 
+    document.querySelectorAll('[data-workflow]').forEach(button => {
+      button.addEventListener('click', () => {
+        currentWorkflow = button.dataset.workflow;
+        document.querySelectorAll('[data-workflow]').forEach(item => {
+          item.classList.toggle('active', item === button);
+        });
+        renderAll();
+      });
+    });
+
     document.getElementById('resetButton').addEventListener('click', () => {
       currentPage = 'task';
+      currentWorkflow = 'cosmic_ready';
       currentState = 'idle';
       currentFpaId = 4;
       document.body.dataset.density = 'comfortable';
+      document.querySelectorAll('[data-workflow]').forEach(item => item.classList.toggle('active', item.dataset.workflow === 'cosmic_ready'));
       document.querySelectorAll('[data-state]').forEach(item => item.classList.toggle('active', item.dataset.state === 'idle'));
       renderAll();
     });
