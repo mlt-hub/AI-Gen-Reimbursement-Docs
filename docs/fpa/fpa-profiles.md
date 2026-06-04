@@ -90,6 +90,10 @@ rules_only   仅规则，不调用 AI
 ai_only      仅 AI，不用规则兜底补行
 ```
 
+`ai_only` 的“仅 AI”只约束行生成和失败处理：系统不使用规则生成行，不追加 `rules_fallback` 补齐行，AI 调用失败、解析失败或被 AI 调用限制跳过时直接报错。
+
+即使选择 `ai_only`，profile 仍必须绑定有效 `rule_set`。该规则集仍用于配置校验、AI 结果后处理、非法类型兜底、明显类型冲突 warning、审核追踪和 AI cache key。合法 AI type 与规则建议冲突时，`ai_only` 保留 AI type，只记录 warning；AI 返回非法 type 时仍会用 profile/rule_set 推断出的类型兜底。
+
 `ui_api_mapping` 和 `multi_uis` 支持 `ai_only`；此时不会强制规则兜底生成默认行。
 
 ## Web 与 CLI
