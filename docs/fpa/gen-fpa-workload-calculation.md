@@ -32,6 +32,34 @@ adjustment_value:
   method: standard_fpa
   complexity_source: ai
   fallback_complexity: low
+  standard_fpa:
+    weights:
+      ILF:
+        low: 7
+        medium: 10
+        high: 15
+      EIF:
+        low: 5
+        medium: 7
+        high: 10
+      EI:
+        low: 3
+        medium: 4
+        high: 6
+      EO:
+        low: 4
+        medium: 5
+        high: 7
+      EQ:
+        low: 3
+        medium: 4
+        high: 6
+    data_function_complexity_matrix:
+      # ILF/EIF: DET + RET，按 docs/fpa/fpa-calculation-method.md 的数据功能矩阵配置。
+      # 具体结构由实现阶段确定，但必须完整表达 RET/DET 分段到 low/medium/high 的映射。
+    transaction_complexity_matrices:
+      # EI/EO/EQ: DET + FTR，按 docs/fpa/fpa-calculation-method.md 的事务功能矩阵配置。
+      # EI 与 EO/EQ 的 DET/FTR 分段不同，应分别配置。
 ```
 
 字段说明：
@@ -41,6 +69,9 @@ adjustment_value:
 | `method` | `legacy_workload` / `standard_fpa` | 决定 `调整值` 的计算口径。 |
 | `complexity_source` | `ai` / `explicit` / `default` | `standard_fpa` 下复杂度来源。当前推荐使用 `ai`。 |
 | `fallback_complexity` | `low` / `medium` / `high` | AI 或显式字段缺失时的兜底复杂度，默认建议为 `low`。 |
+| `standard_fpa.weights` | 类型到低/中/高权重表 | `standard_fpa` 下 `调整值（FP）` 的来源。 |
+| `standard_fpa.data_function_complexity_matrix` | DET/RET 到复杂度映射 | `ILF` / `EIF` 复杂度矩阵。 |
+| `standard_fpa.transaction_complexity_matrices` | DET/FTR 到复杂度映射 | `EI` / `EO` / `EQ` 复杂度矩阵。 |
 
 `adjustment_value` 是必填配置。缺少该配置、缺少 `legacy_workload.type_weights` 或缺少 `default` 权重时，应直接报配置错误。系统不提供代码内置的历史权重回退。
 
@@ -148,7 +179,9 @@ adjustment_value:
 
 ## standard_fpa 调整值规则
 
-`standard_fpa` 按 `docs/fpa/fpa-calculation-method.md` 中的 FPA 权重表计算 `调整值（FP）`。
+`standard_fpa` 按配置中的 FPA 复杂度矩阵和权重表计算 `调整值（FP）`。
+
+`docs/fpa/fpa-calculation-method.md` 描述标准 FPA 方法和建议矩阵，`fpa_config.yaml` 承载运行时实际采用的矩阵和权重。实现时不得把标准权重表或复杂度矩阵硬编码到代码中。
 
 ### AI 复杂度判定
 
@@ -182,12 +215,12 @@ AI 行输出建议包含：
 代码计算顺序：
 
 1. 根据 `类型` 判断数据功能还是事务功能。
-2. 如果存在有效的 DET + RET/FTR，按复杂度矩阵复算复杂度。
+2. 如果存在有效的 DET + RET/FTR，按配置中的复杂度矩阵复算复杂度。
 3. 如果指标缺失但存在 AI 输出的 `complexity`，使用 AI 输出复杂度。
 4. 如果复杂度仍缺失，使用配置中的 `fallback_complexity`。
-5. 根据类型和复杂度，从标准权重表得到 `调整值（FP）`。
+5. 根据类型和复杂度，从配置中的 `standard_fpa.weights` 得到 `调整值（FP）`。
 
-标准权重如下：
+标准权重配置示例如下：
 
 | 类型 | 低 | 中 | 高 |
 |---|---:|---:|---:|
@@ -196,6 +229,13 @@ AI 行输出建议包含：
 | EI | 3 | 4 | 6 |
 | EO | 4 | 5 | 7 |
 | EQ | 3 | 4 | 6 |
+
+实现约束：
+
+- 不允许在代码中硬编码 `ILF/EI/EO/EQ/EIF` 的低/中/高权重表。
+- 不允许在代码中硬编码 DET/RET/FTR 到低/中/高的复杂度矩阵。
+- 缺少 `standard_fpa.weights`、复杂度矩阵或必要类型/复杂度权重时，应直接报配置错误。
+- `docs/fpa/fpa-calculation-method.md` 中的标准表只能作为配置模板来源，不能作为代码内置默认值。
 
 ## check Excel 审计展示
 
@@ -264,5 +304,5 @@ FPA 工作量 = 调整值 × 要素数量
 其中：
 
 - `legacy_workload` 使用配置化简化权重；示例配置延续历史结果。
-- `standard_fpa` 由 AI 输出复杂度证据，代码按 FPA 矩阵复算复杂度和 FP 权重。
+- `standard_fpa` 由 AI 输出复杂度证据，代码按配置中的 FPA 矩阵复算复杂度并按配置权重计算 FP。
 - check Excel 展示复杂度、DET、RET、FTR、复杂度说明和调整值计算方式，保证人工审阅时可追溯。
