@@ -189,12 +189,21 @@ AI 不直接决定最终 `调整值（FP）`。AI 负责输出复杂度判定证
 
 生成 AI prompt 时，应从当前 `fpa_config.yaml` 中读取并注入以下运行时配置：
 
+- 当前业务上下文：当前模块、功能过程、功能过程描述、项目领域上下文、内部/外部数据组和外部服务上下文。
+- FPA 计数原则：用户视角、业务意图、系统边界、不要按按钮/页面/接口/数据库表/字段/代码组件计数。
 - FPA 类型说明：`ILF` / `EIF` / `EI` / `EO` / `EQ`。
+- DET / RET / FTR 识别口径。
+- 计算依据归类判定原则 `judgement_rules`。
 - `standard_fpa.data_function_complexity_matrix`。
 - `standard_fpa.transaction_complexity_matrices`。
 - `standard_fpa.weights`。
+- 输出 JSON schema 和不确定性处理规则。
 
 注入这些配置的目的，是让 AI 的 DET/RET/FTR 识别、复杂度初判和 `complexity_reason` 与当前项目配置口径一致。AI 不得依赖自身记忆中的 FPA 标准表，也不得编造 prompt 中没有提供的矩阵或权重。
+
+`rule_set_config` 不应作为完整结构注入 AI prompt。外部数据规则、内部数据规则、类型映射规则、关键词规则、覆盖规则、冲突规则和行规划规则属于代码规则/后处理路径，应继续由程序执行并进入 audit trace，而不是交给 AI 自行解释或模拟执行。
+
+在 `rules_first` 等需要 AI 复核或补充的场景中，可以把规则执行结果的摘要喂给 AI，例如“已有规则行覆盖了哪些功能过程”“仍缺少哪些类型的候选行”“为什么需要补充”。不应把完整规则配置表交给 AI。
 
 prompt 约束应明确：
 
@@ -202,6 +211,7 @@ prompt 约束应明确：
 你可以参考以下配置矩阵判断复杂度，但最终调整值由系统代码复算。
 不要自行编造未提供的复杂度矩阵或权重表。
 不要把你返回的 FP 作为最终调整值；如需说明 FP，只能作为解释性参考。
+不要模拟执行未提供的 rule_set_config；规则集由系统代码执行。
 如果输入证据不足，输出保守复杂度并说明不确定点。
 ```
 
