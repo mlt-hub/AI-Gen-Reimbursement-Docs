@@ -177,6 +177,14 @@ def _write_fpa_prompt_config(tmp_path, monkeypatch):
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: unified_ui
+adjustment_value:
+  method: legacy_workload
+  complexity_source: default
+  fallback_complexity: low
+  legacy_workload:
+    type_weights:
+      EI: 2
+      default: 1
 profiles:
   unified_ui:
     kind: unified_ui

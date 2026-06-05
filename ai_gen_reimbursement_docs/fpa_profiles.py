@@ -197,22 +197,15 @@ def group_tag(group: dict[str, object]) -> str:
 
 
 def adjust_value_for_type(fpa_type: str) -> int | float:
-    from ai_gen_reimbursement_docs.config_utils import (
-        DEFAULT_FPA_ADJUSTMENT_VALUE_CONFIG,
-        FpaConfigError,
-        load_fpa_adjustment_value_config,
-    )
+    from ai_gen_reimbursement_docs.config_utils import FpaConfigError, load_fpa_adjustment_value_config
 
-    try:
-        config = load_fpa_adjustment_value_config()
-    except FpaConfigError as exc:
-        if "未找到 FPA 配置文件" not in str(exc):
-            raise
-        config = DEFAULT_FPA_ADJUSTMENT_VALUE_CONFIG
+    config = load_fpa_adjustment_value_config()
+    if config.get("method") != "legacy_workload":
+        raise FpaConfigError("当前仅 legacy_workload 支持按类型权重计算调整值")
     legacy = config.get("legacy_workload", {})
-    type_weights = legacy.get("type_weights", {}) if isinstance(legacy, dict) else {}
+    type_weights = legacy["type_weights"] if isinstance(legacy, dict) else {}
     type_key = str(fpa_type or "").strip().upper()
-    value = type_weights.get(type_key, type_weights.get("default", 1)) if isinstance(type_weights, dict) else 1
+    value = type_weights[type_key] if type_key in type_weights else type_weights["default"]
     return int(value) if isinstance(value, float) and value.is_integer() else value
 
 

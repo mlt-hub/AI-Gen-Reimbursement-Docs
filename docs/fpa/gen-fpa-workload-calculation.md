@@ -42,7 +42,7 @@ adjustment_value:
 | `complexity_source` | `ai` / `explicit` / `default` | `standard_fpa` 下复杂度来源。当前推荐使用 `ai`。 |
 | `fallback_complexity` | `low` / `medium` / `high` | AI 或显式字段缺失时的兜底复杂度，默认建议为 `low`。 |
 
-`legacy_workload` 是兼容模式；未配置时应保持现有行为，避免既有结果突然变化。
+`adjustment_value` 是必填配置。缺少该配置、缺少 `legacy_workload.type_weights` 或缺少 `default` 权重时，应直接报配置错误。
 
 ## 字段来源
 
@@ -138,7 +138,7 @@ adjustment_value:
 - 优先读取当前 `类型` 对应的权重。
 - 当前 `类型` 未配置时读取 `default`。
 - `default` 必须配置，防止未知类型或新增类型没有兜底权重。
-- 未配置 `adjustment_value` 时，系统使用默认兼容权重 `EI=2`、`default=1`。
+- `adjustment_value` 不提供代码内置兼容回退；项目必须在配置文件中明确写出权重。
 
 ## standard_fpa 调整值规则
 
@@ -257,6 +257,6 @@ FPA 工作量 = 调整值 × 要素数量
 
 其中：
 
-- `legacy_workload` 使用配置化简化权重，默认兼容历史结果。
+- `legacy_workload` 使用配置化简化权重；示例配置延续历史结果。
 - `standard_fpa` 由 AI 输出复杂度证据，代码按 FPA 矩阵复算复杂度和 FP 权重。
 - check Excel 展示复杂度、DET、RET、FTR、复杂度说明和调整值计算方式，保证人工审阅时可追溯。

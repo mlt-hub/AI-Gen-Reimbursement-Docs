@@ -71,6 +71,14 @@ def _write_fpa_config(tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: unified_ui
+adjustment_value:
+  method: legacy_workload
+  complexity_source: default
+  fallback_complexity: low
+  legacy_workload:
+    type_weights:
+      EI: 2
+      default: 1
 profiles:
   unified_ui:
     kind: unified_ui
@@ -345,7 +353,7 @@ class TestLoadFpaProfile:
                 load_fpa_profile()
 
 class TestLoadFpaExecutionOptions:
-    def test_adjustment_value_config_defaults_to_legacy_weights(self, tmp_path):
+    def test_adjustment_value_config_requires_explicit_legacy_weights(self, tmp_path):
         _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             result = load_fpa_adjustment_value_config()
@@ -353,20 +361,36 @@ class TestLoadFpaExecutionOptions:
         assert result["method"] == "legacy_workload"
         assert result["legacy_workload"]["type_weights"] == {"EI": 2, "default": 1}
 
-    def test_adjustment_value_config_accepts_custom_legacy_weights(self, tmp_path):
+    def test_adjustment_value_config_rejects_missing_adjustment_value(self, tmp_path):
         _write_fpa_config(tmp_path)
         path = tmp_path / "fpa_config.yaml"
         path.write_text(
             path.read_text(encoding="utf-8").replace(
-                "default-profile: unified_ui",
-                """default-profile: unified_ui
-adjustment_value:
+                """adjustment_value:
   method: legacy_workload
   complexity_source: default
   fallback_complexity: low
   legacy_workload:
     type_weights:
-      EI: 5
+      EI: 2
+      default: 1
+""",
+                "",
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match="adjustment_value"):
+                load_fpa_adjustment_value_config()
+
+    def test_adjustment_value_config_accepts_custom_legacy_weights(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        path = tmp_path / "fpa_config.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                """      EI: 2
+      default: 1""",
+                """      EI: 5
       EO: 3
       default: 2""",
             ),
@@ -382,13 +406,9 @@ adjustment_value:
         path = tmp_path / "fpa_config.yaml"
         path.write_text(
             path.read_text(encoding="utf-8").replace(
-                "default-profile: unified_ui",
-                """default-profile: unified_ui
-adjustment_value:
-  method: legacy_workload
-  legacy_workload:
-    type_weights:
-      EI: 5
+                """      EI: 2
+      default: 1""",
+                """      EI: 5
       EO: 3
       default: 2""",
             ),
@@ -404,9 +424,16 @@ adjustment_value:
         path = tmp_path / "fpa_config.yaml"
         path.write_text(
             path.read_text(encoding="utf-8").replace(
-                "default-profile: unified_ui",
-                """default-profile: unified_ui
-adjustment_value:
+                """  method: legacy_workload
+  complexity_source: default
+  fallback_complexity: low
+  legacy_workload:
+    type_weights:
+      EI: 2
+      default: 1""",
+                """  method: legacy_workload
+  complexity_source: default
+  fallback_complexity: low
   legacy_workload:
     type_weights:
       EI: 5""",
