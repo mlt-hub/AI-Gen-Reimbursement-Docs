@@ -403,6 +403,20 @@ VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_FPA_JUDGEMENT_RULES_SOURCES = {"config", "template"}
 VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_FPA_TRANSACTION_TYPES = {"EI", "EQ", "EO"}
+VALID_FPA_ADJUSTMENT_METHODS = {"legacy_workload", "standard_fpa"}
+VALID_FPA_COMPLEXITY_SOURCES = {"ai", "explicit", "default"}
+VALID_FPA_COMPLEXITIES = {"low", "medium", "high"}
+DEFAULT_FPA_ADJUSTMENT_VALUE_CONFIG = {
+    "method": "legacy_workload",
+    "complexity_source": "default",
+    "fallback_complexity": "low",
+    "legacy_workload": {
+        "type_weights": {
+            "EI": 2,
+            "default": 1,
+        },
+    },
+}
 VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
 FPA_USER_PROMPT_PLACEHOLDERS = frozenset({"core_rules", "judgement_rules", "payload_json"})
 
@@ -789,6 +803,56 @@ def _validate_fpa_user_prompt_template(template_text: str, key_path: str) -> Non
         )
 
 
+def _validate_fpa_adjustment_value_config(raw: object) -> None:
+    if raw is None:
+        return
+    entry = _require_mapping(raw, "adjustment_value")
+
+    method = str(entry.get("method", DEFAULT_FPA_ADJUSTMENT_VALUE_CONFIG["method"]) or "").strip()
+    if method not in VALID_FPA_ADJUSTMENT_METHODS:
+        raise FpaConfigError(
+            f"未知 FPA adjustment_value.method: {method}，支持的 method: {', '.join(sorted(VALID_FPA_ADJUSTMENT_METHODS))}"
+        )
+
+    complexity_source = str(
+        entry.get("complexity_source", DEFAULT_FPA_ADJUSTMENT_VALUE_CONFIG["complexity_source"]) or ""
+    ).strip()
+    if complexity_source not in VALID_FPA_COMPLEXITY_SOURCES:
+        raise FpaConfigError(
+            "未知 FPA adjustment_value.complexity_source: "
+            f"{complexity_source}，支持的 complexity_source: {', '.join(sorted(VALID_FPA_COMPLEXITY_SOURCES))}"
+        )
+
+    fallback_complexity = str(
+        entry.get("fallback_complexity", DEFAULT_FPA_ADJUSTMENT_VALUE_CONFIG["fallback_complexity"]) or ""
+    ).strip()
+    if fallback_complexity not in VALID_FPA_COMPLEXITIES:
+        raise FpaConfigError(
+            "未知 FPA adjustment_value.fallback_complexity: "
+            f"{fallback_complexity}，支持的 fallback_complexity: {', '.join(sorted(VALID_FPA_COMPLEXITIES))}"
+        )
+
+    legacy = entry.get("legacy_workload")
+    if legacy is None:
+        return
+    legacy_entry = _require_mapping(legacy, "adjustment_value.legacy_workload")
+    type_weights = _require_mapping(legacy_entry.get("type_weights"), "adjustment_value.legacy_workload.type_weights")
+    if "default" not in type_weights:
+        raise FpaConfigError("FPA 配置无效：adjustment_value.legacy_workload.type_weights 必须包含 default")
+    for fpa_type, weight in type_weights.items():
+        type_key = str(fpa_type).strip()
+        if type_key != "default" and type_key.upper() not in VALID_FPA_TYPES:
+            raise FpaConfigError(
+                "FPA 配置无效：adjustment_value.legacy_workload.type_weights 包含非法类型: "
+                f"{fpa_type}"
+            )
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
+            raise FpaConfigError(
+                "FPA 配置无效：adjustment_value.legacy_workload.type_weights."
+                f"{fpa_type} 必须是非负数字"
+            )
+
+
 def validate_fpa_config(cfg: dict[str, object]) -> None:
     """Validate fpa_config.yaml structure and cross references."""
     if not isinstance(cfg, dict) or not cfg:
@@ -797,6 +861,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     judgement_rules_source = cfg.get("judgement_rules_source", "config")
     if not isinstance(judgement_rules_source, str) or judgement_rules_source.strip() not in VALID_FPA_JUDGEMENT_RULES_SOURCES:
         raise FpaConfigError(f"未知 FPA judgement_rules_source: {judgement_rules_source}")
+    _validate_fpa_adjustment_value_config(cfg.get("adjustment_value"))
 
     profiles = _require_mapping(cfg.get("profiles"), "profiles")
     core_rules = _require_mapping(cfg.get("core_rules"), "core_rules")
@@ -919,6 +984,29 @@ def load_fpa_config() -> dict[str, object]:
         raise FpaConfigError(f"FPA 配置为空：配置目录/{FPA_CONFIG_FILENAME}")
     validate_fpa_config(cfg)
     return cfg
+
+
+def load_fpa_adjustment_value_config() -> dict[str, object]:
+    """读取 FPA 调整值计算配置，未配置时返回 legacy_workload 默认权重。"""
+    cfg = load_fpa_config()
+    raw = cfg.get("adjustment_value")
+    result = json.loads(json.dumps(DEFAULT_FPA_ADJUSTMENT_VALUE_CONFIG))
+    if not isinstance(raw, dict):
+        return result
+
+    for key in ("method", "complexity_source", "fallback_complexity"):
+        if key in raw:
+            result[key] = str(raw.get(key) or result[key]).strip()
+
+    legacy = raw.get("legacy_workload")
+    if isinstance(legacy, dict):
+        type_weights = legacy.get("type_weights")
+        if isinstance(type_weights, dict):
+            result["legacy_workload"]["type_weights"] = {
+                str(fpa_type).strip().upper() if str(fpa_type).strip() != "default" else "default": weight
+                for fpa_type, weight in type_weights.items()
+            }
+    return result
 
 
 def load_fpa_judgement_rules_source() -> str:

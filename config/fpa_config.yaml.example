@@ -6,6 +6,18 @@
 default-profile: strict_fpa
 judgement_rules_source: config
 
+# FPA 调整值计算配置。
+# method=legacy_workload 时，调整值来自 legacy_workload.type_weights。
+# method=standard_fpa 时，调整值按标准 FPA 类型和复杂度权重表计算。
+adjustment_value:
+  method: legacy_workload
+  complexity_source: default
+  fallback_complexity: low
+  legacy_workload:
+    type_weights:
+      EI: 2
+      default: 1
+
 # strategy 支持 rules_first / ai_first / rules_only / ai_only。
 # ai_only 不使用规则生成或补齐行，AI 失败时直接报错；但 rule_set 仍用于
 # 配置校验、AI 结果后处理、非法类型兜底、冲突 warning、审核追踪和缓存 key。

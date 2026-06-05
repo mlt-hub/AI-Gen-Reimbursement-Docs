@@ -16,6 +16,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_cfp_formula,
     load_cosmic_warn_marker,
     load_fpa_reduced_use_workload,
+    load_fpa_adjustment_value_config,
     load_fpa_profile,
     load_fpa_rule_set,
     load_fpa_strategy,
@@ -33,6 +34,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     resolve_api_key,
     _read_env_value,
 )
+from ai_gen_reimbursement_docs.fpa_profiles import adjust_value_for_type
 
 
 def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_path):
@@ -343,6 +345,78 @@ class TestLoadFpaProfile:
                 load_fpa_profile()
 
 class TestLoadFpaExecutionOptions:
+    def test_adjustment_value_config_defaults_to_legacy_weights(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            result = load_fpa_adjustment_value_config()
+
+        assert result["method"] == "legacy_workload"
+        assert result["legacy_workload"]["type_weights"] == {"EI": 2, "default": 1}
+
+    def test_adjustment_value_config_accepts_custom_legacy_weights(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        path = tmp_path / "fpa_config.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "default-profile: unified_ui",
+                """default-profile: unified_ui
+adjustment_value:
+  method: legacy_workload
+  complexity_source: default
+  fallback_complexity: low
+  legacy_workload:
+    type_weights:
+      EI: 5
+      EO: 3
+      default: 2""",
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            result = load_fpa_adjustment_value_config()
+
+        assert result["legacy_workload"]["type_weights"] == {"EI": 5, "EO": 3, "default": 2}
+
+    def test_adjust_value_for_type_uses_configured_legacy_weights(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        path = tmp_path / "fpa_config.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "default-profile: unified_ui",
+                """default-profile: unified_ui
+adjustment_value:
+  method: legacy_workload
+  legacy_workload:
+    type_weights:
+      EI: 5
+      EO: 3
+      default: 2""",
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert adjust_value_for_type("EI") == 5
+            assert adjust_value_for_type("EO") == 3
+            assert adjust_value_for_type("EQ") == 2
+
+    def test_adjustment_value_config_rejects_missing_default_weight(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        path = tmp_path / "fpa_config.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "default-profile: unified_ui",
+                """default-profile: unified_ui
+adjustment_value:
+  legacy_workload:
+    type_weights:
+      EI: 5""",
+            ),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match="type_weights 必须包含 default"):
+                load_fpa_adjustment_value_config()
+
     def test_strategy_and_rule_set_from_profile_config(self, tmp_path):
         _write_fpa_config(tmp_path)
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):

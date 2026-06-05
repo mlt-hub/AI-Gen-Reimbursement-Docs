@@ -96,7 +96,7 @@ adjustment_value:
 
 ## legacy_workload 调整值规则
 
-`legacy_workload` 沿用当前实现中的规则：
+`legacy_workload` 使用配置中的类型权重表计算 `调整值`。默认配置为：
 
 ```text
 EI => 2
@@ -109,6 +109,36 @@ EI => 2
 类型为 EI 的功能点，默认工作量权重为 2
 类型为 EO / EQ / ILF / EIF 等其他功能点，默认工作量权重为 1
 ```
+
+对应配置为：
+
+```yaml
+adjustment_value:
+  method: legacy_workload
+  legacy_workload:
+    type_weights:
+      EI: 2
+      default: 1
+```
+
+项目可以按需要覆盖任意 FPA 类型的权重，例如为 `EO` 单独配置权重：
+
+```yaml
+adjustment_value:
+  method: legacy_workload
+  legacy_workload:
+    type_weights:
+      EI: 2
+      EO: 3
+      default: 1
+```
+
+读取规则：
+
+- 优先读取当前 `类型` 对应的权重。
+- 当前 `类型` 未配置时读取 `default`。
+- `default` 必须配置，防止未知类型或新增类型没有兜底权重。
+- 未配置 `adjustment_value` 时，系统使用默认兼容权重 `EI=2`、`default=1`。
 
 ## standard_fpa 调整值规则
 
@@ -227,6 +257,6 @@ FPA 工作量 = 调整值 × 要素数量
 
 其中：
 
-- `legacy_workload` 保持现有简化权重，兼容历史结果。
+- `legacy_workload` 使用配置化简化权重，默认兼容历史结果。
 - `standard_fpa` 由 AI 输出复杂度证据，代码按 FPA 矩阵复算复杂度和 FP 权重。
 - check Excel 展示复杂度、DET、RET、FTR、复杂度说明和调整值计算方式，保证人工审阅时可追溯。
