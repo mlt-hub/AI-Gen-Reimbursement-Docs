@@ -83,10 +83,8 @@ def test_strict_fpa_external_data_rules_can_be_extended_from_config(tmp_path):
     yaml_file.write_text(
         """
 default-profile: strict_fpa
-adjustment_value:
-  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
+adjustment_value_method_default: legacy_workload
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2
@@ -152,10 +150,8 @@ def test_rule_set_warns_when_external_data_rule_looks_like_ordinary_service(tmp_
     yaml_file.write_text(
         """
 default-profile: strict_fpa
-adjustment_value:
-  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
+adjustment_value_method_default: legacy_workload
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2

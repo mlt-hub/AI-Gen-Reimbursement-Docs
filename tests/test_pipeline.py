@@ -184,7 +184,7 @@ class TestGenFpa:
                 "子系统(模块)": meta.get("子系统（模块）", ""),
                 "资产标识": meta.get("资产标识", ""),
                 "新增/修改功能点": "低置信度规则行",
-                "类型": "",
+                "类型": "EI",
                 "计算依据归类": "",
                 "计算依据说明": "低置信度规则行。",
                 "变更状态": "新增",
@@ -212,6 +212,10 @@ class TestGenFpa:
 
         monkeypatch.setattr(
             "ai_gen_reimbursement_docs.fpa_profiles.CustomRulesProfile.fallback_rows_for_l3",
+            fake_fallback,
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.fpa_profiles.StrictFpaProfile.fallback_rows_for_l3",
             fake_fallback,
         )
         monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)

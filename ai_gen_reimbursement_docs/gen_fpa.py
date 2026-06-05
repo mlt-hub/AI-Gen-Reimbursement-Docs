@@ -32,6 +32,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     CustomRulesProfile,
     FpaRuleSetConfig,
     adjust_value_for_type as _adjust_value_for_type,
+    calculate_fpa_adjustment_for_row,
     current_fpa_rule_set_config,
     get_fpa_profile,
     group_tag as _group_tag,
@@ -745,7 +746,20 @@ def _normalize_ai_fpa_rows_for_l3(
             "类型理由": type_reason,
             "源功能过程": source_text,
             "后处理警告": "；".join(row_warnings),
+            "复杂度": raw.get("complexity", ""),
+            "DET": raw.get("det_count", ""),
+            "RET": raw.get("ret_count", ""),
+            "FTR": raw.get("ftr_count", ""),
+            "复杂度说明": raw.get("complexity_reason", ""),
         }
+        adjustment_audit = calculate_fpa_adjustment_for_row(row)
+        row["调整值"] = adjustment_audit["adjustment_value"]
+        row["复杂度"] = adjustment_audit["complexity"]
+        row["DET"] = adjustment_audit["det_count"]
+        row["RET"] = adjustment_audit["ret_count"]
+        row["FTR"] = adjustment_audit["ftr_count"]
+        row["复杂度说明"] = adjustment_audit["complexity_reason"]
+        row["调整值计算方式"] = adjustment_audit["method"]
         for hit in row_hits:
             _add_rule_hit(
                 row,
@@ -1286,6 +1300,19 @@ def calculate_fpa_total(rows: list[dict[str, object]]) -> float:
     return sum(calculate_fpa_row_workload(row) for row in rows)
 
 
+def _enrich_fpa_rows_with_adjustment(rows: list[dict[str, object]]) -> None:
+    """Apply configured adjustment calculation and audit fields to rows in place."""
+    for row in rows:
+        adjustment_audit = calculate_fpa_adjustment_for_row(row)
+        row["调整值"] = adjustment_audit["adjustment_value"]
+        row["复杂度"] = adjustment_audit["complexity"]
+        row["DET"] = adjustment_audit["det_count"]
+        row["RET"] = adjustment_audit["ret_count"]
+        row["FTR"] = adjustment_audit["ftr_count"]
+        row["复杂度说明"] = adjustment_audit["complexity_reason"]
+        row["调整值计算方式"] = adjustment_audit["method"]
+
+
 def calculate_fpa_excel_formula_projection(xlsx_path: str) -> float:
     """读取 Excel 公式输入列，确定性投影 L 列工作量总和。"""
     from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
@@ -1752,6 +1779,7 @@ def _write_fpa_rows_md(
     ai_filled: bool = False,
     execution_meta: dict[str, str] | None = None,
 ) -> float:
+    _enrich_fpa_rows_with_adjustment(fpa_rows)
     with open(output_md_path, 'w', encoding='utf-8') as f:
         f.write("# FPA 工作量评估\n\n")
         f.write(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -1763,8 +1791,8 @@ def _write_fpa_rows_md(
                 if val:
                     f.write(f"**{key}**: {val}\n")
         f.write("\n")
-        f.write("| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |\n")
-        f.write("|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|\n")
+        f.write("| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 | 复杂度 | DET | RET | FTR | 复杂度说明 | 调整值计算方式 |\n")
+        f.write("|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|--------|-----|-----|-----|------------|----------------|\n")
         for row in fpa_rows:
             vals = [
                 str(row.get("序号", "")),
@@ -1781,6 +1809,12 @@ def _write_fpa_rows_md(
                 str(row.get("类型理由", "")).replace('|', '\\|'),
                 str(row.get("源功能过程", "")).replace('|', '\\|'),
                 str(row.get("后处理警告", "")).replace('|', '\\|'),
+                str(row.get("复杂度", "")),
+                str(row.get("DET", "")),
+                str(row.get("RET", "")),
+                str(row.get("FTR", "")),
+                str(row.get("复杂度说明", "")).replace("|", chr(92) + "|").replace(chr(10), " "),
+                str(row.get("调整值计算方式", "")),
             ]
             f.write("| " + " | ".join(vals) + " |\n")
     return calculate_fpa_total(fpa_rows)
@@ -1821,6 +1855,12 @@ def _read_fpa_rows_md_for_audit(fpa_md_path: str) -> tuple[dict[str, str], list[
                         "类型理由": cells[11],
                         "源功能过程": cells[12],
                         "后处理警告": cells[13],
+                        "复杂度": cells[14] if len(cells) > 14 else "",
+                        "DET": cells[15] if len(cells) > 15 else "",
+                        "RET": cells[16] if len(cells) > 16 else "",
+                        "FTR": cells[17] if len(cells) > 17 else "",
+                        "复杂度说明": cells[18] if len(cells) > 18 else "",
+                        "调整值计算方式": cells[19] if len(cells) > 19 else "",
                     })
     return execution_meta, fpa_rows
 
@@ -1965,7 +2005,8 @@ FPA_CHECK_DEFAULT_COLUMNS: dict[str, list[str]] = {
     "FPA结果": [
         "序号", "子系统(模块)", "资产标识", "新增/修改功能点", "类型", "计算依据归类",
         "计算依据说明", "变更状态", "调整值", "要素数量", "生成方式", "类型理由",
-        "源功能过程", "后处理警告", "profile", "strategy", "rule_set",
+        "源功能过程", "后处理警告", "复杂度", "DET", "RET", "FTR", "复杂度说明",
+        "调整值计算方式", "profile", "strategy", "rule_set",
     ],
     "覆盖审核": [
         "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
@@ -2090,6 +2131,12 @@ def generate_fpa_check_xlsx_from_md(
             "类型理由": row.get("类型理由", ""),
             "源功能过程": row.get("源功能过程", ""),
             "后处理警告": row.get("后处理警告", ""),
+            "复杂度": row.get("复杂度", ""),
+            "DET": row.get("DET", ""),
+            "RET": row.get("RET", ""),
+            "FTR": row.get("FTR", ""),
+            "复杂度说明": row.get("复杂度说明", ""),
+            "调整值计算方式": row.get("调整值计算方式", ""),
             "profile": execution_meta.get("profile", ""),
             "strategy": execution_meta.get("strategy", ""),
             "rule_set": execution_meta.get("rule_set", ""),

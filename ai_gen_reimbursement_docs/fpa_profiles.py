@@ -188,6 +188,158 @@ _CURRENT_RULE_SET_CONFIG: ContextVar[FpaRuleSetConfig | None] = ContextVar(
     default=None,
 )
 
+COMPLEXITY_ALIASES = {
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "低": "low",
+    "中": "medium",
+    "高": "high",
+}
+COMPLEXITY_LABELS = {"low": "低", "medium": "中", "high": "高"}
+
+
+def _normalize_complexity(value: object) -> str:
+    text = str(value or "").strip().lower()
+    return COMPLEXITY_ALIASES.get(text, "")
+
+
+def _as_optional_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _fmt_number(value: int | None) -> str:
+    return "" if value is None else str(value)
+
+
+def _match_complexity_matrix(
+    matrix: object,
+    *,
+    det_count: int,
+    secondary_count: int,
+) -> str:
+    if not isinstance(matrix, list):
+        return ""
+    for rule in matrix:
+        if not isinstance(rule, dict):
+            continue
+        det_min = _as_optional_int(rule.get("det_min"))
+        det_max = _as_optional_int(rule.get("det_max"))
+        secondary_min = _as_optional_int(rule.get("ret_min"))
+        secondary_max = _as_optional_int(rule.get("ret_max"))
+        if secondary_min is None:
+            secondary_min = _as_optional_int(rule.get("ftr_min"))
+        if secondary_max is None:
+            secondary_max = _as_optional_int(rule.get("ftr_max"))
+        if det_min is None or secondary_min is None:
+            continue
+        if det_count < det_min or (det_max is not None and det_count > det_max):
+            continue
+        if secondary_count < secondary_min or (secondary_max is not None and secondary_count > secondary_max):
+            continue
+        return _normalize_complexity(rule.get("complexity"))
+    return ""
+
+
+def calculate_fpa_adjustment_for_row(row: dict[str, object]) -> dict[str, object]:
+    """Calculate adjustment value and audit fields from configured FPA method."""
+    from ai_gen_reimbursement_docs.config_utils import FpaConfigError, load_fpa_adjustment_value_config
+
+    config = load_fpa_adjustment_value_config()
+    method = str(config.get("method") or "").strip()
+    methods = config.get("methods", {})
+    if not isinstance(methods, dict) or method not in methods:
+        raise FpaConfigError(f"FPA 配置无效：adjustment_value_methods.{method}")
+
+    fpa_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
+    if fpa_type not in VALID_FPA_TYPES:
+        raise FpaConfigError(f"FPA 类型非法，无法计算调整值: {fpa_type}")
+
+    if method == "legacy_workload":
+        legacy = methods.get("legacy_workload")
+        type_weights = legacy.get("type_weights") if isinstance(legacy, dict) else {}
+        value = type_weights[fpa_type] if isinstance(type_weights, dict) and fpa_type in type_weights else type_weights["default"]
+        return {
+            "adjustment_value": int(value) if isinstance(value, float) and value.is_integer() else value,
+            "method": method,
+            "complexity": "",
+            "det_count": row.get("DET", row.get("det_count", "")) or "",
+            "ret_count": row.get("RET", row.get("ret_count", "")) or "",
+            "ftr_count": row.get("FTR", row.get("ftr_count", "")) or "",
+            "complexity_reason": str(row.get("复杂度说明", row.get("complexity_reason", "")) or ""),
+        }
+
+    standard = methods.get("standard_fpa")
+    if not isinstance(standard, dict):
+        raise FpaConfigError("FPA 配置无效：adjustment_value_methods.standard_fpa")
+    det_count = _as_optional_int(row.get("DET", row.get("det_count")))
+    ret_count = _as_optional_int(row.get("RET", row.get("ret_count")))
+    ftr_count = _as_optional_int(row.get("FTR", row.get("ftr_count")))
+    ai_complexity = _normalize_complexity(row.get("复杂度", row.get("complexity")))
+    final_complexity = ""
+    code_reason = ""
+
+    if fpa_type in {"ILF", "EIF"} and det_count is not None and ret_count is not None:
+        final_complexity = _match_complexity_matrix(
+            standard.get("data_function_complexity_matrix"),
+            det_count=det_count,
+            secondary_count=ret_count,
+        )
+        if final_complexity:
+            code_reason = (
+                f"代码按配置矩阵复算：类型={fpa_type}，DET={det_count}，RET={ret_count}，"
+                f"复杂度={COMPLEXITY_LABELS[final_complexity]}。"
+            )
+    elif fpa_type in {"EI", "EO", "EQ"} and det_count is not None and ftr_count is not None:
+        matrices = standard.get("transaction_complexity_matrices")
+        matrix = matrices.get(fpa_type) if isinstance(matrices, dict) else None
+        final_complexity = _match_complexity_matrix(matrix, det_count=det_count, secondary_count=ftr_count)
+        if final_complexity:
+            code_reason = (
+                f"代码按配置矩阵复算：类型={fpa_type}，DET={det_count}，FTR={ftr_count}，"
+                f"复杂度={COMPLEXITY_LABELS[final_complexity]}。"
+            )
+
+    if not final_complexity and ai_complexity:
+        final_complexity = ai_complexity
+        missing = "RET" if fpa_type in {"ILF", "EIF"} else "FTR"
+        code_reason = (
+            f"DET/{missing} 证据不完整或未命中配置矩阵，采用 AI 输出复杂度="
+            f"{COMPLEXITY_LABELS[final_complexity]}。"
+        )
+
+    if not final_complexity:
+        final_complexity = _normalize_complexity(standard.get("fallback_complexity")) or "low"
+        code_reason = f"复杂度证据缺失，采用配置兜底复杂度={COMPLEXITY_LABELS[final_complexity]}。"
+
+    weights = standard.get("weights")
+    type_weights = weights.get(fpa_type) if isinstance(weights, dict) else None
+    if not isinstance(type_weights, dict) or final_complexity not in type_weights:
+        raise FpaConfigError(
+            f"FPA 配置无效：adjustment_value_methods.standard_fpa.weights.{fpa_type}.{final_complexity}"
+        )
+    value = type_weights[final_complexity]
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+
+    ai_reason = str(row.get("复杂度说明", row.get("complexity_reason", "")) or "").strip()
+    full_reason = "；".join(part for part in (ai_reason, code_reason) if part)
+    return {
+        "adjustment_value": value,
+        "method": method,
+        "complexity": COMPLEXITY_LABELS[final_complexity],
+        "det_count": _fmt_number(det_count),
+        "ret_count": _fmt_number(ret_count) if fpa_type in {"ILF", "EIF"} else "",
+        "ftr_count": _fmt_number(ftr_count) if fpa_type in {"EI", "EO", "EQ"} else "",
+        "complexity_reason": full_reason,
+    }
+
 
 def group_tag(group: dict[str, object]) -> str:
     return (
@@ -197,16 +349,7 @@ def group_tag(group: dict[str, object]) -> str:
 
 
 def adjust_value_for_type(fpa_type: str) -> int | float:
-    from ai_gen_reimbursement_docs.config_utils import FpaConfigError, load_fpa_adjustment_value_config
-
-    config = load_fpa_adjustment_value_config()
-    if config.get("method") != "legacy_workload":
-        raise FpaConfigError("当前仅 legacy_workload 支持按类型权重计算调整值")
-    legacy = config.get("legacy_workload", {})
-    type_weights = legacy["type_weights"] if isinstance(legacy, dict) else {}
-    type_key = str(fpa_type or "").strip().upper()
-    value = type_weights[type_key] if type_key in type_weights else type_weights["default"]
-    return int(value) if isinstance(value, float) and value.is_integer() else value
+    return calculate_fpa_adjustment_for_row({"类型": fpa_type})["adjustment_value"]
 
 
 def module_change_status(processes: list[object]) -> str:
@@ -226,6 +369,11 @@ def _prompt_payload(
     group: dict[str, object],
     domain_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    from ai_gen_reimbursement_docs.config_utils import load_fpa_adjustment_value_config
+
+    adjustment_config = load_fpa_adjustment_value_config()
+    methods = adjustment_config.get("methods", {})
+    standard_fpa = methods.get("standard_fpa", {}) if isinstance(methods, dict) else {}
     return {
         "module": {
             "client_type": group.get("client_type", ""),
@@ -236,6 +384,37 @@ def _prompt_payload(
         },
         "processes": group.get("processes", []),
         "domain_context": domain_context or {},
+        "fpa_calculation": {
+            "principles": [
+                "以用户视角、业务意图和系统边界识别功能点。",
+                "不要按按钮、页面、接口、数据库表、字段或代码组件机械计数。",
+                "AI 只输出复杂度证据；最终调整值由系统代码按配置矩阵和权重表复算。",
+            ],
+            "types": {
+                "ILF": "本系统内部维护的逻辑数据集合。",
+                "EIF": "本系统引用但不维护的外部逻辑数据集合。",
+                "EI": "外部输入，用于维护内部逻辑数据或改变系统状态。",
+                "EO": "外部输出，包含派生计算、汇总、格式化处理或业务规则加工。",
+                "EQ": "外部查询，输入查询条件并返回数据，不包含明显派生加工或状态改变。",
+            },
+            "metric_guidelines": {
+                "DET": "用户可识别的数据项数量。",
+                "RET": "ILF/EIF 中用户可识别的记录子组数量。",
+                "FTR": "EI/EO/EQ 读取或维护的 ILF/EIF 数量。",
+            },
+            "adjustment_value_method_default": adjustment_config.get("method", ""),
+            "standard_fpa": standard_fpa if isinstance(standard_fpa, dict) else {},
+            "output_fields": {
+                "ILF_EIF": ["complexity", "det_count", "ret_count", "complexity_reason"],
+                "EI_EO_EQ": ["complexity", "det_count", "ftr_count", "complexity_reason"],
+            },
+            "constraints": [
+                "不要自行编造未提供的复杂度矩阵或权重表。",
+                "不要把 AI 返回的 FP 当作最终调整值。",
+                "如果输入证据不足，输出保守复杂度并在 complexity_reason 中说明不确定点。",
+                "不要模拟执行未提供的 rule_set_config；规则集由系统代码执行。",
+            ],
+        },
     }
 
 

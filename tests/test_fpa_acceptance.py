@@ -131,7 +131,7 @@ def test_fpa_acceptance_formula_projection_matches_summary_across_type_strategie
         totals[profile_name] = _summary_total(summary_md)
         projections[profile_name] = calculate_fpa_excel_formula_projection(str(fpa_xlsx))
 
-    assert totals == {"unified_ui": 8.0, "strict_fpa": 13.0}
+    assert totals == {"unified_ui": 41.0, "strict_fpa": 32.0}
     assert projections == totals
 
 
@@ -165,10 +165,13 @@ def test_fpa_acceptance_strict_rules_formal_check_workbook_from_golden_case(tmp_
         for row in fpa_rows
     ]
     assert actual == case["expected"]["strict_fpa"]
-    assert "FPA工作量（人/天）: 13" in summary_md.read_text(encoding="utf-8")
+    assert "FPA工作量（人/天）: 32.0" in summary_md.read_text(encoding="utf-8")
 
     wb = openpyxl.load_workbook(check_xlsx, data_only=True)
     assert wb.sheetnames == ["FPA结果", "覆盖审核", "Warnings", "规则命中详情", "AI原始返回"]
+    result_headers = _headers(wb["FPA结果"])
+    for header in ["复杂度", "DET", "RET", "FTR", "复杂度说明", "调整值计算方式"]:
+        assert header in result_headers
 
     ws_coverage = wb["覆盖审核"]
     coverage_headers = _headers(ws_coverage)
@@ -275,7 +278,7 @@ def test_fpa_acceptance_real_excel_to_md_to_formal_check_workbook(tmp_path):
         for row in fpa_rows
     ]
     assert actual == case["expected"]["strict_fpa"]
-    assert "FPA工作量（人/天）: 10" in summary_md.read_text(encoding="utf-8")
+    assert "FPA工作量（人/天）: 29.0" in summary_md.read_text(encoding="utf-8")
 
     wb = openpyxl.load_workbook(check_xlsx, data_only=True)
     assert wb.sheetnames == ["FPA结果", "覆盖审核", "Warnings", "规则命中详情", "AI原始返回"]

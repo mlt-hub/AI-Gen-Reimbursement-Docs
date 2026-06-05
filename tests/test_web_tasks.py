@@ -95,10 +95,8 @@ def test_fpa_options_returns_config_metadata(monkeypatch, tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: strict_fpa
-adjustment_value:
-  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
+adjustment_value_method_default: legacy_workload
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2
@@ -187,10 +185,8 @@ def test_fpa_options_preserves_custom_profile_order_and_label_fallback(monkeypat
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: client_api
-adjustment_value:
-  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
+adjustment_value_method_default: legacy_workload
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2
@@ -247,10 +243,8 @@ def test_fpa_options_returns_400_for_invalid_prompt_placeholder(monkeypatch, tmp
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: strict_fpa
-adjustment_value:
-  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
+adjustment_value_method_default: legacy_workload
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2

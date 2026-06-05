@@ -7,16 +7,80 @@ default-profile: strict_fpa
 judgement_rules_source: config
 
 # FPA 调整值计算配置。
-# method=legacy_workload 时，调整值来自 legacy_workload.type_weights。
-# method=standard_fpa 时，调整值按标准 FPA 类型和复杂度权重表计算。
-adjustment_value:
-  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
+# legacy_workload: 简化历史口径，调整值来自 type_weights。
+# standard_fpa: 标准 FPA 口径，AI 输出 DET/RET/FTR 证据，代码按矩阵复算复杂度和 FP。
+adjustment_value_method_default: standard_fpa
+
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2
       default: 1
+  standard_fpa:
+    complexity_source: ai
+    fallback_complexity: low
+    weights:
+      ILF:
+        low: 7
+        medium: 10
+        high: 15
+      EIF:
+        low: 5
+        medium: 7
+        high: 10
+      EI:
+        low: 3
+        medium: 4
+        high: 6
+      EO:
+        low: 4
+        medium: 5
+        high: 7
+      EQ:
+        low: 3
+        medium: 4
+        high: 6
+    data_function_complexity_matrix:
+      - {ret_min: 1, ret_max: 1, det_min: 1, det_max: 19, complexity: low}
+      - {ret_min: 1, ret_max: 1, det_min: 20, det_max: 50, complexity: low}
+      - {ret_min: 1, ret_max: 1, det_min: 51, complexity: medium}
+      - {ret_min: 2, ret_max: 5, det_min: 1, det_max: 19, complexity: low}
+      - {ret_min: 2, ret_max: 5, det_min: 20, det_max: 50, complexity: medium}
+      - {ret_min: 2, ret_max: 5, det_min: 51, complexity: high}
+      - {ret_min: 6, det_min: 1, det_max: 19, complexity: medium}
+      - {ret_min: 6, det_min: 20, det_max: 50, complexity: high}
+      - {ret_min: 6, det_min: 51, complexity: high}
+    transaction_complexity_matrices:
+      EI:
+        - {ftr_min: 0, ftr_max: 1, det_min: 1, det_max: 4, complexity: low}
+        - {ftr_min: 0, ftr_max: 1, det_min: 5, det_max: 15, complexity: low}
+        - {ftr_min: 0, ftr_max: 1, det_min: 16, complexity: medium}
+        - {ftr_min: 2, ftr_max: 2, det_min: 1, det_max: 4, complexity: low}
+        - {ftr_min: 2, ftr_max: 2, det_min: 5, det_max: 15, complexity: medium}
+        - {ftr_min: 2, ftr_max: 2, det_min: 16, complexity: high}
+        - {ftr_min: 3, det_min: 1, det_max: 4, complexity: medium}
+        - {ftr_min: 3, det_min: 5, det_max: 15, complexity: high}
+        - {ftr_min: 3, det_min: 16, complexity: high}
+      EO:
+        - {ftr_min: 0, ftr_max: 1, det_min: 1, det_max: 5, complexity: low}
+        - {ftr_min: 0, ftr_max: 1, det_min: 6, det_max: 19, complexity: low}
+        - {ftr_min: 0, ftr_max: 1, det_min: 20, complexity: medium}
+        - {ftr_min: 2, ftr_max: 3, det_min: 1, det_max: 5, complexity: low}
+        - {ftr_min: 2, ftr_max: 3, det_min: 6, det_max: 19, complexity: medium}
+        - {ftr_min: 2, ftr_max: 3, det_min: 20, complexity: high}
+        - {ftr_min: 4, det_min: 1, det_max: 5, complexity: medium}
+        - {ftr_min: 4, det_min: 6, det_max: 19, complexity: high}
+        - {ftr_min: 4, det_min: 20, complexity: high}
+      EQ:
+        - {ftr_min: 0, ftr_max: 1, det_min: 1, det_max: 5, complexity: low}
+        - {ftr_min: 0, ftr_max: 1, det_min: 6, det_max: 19, complexity: low}
+        - {ftr_min: 0, ftr_max: 1, det_min: 20, complexity: medium}
+        - {ftr_min: 2, ftr_max: 3, det_min: 1, det_max: 5, complexity: low}
+        - {ftr_min: 2, ftr_max: 3, det_min: 6, det_max: 19, complexity: medium}
+        - {ftr_min: 2, ftr_max: 3, det_min: 20, complexity: high}
+        - {ftr_min: 4, det_min: 1, det_max: 5, complexity: medium}
+        - {ftr_min: 4, det_min: 6, det_max: 19, complexity: high}
+        - {ftr_min: 4, det_min: 20, complexity: high}
 
 # strategy 支持 rules_first / ai_first / rules_only / ai_only。
 # ai_only 不使用规则生成或补齐行，AI 失败时直接报错；但 rule_set 仍用于
@@ -149,7 +213,7 @@ user_prompt_sets:
     ${payload_json}
 
     请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"<多界面拆分理由，可空>"}]}
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"<多界面拆分理由，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
   strict_fpa_up: |-
     ${core_rules}
@@ -178,7 +242,7 @@ user_prompt_sets:
     ${payload_json}
 
     请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":""}]}
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
   multi_uis_up: |-
     ${core_rules}
@@ -196,7 +260,7 @@ user_prompt_sets:
     ${payload_json}
 
     请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"<独立页面/独立业务对象/独立业务流程/独立用户端>"}]}
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"<独立页面/独立业务对象/独立业务流程/独立用户端>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
   ui_api_mapping_up: |-
     ${core_rules}
@@ -215,7 +279,7 @@ user_prompt_sets:
     ${payload_json}
 
     请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":""}]}
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
 rule_sets:
   # type_mapping_rules：直接把关键词映射到 EI/EQ/EO/ILF/EIF，适合项目级特例、业务对象或数据组边界。

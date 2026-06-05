@@ -34,7 +34,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     resolve_api_key,
     _read_env_value,
 )
-from ai_gen_reimbursement_docs.fpa_profiles import adjust_value_for_type
+from ai_gen_reimbursement_docs.fpa_profiles import adjust_value_for_type, calculate_fpa_adjustment_for_row
 
 
 def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_path):
@@ -71,14 +71,31 @@ def _write_fpa_config(tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: unified_ui
-adjustment_value:
-  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
+adjustment_value_method_default: standard_fpa
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2
       default: 1
+  standard_fpa:
+    complexity_source: ai
+    fallback_complexity: low
+    weights:
+      ILF: {low: 7, medium: 10, high: 15}
+      EIF: {low: 5, medium: 7, high: 10}
+      EI: {low: 3, medium: 4, high: 6}
+      EO: {low: 4, medium: 5, high: 7}
+      EQ: {low: 3, medium: 4, high: 6}
+    data_function_complexity_matrix:
+      - {ret_min: 1, det_min: 1, complexity: low}
+    transaction_complexity_matrices:
+      EI:
+        - {ftr_min: 0, ftr_max: 1, det_min: 1, det_max: 4, complexity: low}
+        - {ftr_min: 2, ftr_max: 2, det_min: 5, det_max: 15, complexity: medium}
+      EO:
+        - {ftr_min: 0, det_min: 1, complexity: low}
+      EQ:
+        - {ftr_min: 0, det_min: 1, complexity: low}
 profiles:
   unified_ui:
     kind: unified_ui
@@ -358,29 +375,19 @@ class TestLoadFpaExecutionOptions:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             result = load_fpa_adjustment_value_config()
 
-        assert result["method"] == "legacy_workload"
-        assert result["legacy_workload"]["type_weights"] == {"EI": 2, "default": 1}
+        assert result["method"] == "standard_fpa"
+        assert result["methods"]["legacy_workload"]["type_weights"] == {"EI": 2, "default": 1}
+        assert result["methods"]["standard_fpa"]["weights"]["EI"]["medium"] == 4
 
     def test_adjustment_value_config_rejects_missing_adjustment_value(self, tmp_path):
         _write_fpa_config(tmp_path)
         path = tmp_path / "fpa_config.yaml"
-        path.write_text(
-            path.read_text(encoding="utf-8").replace(
-                """adjustment_value:
-  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
-  legacy_workload:
-    type_weights:
-      EI: 2
-      default: 1
-""",
-                "",
-            ),
-            encoding="utf-8",
-        )
+        content = path.read_text(encoding="utf-8")
+        start = content.index("adjustment_value_method_default:")
+        end = content.index("profiles:")
+        path.write_text(content[:start] + content[end:], encoding="utf-8")
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match="adjustment_value"):
+            with pytest.raises(FpaConfigError, match="adjustment_value_method_default"):
                 load_fpa_adjustment_value_config()
 
     def test_adjustment_value_config_accepts_custom_legacy_weights(self, tmp_path):
@@ -399,13 +406,16 @@ class TestLoadFpaExecutionOptions:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             result = load_fpa_adjustment_value_config()
 
-        assert result["legacy_workload"]["type_weights"] == {"EI": 5, "EO": 3, "default": 2}
+        assert result["methods"]["legacy_workload"]["type_weights"] == {"EI": 5, "EO": 3, "default": 2}
 
     def test_adjust_value_for_type_uses_configured_legacy_weights(self, tmp_path):
         _write_fpa_config(tmp_path)
         path = tmp_path / "fpa_config.yaml"
         path.write_text(
             path.read_text(encoding="utf-8").replace(
+                "adjustment_value_method_default: standard_fpa",
+                "adjustment_value_method_default: legacy_workload",
+            ).replace(
                 """      EI: 2
       default: 1""",
                 """      EI: 5
@@ -419,23 +429,43 @@ class TestLoadFpaExecutionOptions:
             assert adjust_value_for_type("EO") == 3
             assert adjust_value_for_type("EQ") == 2
 
+    def test_standard_fpa_recalculates_complexity_and_weight_from_matrix(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            result = calculate_fpa_adjustment_for_row({
+                "类型": "EI",
+                "det_count": 8,
+                "ftr_count": 2,
+                "complexity": "low",
+                "complexity_reason": "AI 初判为低。",
+            })
+
+        assert result["method"] == "standard_fpa"
+        assert result["complexity"] == "中"
+        assert result["adjustment_value"] == 4
+        assert result["det_count"] == "8"
+        assert result["ftr_count"] == "2"
+        assert "代码按配置矩阵复算" in result["complexity_reason"]
+
+    def test_standard_fpa_uses_fallback_complexity_when_evidence_missing(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            result = calculate_fpa_adjustment_for_row({"类型": "EO"})
+
+        assert result["method"] == "standard_fpa"
+        assert result["complexity"] == "低"
+        assert result["adjustment_value"] == 4
+        assert "配置兜底复杂度" in result["complexity_reason"]
+
     def test_adjustment_value_config_rejects_missing_default_weight(self, tmp_path):
         _write_fpa_config(tmp_path)
         path = tmp_path / "fpa_config.yaml"
         path.write_text(
             path.read_text(encoding="utf-8").replace(
-                """  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
-  legacy_workload:
-    type_weights:
+                """    type_weights:
       EI: 2
       default: 1""",
-                """  method: legacy_workload
-  complexity_source: default
-  fallback_complexity: low
-  legacy_workload:
-    type_weights:
+                """    type_weights:
       EI: 5""",
             ),
             encoding="utf-8",
