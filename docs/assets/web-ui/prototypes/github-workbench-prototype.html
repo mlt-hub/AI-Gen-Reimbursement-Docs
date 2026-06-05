@@ -293,6 +293,16 @@
       min-width: 0;
     }
 
+    .layout.workspace-focus {
+      grid-template-columns: minmax(0, 1fr);
+      max-width: 1180px;
+    }
+
+    .layout.workspace-focus .sidebar,
+    .layout.workspace-focus .right-context {
+      display: none;
+    }
+
     .page {
       display: none;
     }
@@ -680,11 +690,43 @@
       margin: 0 0 16px;
     }
 
+    .workbench-layout {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.35fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .workflow-list-pane,
+    .workflow-detail-pane {
+      min-width: 0;
+    }
+
+    .workflow-list-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .workflow-list-head h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .workflow-list-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
     .workflow-row {
       display: grid;
-      grid-template-columns: minmax(0, 1.25fr) 150px 140px 120px 120px;
-      gap: 12px;
-      align-items: center;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px 12px;
+      align-items: start;
       min-height: 68px;
       border: 1px solid var(--rule);
       border-radius: var(--radius-md);
@@ -717,6 +759,10 @@
       font-size: 12px;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .workflow-meta {
+      grid-column: 1 / -1;
     }
 
     .run-title {
@@ -1029,6 +1075,7 @@
       }
 
       .split,
+      .workbench-layout,
       .review-layout {
         grid-template-columns: 1fr;
       }
@@ -1269,7 +1316,7 @@
   </main>
 
   <div class="bottom-switcher">
-    <div class="bottom-label" id="bottomHint">底部切换栏：快速切换多个 workflow、当前 run 状态和密度。</div>
+    <div class="bottom-label" id="bottomHint">Prototype Controls：快速切换 workflow、run 状态和密度；正式界面不显示。</div>
     <div class="switcher-controls">
       <div class="switch-group">
         <span class="switch-label">Workflow</span>
@@ -1582,8 +1629,8 @@
       document.getElementById('page-task').innerHTML = `
         <div class="page-head">
           <div>
-            <h1>工作台</h1>
-            <p>多个 workflow 可以同时推进。选中一个 workflow 后，再查看它的 stage、重复 runs 和 FPA 版本。</p>
+            <h1>Workflow 工作台</h1>
+            <p>左侧处理多个项目，右侧查看选中 workflow 的下一步、最近 runs 和 FPA 版本。</p>
           </div>
           <div class="btn-row">
             ${badge(`${workflows.filter(item => item.runState === 'running').length} 个运行中`, 'accent')}
@@ -1591,46 +1638,59 @@
             ${badge(`${workflows.filter(item => item.runState === 'error').length} 个出错`, 'danger')}
           </div>
         </div>
-        <div class="workflow-list">
-          ${workflows.map(item => {
-            const itemStage = workflowMeta[item.stage] || workflowMeta.not_started;
-            return `
-              <button class="workflow-row ${item.id === currentWorkflow ? 'active' : ''}" data-workflow-pick="${item.id}">
-                <span class="workflow-main"><strong>${item.name}</strong><span>${item.latestRun}</span></span>
-                <span>${badge(itemStage.label, itemStage.badge)}</span>
-                <span class="workflow-meta">${item.fpaVersion}</span>
-                <span class="workflow-meta">${item.next}</span>
-                <span class="workflow-meta">${item.updated}</span>
-              </button>
-            `;
-          }).join('')}
-        </div>
-        <div class="page-head">
-          <div>
-            <h1>${workflow.name} · ${action.title || stage.title}</h1>
-            <p>${action.message || stage.message}</p>
-          </div>
-          <div class="btn-row">
-            <button class="${primaryClass}">${action.primary || stage.primary}</button>
-            ${secondary}
-          </div>
-        </div>
-        <div class="summary-grid">
-          <div class="summary-cell"><span>Workflow</span><strong>${workflow.name}</strong></div>
-          <div class="summary-cell"><span>阶段</span><strong>${badge(stage.label, stage.badge)}</strong></div>
-          <div class="summary-cell"><span>当前 Run</span><strong>${badge(run.label, run.badge)}</strong></div>
-          <div class="summary-cell"><span>最近运行</span><strong>${workflow.latestRun}</strong></div>
-          <div class="summary-cell"><span>FPA 版本</span><strong>${workflow.fpaVersion}</strong></div>
-        </div>
-        <div class="annotations">
-          ${workflow.stage === 'fpa_review' ? '<div class="annotation warning"><strong>!</strong><div><strong>FPA 可重复生成</strong><p>gen-fpa #3 已结束并生成 FPA v3。用户可以确认当前版本，也可以继续重新生成 FPA v4。</p></div></div>' : ''}
-          ${workflow.stage === 'cosmic_ready' ? `<div class="annotation warning"><strong>!</strong><div><strong>等待下一次 run</strong><p>${workflow.fpaVersion} 已确认。点击“生成 COSMIC”时应启动新的 gen-cosmic run，而不是让旧任务长期运行。</p></div></div>` : ''}
-          ${currentState === 'error' ? '<div class="annotation danger"><strong>!</strong><div><strong>检查安装包数据保护失败</strong><p>data.enc 未被打包，建议先运行发布包检查脚本。</p></div></div>' : ''}
-          <div class="annotation info"><strong>i</strong><div><strong>当前 FPA 策略</strong><p>严格 FPA / 规则优先 / rule_set: default_strict。</p></div></div>
-        </div>
-        <div class="box" style="margin-top:16px">
-          <div class="box-head"><strong>${workflow.name} 进展</strong><span class="date">${stage.label} / ${workflow.fpaVersion}</span></div>
-          <div class="step-list">${stepData.slice(0, 6).map(renderStep).join('')}</div>
+        <div class="workbench-layout">
+          <section class="workflow-list-pane">
+            <div class="workflow-list-head">
+              <div>
+                <h2>进行中的 workflow</h2>
+                <p>按项目聚合，最近 run 只是其中一条记录。</p>
+              </div>
+              <button class="btn primary">新任务</button>
+            </div>
+            <div class="workflow-list">
+              ${workflows.map(item => {
+                const itemStage = workflowMeta[item.stage] || workflowMeta.not_started;
+                return `
+                  <button class="workflow-row ${item.id === currentWorkflow ? 'active' : ''}" data-workflow-pick="${item.id}">
+                    <span class="workflow-main"><strong>${item.name}</strong><span>${item.latestRun}</span></span>
+                    <span>${badge(itemStage.label, itemStage.badge)}</span>
+                    <span class="workflow-meta">${item.fpaVersion}</span>
+                    <span class="workflow-meta">${item.next}</span>
+                    <span class="workflow-meta">${item.updated}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </section>
+          <section class="workflow-detail-pane">
+            <div class="page-head">
+              <div>
+                <h1>${workflow.name}</h1>
+                <p>${action.title || stage.title}。${action.message || stage.message}</p>
+              </div>
+              <div class="btn-row">
+                <button class="${primaryClass}">${action.primary || stage.primary}</button>
+                ${secondary}
+              </div>
+            </div>
+            <div class="summary-grid">
+              <div class="summary-cell"><span>阶段</span><strong>${badge(stage.label, stage.badge)}</strong></div>
+              <div class="summary-cell"><span>当前 Run</span><strong>${badge(run.label, run.badge)}</strong></div>
+              <div class="summary-cell"><span>最近运行</span><strong>${workflow.latestRun}</strong></div>
+              <div class="summary-cell"><span>FPA 版本</span><strong>${workflow.fpaVersion}</strong></div>
+              <div class="summary-cell"><span>下一步</span><strong>${workflow.next}</strong></div>
+            </div>
+            <div class="annotations">
+              ${workflow.stage === 'fpa_review' ? '<div class="annotation warning"><strong>!</strong><div><strong>FPA 可重复生成</strong><p>gen-fpa #3 已结束并生成 FPA v3。用户可以确认当前版本，也可以继续重新生成 FPA v4。</p></div></div>' : ''}
+              ${workflow.stage === 'cosmic_ready' ? `<div class="annotation warning"><strong>!</strong><div><strong>等待下一次 run</strong><p>${workflow.fpaVersion} 已确认。点击“生成 COSMIC”时应启动新的 gen-cosmic run，而不是让旧任务长期运行。</p></div></div>` : ''}
+              ${currentState === 'error' ? '<div class="annotation danger"><strong>!</strong><div><strong>检查安装包数据保护失败</strong><p>data.enc 未被打包，建议先运行发布包检查脚本。</p></div></div>' : ''}
+            </div>
+            <div class="box" style="margin-top:16px">
+              <div class="box-head"><strong>最近 runs</strong><span class="date">${stage.label} / ${workflow.fpaVersion}</span></div>
+              <div class="step-list">${stepData.slice(0, 6).map(renderStep).join('')}</div>
+            </div>
+            <div class="annotation info" style="margin-top:16px"><strong>i</strong><div><strong>当前 FPA 策略</strong><p>严格 FPA / 规则优先 / rule_set: default_strict。</p></div></div>
+          </section>
         </div>
       `;
     }
@@ -1808,6 +1868,7 @@
     function renderAll() {
       const shell = document.getElementById('shell');
       shell.classList.toggle('with-right', currentPage === 'task');
+      shell.classList.toggle('workspace-focus', currentPage === 'task');
       renderLeftNav();
       renderRightContext();
       renderTask();
