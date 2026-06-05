@@ -6,7 +6,7 @@
 
 | 计算方式 | 含义 | 适用场景 |
 |---|---|---|
-| `legacy_workload` | 现有简化工作量口径，按类型给出简化调整值。 | 需要延续现有估算结果、快速生成或模板兼容时使用。 |
+| `legacy_workload` | 简化工作量口径，按配置中的类型权重表给出调整值。 | 需要沿用简化估算模型或快速生成时使用。 |
 | `standard_fpa` | 按标准 FPA 类型、复杂度矩阵和权重表计算 FP。复杂度由 AI 输出证据，代码按矩阵复算。 | 需要更接近 FPA 标准、可审计复杂度依据和正式评审时使用。 |
 
 无论选择哪种方式，最终工作量汇总仍沿用：
@@ -42,7 +42,7 @@ adjustment_value:
 | `complexity_source` | `ai` / `explicit` / `default` | `standard_fpa` 下复杂度来源。当前推荐使用 `ai`。 |
 | `fallback_complexity` | `low` / `medium` / `high` | AI 或显式字段缺失时的兜底复杂度，默认建议为 `low`。 |
 
-`adjustment_value` 是必填配置。缺少该配置、缺少 `legacy_workload.type_weights` 或缺少 `default` 权重时，应直接报配置错误。
+`adjustment_value` 是必填配置。缺少该配置、缺少 `legacy_workload.type_weights` 或缺少 `default` 权重时，应直接报配置错误。系统不提供代码内置的历史权重回退。
 
 ## 字段来源
 
@@ -96,7 +96,7 @@ adjustment_value:
 
 ## legacy_workload 调整值规则
 
-`legacy_workload` 使用配置中的类型权重表计算 `调整值`。默认配置为：
+`legacy_workload` 使用配置中的类型权重表计算 `调整值`。示例配置可以延续历史取值：
 
 ```text
 EI => 2
@@ -110,7 +110,7 @@ EI => 2
 类型为 EO / EQ / ILF / EIF 等其他功能点，默认工作量权重为 1
 ```
 
-对应配置为：
+对应配置示例为：
 
 ```yaml
 adjustment_value:
@@ -137,8 +137,14 @@ adjustment_value:
 
 - 优先读取当前 `类型` 对应的权重。
 - 当前 `类型` 未配置时读取 `default`。
-- `default` 必须配置，防止未知类型或新增类型没有兜底权重。
+- `default` 必须配置，作为配置文件中的显式兜底权重。
 - `adjustment_value` 不提供代码内置兼容回退；项目必须在配置文件中明确写出权重。
+
+实现约束：
+
+- 不允许在代码中硬编码 `EI => 2`、`其他类型 => 1` 这类分支。
+- 不允许在配置缺失、`type_weights` 缺失或 `default` 缺失时静默回退。
+- 不允许为了防御异常而在运行路径中返回固定 `1`；配置错误应暴露为配置错误。
 
 ## standard_fpa 调整值规则
 
