@@ -25,14 +25,20 @@
 
 ## 配置方式
 
-建议在 FPA 专用配置 `fpa_config.yaml` 中增加：
+目标配置命名如下：
 
 ```yaml
-adjustment_value:
-  method: standard_fpa
-  complexity_source: ai
-  fallback_complexity: low
+adjustment_value_method_default: standard_fpa
+
+adjustment_value_methods:
+  legacy_workload:
+    type_weights:
+      EI: 2
+      default: 1
+
   standard_fpa:
+    complexity_source: ai
+    fallback_complexity: low
     weights:
       ILF:
         low: 7
@@ -66,14 +72,16 @@ adjustment_value:
 
 | 字段 | 可选值 | 说明 |
 |---|---|---|
-| `method` | `legacy_workload` / `standard_fpa` | 决定 `调整值` 的计算口径。 |
-| `complexity_source` | `ai` / `explicit` / `default` | `standard_fpa` 下复杂度来源。当前推荐使用 `ai`。 |
-| `fallback_complexity` | `low` / `medium` / `high` | AI 或显式字段缺失时的兜底复杂度，默认建议为 `low`。 |
-| `standard_fpa.weights` | 类型到低/中/高权重表 | `standard_fpa` 下 `调整值（FP）` 的来源。 |
-| `standard_fpa.data_function_complexity_matrix` | DET/RET 到复杂度映射 | `ILF` / `EIF` 复杂度矩阵。 |
-| `standard_fpa.transaction_complexity_matrices` | DET/FTR 到复杂度映射 | `EI` / `EO` / `EQ` 复杂度矩阵。 |
+| `adjustment_value_method_default` | `legacy_workload` / `standard_fpa` | 默认调整值计算方式。当前决策为 `standard_fpa`。 |
+| `adjustment_value_methods` | method 配置集合 | 所有可选调整值计算方式的配置集合。 |
+| `adjustment_value_methods.legacy_workload.type_weights` | 类型到权重表 | `legacy_workload` 下 `调整值` 的来源。 |
+| `adjustment_value_methods.standard_fpa.complexity_source` | `ai` / `default` | `standard_fpa` 第一版复杂度来源。当前推荐使用 `ai`。 |
+| `adjustment_value_methods.standard_fpa.fallback_complexity` | `low` / `medium` / `high` | AI 或矩阵证据缺失时的兜底复杂度，默认建议为 `low`。 |
+| `adjustment_value_methods.standard_fpa.weights` | 类型到低/中/高权重表 | `standard_fpa` 下 `调整值（FP）` 的来源。 |
+| `adjustment_value_methods.standard_fpa.data_function_complexity_matrix` | DET/RET 到复杂度映射 | `ILF` / `EIF` 复杂度矩阵。 |
+| `adjustment_value_methods.standard_fpa.transaction_complexity_matrices` | DET/FTR 到复杂度映射 | `EI` / `EO` / `EQ` 复杂度矩阵。 |
 
-`adjustment_value` 是必填配置。缺少该配置、缺少 `legacy_workload.type_weights` 或缺少 `default` 权重时，应直接报配置错误。系统不提供代码内置的历史权重回退。
+`adjustment_value_method_default` 和 `adjustment_value_methods` 是必填配置。缺少默认 method、缺少对应 method 配置、缺少 `legacy_workload.type_weights.default`、缺少 `adjustment_value_methods.standard_fpa.weights` 或缺少复杂度矩阵时，应直接报配置错误。系统不提供代码内置的历史权重回退。
 
 ## 字段来源
 
@@ -144,8 +152,7 @@ EI => 2
 对应配置示例为：
 
 ```yaml
-adjustment_value:
-  method: legacy_workload
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2
@@ -155,8 +162,7 @@ adjustment_value:
 项目可以按需要覆盖任意 FPA 类型的权重，例如为 `EO` 单独配置权重：
 
 ```yaml
-adjustment_value:
-  method: legacy_workload
+adjustment_value_methods:
   legacy_workload:
     type_weights:
       EI: 2
@@ -169,7 +175,7 @@ adjustment_value:
 - 优先读取当前 `类型` 对应的权重。
 - 当前 `类型` 未配置时读取 `default`。
 - `default` 必须配置，作为配置文件中的显式兜底权重。
-- `adjustment_value` 不提供代码内置兼容回退；项目必须在配置文件中明确写出权重。
+- `adjustment_value_methods` 不提供代码内置兼容回退；项目必须在配置文件中明确写出权重。
 
 实现约束：
 
@@ -194,9 +200,9 @@ AI 不直接决定最终 `调整值（FP）`。AI 负责输出复杂度判定证
 - FPA 类型说明：`ILF` / `EIF` / `EI` / `EO` / `EQ`。
 - DET / RET / FTR 识别口径。
 - 计算依据归类判定原则 `judgement_rules`。
-- `standard_fpa.data_function_complexity_matrix`。
-- `standard_fpa.transaction_complexity_matrices`。
-- `standard_fpa.weights`。
+- `adjustment_value_methods.standard_fpa.data_function_complexity_matrix`。
+- `adjustment_value_methods.standard_fpa.transaction_complexity_matrices`。
+- `adjustment_value_methods.standard_fpa.weights`。
 - 输出 JSON schema 和不确定性处理规则。
 
 注入这些配置的目的，是让 AI 的 DET/RET/FTR 识别、复杂度初判和 `complexity_reason` 与当前项目配置口径一致。AI 不得依赖自身记忆中的 FPA 标准表，也不得编造 prompt 中没有提供的矩阵或权重。
@@ -237,17 +243,19 @@ AI 行输出建议包含：
 - `EI` / `EO` / `EQ` 行输出 `det_count`、`ftr_count` 和 `complexity_reason`。
 - 无法可靠判断 DET、RET 或 FTR 时，AI 应给出保守复杂度，并在 `complexity_reason` 中说明不确定点。
 - 即使 AI 返回了 `complexity`，代码仍应优先使用 DET/RET/FTR 按矩阵复算复杂度。
+- 第一版不支持人工或规则显式覆盖复杂度；check Excel 和 Web 审阅页中的复杂度字段只用于展示和审计，不作为反向复算输入。
 
 ### 代码复算规则
 
 代码计算顺序：
 
-1. 从当前 FPA 配置读取 `standard_fpa` 权重表和复杂度矩阵。
-2. 根据 `类型` 判断数据功能还是事务功能。
-3. 如果存在有效的 DET + RET/FTR，按配置中的复杂度矩阵复算复杂度。
-4. 如果指标缺失但存在 AI 输出的 `complexity`，使用 AI 输出复杂度。
-5. 如果复杂度仍缺失，使用配置中的 `fallback_complexity`。
-6. 根据类型和复杂度，从配置中的 `standard_fpa.weights` 得到 `调整值（FP）`。
+1. 读取 `adjustment_value_method_default`，默认采用 `standard_fpa`。
+2. 从当前 FPA 配置读取 `adjustment_value_methods.standard_fpa` 权重表和复杂度矩阵。
+3. 根据 `类型` 判断数据功能还是事务功能。
+4. 如果存在有效的 DET + RET/FTR，按配置中的复杂度矩阵复算复杂度。
+5. 如果指标缺失但存在 AI 输出的 `complexity`，使用 AI 输出复杂度。
+6. 如果复杂度仍缺失，使用配置中的 `fallback_complexity`。
+7. 根据类型和复杂度，从配置中的 `weights` 得到 `调整值（FP）`。
 
 标准权重配置示例如下：
 
@@ -263,12 +271,12 @@ AI 行输出建议包含：
 
 - 不允许在代码中硬编码 `ILF/EI/EO/EQ/EIF` 的低/中/高权重表。
 - 不允许在代码中硬编码 DET/RET/FTR 到低/中/高的复杂度矩阵。
-- 缺少 `standard_fpa.weights`、复杂度矩阵或必要类型/复杂度权重时，应直接报配置错误。
+- 缺少 `adjustment_value_methods.standard_fpa.weights`、复杂度矩阵或必要类型/复杂度权重时，应直接报配置错误。
 - `docs/fpa/fpa-calculation-method.md` 中的标准表只能作为配置模板来源，不能作为代码内置默认值。
 
 ## check Excel 审计展示
 
-`standard_fpa` 下，check Excel 应新增复杂度审计字段，便于人工复核 AI 判定和代码复算结果。
+`standard_fpa` 下，check Excel 应新增复杂度审计字段，便于人工复核 AI 判定和代码复算结果。第一版不修改正式 `FPA工作量评估.xlsx` 模板，不在正式 FPA Excel 中新增复杂度列。
 
 建议在 `FPA结果` sheet 中新增：
 
@@ -286,7 +294,18 @@ AI 行输出建议包含：
 - `ILF` / `EIF` 展示 `DET` + `RET`，`FTR` 留空。
 - `EI` / `EO` / `EQ` 展示 `DET` + `FTR`，`RET` 留空。
 - `legacy_workload` 下可以保留这些列为空，或仅展示 `调整值计算方式=legacy_workload`。
-- 如果正式 Excel 模板暂不新增列，复杂度审计先进入 check Excel，不影响正式交付模板结构。
+- 复杂度审计只进入 check Excel，不影响正式交付模板结构。
+- check Excel 第一版仅用于审计展示，不支持人工修改复杂度后反向复算。
+
+## 后续待做：复杂度显式覆盖与复算
+
+第一版暂不实现人工或规则显式覆盖复杂度。未来如需支持，应作为独立能力设计和实现：
+
+- check Excel 或 Web FPA 审阅页可编辑 `复杂度`、`复杂度来源`、`DET`、`RET`、`FTR`、`复杂度说明`。
+- 覆盖对象只能是复杂度和复杂度证据，不允许直接覆盖最终 `调整值（FP）`。
+- 系统仍按 `类型 + 复杂度 + adjustment_value_methods.standard_fpa.weights` 复算 `调整值（FP）`。
+- 复算不重新调用 AI，不重新识别 FPA 行，只更新复杂度、调整值、FPA 工作量、审计字段和总工作量。
+- `rule_set_config` 仍不完整喂给 AI；规则覆盖如需支持，应由代码规则路径执行并进入 audit trace。
 
 ## Markdown 汇总
 
@@ -332,6 +351,7 @@ FPA 工作量 = 调整值 × 要素数量
 
 其中：
 
-- `legacy_workload` 使用配置化简化权重；示例配置延续历史结果。
-- `standard_fpa` 由 AI 输出复杂度证据，代码按配置中的 FPA 矩阵复算复杂度并按配置权重计算 FP。
-- check Excel 展示复杂度、DET、RET、FTR、复杂度说明和调整值计算方式，保证人工审阅时可追溯。
+- 默认计算方式由 `adjustment_value_method_default` 决定，当前决策为 `standard_fpa`。
+- `legacy_workload` 使用 `adjustment_value_methods.legacy_workload` 中的配置化简化权重；示例配置延续历史结果。
+- `standard_fpa` 由 AI 输出复杂度证据，代码按 `adjustment_value_methods.standard_fpa` 中的 FPA 矩阵复算复杂度并按配置权重计算 FP。
+- check Excel 展示复杂度、DET、RET、FTR、复杂度说明和调整值计算方式；正式 FPA Excel 不新增复杂度列。
