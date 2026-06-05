@@ -187,6 +187,24 @@ adjustment_value:
 
 AI 不直接决定最终 `调整值（FP）`。AI 负责输出复杂度判定证据，代码负责按矩阵复算复杂度和权重。
 
+生成 AI prompt 时，应从当前 `fpa_config.yaml` 中读取并注入以下运行时配置：
+
+- FPA 类型说明：`ILF` / `EIF` / `EI` / `EO` / `EQ`。
+- `standard_fpa.data_function_complexity_matrix`。
+- `standard_fpa.transaction_complexity_matrices`。
+- `standard_fpa.weights`。
+
+注入这些配置的目的，是让 AI 的 DET/RET/FTR 识别、复杂度初判和 `complexity_reason` 与当前项目配置口径一致。AI 不得依赖自身记忆中的 FPA 标准表，也不得编造 prompt 中没有提供的矩阵或权重。
+
+prompt 约束应明确：
+
+```text
+你可以参考以下配置矩阵判断复杂度，但最终调整值由系统代码复算。
+不要自行编造未提供的复杂度矩阵或权重表。
+不要把你返回的 FP 作为最终调整值；如需说明 FP，只能作为解释性参考。
+如果输入证据不足，输出保守复杂度并说明不确定点。
+```
+
 AI 行输出建议包含：
 
 ```json
@@ -214,11 +232,12 @@ AI 行输出建议包含：
 
 代码计算顺序：
 
-1. 根据 `类型` 判断数据功能还是事务功能。
-2. 如果存在有效的 DET + RET/FTR，按配置中的复杂度矩阵复算复杂度。
-3. 如果指标缺失但存在 AI 输出的 `complexity`，使用 AI 输出复杂度。
-4. 如果复杂度仍缺失，使用配置中的 `fallback_complexity`。
-5. 根据类型和复杂度，从配置中的 `standard_fpa.weights` 得到 `调整值（FP）`。
+1. 从当前 FPA 配置读取 `standard_fpa` 权重表和复杂度矩阵。
+2. 根据 `类型` 判断数据功能还是事务功能。
+3. 如果存在有效的 DET + RET/FTR，按配置中的复杂度矩阵复算复杂度。
+4. 如果指标缺失但存在 AI 输出的 `complexity`，使用 AI 输出复杂度。
+5. 如果复杂度仍缺失，使用配置中的 `fallback_complexity`。
+6. 根据类型和复杂度，从配置中的 `standard_fpa.weights` 得到 `调整值（FP）`。
 
 标准权重配置示例如下：
 
