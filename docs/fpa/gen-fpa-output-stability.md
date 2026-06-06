@@ -619,6 +619,27 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 未传入阈值时只生成报告，不判定通过/失败；传入阈值后，Markdown 报告会增加 `Quality Gate` 区块，manifest/comparison 中会写入 `evaluation.status=pass|fail` 和每项检查结果。若质量门失败，CLI 会返回退出码 `2`，便于接入 CI 或自动验收。
 
+也可以直接使用 CI 友好的脚本入口：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset strict-real-model `
+  --output-dir .\tmp_fpa_stability_ci
+```
+
+该脚本会打印 JSON 摘要，包含 `status`、`report_path` 和 `run_count`；当质量门失败时返回退出码 `2`，其它异常仍按普通错误返回非 0。无真实模型 API 时，可以用规则基线模式做本地烟测：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset "" `
+  --suite standard `
+  --profiles strict_fpa `
+  --strategies rules_only `
+  --rule-sets strict_fpa_rs `
+  --max-retries 0 `
+  --output-dir .\tmp_fpa_stability_ci
+```
+
 ### 增强优先级
 
 推荐按以下优先级增强 harness：
