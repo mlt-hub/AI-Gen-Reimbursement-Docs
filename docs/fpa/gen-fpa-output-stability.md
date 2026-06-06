@@ -250,6 +250,55 @@ Harness 通常包含：
 449 passed, 2 skipped
 ```
 
+2026-06-06 已按推荐路线完成第一轮输出稳定性增强，提交为：
+
+```text
+c9967f2 stabilize gen-fpa ai output validation
+efeb82a add fpa confirmation contract
+188228c expose fpa confirmation mode in web ui
+```
+
+本轮实施范围：
+
+- `ai_gen_reimbursement_docs/fpa_validator.py`：新增非破坏式结构化 validator，检查查询误判 EI、普通服务误判 EIF、`source_process_ids` 越界、同一对象 CRUD 拆分、同一查询场景拆分、`计算依据说明` 结构缺失等问题。
+- `ai_gen_reimbursement_docs/gen_fpa.py`：AI 输出规范化和规则补齐后接入 validator；`ai_first` 对高置信稳定性问题自动重试一次，重试后仍有问题则保留结果并写入 warning，不阻断最终结果。
+- `tests/test_fpa_validator.py`、`tests/test_gen_fpa_ai.py`：覆盖 validator 高置信误判、`ai_first` 一次重试、预览确认问题返回、确认结果进入 prompt 并抑制同一问题重复确认。
+- `tests/test_fpa_golden_fixture_reports.py`、`tests/fixtures/fpa_golden_cases/vertical_industry_management.json`：golden case 支持“固定期望 + 行为断言”两层，锁定垂直行业管理 strict 口径下查询合并、维护合并和来源流程合并。
+- `ai_gen_reimbursement_docs/fpa_confirmation.py`：新增确认流后端契约，支持 `auto`、`cautious`、`strict` 三种模式；将 validator issue 转换为结构化确认问题；将 `confirmed_decisions` 渲染为下一轮 AI prompt 的硬约束。
+- `web_app/routes/tasks.py`：`/api/fpa/options` 返回确认模式枚举；`/api/fpa/preview-module` 接收 `fpa_confirmation_mode` 和 `confirmed_decisions`，并可返回 `status=needs_confirmation`、`confirmation_questions`、`confirmed_decision_count`。
+- `web_app/src/components/AdvancedOptions.vue`、`web_app/src/stores/config.ts`、`web_app/src/composables/useFpaOptions.ts`、`web_app/src/components/FpaPreview.vue`、`web_app/src/views/Home.vue`：Web 高级选项新增 `FPA 生成模式`，默认审慎模式；FPA 预览和正式运行请求携带该模式。当前完整确认卡片交互尚未实现，预览接口和前端配置入口已就绪。
+
+当前新增代表行为：
+
+```text
+AI 将“查询客户”判为 EI
+=> validator 标记 validator.query_as_ei
+=> ai_first 自动带校验反馈重试一次
+=> 重试仍失败则保留结果并进入 warning/check/debug
+
+AI 将“调用短信平台发送测试短信”判为 EIF
+=> validator 标记 validator.ordinary_service_as_eif
+=> 审慎/严格确认模式可生成“EIF 识别”确认项
+
+用户带 confirmed_decisions 再次预览
+=> 确认结果进入 prompt 硬约束
+=> 同一确认项不再重复返回
+```
+
+最新验证结果：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+npm run build
+```
+
+最近一次结果：
+
+```text
+463 passed, 2 skipped
+vue-tsc -b && vite build passed
+```
+
 ### Golden Case 回归集
 
 准备 5 到 10 个典型 FPA 输入案例，每个案例配期望结果或关键断言。重点覆盖：
@@ -283,6 +332,13 @@ source_process_ids 是否被正确合并。
 
 这样可以避免 AI 文案或名称轻微变化导致测试失败，同时仍能锁住关键计量口径。
 
+当前已在 `tests/test_fpa_golden_fixture_reports.py` 中支持 fixture 级 `assertions` 字段。`vertical_industry_management.json` 已添加 strict_fpa 行为断言，要求：
+
+- 必须包含 `垂直行业查询：EQ`、`垂直行业维护：EI`、`垂直行业管理员维护：EI`。
+- `垂直行业查询` 必须合并来源流程 `垂直行业列表数据查询、查询垂直行业数据`。
+- `垂直行业维护` 必须合并来源流程 `添加垂直行业、编辑垂直行业、删除垂直行业`。
+- 不得出现逐 process 输出的短名称，例如 `添加垂直行业`、`编辑垂直行业`、`删除垂直行业`。
+
 ### 结构化断言
 
 不建议用全文比对 AI 输出。更稳定的做法是断言关键行为：
@@ -314,6 +370,15 @@ AI 返回 JSON 后，harness 可执行 validator：
 你错误地将“系统用户校验”识别为 EIF。普通校验服务不得生成 EIF，请修正。
 ```
 
+当前已实现 `ai_gen_reimbursement_docs/fpa_validator.py`。它只产生 `FpaValidationIssue`，不直接改写 AI rows。这样可以保留审阅透明度，并避免在 `ai_first/ai_only` 策略下悄悄覆盖模型输出。
+
+当前 validator 行为：
+
+- 高置信问题标记为 `retryable=True`，例如查询判 EI、普通服务判 EIF、`source_process_ids` 越界、同一对象 CRUD 拆成多个 EI。
+- `ai_first` 首次命中 retryable issue 时自动重试一次。
+- 重试后仍命中问题时，不阻断交付物生成，将问题写入 warning、`后处理警告` 和规则命中详情。
+- `ai_only` 和预览路径保留 warning，不自动兜底覆盖类型。
+
 ### 确认流测试
 
 如果引入 `needs_confirmation` 和 `confirmed_decisions`，harness 也需要覆盖确认流程：
@@ -329,6 +394,21 @@ scope: project_profile 才影响后续生成。
 ```
 
 确认流测试的重点是保证“用户确认的项目口径”真正进入下一轮生成，并且确认作用域不会意外污染后续交互。
+
+当前已实现后端确认契约和预览路径测试：
+
+- `fpa_confirmation_mode=auto`：不返回确认项。
+- `fpa_confirmation_mode=cautious`：只把高风险 validator issue 转换为确认项。
+- `fpa_confirmation_mode=strict`：除高风险问题外，也可返回说明结构等审阅项。
+- `confirmed_decisions` 支持 `{id: {value, scope}}` 格式，默认作用域为 `current_run`。
+- `confirmed_decisions` 会进入下一轮 prompt，作为硬约束文本。
+- 已确认的问题不会在同一轮预览中重复返回。
+
+当前尚未完成：
+
+- 前端确认卡片弹窗/中间页。
+- 批量正式生成中的 `needs_confirmation` 暂停/继续流程。
+- `scope=project_profile` 的持久化项目口径存储。
 
 ### 两阶段生成
 
@@ -382,6 +462,16 @@ P1：新增结构化 validator，抓查询误判、EIF 误判、source_processes
 P2：补充确认流测试，覆盖 needs_confirmation、confirmed_decisions 和确认作用域。
 P3：把 golden cases 拆成“固定期望 + 行为断言”两层。
 P4：增加真实模型稳定性报告，持续跟踪 warning、确认率、重试率和误判率。
+```
+
+当前状态：
+
+```text
+P0：已完成。strict_fpa 逻辑事务合并口径已有 profile、prompt、fixture、测试锁定。
+P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
+P2：已完成后端契约和预览测试；前端确认卡片和批量暂停/继续流程待做。
+P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
+P4：未开始。仍需真实模型稳定性报告和指标沉淀。
 ```
 
 ## Agent 工作流方案
@@ -622,6 +712,18 @@ validator 校验
 - 审慎模式：只对高风险争议点展示确认，适合日常业务生成。
 - 严格确认模式：所有合并、拆分、EIF、EO 争议都展示确认，适合验收和审计。
 
+当前 Web 已在高级选项中增加 `FPA 生成模式` 下拉框，选项来自 `/api/fpa/options`：
+
+```json
+[
+  {"name": "auto", "label": "自动模式"},
+  {"name": "cautious", "label": "审慎模式"},
+  {"name": "strict", "label": "严格确认模式"}
+]
+```
+
+默认值为 `cautious`。FPA 预览请求会携带 `fpa_confirmation_mode`；正式运行请求也会携带该字段，但当前批量生成仍按非阻断 warning/重试路径执行，尚未实现批量暂停确认。
+
 ### 确认卡片
 
 每个争议点展示为一张确认卡片，包含主题、问题、推荐选项、原因和用户选择。
@@ -696,6 +798,29 @@ EIF 识别
 ```
 
 后端生成最终结果时，应将 `confirmed_decisions` 写入 prompt、规则上下文或后处理上下文，并作为硬约束执行。
+
+当前预览接口实际返回字段为：
+
+```json
+{
+  "status": "needs_confirmation",
+  "confirmation_mode": "cautious",
+  "confirmation_questions": [],
+  "confirmed_decision_count": 0,
+  "rows": [],
+  "warnings": []
+}
+```
+
+其中 `confirmation_questions` 中的确认项包含：
+
+- `id`
+- `topic`
+- `question`
+- `recommendation`
+- `reason`
+- `options`
+- `source_issue`
 
 ### 确认作用域
 
