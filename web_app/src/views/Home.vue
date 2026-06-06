@@ -295,6 +295,7 @@ async function startTask() {
   if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
   if (config.fpaStrategy) body.append('fpa_strategy', config.fpaStrategy)
   if (config.fpaRuleSet) body.append('fpa_rule_set', config.fpaRuleSet)
+  if (config.fpaConfirmationMode) body.append('fpa_confirmation_mode', config.fpaConfirmationMode)
   if (config.clean) body.append('clean', '1')
 
   let url: string

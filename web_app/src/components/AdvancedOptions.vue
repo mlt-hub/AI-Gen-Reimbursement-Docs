@@ -72,6 +72,14 @@
             </select>
             <div v-if="fpaOptionsError" class="mt-1 text-xs text-[var(--color-warning)]">{{ fpaOptionsError }}</div>
           </div>
+          <div>
+            <label for="fpa-confirmation-mode" class="field-label text-xs">FPA 生成模式</label>
+            <select id="fpa-confirmation-mode" v-model="config.fpaConfirmationMode" class="field-control">
+              <option v-for="mode in fpaOptions.confirmation_modes" :key="mode.name" :value="mode.name">
+                {{ mode.label }}
+              </option>
+            </select>
+          </div>
         </div>
       </section>
 
@@ -128,6 +136,9 @@ watch(
   options => {
     if (config.fpaRuleSet && !options.rule_sets.some(ruleSet => ruleSet.name === config.fpaRuleSet)) {
       config.fpaRuleSet = ''
+    }
+    if (!options.confirmation_modes.some(mode => mode.name === config.fpaConfirmationMode)) {
+      config.fpaConfirmationMode = 'cautious'
     }
   },
   { immediate: true },

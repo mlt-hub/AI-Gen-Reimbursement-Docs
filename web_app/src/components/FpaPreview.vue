@@ -335,6 +335,10 @@ interface FpaPreviewResult {
   }
   rows: FpaPreviewRow[]
   warnings: string[]
+  status?: 'ok' | 'needs_confirmation'
+  confirmation_mode?: string
+  confirmation_questions?: Array<Record<string, unknown>>
+  confirmed_decision_count?: number
   used_ai: boolean
   profile: string
   profile_version: string
@@ -504,6 +508,7 @@ async function runPreview() {
   if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
   if (config.fpaStrategy) body.append('fpa_strategy', config.fpaStrategy)
   if (config.fpaRuleSet) body.append('fpa_rule_set', config.fpaRuleSet)
+  if (config.fpaConfirmationMode) body.append('fpa_confirmation_mode', config.fpaConfirmationMode)
   appendInputSource(body)
 
   try {

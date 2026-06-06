@@ -22,6 +22,7 @@ export interface FpaOptions {
   default_profile: string
   profiles: FpaProfileOption[]
   strategies: FpaNamedOption[]
+  confirmation_modes: FpaNamedOption[]
   kinds: FpaNamedOption[]
   rule_sets: FpaRuleSetOption[]
 }
@@ -39,6 +40,11 @@ const fallbackOptions: FpaOptions = {
     { name: 'ai_first', label: 'AI 优先' },
     { name: 'rules_only', label: '仅规则' },
     { name: 'ai_only', label: '仅 AI' },
+  ],
+  confirmation_modes: [
+    { name: 'auto', label: '自动模式' },
+    { name: 'cautious', label: '审慎模式' },
+    { name: 'strict', label: '严格确认模式' },
   ],
   kinds: [
     { name: 'strict_fpa', label: 'strict_fpa' },
@@ -67,6 +73,7 @@ export function useFpaOptions() {
           default_profile: data.default_profile || fallbackOptions.default_profile,
           profiles: data.profiles?.length ? data.profiles : fallbackOptions.profiles,
           strategies: data.strategies?.length ? data.strategies : fallbackOptions.strategies,
+          confirmation_modes: data.confirmation_modes?.length ? data.confirmation_modes : fallbackOptions.confirmation_modes,
           kinds: data.kinds?.length ? data.kinds : fallbackOptions.kinds,
           rule_sets: data.rule_sets ?? [],
         }

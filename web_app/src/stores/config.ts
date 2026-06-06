@@ -6,6 +6,7 @@ export type BackendStatus = 'checking' | 'connected' | 'degraded' | 'offline'
 export type PipelineMode = 'from-excel-gen-all' | 'from-excel-gen-basedata' |
   'from-excel-gen-fpa' | 'from-excel-gen-cosmic' |
   'from-excel-gen-list' | 'from-excel-gen-spec'
+export type FpaConfirmationMode = 'auto' | 'cautious' | 'strict'
 
 // ── 浏览器端配置持久化 ───────────────────────────────────
 
@@ -64,6 +65,7 @@ export interface UserSettings {
   fpaProfile: string
   fpaStrategy: string
   fpaRuleSet: string
+  fpaConfirmationMode: FpaConfirmationMode
   pipelineMode: PipelineMode
   clean: boolean
 }
@@ -89,6 +91,7 @@ export const useConfigStore = defineStore('config', () => {
   const fpaProfile = ref(normalizeFpaProfile(loadStr('fpaProfile', 'strict_fpa')))
   const fpaStrategy = ref(normalizeFpaStrategy(loadStr('fpaStrategy', '')))
   const fpaRuleSet = ref(loadStr('fpaRuleSet', ''))
+  const fpaConfirmationMode = ref<FpaConfirmationMode>(normalizeFpaConfirmationMode(loadStr('fpaConfirmationMode', 'cautious')))
   const clean = ref(loadBool('clean', false))
   const selectedFile = ref<File | null>(null)
 
@@ -100,6 +103,7 @@ export const useConfigStore = defineStore('config', () => {
   watch(fpaProfile, v => saveStr('fpaProfile', normalizeFpaProfile(v)))
   watch(fpaStrategy, v => saveStr('fpaStrategy', normalizeFpaStrategy(v)))
   watch(fpaRuleSet, v => saveStr('fpaRuleSet', v))
+  watch(fpaConfirmationMode, v => saveStr('fpaConfirmationMode', normalizeFpaConfirmationMode(v)))
   watch(pipelineMode, v => saveStr('pipelineMode', v))
   watch(clean, v => saveBool('clean', v))
 
@@ -119,6 +123,7 @@ export const useConfigStore = defineStore('config', () => {
     fpaProfile.value = 'strict_fpa'
     fpaStrategy.value = ''
     fpaRuleSet.value = ''
+    fpaConfirmationMode.value = 'cautious'
     clean.value = false
     selectedFile.value = null
   }
@@ -133,6 +138,7 @@ export const useConfigStore = defineStore('config', () => {
       fpaProfile: fpaProfile.value,
       fpaStrategy: fpaStrategy.value,
       fpaRuleSet: fpaRuleSet.value,
+      fpaConfirmationMode: fpaConfirmationMode.value,
       pipelineMode: pipelineMode.value,
       clean: clean.value,
     }
@@ -151,6 +157,7 @@ export const useConfigStore = defineStore('config', () => {
       if (data.fpaProfile !== undefined) fpaProfile.value = normalizeFpaProfile(data.fpaProfile)
       if (data.fpaStrategy !== undefined) fpaStrategy.value = normalizeFpaStrategy(data.fpaStrategy)
       if (data.fpaRuleSet !== undefined) fpaRuleSet.value = data.fpaRuleSet
+      if (data.fpaConfirmationMode !== undefined) fpaConfirmationMode.value = normalizeFpaConfirmationMode(data.fpaConfirmationMode)
       if (data.pipelineMode !== undefined) pipelineMode.value = data.pipelineMode
       if (data.clean !== undefined) clean.value = data.clean
       return true
@@ -162,7 +169,7 @@ export const useConfigStore = defineStore('config', () => {
   const apiKeyForRequest = computed(() => normalizeApiKeyInput(apiKey.value))
 
   return { workMode, backendStatus, pipelineMode, xlsxPath, outputDir, apiKey, apiKeyForRequest, model, baseUrl,
-           maxTokens, projectName, fpaProfile, fpaStrategy, fpaRuleSet, clean, selectedFile, isValid, reset,
+           maxTokens, projectName, fpaProfile, fpaStrategy, fpaRuleSet, fpaConfirmationMode, clean, selectedFile, isValid, reset,
            exportSettings, importSettings }
 })
 
@@ -174,4 +181,9 @@ function normalizeFpaProfile(value: string): string {
 function normalizeFpaStrategy(value: string): string {
   const v = value.trim()
   return ['', 'rules_first', 'ai_first', 'rules_only', 'ai_only'].includes(v) ? v : ''
+}
+
+function normalizeFpaConfirmationMode(value: string): FpaConfirmationMode {
+  const v = value.trim()
+  return v === 'auto' || v === 'strict' ? v : 'cautious'
 }
