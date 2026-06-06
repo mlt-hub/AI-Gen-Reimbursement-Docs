@@ -94,19 +94,23 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             ],
         })
 
+    summary = {
+        "module_count": len(module_reports),
+        "warning_count": warning_count,
+        "quality_issue_count": quality_issue_count,
+        "retryable_quality_issue_count": retryable_quality_issue_count,
+        "confirmed_decision_count": confirmed_decision_count,
+        "retry_count": retry_count,
+        "retry_trigger_source_counts": dict(retry_trigger_source_counts),
+        "source_counts": dict(source_counts),
+        "issue_code_counts": dict(issue_code_counts),
+        "agent_role_counts": dict(agent_role_counts),
+        "pending_agent_role_counts": dict(pending_agent_role_counts),
+    }
     return {
         "summary": {
-            "module_count": len(module_reports),
-            "warning_count": warning_count,
-            "quality_issue_count": quality_issue_count,
-            "retryable_quality_issue_count": retryable_quality_issue_count,
-            "confirmed_decision_count": confirmed_decision_count,
-            "retry_count": retry_count,
-            "retry_trigger_source_counts": dict(retry_trigger_source_counts),
-            "source_counts": dict(source_counts),
-            "issue_code_counts": dict(issue_code_counts),
-            "agent_role_counts": dict(agent_role_counts),
-            "pending_agent_role_counts": dict(pending_agent_role_counts),
+            **summary,
+            "recommendations": _recommendations(summary),
         },
         "modules": module_reports,
     }
@@ -198,18 +202,22 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
             "retry_trigger_source_counts": dict(run_retry_trigger_counts),
         })
 
+    summary = {
+        "run_count": len(runs),
+        "module_count": total_modules,
+        "warning_count": total_warnings,
+        "quality_issue_count": total_quality_issues,
+        "retryable_quality_issue_count": total_retryable_issues,
+        "confirmed_decision_count": total_confirmed_decisions,
+        "retry_count": total_retries,
+        "retry_trigger_source_counts": dict(retry_trigger_source_counts),
+        "source_counts": dict(source_counts),
+        "issue_code_counts": dict(issue_code_counts),
+    }
     return {
         "summary": {
-            "run_count": len(runs),
-            "module_count": total_modules,
-            "warning_count": total_warnings,
-            "quality_issue_count": total_quality_issues,
-            "retryable_quality_issue_count": total_retryable_issues,
-            "confirmed_decision_count": total_confirmed_decisions,
-            "retry_count": total_retries,
-            "retry_trigger_source_counts": dict(retry_trigger_source_counts),
-            "source_counts": dict(source_counts),
-            "issue_code_counts": dict(issue_code_counts),
+            **summary,
+            "recommendations": _recommendations(summary),
         },
         "runs": runs,
         "issue_details": issue_details,
@@ -291,6 +299,24 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
                     f"| {_int_or_default(check.get('threshold'), 0)} "
                     f"| {'yes' if check.get('passed') else 'no'} |"
                 )
+        lines.append("")
+    recommendations = summary.get("recommendations", []) if isinstance(summary, dict) else []
+    if isinstance(recommendations, list) and recommendations:
+        lines.extend([
+            "## Recommendations",
+            "",
+            "| Priority | Area | Recommendation | Evidence |",
+            "|---|---|---|---|",
+        ])
+        for item in recommendations:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"| {_escape_md(str(item.get('priority', '') or ''))} "
+                f"| {_escape_md(str(item.get('area', '') or ''))} "
+                f"| {_escape_md(str(item.get('message', '') or ''))} "
+                f"| {_escape_md(str(item.get('evidence', '') or ''))} |"
+            )
         lines.append("")
     lines.extend([
         "## Runs",
@@ -374,6 +400,97 @@ def _quality_parts(value: object) -> tuple[list[dict[str, Any]], dict[str, objec
     issues = [issue for issue in raw_issues if isinstance(issue, dict)] if isinstance(raw_issues, list) else []
     summary = value.get("summary", {})
     return issues, summary if isinstance(summary, dict) else {}
+
+
+def _recommendations(summary: dict[str, object]) -> list[dict[str, object]]:
+    issue_counts = _counter_from_dict(summary.get("issue_code_counts", {}))
+    retry_triggers = _counter_from_dict(summary.get("retry_trigger_source_counts", {}))
+    source_counts = _counter_from_dict(summary.get("source_counts", {}))
+    recommendations: list[dict[str, object]] = []
+    _add_recommendation(
+        recommendations,
+        condition=issue_counts.get("validator.explanation_structure", 0) > 0,
+        priority="P1",
+        area="explanation",
+        message="优先修复计算依据说明结构化输出，减少人工审阅成本。",
+        evidence=f"validator.explanation_structure={issue_counts.get('validator.explanation_structure', 0)}",
+    )
+    _add_recommendation(
+        recommendations,
+        condition=issue_counts.get("quality.type_judgement_mismatch", 0) > 0
+        or retry_triggers.get("quality_review", 0) > 0,
+        priority="P1",
+        area="type_judgement",
+        message="强化 prompt 对 type_judgement 的引用，检查 AI 是否偏离高置信类型建议。",
+        evidence=(
+            f"quality.type_judgement_mismatch={issue_counts.get('quality.type_judgement_mismatch', 0)}, "
+            f"quality_review_retries={retry_triggers.get('quality_review', 0)}"
+        ),
+    )
+    _add_recommendation(
+        recommendations,
+        condition=issue_counts.get("quality.merge_review_not_applied", 0) > 0
+        or issue_counts.get("validator.split_crud_ei", 0) > 0
+        or issue_counts.get("validator.split_query_eq", 0) > 0,
+        priority="P1",
+        area="merge_review",
+        message="强化维护/查询合并口径，检查规则兜底和 AI 输出是否仍按 process 拆分。",
+        evidence=(
+            f"merge_not_applied={issue_counts.get('quality.merge_review_not_applied', 0)}, "
+            f"split_crud={issue_counts.get('validator.split_crud_ei', 0)}, "
+            f"split_query={issue_counts.get('validator.split_query_eq', 0)}"
+        ),
+    )
+    _add_recommendation(
+        recommendations,
+        condition=issue_counts.get("validator.query_as_ei", 0) > 0
+        or issue_counts.get("validator.ordinary_service_as_eif", 0) > 0
+        or retry_triggers.get("validator", 0) > 0,
+        priority="P1",
+        area="validator",
+        message="继续前置基础类型边界到 prompt 和 type_judgement，降低 validator 重试压力。",
+        evidence=(
+            f"query_as_ei={issue_counts.get('validator.query_as_ei', 0)}, "
+            f"ordinary_service_as_eif={issue_counts.get('validator.ordinary_service_as_eif', 0)}, "
+            f"validator_retries={retry_triggers.get('validator', 0)}"
+        ),
+    )
+    deterministic_rule_count = source_counts.get("rules", 0) + source_counts.get("rules_fallback", 0)
+    _add_recommendation(
+        recommendations,
+        condition=deterministic_rule_count > 0 and _int_or_default(summary.get("quality_issue_count"), 0) > 0,
+        priority="P0",
+        area="rules_only_baseline",
+        message="rules/rules_only 基线仍有质量问题时，先修确定性规则，再评估真实模型波动。",
+        evidence=f"rule_sources={deterministic_rule_count}, quality_issues={_int_or_default(summary.get('quality_issue_count'), 0)}",
+    )
+    _add_recommendation(
+        recommendations,
+        condition=not recommendations and _int_or_default(summary.get("module_count"), 0) > 0,
+        priority="P2",
+        area="real_model_sampling",
+        message="当前质量信号稳定，可推进真实模型批量抽样并比较 prompt/model/rule_set 趋势。",
+        evidence=f"modules={_int_or_default(summary.get('module_count'), 0)}",
+    )
+    return recommendations
+
+
+def _add_recommendation(
+    recommendations: list[dict[str, object]],
+    *,
+    condition: bool,
+    priority: str,
+    area: str,
+    message: str,
+    evidence: str,
+) -> None:
+    if condition:
+        recommendations.append({
+            "priority": priority,
+            "area": area,
+            "message": message,
+            "evidence": evidence,
+        })
 
 
 def _issue_details_for_trace(

@@ -594,6 +594,7 @@ scope: project_profile 才影响后续生成。
 - 重试后仍存在质量审核问题时，结果仍保留并写入 warning、audit trace 和稳定性报告，不阻断交付。
 - AI audit trace 会写入 `retry_trigger_source`，取值为 `validator` 或 `quality_review`。
 - 稳定性报告会汇总 `retry_trigger_source_counts`，Markdown 对比报告会新增 `Retry Triggers` 分布段。
+- 稳定性报告会基于 issue code、重试来源和生成来源给出 `recommendations`，Markdown 对比报告会新增 `Recommendations` 段，提示下一步应优先修 prompt、规则、validator、合并口径、说明结构，还是推进真实模型抽样。
 
 这样类型判定节点不只是审计展示，也能在 AI 首次输出偏离高置信建议时参与自动纠偏。
 

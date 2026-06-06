@@ -21,9 +21,10 @@ def test_stability_report_summarizes_module_quality_signals():
                     "issues": [
                         {"code": "validator.query_as_ei", "retryable": True},
                         {"code": "quality.merge_review_not_applied", "retryable": True},
+                        {"code": "validator.explanation_structure", "retryable": False},
                     ],
                     "summary": {
-                        "issue_count": 2,
+                        "issue_count": 3,
                         "retryable_count": 2,
                         "confirmed_decision_count": 1,
                     },
@@ -55,13 +56,15 @@ def test_stability_report_summarizes_module_quality_signals():
     summary = report["summary"]
     assert summary["module_count"] == 2
     assert summary["warning_count"] == 2
-    assert summary["quality_issue_count"] == 2
+    assert summary["quality_issue_count"] == 3
     assert summary["retryable_quality_issue_count"] == 2
     assert summary["confirmed_decision_count"] == 1
     assert summary["retry_count"] == 1
     assert summary["retry_trigger_source_counts"] == {"quality_review": 1}
     assert summary["source_counts"] == {"ai": 1, "rules_fallback": 1}
     assert summary["issue_code_counts"]["validator.query_as_ei"] == 1
+    assert summary["recommendations"][0]["area"] == "explanation"
+    assert any(item["area"] == "rules_only_baseline" for item in summary["recommendations"])
     assert summary["agent_role_counts"]["business_fact_extractor"] == 2
     assert summary["pending_agent_role_counts"]["fpa_type_judge"] == 2
     assert report["modules"][0]["retry_count"] == 1
@@ -127,6 +130,8 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert comparison["issue_details"][0]["case_id"] == "customer_query"
     assert comparison["issue_details"][0]["message"] == "查询流程不应判为 EI"
     assert "validator.query_as_ei" in markdown
+    assert "## Recommendations" in markdown
+    assert "validator_retries=1" in markdown
     assert "## Retry Triggers" in markdown
     assert "| validator | 1 |" in markdown
     assert "| customer_query | customer_query__strict_fpa__ai_first__strict_fpa_rs | model-a.json |" in markdown
