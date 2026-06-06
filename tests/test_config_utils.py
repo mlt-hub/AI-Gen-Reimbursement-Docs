@@ -908,6 +908,9 @@ class TestLoadFpaUserPromptTemplate:
         assert "必须合并为一个维护类 EI" in strict
         assert "必须合并为一个查询类 EQ" in strict
         assert "普通外部服务调用" in strict
+        assert "xxx数据组" in strict
+        assert "xxx维护" in strict
+        assert "xxx查询" in strict
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
         _write_fpa_config(tmp_path)
