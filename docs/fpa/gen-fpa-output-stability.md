@@ -619,6 +619,19 @@ Quality Gate: PASS
 Recommendation: 当前质量信号稳定，可推进真实模型批量抽样。
 ```
 
+当前已继续增强真实模型抽样入口的安全性：
+
+- `scripts/run_fpa_stability_ci.py` 默认不再隐式启用 `strict-real-model` preset。
+- 仅传 `--suite standard` 时，默认按 `strict_fpa + rules_only + strict_fpa_rs` 运行。
+- 真实模型抽样必须显式传 `--preset strict-real-model`。
+- 新增 `--dry-run`，只打印解析后的 fixture、profile、strategy、rule_set、threshold、output_dir 和 `will_call_model`，不调用模型。
+
+推荐真实模型运行前先执行：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py --dry-run --preset strict-real-model
+```
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。

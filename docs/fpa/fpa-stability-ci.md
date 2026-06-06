@@ -11,13 +11,21 @@
 
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
-  --preset "" `
   --suite standard `
-  --profiles strict_fpa `
-  --strategies rules_only `
-  --rule-sets strict_fpa_rs `
   --max-retries 0 `
+  --max-quality-issues 0 `
+  --max-retryable-issues 0 `
   --output-dir .\tmp_fpa_stability_ci
+```
+
+脚本默认不启用真实模型 preset；仅指定 `--suite standard` 时，默认使用 `profile=strict_fpa`、`strategy=rules_only`、`rule_set=strict_fpa_rs`。
+
+运行前可用 dry-run 查看计划，不会调用模型：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --dry-run `
+  --suite standard
 ```
 
 ## 本地真实模型门禁
@@ -40,6 +48,14 @@
 - `max_retries=0`
 
 质量门失败时，脚本返回退出码 `2`。
+
+真实模型运行前建议先 dry-run 确认会调用模型：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --dry-run `
+  --preset strict-real-model
+```
 
 ## GitHub Actions 示例
 
