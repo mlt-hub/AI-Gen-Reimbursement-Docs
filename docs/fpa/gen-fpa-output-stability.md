@@ -553,6 +553,24 @@ ard --fpa-stability-report .\run-a\fpa_audit_trace.json .\run-b\fpa_audit_trace.
 - issue code 分布。
 - `ai`、`ai_cache`、`rules`、`rules_fallback` 等生成来源分布。
 
+当前还已完成第一版自动批量抽样执行器。可以直接基于现有 FPA golden fixture 生成多组 trace 和汇总报告：
+
+```powershell
+ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_industry_management.json `
+  --fpa-stability-sample-profiles strict_fpa,unified_ui `
+  --fpa-stability-sample-strategies rules_only `
+  --fpa-stability-sample-rule-sets strict_fpa_rs `
+  --output-dir .\fpa-stability-samples
+```
+
+输出目录会包含：
+
+- 每个 fixture/config 组合的 `module_tree.md`、`meta.md`、`fpa.md`、`summary.md`、`fpa_audit_trace.json`。
+- `fpa-stability-sampling-manifest.json`。
+- `fpa-stability-sampling-report.md`。
+
+第一版默认可用 `rules_only` 做无模型基线；传入 `--api-key`、`--model`、`--base-url` 并选择 `ai_first`/`ai_only` 后，可复用同一入口做真实模型抽样。
+
 ### 增强优先级
 
 推荐按以下优先级增强 harness：
@@ -573,7 +591,7 @@ P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试和 FPA 预览页确认卡片；批量暂停/继续流程待做。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
 两阶段生成：已完成第一版规则化 `process_facts`、`merge_review` 和 `quality_review` 中间结构；尚未拆成独立 AI Agent。
-P4：已完成第一版指标沉淀和多 trace Markdown 对比报告。真实模型自动批量抽样执行器仍待做。
+P4：已完成第一版指标沉淀、多 trace Markdown 对比报告和 fixture 批量抽样执行器。后续仍需补真实模型批量抽样的推荐样例集和趋势阈值。
 ```
 
 ## Agent 工作流方案

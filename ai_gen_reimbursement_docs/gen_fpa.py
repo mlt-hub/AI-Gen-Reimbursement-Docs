@@ -1753,6 +1753,11 @@ def _plan_fpa_rows_with_execution(
         for group in groups:
             group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
             _attach_profile_rule_hits(group_rows, profile=profile, generation="fallback")
+            quality_review = _build_quality_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
             all_rows.extend(group_rows)
             seq += len(group_rows)
             audit_modules.append({
@@ -1762,14 +1767,17 @@ def _plan_fpa_rows_with_execution(
                 "raw_rows": [],
                 "warnings": [*config_warnings, "仅规则策略未调用 AI"],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
+                "quality_review": quality_review,
             })
-        _save_fpa_audit_trace(audit_trace_path, {
+        audit_trace = {
             "version": 1,
             "profile": profile.name,
             "strategy": strategy,
             "rule_set": rule_set,
             "modules": audit_modules,
-        })
+        }
+        audit_trace["stability_report"] = build_fpa_stability_report(audit_trace)
+        _save_fpa_audit_trace(audit_trace_path, audit_trace)
         return all_rows
     if strategy != "rules_first" and not api_key:
         raise ValueError(f"FPA strategy={strategy} 需要 API Key，当前未配置")

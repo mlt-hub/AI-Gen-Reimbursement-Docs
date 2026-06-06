@@ -468,6 +468,14 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='读取一个或多个 fpa_audit_trace.json，输出 FPA 稳定性对比报告')
     parser.add_argument('--fpa-stability-output', default='',
                         help='FPA 稳定性对比报告 Markdown 输出路径')
+    parser.add_argument('--fpa-stability-sample-fixtures', nargs='+', default=[],
+                        help='读取一个或多个 FPA golden fixture JSON，批量生成稳定性采样 trace 和报告')
+    parser.add_argument('--fpa-stability-sample-profiles', default='strict_fpa',
+                        help='稳定性采样 profile 列表，逗号分隔')
+    parser.add_argument('--fpa-stability-sample-strategies', default='rules_only',
+                        help='稳定性采样 strategy 列表，逗号分隔')
+    parser.add_argument('--fpa-stability-sample-rule-sets', default='',
+                        help='稳定性采样 rule_set 列表，逗号分隔')
     parser.add_argument('--preview-fpa-module', default='',
                         help='只预览指定三级模块的 FPA 拆分结果，不生成 Excel')
     parser.add_argument('--preview-fpa-module-index', type=int, default=None,
@@ -647,6 +655,31 @@ def main():
             print(output_path)
         else:
             print(markdown)
+        return
+
+    if args.fpa_stability_sample_fixtures:
+        from ai_gen_reimbursement_docs.fpa_stability_sampler import (
+            parse_fpa_stability_sample_configs,
+            run_fpa_stability_sampling,
+        )
+
+        sample_output_dir = args.output_dir or os.path.abspath("fpa-stability-samples")
+        sample_api_key = args.api_key or load_api_key()
+        sample_model = args.model or load_model_name()
+        sample_base_url = load_base_url()
+        manifest = run_fpa_stability_sampling(
+            fixture_paths=args.fpa_stability_sample_fixtures,
+            output_dir=sample_output_dir,
+            configs=parse_fpa_stability_sample_configs(
+                profiles=args.fpa_stability_sample_profiles,
+                strategies=args.fpa_stability_sample_strategies,
+                rule_sets=args.fpa_stability_sample_rule_sets,
+            ),
+            api_key=sample_api_key,
+            model=sample_model,
+            base_url=sample_base_url,
+        )
+        print(manifest["report_path"])
         return
 
     if args.web:

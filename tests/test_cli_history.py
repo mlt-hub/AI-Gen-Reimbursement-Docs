@@ -78,3 +78,27 @@ def test_cli_parser_accepts_fpa_stability_report_args():
 
     assert args.fpa_stability_report == ["trace-a.json", "trace-b.json"]
     assert args.fpa_stability_output == "report.md"
+
+
+def test_cli_parser_accepts_fpa_stability_sampling_args():
+    parser = cli_main._build_parser()
+
+    args = parser.parse_args([
+        "--fpa-stability-sample-fixtures",
+        "case-a.json",
+        "case-b.json",
+        "--fpa-stability-sample-profiles",
+        "strict_fpa,unified_ui",
+        "--fpa-stability-sample-strategies",
+        "rules_only,rules_first",
+        "--fpa-stability-sample-rule-sets",
+        "strict_fpa_rs",
+        "--output-dir",
+        "samples",
+    ])
+
+    assert args.fpa_stability_sample_fixtures == ["case-a.json", "case-b.json"]
+    assert args.fpa_stability_sample_profiles == "strict_fpa,unified_ui"
+    assert args.fpa_stability_sample_strategies == "rules_only,rules_first"
+    assert args.fpa_stability_sample_rule_sets == "strict_fpa_rs"
+    assert args.output_dir == "samples"
