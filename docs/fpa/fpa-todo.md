@@ -227,6 +227,7 @@ rule_set 已并入 fpa_config.yaml。
 rule_set_version 已移除，不再要求用户手动维护版本号。
 rule_set extends 继承已落地，当前支持按规则段配置 append / replace，覆盖 keyword_rules、type_mapping_rules、ai_type_conflict_rules、internal_data_rules、external_data_rules。
 coverage_rules 已支持配置 ai_first 下 rules_fallback 是否补未覆盖功能过程、是否补数据功能行。
+待实施：功能过程覆盖判断改为使用内部 process_id，避免 AI 返回名称与源功能过程名称存在近形字、标点或前后缀差异时误补 rules_fallback。方案见 docs/fpa/todo/fpa-process-id-coverage.md。
 ```
 
 第一版 rule_set 建议支持：
