@@ -383,12 +383,14 @@ def _prompt_payload(
     from ai_gen_reimbursement_docs.fpa_agent_review import build_fpa_agent_review
     from ai_gen_reimbursement_docs.fpa_facts import extract_fpa_process_facts
     from ai_gen_reimbursement_docs.fpa_merge_review import build_fpa_merge_review
+    from ai_gen_reimbursement_docs.fpa_type_judgement import build_fpa_type_judgement
 
     adjustment_config = load_fpa_adjustment_value_config()
     methods = adjustment_config.get("methods", {})
     standard_fpa = methods.get("standard_fpa", {}) if isinstance(methods, dict) else {}
     process_facts = extract_fpa_process_facts(group)
     merge_review = build_fpa_merge_review(group)
+    type_judgement = build_fpa_type_judgement(group)
     agent_review = build_fpa_agent_review(group=group)
     return {
         "module": {
@@ -410,6 +412,7 @@ def _prompt_payload(
         ] if isinstance(group.get("processes", []), list) else [],
         "process_facts": process_facts,
         "merge_review": merge_review,
+        "type_judgement": type_judgement,
         "agent_review": agent_review,
         "domain_context": domain_context or {},
         "fpa_calculation": {

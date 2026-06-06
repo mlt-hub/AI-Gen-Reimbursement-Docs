@@ -37,8 +37,11 @@ def test_agent_review_exposes_role_contract_before_rows_exist():
     assert roles["business_fact_extractor"]["status"] == "completed"
     assert roles["merge_boundary_reviewer"]["status"] == "completed"
     assert roles["quality_reviewer"]["status"] == "awaiting_rows"
-    assert roles["fpa_type_judge"]["status"] == "pending_agent"
-    assert review["summary"]["pending_agent_roles"] == ["fpa_type_judge"]
+    assert roles["fpa_type_judge"]["status"] == "completed"
+    assert roles["fpa_type_judge"]["output_key"] == "type_judgement"
+    assert review["summary"]["pending_agent_roles"] == []
+    assert review["summary"]["type_judgement_count"] == 1
+    assert review["type_judgement"]["judgements"][0]["suggested_type"] == "EI"
     assert review["merge_review"]["groups"][0]["recommendation"] == "merge"
 
 

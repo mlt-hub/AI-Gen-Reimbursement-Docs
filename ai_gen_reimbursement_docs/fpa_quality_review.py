@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from ai_gen_reimbursement_docs.fpa_merge_review import build_fpa_merge_review
+from ai_gen_reimbursement_docs.fpa_type_judgement import build_fpa_type_judgement
 from ai_gen_reimbursement_docs.fpa_validator import validate_fpa_rows
 
 
@@ -30,6 +31,7 @@ def build_fpa_quality_review(
     group: dict[str, object],
     rows: list[dict[str, object]],
     merge_review: dict[str, object] | None = None,
+    type_judgement: dict[str, object] | None = None,
     confirmed_decisions: object | None = None,
 ) -> dict[str, object]:
     """Review generated FPA rows against validator and merge recommendations."""
@@ -46,6 +48,8 @@ def build_fpa_quality_review(
         ))
     review = merge_review or build_fpa_merge_review(group)
     issues.extend(_merge_review_issues(rows=rows, merge_review=review))
+    type_review = type_judgement or build_fpa_type_judgement(group)
+    issues.extend(_type_judgement_issues(rows=rows, type_judgement=type_review))
     summary = {
         "issue_count": len(issues),
         "retryable_count": sum(1 for issue in issues if issue.retryable),
@@ -94,6 +98,62 @@ def _merge_review_issues(
                 suggested_action="retry_or_confirm",
                 retryable=True,
             ))
+    return issues
+
+
+def _type_judgement_issues(
+    *,
+    rows: list[dict[str, object]],
+    type_judgement: dict[str, object],
+) -> list[FpaQualityIssue]:
+    issues: list[FpaQualityIssue] = []
+    judgements = type_judgement.get("judgements", [])
+    if not isinstance(judgements, list):
+        return issues
+    for judgement in judgements:
+        if not isinstance(judgement, dict):
+            continue
+        suggested_type = str(judgement.get("suggested_type", "") or "").upper()
+        source_ids = set(_string_list(judgement.get("source_process_ids", [])))
+        if not suggested_type or not source_ids:
+            continue
+        matching = [
+            (index, row)
+            for index, row in enumerate(rows)
+            if _row_source_ids(row) & source_ids
+        ]
+        if suggested_type == "NONE":
+            for index, row in matching:
+                row_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
+                if row_type == "EIF":
+                    issues.append(FpaQualityIssue(
+                        code="quality.type_judgement_mismatch",
+                        severity="warning",
+                        message=(
+                            f"{row.get('新增/修改功能点', '') or row.get('name', '')} "
+                            "与类型判定节点冲突：普通外部服务不应生成 EIF。"
+                        ),
+                        source_process_ids=sorted(source_ids),
+                        suggested_action="retry_or_confirm",
+                        row_index=index,
+                        retryable=True,
+                    ))
+            continue
+        for index, row in matching:
+            row_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
+            if row_type and row_type != suggested_type:
+                issues.append(FpaQualityIssue(
+                    code="quality.type_judgement_mismatch",
+                    severity="warning",
+                    message=(
+                        f"{row.get('新增/修改功能点', '') or row.get('name', '')} "
+                        f"与类型判定节点冲突：建议 {suggested_type}，当前为 {row_type}。"
+                    ),
+                    source_process_ids=sorted(source_ids),
+                    suggested_action="retry_or_confirm",
+                    row_index=index,
+                    retryable=True,
+                ))
     return issues
 
 

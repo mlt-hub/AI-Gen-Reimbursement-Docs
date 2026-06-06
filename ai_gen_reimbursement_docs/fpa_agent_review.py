@@ -10,6 +10,7 @@ from typing import Any
 from ai_gen_reimbursement_docs.fpa_facts import extract_fpa_process_facts
 from ai_gen_reimbursement_docs.fpa_merge_review import build_fpa_merge_review
 from ai_gen_reimbursement_docs.fpa_quality_review import build_fpa_quality_review
+from ai_gen_reimbursement_docs.fpa_type_judgement import build_fpa_type_judgement
 
 
 def build_fpa_agent_review(
@@ -21,11 +22,13 @@ def build_fpa_agent_review(
     """Build a structured review for the FPA agent role split."""
     process_facts = extract_fpa_process_facts(group)
     merge_review = build_fpa_merge_review(group)
+    type_judgement = build_fpa_type_judgement(group)
     quality_review = (
         build_fpa_quality_review(
             group=group,
             rows=rows,
             merge_review=merge_review,
+            type_judgement=type_judgement,
             confirmed_decisions=confirmed_decisions,
         )
         if rows is not None
@@ -50,13 +53,11 @@ def build_fpa_agent_review(
         _role(
             name="fpa_type_judge",
             label="FPA 类型判定 Agent",
-            implementation="hybrid:profile+prompt+validator",
-            status="pending_agent",
-            input_keys=["process_facts", "domain_context", "fpa_calculation"],
-            output_key="rows",
-            summary={
-                "reason": "当前由 profile 规则、AI rows 和 validator 共同承担，尚未独立拆成节点。",
-            },
+            implementation="deterministic:fpa_type_judgement.build_fpa_type_judgement",
+            status="completed",
+            input_keys=["process_facts", "merge_review", "domain_context"],
+            output_key="type_judgement",
+            summary=_type_summary(type_judgement),
         ),
         _role(
             name="merge_boundary_reviewer",
@@ -86,8 +87,9 @@ def build_fpa_agent_review(
         "roles": roles,
         "process_facts": process_facts,
         "merge_review": merge_review,
+        "type_judgement": type_judgement,
         "quality_review": quality_review,
-        "summary": _summary(roles, process_facts, merge_review, quality_review),
+        "summary": _summary(roles, process_facts, merge_review, type_judgement, quality_review),
     }
 
 
@@ -116,6 +118,7 @@ def _summary(
     roles: list[dict[str, object]],
     process_facts: list[dict[str, object]],
     merge_review: dict[str, object],
+    type_judgement: dict[str, object],
     quality_review: dict[str, object],
 ) -> dict[str, object]:
     return {
@@ -128,12 +131,20 @@ def _summary(
         ],
         "process_fact_count": len(process_facts),
         "merge_group_count": len(_list_value(merge_review.get("groups"))),
+        "type_judgement_count": _type_summary(type_judgement).get("judgement_count", 0),
         "quality_issue_count": _quality_summary(quality_review).get("issue_count", 0),
     }
 
 
 def _quality_summary(quality_review: dict[str, object]) -> dict[str, object]:
     summary = quality_review.get("summary", {}) if isinstance(quality_review, dict) else {}
+    if isinstance(summary, dict):
+        return dict(summary)
+    return {}
+
+
+def _type_summary(type_judgement: dict[str, object]) -> dict[str, object]:
+    summary = type_judgement.get("summary", {}) if isinstance(type_judgement, dict) else {}
     if isinstance(summary, dict):
         return dict(summary)
     return {}

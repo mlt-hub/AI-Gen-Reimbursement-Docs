@@ -82,3 +82,16 @@ def test_quality_review_includes_validator_issues():
 
     assert "validator.query_as_ei" in _issue_codes(review)
     assert review["summary"]["retryable_count"] >= 1
+
+
+def test_quality_review_flags_type_judgement_mismatch():
+    rows = [{
+        "新增/修改功能点": "查询垂直行业",
+        "类型": "EI",
+        "计算依据说明": "来源场景：查询垂直行业。\n业务数据：垂直行业列表。\n业务规则：只读取并展示列表。\n计算说明：误判为 EI。",
+        "source_process_ids": ["m1_p3"],
+    }]
+
+    review = build_fpa_quality_review(group=_group(), rows=rows)
+
+    assert "quality.type_judgement_mismatch" in _issue_codes(review)

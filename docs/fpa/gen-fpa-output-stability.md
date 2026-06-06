@@ -524,9 +524,9 @@ scope: project_profile 才影响后续生成。
     {
       "name": "fpa_type_judge",
       "label": "FPA 类型判定 Agent",
-      "implementation": "hybrid:profile+prompt+validator",
-      "status": "pending_agent",
-      "output_key": "rows"
+      "implementation": "deterministic:fpa_type_judgement.build_fpa_type_judgement",
+      "status": "completed",
+      "output_key": "type_judgement"
     },
     {
       "name": "merge_boundary_reviewer",
@@ -546,7 +546,45 @@ scope: project_profile 才影响后续生成。
 }
 ```
 
-这一步仍不新增额外 AI 调用，也不改变最终功能点计数。它解决的是“Agent 分工可追踪、可测试、可替换”的问题：后续如果要把 `fpa_type_judge` 或其它节点拆成独立 AI Agent，只需要保持同样的 `agent_review.roles[*]`、`process_facts`、`merge_review`、`quality_review` 契约，稳定性报告也能继续统计 `pending_agent_roles`。
+这一步仍不新增额外 AI 调用，也不改变最终功能点计数。它解决的是“Agent 分工可追踪、可测试、可替换”的问题：后续如果要把某个确定性节点替换成独立 AI Agent，只需要保持同样的 `agent_review.roles[*]`、`process_facts`、`type_judgement`、`merge_review`、`quality_review` 契约，稳定性报告也能继续统计 `pending_agent_roles`。
+
+当前已继续完成第一版规则化 FPA 类型判定节点，新增 `ai_gen_reimbursement_docs/fpa_type_judgement.py`。该节点基于 `process_facts` 和 `merge_review` 输出 `type_judgement`，作为生成前的类型建议和质量审核证据链：
+
+```json
+{
+  "judgements": [
+    {
+      "id": "type_query_eq_垂直行业",
+      "candidate_name": "垂直行业查询",
+      "suggested_type": "EQ",
+      "judgement_kind": "query_eq",
+      "target_data_group": "垂直行业",
+      "source_process_ids": ["m1_p1", "m1_p2"],
+      "confidence": "high",
+      "rationale": "同一列表、搜索或查看场景只读取并展示同类数据，按查询类 EQ 判断。"
+    },
+    {
+      "id": "type_maintenance_ei_垂直行业",
+      "candidate_name": "垂直行业维护",
+      "suggested_type": "EI",
+      "judgement_kind": "maintenance_ei",
+      "source_process_ids": ["m1_p3", "m1_p4", "m1_p5"],
+      "confidence": "high",
+      "rationale": "同一业务对象的新增、修改、删除或维护动作改变本系统内部数据，按维护类 EI 判断。"
+    }
+  ]
+}
+```
+
+当前覆盖的确定性建议包括：
+
+- 同一业务对象维护动作合并后建议 EI。
+- 同一查询或列表场景合并后建议 EQ。
+- 导出、统计、汇总、报表或文件输出建议 EO。
+- 明确外部系统维护或本系统不维护的数据组建议 EIF。
+- 普通校验、认证、短信、支付、消息调用等没有外部维护数据组证据时建议 `NONE`，即不生成 EIF。
+
+`quality_review` 已接入 `type_judgement`：当最终 rows 的来源流程命中高置信类型建议但类型不一致时，会产生 `quality.type_judgement_mismatch`。该检查仍是非破坏式 warning/retry 信号，不直接改写 AI 输出。
 
 ### 多次采样与择优
 
@@ -707,7 +745,7 @@ P0：已完成。strict_fpa 逻辑事务合并口径已有 profile、prompt、fi
 P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试和 FPA 预览页确认卡片；批量暂停/继续流程待做。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
-两阶段生成：已完成第一版规则化 `process_facts`、`merge_review` 和 `quality_review` 中间结构，并已新增统一 `agent_review` 分工契约；`fpa_type_judge` 仍标记为 `pending_agent`，尚未拆成独立 AI Agent。
+两阶段生成：已完成第一版规则化 `process_facts`、`type_judgement`、`merge_review` 和 `quality_review` 中间结构，并已新增统一 `agent_review` 分工契约；当前仍未引入额外 AI Agent 调用。
 P4：已完成第一版指标沉淀、多 trace Markdown 对比报告、fixture 批量抽样执行器和稳定性质量门。后续仍需补真实模型批量抽样的推荐样例集。
 ```
 

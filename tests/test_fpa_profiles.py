@@ -677,6 +677,7 @@ def test_prompt_payload_includes_extracted_process_facts(tmp_path):
     assert fact["changes_internal_data"] is False
     assert fact["input_type"] == "新增"
     assert payload["merge_review"]["groups"] == []
+    assert payload["type_judgement"]["judgements"][0]["suggested_type"] == "EQ"
 
 
 def test_prompt_payload_includes_merge_review(tmp_path):
@@ -749,7 +750,9 @@ def test_prompt_payload_includes_agent_review_contract(tmp_path):
     assert roles["business_fact_extractor"]["output_key"] == "process_facts"
     assert roles["merge_boundary_reviewer"]["output_key"] == "merge_review"
     assert roles["quality_reviewer"]["status"] == "awaiting_rows"
-    assert roles["fpa_type_judge"]["status"] == "pending_agent"
+    assert roles["fpa_type_judge"]["status"] == "completed"
+    assert roles["fpa_type_judge"]["output_key"] == "type_judgement"
+    assert payload["agent_review"]["type_judgement"]["judgements"][0]["suggested_type"] == "EI"
 
 
 def test_strict_profile_normalizes_development_suffixes():
