@@ -20,6 +20,19 @@ STANDARD_FPA_STABILITY_SUITE = (
     "master_data_org_reference.json",
 )
 
+FPA_STABILITY_SAMPLE_PRESETS = {
+    "strict-real-model": {
+        "suite": "standard",
+        "profiles": "strict_fpa",
+        "strategies": "ai_first",
+        "rule_sets": "strict_fpa_rs",
+        "thresholds": {
+            "retryable_quality_issue_count": 0,
+            "retry_count": 0,
+        },
+    },
+}
+
 
 @dataclass(frozen=True)
 class FpaStabilitySampleConfig:
@@ -117,6 +130,23 @@ def resolve_fpa_stability_suite_fixtures(suite: str) -> list[str]:
         raise ValueError(f"未知 FPA 稳定性样例集: {suite}")
     fixture_dir = _repo_root() / "tests" / "fixtures" / "fpa_golden_cases"
     return [str(fixture_dir / name) for name in STANDARD_FPA_STABILITY_SUITE]
+
+
+def resolve_fpa_stability_sample_preset(preset: str) -> dict[str, object]:
+    """Resolve a named FPA stability sampling preset."""
+    preset_name = preset.strip().lower()
+    if not preset_name:
+        return {}
+    if preset_name not in FPA_STABILITY_SAMPLE_PRESETS:
+        raise ValueError(f"未知 FPA 稳定性采样 preset: {preset}")
+    raw = FPA_STABILITY_SAMPLE_PRESETS[preset_name]
+    return {
+        "suite": raw["suite"],
+        "profiles": raw["profiles"],
+        "strategies": raw["strategies"],
+        "rule_sets": raw["rule_sets"],
+        "thresholds": dict(raw["thresholds"]),
+    }
 
 
 def parse_fpa_stability_sample_configs(

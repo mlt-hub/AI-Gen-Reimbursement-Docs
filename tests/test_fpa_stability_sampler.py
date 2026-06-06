@@ -2,6 +2,7 @@ import json
 
 from ai_gen_reimbursement_docs.fpa_stability_sampler import (
     parse_fpa_stability_sample_configs,
+    resolve_fpa_stability_sample_preset,
     resolve_fpa_stability_suite_fixtures,
     run_fpa_stability_sampling,
 )
@@ -48,6 +49,19 @@ def test_resolve_standard_suite_returns_existing_fixtures():
     assert len(paths) >= 5
     assert any(path.endswith("vertical_industry_management.json") for path in paths)
     assert all(open(path, encoding="utf-8").read(1) == "{" for path in paths)
+
+
+def test_resolve_strict_real_model_preset():
+    preset = resolve_fpa_stability_sample_preset("strict-real-model")
+
+    assert preset["suite"] == "standard"
+    assert preset["profiles"] == "strict_fpa"
+    assert preset["strategies"] == "ai_first"
+    assert preset["rule_sets"] == "strict_fpa_rs"
+    assert preset["thresholds"] == {
+        "retryable_quality_issue_count": 0,
+        "retry_count": 0,
+    }
 
 
 def test_run_fpa_stability_sampling_writes_traces_manifest_and_report(tmp_path):

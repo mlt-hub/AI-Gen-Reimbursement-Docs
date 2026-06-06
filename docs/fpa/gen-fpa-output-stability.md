@@ -579,6 +579,26 @@ ard --fpa-stability-sample-suite standard `
 - 外部用户中心引用：明确外部维护数据组可生成 EIF。
 - 主数据组织引用：组织主数据 EIF 识别。
 
+真实模型抽样可使用预设命令：
+
+```powershell
+ard --fpa-stability-sample-preset strict-real-model `
+  --api-key <API_KEY> `
+  --model <MODEL_NAME> `
+  --output-dir .\fpa-stability-real-model-samples
+```
+
+`strict-real-model` 会展开为：
+
+- `suite=standard`
+- `profile=strict_fpa`
+- `strategy=ai_first`
+- `rule_set=strict_fpa_rs`
+- `max_retryable_issues=0`
+- `max_retries=0`
+
+如果同时传入 `--fpa-stability-sample-profiles`、`--fpa-stability-sample-strategies`、`--fpa-stability-sample-rule-sets` 或质量门参数，显式参数会覆盖 preset 中的默认值。
+
 当前还已补充第一版稳定性质量门。多 trace 对比或 fixture 采样时，可以增加阈值参数：
 
 ```powershell

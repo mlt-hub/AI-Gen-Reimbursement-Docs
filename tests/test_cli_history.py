@@ -111,3 +111,19 @@ def test_cli_parser_accepts_fpa_stability_sampling_args():
     assert args.output_dir == "samples"
     assert args.fpa_stability_max_retryable_issues == 0
     assert args.fpa_stability_max_retries == 0
+
+
+def test_cli_parser_accepts_fpa_stability_sampling_preset():
+    parser = cli_main._build_parser()
+
+    args = parser.parse_args([
+        "--fpa-stability-sample-preset",
+        "strict-real-model",
+        "--output-dir",
+        "samples",
+    ])
+
+    assert args.fpa_stability_sample_preset == "strict-real-model"
+    assert args.fpa_stability_sample_profiles == ""
+    assert args.fpa_stability_sample_strategies == ""
+    assert args.output_dir == "samples"
