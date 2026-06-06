@@ -95,6 +95,10 @@ def test_cli_parser_accepts_fpa_stability_sampling_args():
         "strict_fpa_rs",
         "--output-dir",
         "samples",
+        "--fpa-stability-max-retryable-issues",
+        "0",
+        "--fpa-stability-max-retries",
+        "0",
     ])
 
     assert args.fpa_stability_sample_fixtures == ["case-a.json", "case-b.json"]
@@ -102,3 +106,5 @@ def test_cli_parser_accepts_fpa_stability_sampling_args():
     assert args.fpa_stability_sample_strategies == "rules_only,rules_first"
     assert args.fpa_stability_sample_rule_sets == "strict_fpa_rs"
     assert args.output_dir == "samples"
+    assert args.fpa_stability_max_retryable_issues == 0
+    assert args.fpa_stability_max_retries == 0

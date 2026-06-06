@@ -124,6 +124,16 @@ def _print_history(*, limit: int, as_json: bool) -> None:
         print(f"  输出目录: {output_dir or '-'} ({availability})")
 
 
+def _fpa_stability_thresholds_from_args(args) -> dict[str, int]:
+    values = {
+        "warning_count": int(getattr(args, "fpa_stability_max_warnings", -1)),
+        "quality_issue_count": int(getattr(args, "fpa_stability_max_quality_issues", -1)),
+        "retryable_quality_issue_count": int(getattr(args, "fpa_stability_max_retryable_issues", -1)),
+        "retry_count": int(getattr(args, "fpa_stability_max_retries", -1)),
+    }
+    return {key: value for key, value in values.items() if value >= 0}
+
+
 def _get_version() -> str:
     """Read version from pyproject.toml."""
     import tomllib
@@ -468,6 +478,14 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='读取一个或多个 fpa_audit_trace.json，输出 FPA 稳定性对比报告')
     parser.add_argument('--fpa-stability-output', default='',
                         help='FPA 稳定性对比报告 Markdown 输出路径')
+    parser.add_argument('--fpa-stability-max-warnings', type=int, default=-1,
+                        help='FPA 稳定性质量门：允许的 warning 总数上限，-1 表示不检查')
+    parser.add_argument('--fpa-stability-max-quality-issues', type=int, default=-1,
+                        help='FPA 稳定性质量门：允许的 quality issue 总数上限，-1 表示不检查')
+    parser.add_argument('--fpa-stability-max-retryable-issues', type=int, default=-1,
+                        help='FPA 稳定性质量门：允许的可重试 quality issue 总数上限，-1 表示不检查')
+    parser.add_argument('--fpa-stability-max-retries', type=int, default=-1,
+                        help='FPA 稳定性质量门：允许的稳定性重试次数上限，-1 表示不检查')
     parser.add_argument('--fpa-stability-sample-fixtures', nargs='+', default=[],
                         help='读取一个或多个 FPA golden fixture JSON，批量生成稳定性采样 trace 和报告')
     parser.add_argument('--fpa-stability-sample-profiles', default='strict_fpa',
@@ -639,10 +657,14 @@ def main():
     if args.fpa_stability_report:
         from ai_gen_reimbursement_docs.fpa_stability_report import (
             build_fpa_stability_comparison,
+            evaluate_fpa_stability_comparison,
             render_fpa_stability_comparison_markdown,
         )
 
         comparison = build_fpa_stability_comparison(args.fpa_stability_report)
+        thresholds = _fpa_stability_thresholds_from_args(args)
+        if thresholds:
+            comparison["evaluation"] = evaluate_fpa_stability_comparison(comparison, thresholds)
         markdown = render_fpa_stability_comparison_markdown(comparison)
         report_output = args.fpa_stability_output or args.output_dir
         if report_output:
@@ -678,6 +700,7 @@ def main():
             api_key=sample_api_key,
             model=sample_model,
             base_url=sample_base_url,
+            thresholds=_fpa_stability_thresholds_from_args(args),
         )
         print(manifest["report_path"])
         return

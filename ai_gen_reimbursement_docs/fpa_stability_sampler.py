@@ -7,6 +7,7 @@ import re
 
 from ai_gen_reimbursement_docs.fpa_stability_report import (
     build_fpa_stability_comparison,
+    evaluate_fpa_stability_comparison,
     render_fpa_stability_comparison_markdown,
 )
 from ai_gen_reimbursement_docs.gen_fpa import plan_fpa_md_from_tree
@@ -27,6 +28,7 @@ def run_fpa_stability_sampling(
     api_key: str = "",
     model: str = "",
     base_url: str = "",
+    thresholds: dict[str, int] | None = None,
 ) -> dict[str, object]:
     """Run FPA planning for fixture/config combinations and render a comparison report."""
     if not fixture_paths:
@@ -78,6 +80,8 @@ def run_fpa_stability_sampling(
             })
 
     comparison = build_fpa_stability_comparison(trace_paths)
+    if thresholds:
+        comparison["evaluation"] = evaluate_fpa_stability_comparison(comparison, thresholds)
     report_md = output_root / "fpa-stability-sampling-report.md"
     report_md.write_text(
         render_fpa_stability_comparison_markdown(comparison),

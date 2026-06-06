@@ -54,11 +54,15 @@ def test_run_fpa_stability_sampling_writes_traces_manifest_and_report(tmp_path):
             strategies="rules_only",
             rule_sets="strict_fpa_rs",
         ),
+        thresholds={"retry_count": 0},
     )
 
     assert len(manifest["runs"]) == 1
+    assert manifest["comparison"]["evaluation"]["status"] == "pass"
     trace_path = manifest["runs"][0]["audit_trace"]
     trace = json.loads(open(trace_path, encoding="utf-8").read())
     assert trace["stability_report"]["summary"]["module_count"] == 1
+    report_text = (output_dir / "fpa-stability-sampling-report.md").read_text(encoding="utf-8")
+    assert "Status: **PASS**" in report_text
     assert (output_dir / "fpa-stability-sampling-report.md").exists()
     assert (output_dir / "fpa-stability-sampling-manifest.json").exists()

@@ -160,6 +160,31 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
     }
 
 
+def evaluate_fpa_stability_comparison(
+    comparison: dict[str, object],
+    thresholds: dict[str, int],
+) -> dict[str, object]:
+    """Evaluate a stability comparison against optional max-value thresholds."""
+    summary = comparison.get("summary", {}) if isinstance(comparison, dict) else {}
+    if not isinstance(summary, dict):
+        summary = {}
+    checks: list[dict[str, object]] = []
+    for metric, threshold in thresholds.items():
+        if threshold < 0:
+            continue
+        actual = _int_or_default(summary.get(metric), 0)
+        checks.append({
+            "metric": metric,
+            "actual": actual,
+            "threshold": threshold,
+            "passed": actual <= threshold,
+        })
+    return {
+        "status": "pass" if all(bool(check["passed"]) for check in checks) else "fail",
+        "checks": checks,
+    }
+
+
 def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> str:
     """Render a multi-run stability comparison as Markdown."""
     summary = comparison.get("summary", {}) if isinstance(comparison, dict) else {}
@@ -185,11 +210,35 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
             f"| {_int_or_default(summary.get('retry_count'), 0)} |"
         ),
         "",
+    ]
+    evaluation = comparison.get("evaluation", {}) if isinstance(comparison, dict) else {}
+    if isinstance(evaluation, dict) and evaluation.get("checks"):
+        lines.extend([
+            "## Quality Gate",
+            "",
+            f"Status: **{str(evaluation.get('status', '')).upper()}**",
+            "",
+            "| Metric | Actual | Threshold | Passed |",
+            "|---|---:|---:|---|",
+        ])
+        checks = evaluation.get("checks", [])
+        if isinstance(checks, list):
+            for check in checks:
+                if not isinstance(check, dict):
+                    continue
+                lines.append(
+                    f"| {_escape_md(str(check.get('metric', '') or ''))} "
+                    f"| {_int_or_default(check.get('actual'), 0)} "
+                    f"| {_int_or_default(check.get('threshold'), 0)} "
+                    f"| {'yes' if check.get('passed') else 'no'} |"
+                )
+        lines.append("")
+    lines.extend([
         "## Runs",
         "",
         "| # | Trace | Profile | Strategy | Rule Set | Modules | Warnings | Quality Issues | Retryable | Confirmations | Retries |",
         "|---:|---|---|---|---|---:|---:|---:|---:|---:|---:|",
-    ]
+    ])
     for run in runs:
         if not isinstance(run, dict):
             continue

@@ -571,6 +571,26 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 第一版默认可用 `rules_only` 做无模型基线；传入 `--api-key`、`--model`、`--base-url` 并选择 `ai_first`/`ai_only` 后，可复用同一入口做真实模型抽样。
 
+当前还已补充第一版稳定性质量门。多 trace 对比或 fixture 采样时，可以增加阈值参数：
+
+```powershell
+ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_industry_management.json `
+  --fpa-stability-sample-profiles strict_fpa `
+  --fpa-stability-sample-strategies rules_only `
+  --fpa-stability-max-retryable-issues 0 `
+  --fpa-stability-max-retries 0 `
+  --output-dir .\fpa-stability-samples
+```
+
+当前支持的阈值包括：
+
+- `--fpa-stability-max-warnings`
+- `--fpa-stability-max-quality-issues`
+- `--fpa-stability-max-retryable-issues`
+- `--fpa-stability-max-retries`
+
+未传入阈值时只生成报告，不判定通过/失败；传入阈值后，Markdown 报告会增加 `Quality Gate` 区块，manifest/comparison 中会写入 `evaluation.status=pass|fail` 和每项检查结果。
+
 ### 增强优先级
 
 推荐按以下优先级增强 harness：
@@ -591,7 +611,7 @@ P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试和 FPA 预览页确认卡片；批量暂停/继续流程待做。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
 两阶段生成：已完成第一版规则化 `process_facts`、`merge_review` 和 `quality_review` 中间结构；尚未拆成独立 AI Agent。
-P4：已完成第一版指标沉淀、多 trace Markdown 对比报告和 fixture 批量抽样执行器。后续仍需补真实模型批量抽样的推荐样例集和趋势阈值。
+P4：已完成第一版指标沉淀、多 trace Markdown 对比报告、fixture 批量抽样执行器和稳定性质量门。后续仍需补真实模型批量抽样的推荐样例集。
 ```
 
 ## Agent 工作流方案

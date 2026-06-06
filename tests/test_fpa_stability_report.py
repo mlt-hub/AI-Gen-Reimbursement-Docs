@@ -3,6 +3,7 @@ import json
 from ai_gen_reimbursement_docs.fpa_stability_report import (
     build_fpa_stability_comparison,
     build_fpa_stability_report,
+    evaluate_fpa_stability_comparison,
     render_fpa_stability_comparison_markdown,
 )
 
@@ -96,3 +97,30 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert comparison["summary"]["source_counts"] == {"ai": 1, "ai_cache": 2}
     assert "validator.query_as_ei" in markdown
     assert "| model-a.json | strict_fpa | ai_first | strict_fpa_rs |" in markdown
+
+
+def test_stability_comparison_quality_gate_renders_failure():
+    comparison = {
+        "summary": {
+            "run_count": 1,
+            "module_count": 1,
+            "warning_count": 2,
+            "quality_issue_count": 1,
+            "retryable_quality_issue_count": 1,
+            "confirmed_decision_count": 0,
+            "retry_count": 0,
+            "source_counts": {},
+            "issue_code_counts": {},
+        },
+        "runs": [],
+    }
+
+    comparison["evaluation"] = evaluate_fpa_stability_comparison(
+        comparison,
+        {"warning_count": 1, "retry_count": 0},
+    )
+    markdown = render_fpa_stability_comparison_markdown(comparison)
+
+    assert comparison["evaluation"]["status"] == "fail"
+    assert "Status: **FAIL**" in markdown
+    assert "| warning_count | 2 | 1 | no |" in markdown
