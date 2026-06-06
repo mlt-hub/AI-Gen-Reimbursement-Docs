@@ -429,6 +429,29 @@ scope: project_profile 才影响后续生成。
 
 这能把 AI 的自由判断从“直接生成最终结果”降低为“标注业务事实”，再由程序化规则完成合并和纠偏。
 
+当前已完成第一版规则化业务事实中间结构，提交后 `prompt payload` 会同时包含原始 `processes` 和新增 `process_facts`。该层由 `ai_gen_reimbursement_docs/fpa_facts.py` 生成，不依赖 AI，不直接决定最终 FPA rows。
+
+当前 `process_facts` 字段包括：
+
+```json
+{
+  "process_id": "m1_p1",
+  "process_name": "查询客户",
+  "input_type": "新增",
+  "operation": "query",
+  "target_data_group": "客户",
+  "query_only": true,
+  "changes_internal_data": false,
+  "produces_external_output": false,
+  "ordinary_external_service": false,
+  "external_data_group_evidence": "",
+  "confidence": "high",
+  "evidence": ["命中关键词：查询", "input_type=新增"]
+}
+```
+
+这一步先解决“中间结构可见、可测试、可进 prompt”的问题。后续多 Agent 工作流可以让“业务事实抽取 Agent”替换或复核这层输出，但最终仍应保留同样的 JSON 契约，便于 validator 和 golden cases 检查。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。
@@ -470,6 +493,7 @@ P0：已完成。strict_fpa 逻辑事务合并口径已有 profile、prompt、fi
 P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试和 FPA 预览页确认卡片；批量暂停/继续流程待做。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
+两阶段生成：已完成第一版规则化 `process_facts` 中间结构；尚未拆成独立 AI Agent。
 P4：未开始。仍需真实模型稳定性报告和指标沉淀。
 ```
 

@@ -380,6 +380,7 @@ def _prompt_payload(
     domain_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     from ai_gen_reimbursement_docs.config_utils import load_fpa_adjustment_value_config
+    from ai_gen_reimbursement_docs.fpa_facts import extract_fpa_process_facts
 
     adjustment_config = load_fpa_adjustment_value_config()
     methods = adjustment_config.get("methods", {})
@@ -402,6 +403,7 @@ def _prompt_payload(
             for process in group.get("processes", [])
             if isinstance(process, dict)
         ] if isinstance(group.get("processes", []), list) else [],
+        "process_facts": extract_fpa_process_facts(group),
         "domain_context": domain_context or {},
         "fpa_calculation": {
             "principles": [

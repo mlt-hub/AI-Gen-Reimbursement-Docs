@@ -1,3 +1,4 @@
+import json
 import pytest
 from unittest.mock import patch
 
@@ -643,6 +644,38 @@ def test_fpa_user_prompt_template_can_be_loaded_from_separate_config(tmp_path):
     assert "1) 规则一" in prompt
     assert '"l3": "客户管理"' in prompt
     assert "${" not in prompt
+
+
+def test_prompt_payload_includes_extracted_process_facts(tmp_path):
+    _write_fpa_config(tmp_path)
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        prompt = STRICT_FPA_PROFILE.build_prompt(
+            {
+                "client_type": "后台",
+                "l1": "业务",
+                "l2": "管理",
+                "l3": "客户管理",
+                "l3_desc": "维护客户信息。",
+                "processes": [
+                    {
+                        "process_id": "m1_p1",
+                        "process_name": "查询客户",
+                        "description": "按客户名称查询客户列表。",
+                        "type": "新增",
+                    }
+                ],
+            },
+            ["规则一"],
+        )
+
+    payload = json.loads(prompt.split("PAYLOAD:", 1)[1])
+    fact = payload["process_facts"][0]
+    assert fact["process_id"] == "m1_p1"
+    assert fact["operation"] == "query"
+    assert fact["query_only"] is True
+    assert fact["changes_internal_data"] is False
+    assert fact["input_type"] == "新增"
 
 
 def test_strict_profile_normalizes_development_suffixes():
