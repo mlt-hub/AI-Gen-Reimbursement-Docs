@@ -1,0 +1,80 @@
+name: FPA Stability Example
+
+# This file is intentionally named *.example.yml so GitHub Actions will not
+# enable it automatically. Copy it to fpa-stability.yml after configuring
+# repository secrets and variables.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rules-baseline:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run rules-only stability baseline
+        shell: pwsh
+        run: |
+          python .\scripts\run_fpa_stability_ci.py `
+            --preset "" `
+            --suite standard `
+            --profiles strict_fpa `
+            --strategies rules_only `
+            --rule-sets strict_fpa_rs `
+            --max-retries 0 `
+            --output-dir .\tmp_fpa_stability_rules
+
+      - name: Upload rules baseline report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fpa-stability-rules
+          path: tmp_fpa_stability_rules
+
+  real-model:
+    runs-on: windows-latest
+    needs: rules-baseline
+    if: ${{ vars.FPA_STABILITY_REAL_MODEL_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run real-model stability gate
+        shell: pwsh
+        env:
+          AI_REIMBURSEMENT_API_KEY: ${{ secrets.AI_REIMBURSEMENT_API_KEY }}
+          AI_REIMBURSEMENT_BASE_URL: ${{ secrets.AI_REIMBURSEMENT_BASE_URL }}
+          AI_REIMBURSEMENT_MODEL: ${{ vars.AI_REIMBURSEMENT_MODEL }}
+        run: |
+          python .\scripts\run_fpa_stability_ci.py `
+            --preset strict-real-model `
+            --output-dir .\tmp_fpa_stability_real_model
+
+      - name: Upload real-model report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fpa-stability-real-model
+          path: tmp_fpa_stability_real_model

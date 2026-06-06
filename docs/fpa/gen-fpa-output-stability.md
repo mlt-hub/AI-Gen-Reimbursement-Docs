@@ -640,6 +640,8 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
   --output-dir .\tmp_fpa_stability_ci
 ```
 
+CI 接入说明和 GitHub Actions 示例见 [`docs/fpa/fpa-stability-ci.md`](fpa-stability-ci.md)。
+
 ### 增强优先级
 
 推荐按以下优先级增强 harness：
