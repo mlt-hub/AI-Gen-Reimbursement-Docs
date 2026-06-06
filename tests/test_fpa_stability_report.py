@@ -1,4 +1,10 @@
-from ai_gen_reimbursement_docs.fpa_stability_report import build_fpa_stability_report
+import json
+
+from ai_gen_reimbursement_docs.fpa_stability_report import (
+    build_fpa_stability_comparison,
+    build_fpa_stability_report,
+    render_fpa_stability_comparison_markdown,
+)
 
 
 def test_stability_report_summarizes_module_quality_signals():
@@ -41,3 +47,52 @@ def test_stability_report_summarizes_module_quality_signals():
     assert summary["source_counts"] == {"ai": 1, "rules_fallback": 1}
     assert summary["issue_code_counts"]["validator.query_as_ei"] == 1
     assert report["modules"][0]["retry_count"] == 1
+
+
+def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
+    trace_a = tmp_path / "model-a.json"
+    trace_b = tmp_path / "model-b.json"
+    trace_a.write_text(json.dumps({
+        "profile": "strict_fpa",
+        "strategy": "ai_first",
+        "rule_set": "strict_fpa_rs",
+        "modules": [{
+            "module": "客户管理",
+            "l3": "客户档案",
+            "source": "ai",
+            "warnings": ["客户档案 AI 输出稳定性校验触发一次重试"],
+            "quality_review": {
+                "issues": [{"code": "validator.query_as_ei", "retryable": True}],
+                "summary": {"issue_count": 1, "retryable_count": 1},
+            },
+        }],
+    }, ensure_ascii=False), encoding="utf-8")
+    trace_b.write_text(json.dumps({
+        "profile": "strict_fpa",
+        "strategy": "ai_first",
+        "rule_set": "strict_fpa_rs",
+        "stability_report": {
+            "summary": {
+                "module_count": 2,
+                "warning_count": 0,
+                "quality_issue_count": 0,
+                "retryable_quality_issue_count": 0,
+                "confirmed_decision_count": 0,
+                "retry_count": 0,
+                "source_counts": {"ai_cache": 2},
+                "issue_code_counts": {},
+            },
+            "modules": [],
+        },
+    }, ensure_ascii=False), encoding="utf-8")
+
+    comparison = build_fpa_stability_comparison([str(trace_a), str(trace_b)])
+    markdown = render_fpa_stability_comparison_markdown(comparison)
+
+    assert comparison["summary"]["run_count"] == 2
+    assert comparison["summary"]["module_count"] == 3
+    assert comparison["summary"]["warning_count"] == 1
+    assert comparison["summary"]["retry_count"] == 1
+    assert comparison["summary"]["source_counts"] == {"ai": 1, "ai_cache": 2}
+    assert "validator.query_as_ei" in markdown
+    assert "| model-a.json | strict_fpa | ai_first | strict_fpa_rs |" in markdown

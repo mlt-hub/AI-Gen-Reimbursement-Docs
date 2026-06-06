@@ -63,3 +63,18 @@ def test_cli_history_plain_output_marks_missing_directory(monkeypatch, tmp_path,
     output = capsys.readouterr().out
     assert "cli2" in output
     assert "目录不存在" in output
+
+
+def test_cli_parser_accepts_fpa_stability_report_args():
+    parser = cli_main._build_parser()
+
+    args = parser.parse_args([
+        "--fpa-stability-report",
+        "trace-a.json",
+        "trace-b.json",
+        "--fpa-stability-output",
+        "report.md",
+    ])
+
+    assert args.fpa_stability_report == ["trace-a.json", "trace-b.json"]
+    assert args.fpa_stability_output == "report.md"

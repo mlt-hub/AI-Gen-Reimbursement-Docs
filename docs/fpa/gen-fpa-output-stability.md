@@ -540,6 +540,19 @@ source_processes 越界率。
 
 正式生成会将汇总写入 `fpa_audit_trace.json` 的 `stability_report` 字段；生成 FPA 审核副本时，会同步生成“稳定性报告”sheet。该 sheet 先提供本次运行的 summary 和模块级明细，后续真实模型抽样可以基于这些字段做跨模型、跨 prompt、跨 rule_set 的趋势对比。
 
+当前也已完成第一版多运行对比能力。多个模型、prompt 或 rule_set 运行完成后，可以用 CLI 汇总多份 trace：
+
+```powershell
+ard --fpa-stability-report .\run-a\fpa_audit_trace.json .\run-b\fpa_audit_trace.json --fpa-stability-output .\fpa-stability-report.md
+```
+
+输出 Markdown 会包含：
+
+- 总体 Runs/Modules/Warnings/Quality Issues/Confirmations/Retries。
+- 每次运行的 profile、strategy、rule_set 和稳定性指标。
+- issue code 分布。
+- `ai`、`ai_cache`、`rules`、`rules_fallback` 等生成来源分布。
+
 ### 增强优先级
 
 推荐按以下优先级增强 harness：
@@ -560,7 +573,7 @@ P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试和 FPA 预览页确认卡片；批量暂停/继续流程待做。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
 两阶段生成：已完成第一版规则化 `process_facts`、`merge_review` 和 `quality_review` 中间结构；尚未拆成独立 AI Agent。
-P4：已完成第一版指标沉淀。生成期 audit trace 会写入 `stability_report`，FPA 审核副本会新增“稳定性报告”sheet；真实模型抽样报告和趋势对比仍待做。
+P4：已完成第一版指标沉淀和多 trace Markdown 对比报告。真实模型自动批量抽样执行器仍待做。
 ```
 
 ## Agent 工作流方案

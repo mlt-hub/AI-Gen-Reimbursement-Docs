@@ -464,6 +464,10 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='FPA 执行策略：rules_first / ai_first / rules_only / ai_only（默认跟随 profile）')
     parser.add_argument('--fpa-rule-set', default='',
                         help='FPA 规则集名称（默认跟随 profile）')
+    parser.add_argument('--fpa-stability-report', nargs='+', default=[],
+                        help='读取一个或多个 fpa_audit_trace.json，输出 FPA 稳定性对比报告')
+    parser.add_argument('--fpa-stability-output', default='',
+                        help='FPA 稳定性对比报告 Markdown 输出路径')
     parser.add_argument('--preview-fpa-module', default='',
                         help='只预览指定三级模块的 FPA 拆分结果，不生成 Excel')
     parser.add_argument('--preview-fpa-module-index', type=int, default=None,
@@ -622,6 +626,27 @@ def main():
 
     if args.history:
         _print_history(limit=args.history_limit, as_json=args.history_json)
+        return
+
+    if args.fpa_stability_report:
+        from ai_gen_reimbursement_docs.fpa_stability_report import (
+            build_fpa_stability_comparison,
+            render_fpa_stability_comparison_markdown,
+        )
+
+        comparison = build_fpa_stability_comparison(args.fpa_stability_report)
+        markdown = render_fpa_stability_comparison_markdown(comparison)
+        report_output = args.fpa_stability_output or args.output_dir
+        if report_output:
+            output_path = os.path.abspath(report_output)
+            if os.path.isdir(output_path):
+                output_path = os.path.join(output_path, "fpa-stability-report.md")
+            os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(markdown)
+            print(output_path)
+        else:
+            print(markdown)
         return
 
     if args.web:
