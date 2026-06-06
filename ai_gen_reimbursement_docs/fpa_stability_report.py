@@ -20,6 +20,8 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
     retryable_quality_issue_count = 0
     retry_count = 0
     confirmed_decision_count = 0
+    agent_role_counts: Counter[str] = Counter()
+    pending_agent_role_counts: Counter[str] = Counter()
 
     for index, module in enumerate(modules, 1):
         if not isinstance(module, dict):
@@ -45,6 +47,19 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         retryable_quality_issue_count += module_retryable_count
         confirmed_decision_count += module_confirmed_count
 
+        agent_review = module.get("agent_review", {})
+        module_agent_roles = _agent_roles(agent_review)
+        agent_role_counts.update(
+            str(role.get("name", "") or "").strip()
+            for role in module_agent_roles
+            if str(role.get("name", "") or "").strip()
+        )
+        pending_agent_role_counts.update(
+            str(role.get("name", "") or "").strip()
+            for role in module_agent_roles
+            if str(role.get("status", "") or "").strip() == "pending_agent"
+        )
+
         module_issue_codes = [
             str(issue.get("code", "") or "").strip()
             for issue in issues
@@ -62,6 +77,16 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             "confirmed_decision_count": module_confirmed_count,
             "retry_count": module_retry_count,
             "issue_code_counts": dict(Counter(module_issue_codes)),
+            "agent_role_counts": dict(Counter(
+                str(role.get("name", "") or "").strip()
+                for role in module_agent_roles
+                if str(role.get("name", "") or "").strip()
+            )),
+            "pending_agent_roles": [
+                str(role.get("name", "") or "").strip()
+                for role in module_agent_roles
+                if str(role.get("status", "") or "").strip() == "pending_agent"
+            ],
         })
 
     return {
@@ -74,9 +99,20 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             "retry_count": retry_count,
             "source_counts": dict(source_counts),
             "issue_code_counts": dict(issue_code_counts),
+            "agent_role_counts": dict(agent_role_counts),
+            "pending_agent_role_counts": dict(pending_agent_role_counts),
         },
         "modules": module_reports,
     }
+
+
+def _agent_roles(agent_review: object) -> list[dict[str, object]]:
+    if not isinstance(agent_review, dict):
+        return []
+    roles = agent_review.get("roles", [])
+    if not isinstance(roles, list):
+        return []
+    return [role for role in roles if isinstance(role, dict)]
 
 
 def load_fpa_stability_trace(path: str) -> dict[str, object]:

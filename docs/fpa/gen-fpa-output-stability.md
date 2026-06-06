@@ -507,6 +507,47 @@ scope: project_profile 才影响后续生成。
 
 这一步先把“审核 Agent”的职责落成可测试契约：审核节点可以发现 validator 误判和合并建议未应用，但不越权修改 AI 输出。后续如拆成独立 AI Agent，应继续沿用同样的 `quality_review` 结构，便于预览页、审计日志和真实模型稳定性报告复用。
 
+当前已继续推进第一版统一 Agent 分工契约，新增 `ai_gen_reimbursement_docs/fpa_agent_review.py`。该层把已有规则化节点收束为一个 `agent_review`，并进入 prompt payload、预览 debug、正式生成 audit trace 和稳定性报告：
+
+```json
+{
+  "version": 1,
+  "mode": "deterministic_contract",
+  "roles": [
+    {
+      "name": "business_fact_extractor",
+      "label": "业务事实抽取 Agent",
+      "implementation": "deterministic:fpa_facts.extract_fpa_process_facts",
+      "status": "completed",
+      "output_key": "process_facts"
+    },
+    {
+      "name": "fpa_type_judge",
+      "label": "FPA 类型判定 Agent",
+      "implementation": "hybrid:profile+prompt+validator",
+      "status": "pending_agent",
+      "output_key": "rows"
+    },
+    {
+      "name": "merge_boundary_reviewer",
+      "label": "合并边界审查 Agent",
+      "implementation": "deterministic:fpa_merge_review.build_fpa_merge_review",
+      "status": "completed",
+      "output_key": "merge_review"
+    },
+    {
+      "name": "quality_reviewer",
+      "label": "质量审核 Agent",
+      "implementation": "deterministic:fpa_quality_review.build_fpa_quality_review",
+      "status": "completed",
+      "output_key": "quality_review"
+    }
+  ]
+}
+```
+
+这一步仍不新增额外 AI 调用，也不改变最终功能点计数。它解决的是“Agent 分工可追踪、可测试、可替换”的问题：后续如果要把 `fpa_type_judge` 或其它节点拆成独立 AI Agent，只需要保持同样的 `agent_review.roles[*]`、`process_facts`、`merge_review`、`quality_review` 契约，稳定性报告也能继续统计 `pending_agent_roles`。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。
@@ -666,7 +707,7 @@ P0：已完成。strict_fpa 逻辑事务合并口径已有 profile、prompt、fi
 P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试和 FPA 预览页确认卡片；批量暂停/继续流程待做。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
-两阶段生成：已完成第一版规则化 `process_facts`、`merge_review` 和 `quality_review` 中间结构；尚未拆成独立 AI Agent。
+两阶段生成：已完成第一版规则化 `process_facts`、`merge_review` 和 `quality_review` 中间结构，并已新增统一 `agent_review` 分工契约；`fpa_type_judge` 仍标记为 `pending_agent`，尚未拆成独立 AI Agent。
 P4：已完成第一版指标沉淀、多 trace Markdown 对比报告、fixture 批量抽样执行器和稳定性质量门。后续仍需补真实模型批量抽样的推荐样例集。
 ```
 

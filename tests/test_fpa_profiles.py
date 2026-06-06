@@ -715,6 +715,43 @@ def test_prompt_payload_includes_merge_review(tmp_path):
     assert group["process_ids"] == ["m1_p1", "m1_p2"]
 
 
+def test_prompt_payload_includes_agent_review_contract(tmp_path):
+    _write_fpa_config(tmp_path)
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        prompt = STRICT_FPA_PROFILE.build_prompt(
+            {
+                "client_type": "后台",
+                "l1": "业务",
+                "l2": "管理",
+                "l3": "客户管理",
+                "l3_desc": "维护客户信息。",
+                "processes": [
+                    {
+                        "process_id": "m1_p1",
+                        "process_name": "添加客户",
+                        "description": "输入客户名称并保存。",
+                        "type": "新增",
+                    },
+                    {
+                        "process_id": "m1_p2",
+                        "process_name": "编辑客户",
+                        "description": "修改客户名称并保存。",
+                        "type": "新增",
+                    },
+                ],
+            },
+            ["规则一"],
+        )
+
+    payload = json.loads(prompt.split("PAYLOAD:", 1)[1])
+    roles = {role["name"]: role for role in payload["agent_review"]["roles"]}
+    assert roles["business_fact_extractor"]["output_key"] == "process_facts"
+    assert roles["merge_boundary_reviewer"]["output_key"] == "merge_review"
+    assert roles["quality_reviewer"]["status"] == "awaiting_rows"
+    assert roles["fpa_type_judge"]["status"] == "pending_agent"
+
+
 def test_strict_profile_normalizes_development_suffixes():
     assert STRICT_FPA_PROFILE.normalize_output_name("添加客户-逻辑处理开发") == "添加客户"
     assert STRICT_FPA_PROFILE.normalize_output_name("客户管理-界面开发") == "客户管理"

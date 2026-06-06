@@ -27,6 +27,13 @@ def test_stability_report_summarizes_module_quality_signals():
                         "confirmed_decision_count": 1,
                     },
                 },
+                "agent_review": {
+                    "roles": [
+                        {"name": "business_fact_extractor", "status": "completed"},
+                        {"name": "fpa_type_judge", "status": "pending_agent"},
+                        {"name": "merge_boundary_reviewer", "status": "completed"},
+                    ],
+                },
             },
             {
                 "module": "订单管理",
@@ -34,6 +41,12 @@ def test_stability_report_summarizes_module_quality_signals():
                 "source": "rules_fallback",
                 "warnings": [],
                 "quality_review": {"issues": [], "summary": {"issue_count": 0}},
+                "agent_review": {
+                    "roles": [
+                        {"name": "business_fact_extractor", "status": "completed"},
+                        {"name": "fpa_type_judge", "status": "pending_agent"},
+                    ],
+                },
             },
         ]
     })
@@ -47,7 +60,10 @@ def test_stability_report_summarizes_module_quality_signals():
     assert summary["retry_count"] == 1
     assert summary["source_counts"] == {"ai": 1, "rules_fallback": 1}
     assert summary["issue_code_counts"]["validator.query_as_ei"] == 1
+    assert summary["agent_role_counts"]["business_fact_extractor"] == 2
+    assert summary["pending_agent_role_counts"]["fpa_type_judge"] == 2
     assert report["modules"][0]["retry_count"] == 1
+    assert report["modules"][0]["pending_agent_roles"] == ["fpa_type_judge"]
 
 
 def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):

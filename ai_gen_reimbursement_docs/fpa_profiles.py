@@ -380,12 +380,16 @@ def _prompt_payload(
     domain_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     from ai_gen_reimbursement_docs.config_utils import load_fpa_adjustment_value_config
+    from ai_gen_reimbursement_docs.fpa_agent_review import build_fpa_agent_review
     from ai_gen_reimbursement_docs.fpa_facts import extract_fpa_process_facts
     from ai_gen_reimbursement_docs.fpa_merge_review import build_fpa_merge_review
 
     adjustment_config = load_fpa_adjustment_value_config()
     methods = adjustment_config.get("methods", {})
     standard_fpa = methods.get("standard_fpa", {}) if isinstance(methods, dict) else {}
+    process_facts = extract_fpa_process_facts(group)
+    merge_review = build_fpa_merge_review(group)
+    agent_review = build_fpa_agent_review(group=group)
     return {
         "module": {
             "client_type": group.get("client_type", ""),
@@ -404,8 +408,9 @@ def _prompt_payload(
             for process in group.get("processes", [])
             if isinstance(process, dict)
         ] if isinstance(group.get("processes", []), list) else [],
-        "process_facts": extract_fpa_process_facts(group),
-        "merge_review": build_fpa_merge_review(group),
+        "process_facts": process_facts,
+        "merge_review": merge_review,
+        "agent_review": agent_review,
         "domain_context": domain_context or {},
         "fpa_calculation": {
             "principles": [

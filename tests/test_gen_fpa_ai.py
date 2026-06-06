@@ -1510,8 +1510,10 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     assert debug["parsed_rows"] == response["rows"]
     assert result["rows"][0]["classification_basis"] == "规则一"
     assert debug["final_rows"][0]["name"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据维护"
+    assert debug["agent_review"]["summary"]["pending_agent_roles"] == ["fpa_type_judge"]
     assert debug["quality_review"]["summary"]["issue_count"] >= 0
     assert result["audit"]["raw_ai"]["source"] == "ai"
+    assert result["audit"]["agent_review"]["summary"]["pending_agent_roles"] == ["fpa_type_judge"]
     assert result["audit"]["raw_ai"]["raw_rows"] == response["rows"]
 
 

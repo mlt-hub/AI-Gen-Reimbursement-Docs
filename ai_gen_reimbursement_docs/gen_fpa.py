@@ -35,6 +35,7 @@ from ai_gen_reimbursement_docs.fpa_confirmation import (
     normalize_confirmed_decisions,
     normalize_confirmation_mode,
 )
+from ai_gen_reimbursement_docs.fpa_agent_review import build_fpa_agent_review
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     CustomRulesProfile,
@@ -101,6 +102,7 @@ class FpaAuditReport:
     raw_rows: list[object] = field(default_factory=list)
     raw_warnings: list[str] = field(default_factory=list)
     rule_hits: list[dict[str, object]] = field(default_factory=list)
+    agent_review: dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -124,6 +126,7 @@ class FpaAuditReport:
                 "raw_rows": self.raw_rows,
             },
             "rule_hits": self.rule_hits,
+            "agent_review": self.agent_review,
         }
 
 
@@ -956,6 +959,19 @@ def _build_quality_review_for_l3(
     )
 
 
+def _build_agent_review_for_l3(
+    *,
+    group: dict[str, object],
+    rows: list[dict[str, object]] | None = None,
+    confirmed_decisions: object | None = None,
+) -> dict[str, object]:
+    return build_fpa_agent_review(
+        group=group,
+        rows=rows,
+        confirmed_decisions=confirmed_decisions,
+    )
+
+
 def _covered_process_ids_for_row(row: dict[str, object], group: dict[str, object]) -> set[str]:
     """Prefer internal process IDs, falling back to exact source-process names."""
     valid_ids = set(_process_id_to_name_for_group(group))
@@ -1155,6 +1171,7 @@ def _build_fpa_audit_report(
         raw_rows=list(raw_rows or []),
         raw_warnings=list(raw_warnings or []),
         rule_hits=list(rule_hits or []),
+        agent_review=_build_agent_review_for_l3(group=group, rows=fpa_rows),
     )
 
 
@@ -1758,6 +1775,11 @@ def _plan_fpa_rows_with_execution(
                 rows=group_rows,
                 confirmed_decisions=confirmed_decisions,
             )
+            agent_review = _build_agent_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
             all_rows.extend(group_rows)
             seq += len(group_rows)
             audit_modules.append({
@@ -1767,6 +1789,7 @@ def _plan_fpa_rows_with_execution(
                 "raw_rows": [],
                 "warnings": [*config_warnings, "仅规则策略未调用 AI"],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
+                "agent_review": agent_review,
                 "quality_review": quality_review,
             })
         audit_trace = {
@@ -1805,6 +1828,16 @@ def _plan_fpa_rows_with_execution(
             _attach_profile_rule_hits(rules_first_rows, profile=profile, generation="fallback")
             rules_first_reasons = _rules_first_ai_reasons(group, rules_first_rows)
             if not rules_first_reasons:
+                quality_review = _build_quality_review_for_l3(
+                    group=group,
+                    rows=rules_first_rows,
+                    confirmed_decisions=confirmed_decisions,
+                )
+                agent_review = _build_agent_review_for_l3(
+                    group=group,
+                    rows=rules_first_rows,
+                    confirmed_decisions=confirmed_decisions,
+                )
                 logger.info("  FPA rules_first 使用规则结果 [%d/%d] %s", idx, len(groups), _group_tag(group))
                 all_rows.extend(rules_first_rows)
                 seq += len(rules_first_rows)
@@ -1815,10 +1848,22 @@ def _plan_fpa_rows_with_execution(
                     "raw_rows": [],
                     "warnings": [*config_warnings, "规则优先策略未调用 AI：规则结果覆盖完整且基础字段有效"],
                     "rule_hits": _trace_rule_hits_for_rows(rules_first_rows),
+                    "agent_review": agent_review,
+                    "quality_review": quality_review,
                 })
                 continue
             if not api_key:
                 warning = "规则结果需要 AI 复核但未配置 API Key，已保留规则生成结果: " + "；".join(rules_first_reasons)
+                quality_review = _build_quality_review_for_l3(
+                    group=group,
+                    rows=rules_first_rows,
+                    confirmed_decisions=confirmed_decisions,
+                )
+                agent_review = _build_agent_review_for_l3(
+                    group=group,
+                    rows=rules_first_rows,
+                    confirmed_decisions=confirmed_decisions,
+                )
                 logger.warning("FPA rules_first 未调用 AI [%s]: %s", _group_tag(group), warning)
                 all_rows.extend(rules_first_rows)
                 seq += len(rules_first_rows)
@@ -1829,6 +1874,8 @@ def _plan_fpa_rows_with_execution(
                     "raw_rows": [],
                     "warnings": [*config_warnings, warning],
                     "rule_hits": _trace_rule_hits_for_rows(rules_first_rows),
+                    "agent_review": agent_review,
+                    "quality_review": quality_review,
                 })
                 continue
 
@@ -1846,6 +1893,16 @@ def _plan_fpa_rows_with_execution(
             warning = "模块超过 AI 调用限制，已使用规则生成"
             if rules_first_reasons:
                 warning = f"规则结果需要 AI 复核但{warning}: {'；'.join(rules_first_reasons)}"
+            quality_review = _build_quality_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
+            agent_review = _build_agent_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
             audit_modules.append({
                 "module": _group_tag(group),
                 "l3": group.get("l3", ""),
@@ -1853,6 +1910,8 @@ def _plan_fpa_rows_with_execution(
                 "raw_rows": [],
                 "warnings": [*config_warnings, warning],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
+                "agent_review": agent_review,
+                "quality_review": quality_review,
             })
             continue
 
@@ -1912,6 +1971,11 @@ def _plan_fpa_rows_with_execution(
                         rows=group_rows,
                         confirmed_decisions=confirmed_decisions,
                     )
+                    agent_review = _build_agent_review_for_l3(
+                        group=group,
+                        rows=group_rows,
+                        confirmed_decisions=confirmed_decisions,
+                    )
                     cache_hits += 1
                     success += 1
                     generated += len(group_rows)
@@ -1926,6 +1990,7 @@ def _plan_fpa_rows_with_execution(
                         "raw_rows": raw_rows,
                         "warnings": _with_config_warnings(warnings, rule_set_config),
                         "rule_hits": _trace_rule_hits_for_rows(group_rows),
+                        "agent_review": agent_review,
                         "quality_review": quality_review,
                     })
                     continue
@@ -2031,6 +2096,11 @@ def _plan_fpa_rows_with_execution(
                 rows=group_rows,
                 confirmed_decisions=confirmed_decisions,
             )
+            agent_review = _build_agent_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
             success += 1
             generated += len(group_rows)
             if cache_path:
@@ -2050,6 +2120,7 @@ def _plan_fpa_rows_with_execution(
                 "raw_rows": raw_rows,
                 "warnings": _with_config_warnings(warnings, rule_set_config),
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
+                "agent_review": agent_review,
                 "quality_review": quality_review,
             })
         except FpaPromptConfigError:
@@ -2073,6 +2144,16 @@ def _plan_fpa_rows_with_execution(
                     + "；".join(rules_first_reasons)
                     + f"；AI错误: {exc}"
                 )
+            quality_review = _build_quality_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
+            agent_review = _build_agent_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
             audit_modules.append({
                 "module": _group_tag(group),
                 "l3": group.get("l3", ""),
@@ -2080,6 +2161,8 @@ def _plan_fpa_rows_with_execution(
                 "raw_rows": locals().get("raw_rows", []),
                 "warnings": [*config_warnings, fallback_warning],
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
+                "agent_review": agent_review,
+                "quality_review": quality_review,
             })
 
         all_rows.extend(group_rows)
@@ -2999,6 +3082,7 @@ def preview_fpa_module(
             "thinking": "",
             "parsed_rows": [],
             "final_rows": [],
+            "agent_review": {},
             "quality_review": {},
         }
         rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
@@ -3130,6 +3214,12 @@ def preview_fpa_module(
             rows=fpa_rows,
             confirmed_decisions=normalized_decisions,
         )
+        agent_review = _build_agent_review_for_l3(
+            group=group,
+            rows=fpa_rows,
+            confirmed_decisions=normalized_decisions,
+        )
+        debug["agent_review"] = agent_review
         debug["quality_review"] = quality_review
         confirmation_questions = build_fpa_confirmation_questions(
             group=group,
