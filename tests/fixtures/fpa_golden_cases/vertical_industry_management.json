@@ -134,5 +134,51 @@
         "type": "EI"
       }
     ]
+  },
+  "assertions": {
+    "strict_fpa": [
+      {
+        "kind": "contains",
+        "name": "垂直行业查询",
+        "type": "EQ"
+      },
+      {
+        "kind": "contains",
+        "name": "垂直行业维护",
+        "type": "EI"
+      },
+      {
+        "kind": "contains",
+        "name": "垂直行业管理员维护",
+        "type": "EI"
+      },
+      {
+        "kind": "source_processes",
+        "name": "垂直行业查询",
+        "value": "垂直行业列表数据查询、查询垂直行业数据"
+      },
+      {
+        "kind": "source_processes",
+        "name": "垂直行业维护",
+        "value": "添加垂直行业、编辑垂直行业、删除垂直行业"
+      },
+      {
+        "kind": "source_processes",
+        "name": "垂直行业管理员维护",
+        "value": "新增垂直行业管理员、删除垂直行业管理员"
+      },
+      {
+        "kind": "not_contains_short_names",
+        "names": [
+          "垂直行业列表数据查询",
+          "查询垂直行业数据",
+          "添加垂直行业",
+          "编辑垂直行业",
+          "删除垂直行业",
+          "新增垂直行业管理员",
+          "删除垂直行业管理员"
+        ]
+      }
+    ]
   }
 }

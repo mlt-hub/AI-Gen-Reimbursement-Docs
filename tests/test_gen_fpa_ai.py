@@ -973,6 +973,71 @@ def test_ai_first_unknown_source_process_ids_warns_and_does_not_count_unknown_id
     assert audit.missing_processes == ["导出客户"]
 
 
+def test_ai_first_retries_once_when_validator_finds_high_confidence_issue(monkeypatch, tmp_path):
+    source_rows = [{
+        "客户端类型": "地市后台",
+        "一级模块": "客户管理",
+        "二级模块": "客户查询",
+        "三级模块": "客户查询",
+        "三级模块整体功能描述": "查询客户。",
+        "功能过程": "查询客户",
+        "功能过程类型": "新增",
+        "功能过程描述": "按客户名称查询客户列表。",
+    }]
+    calls = []
+    responses = [
+        {
+            "rows": [{
+                "name": "查询客户",
+                "type": "EI",
+                "explanation": "来源场景：查询客户。\n业务数据：客户列表。\n业务规则：只读取并展示列表。\n计算说明：误判为 EI。",
+                "source_process_ids": ["m1_p1"],
+                "source_processes": ["查询客户"],
+            }]
+        },
+        {
+            "rows": [{
+                "name": "查询客户",
+                "type": "EQ",
+                "explanation": "来源场景：查询客户。\n业务数据：客户列表。\n业务规则：只读取并展示列表。\n计算说明：查询条件输入并返回客户列表，按 EQ。",
+                "source_process_ids": ["m1_p1"],
+                "source_processes": ["查询客户"],
+            }]
+        },
+    ]
+
+    def fake_call_llm(prompt, *args, **kwargs):
+        calls.append(prompt)
+        return json.dumps(responses[len(calls) - 1], ensure_ascii=False)
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+    audit_trace = tmp_path / "trace.json"
+
+    result = _plan_fpa_rows_with_execution(
+        source_rows,
+        _meta(),
+        [],
+        api_key="sk-test",
+        model="mock-model",
+        base_url="",
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        rule_set="strict_fpa_rs",
+        rule_set_config=FpaRuleSetConfig(
+            name="process_only",
+            coverage_rules=FpaCoverageRules(require_data_function=False),
+        ),
+        audit_trace_path=str(audit_trace),
+    )
+
+    assert len(calls) == 2
+    assert "上一次 FPA JSON 输出未通过项目口径校验" in calls[1]
+    assert any(row["类型"] == "EQ" for row in result)
+    trace = json.loads(audit_trace.read_text(encoding="utf-8"))
+    warnings = trace["modules"][0]["warnings"]
+    assert any("AI 输出稳定性校验触发一次重试" in warning for warning in warnings)
+
+
 def test_coverage_rules_can_disable_data_function_supplement():
     group = _group_rows_by_l3([
         {

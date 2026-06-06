@@ -42,6 +42,12 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     resolve_fpa_execution_config,
     set_current_fpa_rule_set_config,
 )
+from ai_gen_reimbursement_docs.fpa_validator import (
+    FpaValidationIssue,
+    retryable_validation_issues,
+    validate_fpa_rows,
+    validation_feedback,
+)
 from ai_gen_reimbursement_docs.md_table import parse_md_table_row
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_fpa')
@@ -883,6 +889,51 @@ def _source_process_set(row: dict[str, object]) -> set[str]:
     return {item.strip() for item in raw.split("、") if item.strip()}
 
 
+def _append_row_warning(row: dict[str, object], warning: str) -> None:
+    clean_warning = str(warning or "").strip()
+    if not clean_warning:
+        return
+    existing = _warning_items(row.get("后处理警告", ""))
+    if clean_warning in existing:
+        return
+    row["后处理警告"] = "；".join([*existing, clean_warning])
+
+
+def _apply_fpa_validation_issues(
+    rows: list[dict[str, object]],
+    issues: list[FpaValidationIssue],
+) -> list[str]:
+    warnings: list[str] = []
+    for issue in issues:
+        if issue.message in warnings:
+            continue
+        warnings.append(issue.message)
+        if issue.row_index is None or not (0 <= issue.row_index < len(rows)):
+            continue
+        row = rows[issue.row_index]
+        _append_row_warning(row, issue.message)
+        _add_rule_hit(
+            row,
+            hit_object=str(row.get("新增/修改功能点", "") or ""),
+            rule_id=issue.code,
+            rule_desc="gen-fpa 输出稳定性 validator 命中项目口径检查。",
+            suggested_type=str(row.get("类型", "") or ""),
+            adopted=True,
+            warnings=[issue.message],
+        )
+    return warnings
+
+
+def _validate_fpa_rows_for_l3(
+    *,
+    group: dict[str, object],
+    rows: list[dict[str, object]],
+) -> tuple[list[FpaValidationIssue], list[str]]:
+    issues = validate_fpa_rows(group=group, rows=rows)
+    warnings = _apply_fpa_validation_issues(rows, issues)
+    return issues, warnings
+
+
 def _covered_process_ids_for_row(row: dict[str, object], group: dict[str, object]) -> set[str]:
     """Prefer internal process IDs, falling back to exact source-process names."""
     valid_ids = set(_process_id_to_name_for_group(group))
@@ -1276,13 +1327,17 @@ def _ai_plan_fpa_rows_for_l3(
     model: str,
     base_url: str,
     profile: CustomRulesProfile = FPA_PROFILE,
+    validation_retry_feedback: str = "",
 ) -> list[dict[str, object]]:
     """调用 AI 规划一个三级模块的 FPA 行，返回原始 AI rows。"""
     prompt_context = _build_fpa_ai_prompt_context(
         group, judgement_rules, domain_context, profile
     )
+    user_prompt = prompt_context.user_prompt
+    if validation_retry_feedback:
+        user_prompt = f"{user_prompt}\n\n{validation_retry_feedback}"
     resp = _call_llm(
-        prompt_context.user_prompt,
+        user_prompt,
         prompt_context.system_prompt,
         api_key,
         model,
@@ -1795,6 +1850,18 @@ def _plan_fpa_rows_with_execution(
                 )
                 _renumber_rows(group_rows, seq)
                 warnings.extend(supplement_warnings)
+                validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
+                    group=group,
+                    rows=group_rows,
+                )
+                warnings.extend(validation_warnings)
+                if retryable_validation_issues(validation_issues):
+                    logger.warning(
+                        "FPA AI 缓存未通过稳定性校验 [%s]，将重新调用 AI: %s",
+                        _group_tag(group),
+                        "；".join(issue.message for issue in retryable_validation_issues(validation_issues)),
+                    )
+                    group_rows = []
                 if group_rows:
                     cache_hits += 1
                     success += 1
@@ -1842,6 +1909,62 @@ def _plan_fpa_rows_with_execution(
             )
             _renumber_rows(group_rows, seq)
             warnings.extend(supplement_warnings)
+            validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
+                group=group,
+                rows=group_rows,
+            )
+            warnings.extend(validation_warnings)
+            retry_feedback = validation_feedback(validation_issues)
+            if retry_feedback and strategy == "ai_first":
+                logger.warning("FPA AI 输出触发稳定性重试 [%s]", _group_tag(group))
+                retry_raw_rows = _ai_plan_fpa_rows_for_l3(
+                    group,
+                    judgement_rules,
+                    domain_context,
+                    api_key,
+                    model,
+                    base_url,
+                    profile=profile,
+                    validation_retry_feedback=retry_feedback,
+                )
+                retry_group_rows, retry_warnings = _normalize_ai_fpa_rows_for_l3(
+                    group=group,
+                    meta=meta,
+                    ai_rows=retry_raw_rows,
+                    judgement_rules=judgement_rules,
+                    start_seq=seq,
+                    profile=profile,
+                    strategy=strategy,
+                )
+                if rules_first_reasons:
+                    retry_warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
+                retry_group_rows, retry_supplement_warnings = _supplement_ai_rows_with_rules(
+                    group=group,
+                    meta=meta,
+                    ai_rows=retry_group_rows,
+                    profile=profile,
+                    strategy=strategy,
+                    rule_set_config=rule_set_config,
+                )
+                _renumber_rows(retry_group_rows, seq)
+                retry_warnings.extend(retry_supplement_warnings)
+                retry_issues, retry_validation_warnings = _validate_fpa_rows_for_l3(
+                    group=group,
+                    rows=retry_group_rows,
+                )
+                retry_warnings.extend(retry_validation_warnings)
+                retry_notice = f"{_group_tag(group)} AI 输出稳定性校验触发一次重试"
+                if retry_group_rows:
+                    raw_rows = retry_raw_rows
+                    group_rows = retry_group_rows
+                    warnings = [retry_notice, *retry_warnings]
+                    if retryable_validation_issues(retry_issues):
+                        warnings.append(
+                            f"{_group_tag(group)} AI 重试后仍存在稳定性 warning: "
+                            + "；".join(issue.message for issue in retryable_validation_issues(retry_issues))
+                        )
+                else:
+                    warnings.append(f"{retry_notice}，但重试未生成有效 FPA 行，保留首次结果")
             warning_count += len(warnings)
             if not group_rows:
                 raise ValueError("AI 规划未生成有效 FPA 行")
@@ -2794,6 +2917,11 @@ def preview_fpa_module(
                             rule_set_config=execution.rule_set_config,
                         )
                         warnings.extend(supplement_warnings)
+                        _, validation_warnings = _validate_fpa_rows_for_l3(
+                            group=group,
+                            rows=fpa_rows,
+                        )
+                        warnings.extend(validation_warnings)
                         warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
                         if not fpa_rows:
                             raise ValueError("AI 规划未生成有效 FPA 行")
@@ -2830,6 +2958,11 @@ def preview_fpa_module(
                     rule_set_config=execution.rule_set_config,
                 )
                 warnings.extend(supplement_warnings)
+                _, validation_warnings = _validate_fpa_rows_for_l3(
+                    group=group,
+                    rows=fpa_rows,
+                )
+                warnings.extend(validation_warnings)
                 if not fpa_rows:
                     raise ValueError("AI 规划未生成有效 FPA 行")
         except Exception as exc:
