@@ -556,8 +556,8 @@ ard --fpa-stability-report .\run-a\fpa_audit_trace.json .\run-b\fpa_audit_trace.
 当前还已完成第一版自动批量抽样执行器。可以直接基于现有 FPA golden fixture 生成多组 trace 和汇总报告：
 
 ```powershell
-ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_industry_management.json `
-  --fpa-stability-sample-profiles strict_fpa,unified_ui `
+ard --fpa-stability-sample-suite standard `
+  --fpa-stability-sample-profiles strict_fpa `
   --fpa-stability-sample-strategies rules_only `
   --fpa-stability-sample-rule-sets strict_fpa_rs `
   --output-dir .\fpa-stability-samples
@@ -570,6 +570,14 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 - `fpa-stability-sampling-report.md`。
 
 第一版默认可用 `rules_only` 做无模型基线；传入 `--api-key`、`--model`、`--base-url` 并选择 `ai_first`/`ai_only` 后，可复用同一入口做真实模型抽样。
+
+当前 `standard` 推荐样例集包含 5 类高风险口径：
+
+- 垂直行业管理：同一业务对象维护和查询合并。
+- 内外部数据功能混合：ILF/EIF 边界。
+- 短信通知服务：普通外部服务不生成 EIF。
+- 外部用户中心引用：明确外部维护数据组可生成 EIF。
+- 主数据组织引用：组织主数据 EIF 识别。
 
 当前还已补充第一版稳定性质量门。多 trace 对比或 fixture 采样时，可以增加阈值参数：
 

@@ -488,6 +488,8 @@ def _build_parser() -> argparse.ArgumentParser:
                         help='FPA 稳定性质量门：允许的稳定性重试次数上限，-1 表示不检查')
     parser.add_argument('--fpa-stability-sample-fixtures', nargs='+', default=[],
                         help='读取一个或多个 FPA golden fixture JSON，批量生成稳定性采样 trace 和报告')
+    parser.add_argument('--fpa-stability-sample-suite', default='',
+                        help='FPA 稳定性推荐样例集名称；当前支持 standard')
     parser.add_argument('--fpa-stability-sample-profiles', default='strict_fpa',
                         help='稳定性采样 profile 列表，逗号分隔')
     parser.add_argument('--fpa-stability-sample-strategies', default='rules_only',
@@ -679,18 +681,23 @@ def main():
             print(markdown)
         return
 
-    if args.fpa_stability_sample_fixtures:
+    if args.fpa_stability_sample_fixtures or args.fpa_stability_sample_suite:
         from ai_gen_reimbursement_docs.fpa_stability_sampler import (
             parse_fpa_stability_sample_configs,
+            resolve_fpa_stability_suite_fixtures,
             run_fpa_stability_sampling,
         )
 
+        fixture_paths = [*args.fpa_stability_sample_fixtures]
+        if args.fpa_stability_sample_suite:
+            fixture_paths.extend(resolve_fpa_stability_suite_fixtures(args.fpa_stability_sample_suite))
+        fixture_paths = list(dict.fromkeys(fixture_paths))
         sample_output_dir = args.output_dir or os.path.abspath("fpa-stability-samples")
         sample_api_key = args.api_key or load_api_key()
         sample_model = args.model or load_model_name()
         sample_base_url = load_base_url()
         manifest = run_fpa_stability_sampling(
-            fixture_paths=args.fpa_stability_sample_fixtures,
+            fixture_paths=fixture_paths,
             output_dir=sample_output_dir,
             configs=parse_fpa_stability_sample_configs(
                 profiles=args.fpa_stability_sample_profiles,

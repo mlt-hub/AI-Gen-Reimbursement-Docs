@@ -87,6 +87,8 @@ def test_cli_parser_accepts_fpa_stability_sampling_args():
         "--fpa-stability-sample-fixtures",
         "case-a.json",
         "case-b.json",
+        "--fpa-stability-sample-suite",
+        "standard",
         "--fpa-stability-sample-profiles",
         "strict_fpa,unified_ui",
         "--fpa-stability-sample-strategies",
@@ -102,6 +104,7 @@ def test_cli_parser_accepts_fpa_stability_sampling_args():
     ])
 
     assert args.fpa_stability_sample_fixtures == ["case-a.json", "case-b.json"]
+    assert args.fpa_stability_sample_suite == "standard"
     assert args.fpa_stability_sample_profiles == "strict_fpa,unified_ui"
     assert args.fpa_stability_sample_strategies == "rules_only,rules_first"
     assert args.fpa_stability_sample_rule_sets == "strict_fpa_rs"

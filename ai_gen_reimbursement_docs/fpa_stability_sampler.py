@@ -12,6 +12,14 @@ from ai_gen_reimbursement_docs.fpa_stability_report import (
 )
 from ai_gen_reimbursement_docs.gen_fpa import plan_fpa_md_from_tree
 
+STANDARD_FPA_STABILITY_SUITE = (
+    "vertical_industry_management.json",
+    "mixed_internal_external_data_functions.json",
+    "sms_notification_service.json",
+    "external_user_center_reference.json",
+    "master_data_org_reference.json",
+)
+
 
 @dataclass(frozen=True)
 class FpaStabilitySampleConfig:
@@ -100,6 +108,17 @@ def run_fpa_stability_sampling(
     return manifest
 
 
+def resolve_fpa_stability_suite_fixtures(suite: str) -> list[str]:
+    """Resolve a named FPA stability fixture suite to JSON fixture paths."""
+    suite_name = suite.strip().lower()
+    if not suite_name:
+        return []
+    if suite_name != "standard":
+        raise ValueError(f"未知 FPA 稳定性样例集: {suite}")
+    fixture_dir = _repo_root() / "tests" / "fixtures" / "fpa_golden_cases"
+    return [str(fixture_dir / name) for name in STANDARD_FPA_STABILITY_SUITE]
+
+
 def parse_fpa_stability_sample_configs(
     *,
     profiles: str = "",
@@ -174,3 +193,7 @@ def _csv_values(value: str) -> list[str]:
 
 def _safe_name(value: str) -> str:
     return re.sub(r'[\\/:*?"<>|\s]+', "_", value).strip("_") or "sample"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
