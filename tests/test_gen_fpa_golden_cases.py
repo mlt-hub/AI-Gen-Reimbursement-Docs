@@ -23,7 +23,20 @@ def _names(rows):
 
 
 def _types_by_name(rows):
-    return {row["新增/修改功能点"]: row["类型"] for row in rows}
+    result = {}
+    for row in rows:
+        name = row["新增/修改功能点"]
+        result[name] = row["类型"]
+        result[_short_name(name)] = row["类型"]
+    return result
+
+
+def _short_name(name):
+    text = str(name)
+    if not text.startswith("【"):
+        return text
+    parts = text.split("-", 3)
+    return parts[3] if len(parts) == 4 else text
 
 
 def test_golden_vertical_industry_management_fallback_shape():

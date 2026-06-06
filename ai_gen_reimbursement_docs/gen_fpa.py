@@ -141,7 +141,7 @@ def _explanation_quality_warnings(
         f"{group.get('l1', '')}-{group.get('l2', '')}-{group.get('l3', '')}-"
     )
     if source_prefix.strip("-") and source_prefix not in text:
-        expected_tail = "<数据组名称>" if fpa_type in {"ILF", "EIF"} else "<功能过程>"
+        expected_tail = "<数据组名称>" if fpa_type in {"ILF", "EIF"} else "<功能点名称>"
         warnings.append(
             f"{name} 计算依据说明来源场景未使用完整路径格式: {source_prefix}{expected_tail}"
         )

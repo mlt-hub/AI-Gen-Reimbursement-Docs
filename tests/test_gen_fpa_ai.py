@@ -450,6 +450,7 @@ def test_data_function_source_path_warning_mentions_data_group_name():
 
     assert any("<数据组名称>" in warning for warning in warnings)
     assert not any("<功能过程>" in warning for warning in warnings)
+    assert not any("<功能点名称>" in warning for warning in warnings)
     quality_hit = next(
         hit for hit in rows[0]["_规则命中详情"]
         if hit["rule_id"] == "postprocess.explanation_quality"

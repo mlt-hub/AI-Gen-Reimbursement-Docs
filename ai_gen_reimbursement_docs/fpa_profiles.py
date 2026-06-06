@@ -348,6 +348,16 @@ def group_tag(group: dict[str, object]) -> str:
     )
 
 
+def function_point_tag(group: dict[str, object], name: str) -> str:
+    base = group_tag(group)
+    clean_name = str(name or "").strip()
+    if not clean_name:
+        return base
+    if clean_name.startswith(f"{base}-") or clean_name == base:
+        return clean_name
+    return f"{base}-{clean_name}"
+
+
 def adjust_value_for_type(fpa_type: str) -> int | float:
     return calculate_fpa_adjustment_for_row({"类型": fpa_type})["adjustment_value"]
 
@@ -973,7 +983,7 @@ class CustomRulesProfile:
             desc = str(p.get("desc", "") or "").strip()
             if not name:
                 continue
-            point_name = self.logic_point_name(name, desc)
+            point_name = function_point_tag(group, self.logic_point_name(name, desc))
             fpa_type, reason = self.infer_type(point_name, desc)
             row = {
                 "序号": seq,
@@ -1190,14 +1200,15 @@ class StrictFpaProfile(CustomRulesProfile):
         seq = start_seq
 
         for data_name, data_type, data_reason in self._data_functions_for_group(group, process_list):
+            point_name = function_point_tag(group, data_name)
             rows.append({
                 "序号": seq,
                 "子系统(模块)": subsystem,
                 "资产标识": asset,
-                "新增/修改功能点": data_name,
+                "新增/修改功能点": point_name,
                 "类型": data_type,
                 "计算依据归类": "",
-                "计算依据说明": f"{data_name}，作为该三级模块涉及的逻辑数据组。",
+                "计算依据说明": f"{point_name}，作为该三级模块涉及的逻辑数据组。",
                 "变更状态": module_change_status(process_list),
                 "调整值": adjust_value_for_type(data_type),
                 "要素数量": 1,
@@ -1209,14 +1220,15 @@ class StrictFpaProfile(CustomRulesProfile):
             seq += 1
 
         for transaction in self._logical_transactions_for_group(process_list):
+            point_name = function_point_tag(group, str(transaction["name"]))
             row = {
                 "序号": seq,
                 "子系统(模块)": subsystem,
                 "资产标识": asset,
-                "新增/修改功能点": transaction["name"],
+                "新增/修改功能点": point_name,
                 "类型": transaction["type"],
                 "计算依据归类": "",
-                "计算依据说明": transaction["explanation"],
+                "计算依据说明": str(transaction["explanation"]).replace(str(transaction["name"]), point_name, 1),
                 "变更状态": str(transaction["change_status"] or module_change_status(process_list)),
                 "调整值": adjust_value_for_type(str(transaction["type"])),
                 "要素数量": 1,

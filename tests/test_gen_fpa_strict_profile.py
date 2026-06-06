@@ -20,11 +20,31 @@ def _row(client_type, l1, l2, l3, l3_desc, proc, proc_desc, proc_type="新增"):
 
 
 def _names(rows):
-    return [row["新增/修改功能点"] for row in rows]
+    names = []
+    for row in rows:
+        name = row["新增/修改功能点"]
+        names.append(name)
+        short = _short_name(name)
+        if short != name:
+            names.append(short)
+    return names
 
 
 def _types_by_name(rows):
-    return {row["新增/修改功能点"]: row["类型"] for row in rows}
+    result = {}
+    for row in rows:
+        name = row["新增/修改功能点"]
+        result[name] = row["类型"]
+        result[_short_name(name)] = row["类型"]
+    return result
+
+
+def _short_name(name):
+    text = str(name)
+    if not text.startswith("【"):
+        return text
+    parts = text.split("-", 3)
+    return parts[3] if len(parts) == 4 else text
 
 
 def test_strict_fpa_vertical_industry_uses_data_and_transaction_functions():
@@ -42,6 +62,10 @@ def test_strict_fpa_vertical_industry_uses_data_and_transaction_functions():
     names = _names(result)
     types = _types_by_name(result)
 
+    assert all(
+        str(row["新增/修改功能点"]).startswith("【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-")
+        for row in result
+    )
     assert "垂直行业信息" in names
     assert "垂直行业管理员关系" in names
     assert types["垂直行业信息"] == "ILF"
@@ -54,9 +78,9 @@ def test_strict_fpa_vertical_industry_uses_data_and_transaction_functions():
     assert "删除垂直行业" not in types
     assert "新增垂直行业管理员" not in types
     assert "删除垂直行业管理员" not in types
-    query_row = next(row for row in result if row["新增/修改功能点"] == "垂直行业查询")
-    maintenance_row = next(row for row in result if row["新增/修改功能点"] == "垂直行业维护")
-    admin_row = next(row for row in result if row["新增/修改功能点"] == "垂直行业管理员维护")
+    query_row = next(row for row in result if _short_name(row["新增/修改功能点"]) == "垂直行业查询")
+    maintenance_row = next(row for row in result if _short_name(row["新增/修改功能点"]) == "垂直行业维护")
+    admin_row = next(row for row in result if _short_name(row["新增/修改功能点"]) == "垂直行业管理员维护")
     assert query_row["源功能过程"] == "垂直行业列表数据查询、查询垂直行业数据"
     assert maintenance_row["源功能过程"] == "添加垂直行业、编辑垂直行业、删除垂直行业"
     assert admin_row["源功能过程"] == "新增垂直行业管理员、删除垂直行业管理员"

@@ -48,7 +48,7 @@ class TestBuildFpaRuleRows:
             "资产标识": kwargs.get("asset", "TEST-001"),
             "新增/修改功能点前缀生成规则": kwargs.get(
                 "prefix_rule",
-                "【客户端类型】一级模块-二级模块-三级模块-功能过程"
+                "【客户端类型】一级模块-二级模块-三级模块-功能点名称"
             ),
             "功能用户-接收者判定": kwargs.get("receiver_rules", ""),
         }
@@ -76,6 +76,7 @@ class TestBuildFpaRuleRows:
         assert result[0]["新增/修改功能点"].endswith("-界面开发")
         assert result[1]["类型"] == "ILF"
         assert result[1]["新增/修改功能点"].endswith("-逻辑处理开发")
+        assert result[1]["新增/修改功能点"].startswith("【后台】系统管理-用户管理-用户注册-")
         assert result[2]["类型"] == "EQ"
         assert result[2]["新增/修改功能点"].endswith("-查询处理开发")
 

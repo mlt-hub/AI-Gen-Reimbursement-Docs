@@ -15,6 +15,10 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
 )
 
 
+def _fp_name(group: dict[str, str], name: str) -> str:
+    return f"【{group['client_type']}】{group['l1']}-{group['l2']}-{group['l3']}-{name}"
+
+
 @pytest.fixture(autouse=True)
 def strict_default_rule_context():
     config = FpaRuleSetConfig(
@@ -352,8 +356,8 @@ def test_strict_profile_merges_same_name_same_type_and_keeps_type_conflict():
     }
 
     rows = STRICT_FPA_PROFILE.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
-    query_rows = [row for row in rows if row["新增/修改功能点"] == "客户查询"]
-    report_rows = [row for row in rows if row["新增/修改功能点"] == "客户处理"]
+    query_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "客户查询")]
+    report_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "客户处理")]
 
     assert len(query_rows) == 1
     assert query_rows[0]["类型"] == "EQ"
@@ -384,7 +388,7 @@ def test_unified_ui_fallback_merges_duplicate_non_ui_process_rows(tmp_path):
         finally:
             reset_current_fpa_rule_set_config(token)
 
-    process_rows = [row for row in rows if row["新增/修改功能点"] == "查询客户-查询处理开发"]
+    process_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "查询客户-查询处理开发")]
     assert len(process_rows) == 1
     assert process_rows[0]["源功能过程"] == "查询客户"
 
@@ -444,7 +448,7 @@ def test_custom_rule_set_row_planning_rules_affect_fallback_rows(tmp_path):
 
     names = [str(row["新增/修改功能点"]) for row in rows]
     assert names[0].endswith("-页面交互开发")
-    assert names[1] == "查询客户-读取处理开发"
+    assert names[1] == _fp_name(group, "查询客户-读取处理开发")
 
 
 def test_custom_rule_set_can_disable_ui_fallback_row(tmp_path):
@@ -470,7 +474,7 @@ def test_custom_rule_set_can_disable_ui_fallback_row(tmp_path):
         finally:
             reset_current_fpa_rule_set_config(token)
 
-    assert [str(row["新增/修改功能点"]) for row in rows] == ["查询客户-查询处理开发"]
+    assert [str(row["新增/修改功能点"]) for row in rows] == [_fp_name(group, "查询客户-查询处理开发")]
 
 
 def test_rule_set_external_data_rules_affect_strict_profile(tmp_path):
@@ -581,7 +585,7 @@ def test_rule_set_internal_data_rules_affect_strict_profile(tmp_path):
             reset_current_fpa_rule_set_config(token)
 
     types = {str(row["新增/修改功能点"]): str(row["类型"]) for row in rows}
-    assert types["认证授权关系"] == "ILF"
+    assert types[_fp_name(group, "认证授权关系")] == "ILF"
 
 
 def test_unified_ui_prompt_is_rendered_from_config(tmp_path):
