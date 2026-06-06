@@ -617,7 +617,7 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 - `--fpa-stability-max-retryable-issues`
 - `--fpa-stability-max-retries`
 
-未传入阈值时只生成报告，不判定通过/失败；传入阈值后，Markdown 报告会增加 `Quality Gate` 区块，manifest/comparison 中会写入 `evaluation.status=pass|fail` 和每项检查结果。
+未传入阈值时只生成报告，不判定通过/失败；传入阈值后，Markdown 报告会增加 `Quality Gate` 区块，manifest/comparison 中会写入 `evaluation.status=pass|fail` 和每项检查结果。若质量门失败，CLI 会返回退出码 `2`，便于接入 CI 或自动验收。
 
 ### 增强优先级
 

@@ -134,6 +134,21 @@ def _fpa_stability_thresholds_from_args(args) -> dict[str, int]:
     return {key: value for key, value in values.items() if value >= 0}
 
 
+def _exit_if_fpa_stability_failed(comparison: dict[str, object]) -> None:
+    evaluation = comparison.get("evaluation", {}) if isinstance(comparison, dict) else {}
+    if not isinstance(evaluation, dict) or evaluation.get("status") != "fail":
+        return
+    checks = evaluation.get("checks", [])
+    failed = [
+        f"{check.get('metric')}={check.get('actual')}>{check.get('threshold')}"
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is False
+    ] if isinstance(checks, list) else []
+    detail = "；".join(failed) if failed else "质量门未通过"
+    print(f"FPA 稳定性质量门未通过: {detail}", file=sys.stderr)
+    raise SystemExit(2)
+
+
 def _get_version() -> str:
     """Read version from pyproject.toml."""
     import tomllib
@@ -681,6 +696,7 @@ def main():
             print(output_path)
         else:
             print(markdown)
+        _exit_if_fpa_stability_failed(comparison)
         return
 
     if args.fpa_stability_sample_fixtures or args.fpa_stability_sample_suite or args.fpa_stability_sample_preset:
@@ -720,6 +736,7 @@ def main():
             thresholds=thresholds,
         )
         print(manifest["report_path"])
+        _exit_if_fpa_stability_failed(manifest["comparison"])
         return
 
     if args.web:

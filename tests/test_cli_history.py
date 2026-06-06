@@ -127,3 +127,36 @@ def test_cli_parser_accepts_fpa_stability_sampling_preset():
     assert args.fpa_stability_sample_profiles == ""
     assert args.fpa_stability_sample_strategies == ""
     assert args.output_dir == "samples"
+
+
+def test_cli_fpa_stability_quality_gate_failure_exits(capsys):
+    comparison = {
+        "evaluation": {
+            "status": "fail",
+            "checks": [
+                {
+                    "metric": "retry_count",
+                    "actual": 1,
+                    "threshold": 0,
+                    "passed": False,
+                }
+            ],
+        }
+    }
+
+    try:
+        cli_main._exit_if_fpa_stability_failed(comparison)
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("quality gate failure should exit")
+    assert "retry_count=1>0" in capsys.readouterr().err
+
+
+def test_cli_fpa_stability_quality_gate_pass_does_not_exit():
+    cli_main._exit_if_fpa_stability_failed({
+        "evaluation": {
+            "status": "pass",
+            "checks": [],
+        }
+    })
