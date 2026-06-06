@@ -168,7 +168,7 @@ def test_fpa_acceptance_strict_rules_formal_check_workbook_from_golden_case(tmp_
     assert "FPA工作量（人/天）: 23.0" in summary_md.read_text(encoding="utf-8")
 
     wb = openpyxl.load_workbook(check_xlsx, data_only=True)
-    assert wb.sheetnames == ["FPA结果", "覆盖审核", "Warnings", "规则命中详情", "AI原始返回"]
+    assert wb.sheetnames == ["FPA结果", "覆盖审核", "Warnings", "规则命中详情", "AI原始返回", "稳定性报告"]
     result_headers = _headers(wb["FPA结果"])
     for header in ["复杂度", "DET", "RET", "FTR", "复杂度说明", "调整值计算方式"]:
         assert header in result_headers
@@ -281,7 +281,7 @@ def test_fpa_acceptance_real_excel_to_md_to_formal_check_workbook(tmp_path):
     assert "FPA工作量（人/天）: 29.0" in summary_md.read_text(encoding="utf-8")
 
     wb = openpyxl.load_workbook(check_xlsx, data_only=True)
-    assert wb.sheetnames == ["FPA结果", "覆盖审核", "Warnings", "规则命中详情", "AI原始返回"]
+    assert wb.sheetnames == ["FPA结果", "覆盖审核", "Warnings", "规则命中详情", "AI原始返回", "稳定性报告"]
     ws_coverage = wb["覆盖审核"]
     coverage_headers = _headers(ws_coverage)
     assert ws_coverage.cell(2, coverage_headers.index("功能过程总数") + 1).value == 4
@@ -486,6 +486,11 @@ def test_fpa_acceptance_check_workbook_type_conflict_metadata_is_consistent(monk
         assert conflict_hit["建议类型"] == "EI"
         assert conflict_hit["是否采用"] == "否"
         assert "规则建议 type=EI" in conflict_hit["规则说明"]
+
+        stability_rows = _sheet_records(wb["稳定性报告"])
+        summary = next(row for row in stability_rows if row["范围"] == "summary")
+        assert summary["Warning数"] >= 1
+        assert "validator.ordinary_service_as_eif" in str(summary["Issue Codes"])
     finally:
         wb.close()
 

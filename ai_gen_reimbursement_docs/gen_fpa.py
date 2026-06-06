@@ -50,6 +50,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     set_current_fpa_rule_set_config,
 )
 from ai_gen_reimbursement_docs.fpa_quality_review import build_fpa_quality_review
+from ai_gen_reimbursement_docs.fpa_stability_report import build_fpa_stability_report
 from ai_gen_reimbursement_docs.fpa_validator import (
     FpaValidationIssue,
     retryable_validation_issues,
@@ -2086,13 +2087,15 @@ def _plan_fpa_rows_with_execution(
         logger.info(msg)
     if cache_path:
         _save_fpa_ai_cache(cache_path, cache)
-    _save_fpa_audit_trace(audit_trace_path, {
+    audit_trace = {
         "version": 1,
         "profile": profile.name,
         "strategy": strategy,
         "rule_set": rule_set,
         "modules": audit_modules,
-    })
+    }
+    audit_trace["stability_report"] = build_fpa_stability_report(audit_trace)
+    _save_fpa_audit_trace(audit_trace_path, audit_trace)
     return all_rows
 
 
@@ -2343,6 +2346,10 @@ FPA_CHECK_DEFAULT_COLUMNS: dict[str, list[str]] = {
         "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
     ],
     "AI原始返回": ["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"],
+    "稳定性报告": [
+        "范围", "模块序号", "模块", "三级模块", "来源", "Warning数", "Quality Issue数",
+        "可重试Quality Issue数", "确认数", "重试次数", "来源统计", "Issue Codes",
+    ],
 }
 
 
@@ -2386,6 +2393,11 @@ def generate_fpa_check_xlsx_from_md(
     groups = _group_rows_by_l3(tree_rows)
     rows_by_module = _group_rows_for_audit(fpa_rows, groups)
     audit_trace = _load_fpa_audit_trace(audit_trace_path)
+    stability_report = audit_trace.get("stability_report", {})
+    if not isinstance(stability_report, dict):
+        stability_report = {}
+    if not stability_report:
+        stability_report = build_fpa_stability_report(audit_trace)
     rule_hits_by_seq = _rule_hits_from_audit_trace(audit_trace)
     audit_modules = audit_trace.get("modules", [])
     if not isinstance(audit_modules, list):
@@ -2582,11 +2594,46 @@ def generate_fpa_check_xlsx_from_md(
             "AI原始Rows JSON": _json.dumps(audit_report.raw_rows, ensure_ascii=False, indent=2),
         })
 
+    ws_stability = wb.create_sheet("稳定性报告")
+    ws_stability.append(sheet_columns["稳定性报告"])
+    stability_summary = stability_report.get("summary", {}) if isinstance(stability_report, dict) else {}
+    if not isinstance(stability_summary, dict):
+        stability_summary = {}
+    _append_audit_row(ws_stability, sheet_columns["稳定性报告"], {
+        "范围": "summary",
+        "Warning数": stability_summary.get("warning_count", 0),
+        "Quality Issue数": stability_summary.get("quality_issue_count", 0),
+        "可重试Quality Issue数": stability_summary.get("retryable_quality_issue_count", 0),
+        "确认数": stability_summary.get("confirmed_decision_count", 0),
+        "重试次数": stability_summary.get("retry_count", 0),
+        "来源统计": _json.dumps(stability_summary.get("source_counts", {}), ensure_ascii=False, sort_keys=True),
+        "Issue Codes": _json.dumps(stability_summary.get("issue_code_counts", {}), ensure_ascii=False, sort_keys=True),
+    })
+    stability_modules = stability_report.get("modules", []) if isinstance(stability_report, dict) else []
+    if not isinstance(stability_modules, list):
+        stability_modules = []
+    for module in stability_modules:
+        if not isinstance(module, dict):
+            continue
+        _append_audit_row(ws_stability, sheet_columns["稳定性报告"], {
+            "范围": "module",
+            "模块序号": module.get("module_index", ""),
+            "模块": module.get("module", ""),
+            "三级模块": module.get("l3", ""),
+            "来源": module.get("source", ""),
+            "Warning数": module.get("warning_count", 0),
+            "Quality Issue数": module.get("quality_issue_count", 0),
+            "可重试Quality Issue数": module.get("retryable_quality_issue_count", 0),
+            "确认数": module.get("confirmed_decision_count", 0),
+            "重试次数": module.get("retry_count", 0),
+            "Issue Codes": _json.dumps(module.get("issue_code_counts", {}), ensure_ascii=False, sort_keys=True),
+        })
+
     header_fill = PatternFill("solid", fgColor="D9EAF7")
     warning_fill = PatternFill("solid", fgColor="FFF2CC")
     missing_fill = PatternFill("solid", fgColor="FCE4D6")
 
-    for ws in (ws_result, ws_coverage, ws_warnings, ws_rule_hits, ws_raw):
+    for ws in (ws_result, ws_coverage, ws_warnings, ws_rule_hits, ws_raw, ws_stability):
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
         for cell in ws[1]:

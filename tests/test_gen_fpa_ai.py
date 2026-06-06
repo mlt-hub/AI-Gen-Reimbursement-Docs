@@ -1402,6 +1402,8 @@ def test_rules_first_without_api_keeps_low_confidence_rules_and_audit_warning(mo
     warnings = trace["modules"][0]["warnings"]
     assert any("规则结果需要 AI 复核但未配置 API Key" in warning for warning in warnings)
     assert any("类型无效" in warning for warning in warnings)
+    assert trace["stability_report"]["summary"]["warning_count"] == len(warnings)
+    assert trace["stability_report"]["summary"]["source_counts"] == {"rules": 1}
 
 
 def test_ai_parse_failure_falls_back(monkeypatch, tmp_path, caplog):
