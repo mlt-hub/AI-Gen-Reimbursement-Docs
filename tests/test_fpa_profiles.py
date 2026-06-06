@@ -352,12 +352,12 @@ def test_strict_profile_merges_same_name_same_type_and_keeps_type_conflict():
     }
 
     rows = STRICT_FPA_PROFILE.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
-    query_rows = [row for row in rows if row["新增/修改功能点"] == "查询客户"]
+    query_rows = [row for row in rows if row["新增/修改功能点"] == "客户查询"]
     report_rows = [row for row in rows if row["新增/修改功能点"] == "客户处理"]
 
     assert len(query_rows) == 1
     assert query_rows[0]["类型"] == "EQ"
-    assert query_rows[0]["源功能过程"] == "查询客户"
+    assert query_rows[0]["源功能过程"] == "查询客户、查询客户"
     assert len(report_rows) == 2
     assert {str(row["类型"]) for row in report_rows} == {"EO", "EQ"}
     assert all("同名不同类型结果行" in str(row["后处理警告"]) for row in report_rows)

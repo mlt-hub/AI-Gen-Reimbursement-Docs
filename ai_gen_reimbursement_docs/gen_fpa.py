@@ -646,15 +646,7 @@ def _normalize_ai_fpa_rows_for_l3(
                 })
 
         review_warning = profile.ai_data_group_review_warning(name, explanation, fpa_type)
-        has_type_warning = any(
-            hit.get("rule_id") in {
-                "postprocess.invalid_ai_type",
-                "postprocess.ai_first_type_conflict",
-                "postprocess.keyword_type_conflict",
-            }
-            for hit in row_hits
-        )
-        if review_warning and not has_type_warning:
+        if review_warning:
             warnings.append(review_warning)
             row_warnings.append(review_warning)
             row_hits.append({

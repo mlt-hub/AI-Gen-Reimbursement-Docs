@@ -29,7 +29,8 @@ def _types_by_name(rows):
 
 def test_strict_fpa_vertical_industry_uses_data_and_transaction_functions():
     rows = [
-        _row("地市后台", "垂直行业营销", "垂直行业管理", "垂直行业管理", "维护垂直行业基础信息、状态和管理员。", "查询垂直行业", "按行业名称查询垂直行业列表，支持分页。"),
+        _row("地市后台", "垂直行业营销", "垂直行业管理", "垂直行业管理", "维护垂直行业基础信息、状态和管理员。", "垂直行业列表数据查询", "默认展示存量垂直行业列表。"),
+        _row("地市后台", "垂直行业营销", "垂直行业管理", "垂直行业管理", "维护垂直行业基础信息、状态和管理员。", "查询垂直行业数据", "按行业名称查询垂直行业列表，支持分页。"),
         _row("地市后台", "垂直行业营销", "垂直行业管理", "垂直行业管理", "维护垂直行业基础信息、状态和管理员。", "添加垂直行业", "输入垂直行业名称并保存。"),
         _row("地市后台", "垂直行业营销", "垂直行业管理", "垂直行业管理", "维护垂直行业基础信息、状态和管理员。", "编辑垂直行业", "修改垂直行业名称并保存。"),
         _row("地市后台", "垂直行业营销", "垂直行业管理", "垂直行业管理", "维护垂直行业基础信息、状态和管理员。", "删除垂直行业", "删除指定垂直行业。"),
@@ -45,12 +46,20 @@ def test_strict_fpa_vertical_industry_uses_data_and_transaction_functions():
     assert "垂直行业管理员关系" in names
     assert types["垂直行业信息"] == "ILF"
     assert types["垂直行业管理员关系"] == "ILF"
-    assert types["查询垂直行业"] == "EQ"
-    assert types["添加垂直行业"] == "EI"
-    assert types["编辑垂直行业"] == "EI"
-    assert types["删除垂直行业"] == "EI"
-    assert types["新增垂直行业管理员"] == "EI"
-    assert types["删除垂直行业管理员"] == "EI"
+    assert types["垂直行业查询"] == "EQ"
+    assert types["垂直行业维护"] == "EI"
+    assert types["垂直行业管理员维护"] == "EI"
+    assert "添加垂直行业" not in types
+    assert "编辑垂直行业" not in types
+    assert "删除垂直行业" not in types
+    assert "新增垂直行业管理员" not in types
+    assert "删除垂直行业管理员" not in types
+    query_row = next(row for row in result if row["新增/修改功能点"] == "垂直行业查询")
+    maintenance_row = next(row for row in result if row["新增/修改功能点"] == "垂直行业维护")
+    admin_row = next(row for row in result if row["新增/修改功能点"] == "垂直行业管理员维护")
+    assert query_row["源功能过程"] == "垂直行业列表数据查询、查询垂直行业数据"
+    assert maintenance_row["源功能过程"] == "添加垂直行业、编辑垂直行业、删除垂直行业"
+    assert admin_row["源功能过程"] == "新增垂直行业管理员、删除垂直行业管理员"
     assert not any("界面开发" in name or "接口开发" in name or "逻辑处理开发" in name for name in names)
 
 

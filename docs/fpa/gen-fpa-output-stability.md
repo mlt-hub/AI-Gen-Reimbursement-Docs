@@ -179,7 +179,7 @@ Harness 通常包含：
 
 其中部分能力，例如 validator 和 warning，也可以进入生产系统作为兜底；但 golden cases 和回归测试主要用于开发、测试、CI/CD 和发布前验收。
 
-### 当前缺口
+### 当前口径对齐点
 
 当前仓库已经有 FPA golden cases 和 strict profile 相关测试，例如：
 
@@ -188,19 +188,9 @@ Harness 通常包含：
 - `tests/test_gen_fpa_golden_cases.py`
 - `tests/test_gen_fpa_strict_profile.py`
 
-但现有验收样例与本方案推荐的稳定口径仍存在不一致。代表例是 `vertical_industry_management.json`：当前 `strict_fpa` 期望仍按单个功能过程拆分维护动作，例如添加垂直行业、编辑垂直行业、删除垂直行业分别计为 EI；本方案推荐口径则是同一数据组、同一管理场景下合并为“垂直行业维护”EI。
+`strict_fpa` 已切换为逻辑事务合并口径。代表例是 `vertical_industry_management.json`：同一数据组、同一管理场景下的添加垂直行业、编辑垂直行业、删除垂直行业合并为“垂直行业维护”EI；新增垂直行业管理员、删除垂直行业管理员合并为“垂直行业管理员维护”EI；默认列表查询和条件搜索合并为“垂直行业查询”EQ。
 
-因此，harness 增强的第一步不是增加更多测试，而是先统一 `strict_fpa` 的计量口径：
-
-```text
-如果 strict_fpa 采用逻辑事务合并口径：
-  golden fixtures、测试断言、prompt、后处理规则都要同步调整。
-
-如果 strict_fpa 保持逐 process 计数口径：
-  本文档中的合并口径应改为另一个 profile 或确认模式下的项目口径。
-```
-
-在口径未统一前，AI 输出、文档、golden cases 和 validator 可能互相拉扯，反而放大不稳定。
+后续 harness 增强的重点，是让 prompt、golden fixtures、规则兜底、AI 后处理和确认流测试持续保持同一口径，避免某一层回退到逐 process 计数。
 
 ### Golden Case 回归集
 
@@ -329,7 +319,7 @@ source_processes 越界率。
 推荐按以下优先级增强 harness：
 
 ```text
-P0：统一 strict_fpa 口径，更新 golden fixtures、prompt、后处理规则和测试断言。
+P0：持续锁定 strict_fpa 逻辑事务合并口径，确保 golden fixtures、prompt、后处理规则和测试断言一致。
 P1：新增结构化 validator，抓查询误判、EIF 误判、source_processes 越界、说明结构缺失等典型问题。
 P2：补充确认流测试，覆盖 needs_confirmation、confirmed_decisions 和确认作用域。
 P3：把 golden cases 拆成“固定期望 + 行为断言”两层。

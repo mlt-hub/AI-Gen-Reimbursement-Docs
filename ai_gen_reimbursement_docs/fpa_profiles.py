@@ -1208,6 +1208,31 @@ class StrictFpaProfile(CustomRulesProfile):
             })
             seq += 1
 
+        for transaction in self._logical_transactions_for_group(process_list):
+            row = {
+                "序号": seq,
+                "子系统(模块)": subsystem,
+                "资产标识": asset,
+                "新增/修改功能点": transaction["name"],
+                "类型": transaction["type"],
+                "计算依据归类": "",
+                "计算依据说明": transaction["explanation"],
+                "变更状态": str(transaction["change_status"] or module_change_status(process_list)),
+                "调整值": adjust_value_for_type(str(transaction["type"])),
+                "要素数量": 1,
+                "生成方式": "fallback",
+                "类型理由": transaction["reason"],
+                "源功能过程": transaction["sources"],
+                "后处理警告": "",
+            }
+            if _append_row_with_l3_name_policy(rows, row):
+                seq += 1
+        return rows
+
+    def _logical_transactions_for_group(self, process_list: list[object]) -> list[dict[str, object]]:
+        singles: list[dict[str, object]] = []
+        grouped: dict[tuple[str, str], list[dict[str, object]]] = {}
+
         for p in process_list:
             if not isinstance(p, dict):
                 continue
@@ -1220,25 +1245,117 @@ class StrictFpaProfile(CustomRulesProfile):
             if fpa_type in {"ILF", "EIF"}:
                 fpa_type = "EI"
                 reason = "功能过程按事务功能计量，数据功能已单独识别。"
-            row = {
-                "序号": seq,
-                "子系统(模块)": subsystem,
-                "资产标识": asset,
-                "新增/修改功能点": point_name,
-                "类型": fpa_type,
-                "计算依据归类": "",
-                "计算依据说明": f"{point_name}，具体为以下：\n1、{desc or raw_name}",
-                "变更状态": str(p.get("type", "") or module_change_status(process_list)),
-                "调整值": adjust_value_for_type(fpa_type),
-                "要素数量": 1,
-                "生成方式": "fallback",
-                "类型理由": reason,
-                "源功能过程": raw_name,
-                "后处理警告": "",
+            item = {
+                "raw_name": raw_name,
+                "point_name": point_name,
+                "desc": desc,
+                "type": fpa_type,
+                "reason": reason,
+                "change_status": str(p.get("type", "") or ""),
             }
-            if _append_row_with_l3_name_policy(rows, row):
-                seq += 1
-        return rows
+            group_key = self._logical_transaction_group_key(point_name, desc, fpa_type)
+            if group_key is None:
+                singles.append(self._single_transaction_row(item))
+                continue
+            if group_key not in grouped:
+                grouped[group_key] = []
+            grouped[group_key].append(item)
+
+        result: list[dict[str, object]] = []
+        single_iter = iter(singles)
+        emitted_group_keys: set[tuple[str, str]] = set()
+        for p in process_list:
+            if not isinstance(p, dict):
+                continue
+            raw_name = str(p.get("name", "") or "").strip()
+            if not raw_name:
+                continue
+            point_name = self._transaction_name(raw_name)
+            fpa_type, _ = self.infer_type(point_name, str(p.get("desc", "") or "").strip())
+            if fpa_type in {"ILF", "EIF"}:
+                fpa_type = "EI"
+            group_key = self._logical_transaction_group_key(point_name, str(p.get("desc", "") or "").strip(), fpa_type)
+            if group_key is None:
+                result.append(next(single_iter))
+                continue
+            if group_key in emitted_group_keys:
+                continue
+            emitted_group_keys.add(group_key)
+            items = grouped[group_key]
+            result.append(
+                self._merged_transaction_row(group_key, items)
+                if len(items) > 1
+                else self._single_transaction_row(items[0])
+            )
+        return result
+
+    def _single_transaction_row(self, item: dict[str, object]) -> dict[str, object]:
+        point_name = str(item["point_name"])
+        desc = str(item["desc"] or item["raw_name"])
+        return {
+            "name": point_name,
+            "type": item["type"],
+            "reason": item["reason"],
+            "explanation": f"{point_name}，具体为以下：\n1、{desc}",
+            "change_status": item["change_status"],
+            "sources": item["raw_name"],
+        }
+
+    def _merged_transaction_row(
+        self,
+        group_key: tuple[str, str],
+        items: list[dict[str, object]],
+    ) -> dict[str, object]:
+        fpa_type, object_name = group_key
+        suffix = "查询" if fpa_type == "EQ" else "维护" if fpa_type == "EI" else "输出"
+        point_name = f"{object_name}{suffix}"
+        detail = "\n".join(
+            f"{i}、{str(item['desc'] or item['raw_name'])}"
+            for i, item in enumerate(items, 1)
+        )
+        sources = "、".join(str(item["raw_name"]) for item in items)
+        if fpa_type == "EQ":
+            reason = "多个查询功能过程读取同一业务对象并展示同类结果，按一个逻辑查询事务 EQ 合并。"
+        elif fpa_type == "EI":
+            reason = "多个维护功能过程针对同一业务对象改变系统内数据，按一个逻辑维护事务 EI 合并。"
+        else:
+            reason = "多个输出功能过程针对同一业务对象，按一个逻辑输出事务 EO 合并。"
+        return {
+            "name": point_name,
+            "type": fpa_type,
+            "reason": reason,
+            "explanation": f"{point_name}，合并以下同一逻辑事务：\n{detail}",
+            "change_status": next((str(item["change_status"]) for item in items if str(item["change_status"])), ""),
+            "sources": sources,
+        }
+
+    def _logical_transaction_group_key(
+        self,
+        name: str,
+        desc: str,
+        fpa_type: str,
+    ) -> tuple[str, str] | None:
+        if fpa_type not in {"EI", "EQ"}:
+            return None
+        object_name = self._transaction_object_name(name)
+        if not object_name:
+            object_name = self._transaction_object_name(desc)
+        if not object_name:
+            return None
+        return fpa_type, object_name
+
+    def _transaction_object_name(self, text: str) -> str:
+        value = text.strip()
+        if not value:
+            return ""
+        value = re.sub(
+            r"(?:新增|添加|修改|编辑|删除|保存|提交|审批|启用|停用|导入|同步|发起|写入|选择|引用|关联|查询|查看|详情|检索|列表)",
+            "",
+            value,
+        )
+        value = re.sub(r"(?:数据查询|数据|信息|记录|列表|详情|结果|指定|当前|已保存的|存量的)", "", value)
+        value = re.split(r"[，。；、\s]", value, maxsplit=1)[0]
+        return value.strip(" 的。；，、")
 
     def build_prompt(
         self,
@@ -1378,7 +1495,18 @@ class StrictFpaProfile(CustomRulesProfile):
         return list(current_rule_set.external_data_rules) if current_rule_set is not None else []
 
     def _configured_keyword_rules(self) -> tuple[KeywordTypeRule, ...]:
-        return super()._configured_keyword_rules()
+        rules = super()._configured_keyword_rules()
+        if rules:
+            return rules
+        return (
+            KeywordTypeRule("EO", ("导出", "报表", "下载", "生成文件"), "事务功能产生派生或格式化输出，按 EO。"),
+            KeywordTypeRule("EQ", ("查询", "查看", "详情", "检索", "列表"), "事务功能读取数据且无派生输出，按 EQ。"),
+            KeywordTypeRule(
+                "EI",
+                ("新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联"),
+                "事务功能进入或改变系统边界内数据，按 EI。",
+            ),
+        )
 
     def _configured_transaction_keywords(self) -> tuple[str, ...]:
         keywords: list[str] = []
