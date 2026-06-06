@@ -56,6 +56,7 @@ from ai_gen_reimbursement_docs.fpa_quality_review import (
     retryable_quality_issues,
 )
 from ai_gen_reimbursement_docs.fpa_stability_report import build_fpa_stability_report
+from ai_gen_reimbursement_docs.fpa_type_judgement import build_fpa_type_judgement
 from ai_gen_reimbursement_docs.fpa_validator import (
     FpaValidationIssue,
     retryable_validation_issues,
@@ -516,6 +517,7 @@ def _normalize_ai_fpa_rows_for_l3(
     normalized: list[dict[str, object]] = []
     multi_ui_names: set[str] = set()
     seq = start_seq
+    type_judgement = build_fpa_type_judgement(group)
     for raw in ai_rows:
         if not isinstance(raw, dict):
             warnings.append(f"{_group_tag(group)} AI rows 中存在非对象项，已跳过")
@@ -573,7 +575,11 @@ def _normalize_ai_fpa_rows_for_l3(
                 "adopted": "是",
                 "warnings": row_warnings[-1:] if ai_type else [],
             })
-        elif fallback_type != ai_type and profile.has_obvious_conflict(name, explanation, ai_type):
+        elif (
+            fallback_type != ai_type
+            and profile.has_obvious_conflict(name, explanation, ai_type)
+            and not _ai_row_matches_type_judgement(raw, ai_type, type_judgement)
+        ):
             rule_basis = fallback_reason or "规则认为 AI type 存在业务冲突。"
             conflict_detail = f"规则建议 type={fallback_type}；规则依据：{rule_basis}"
             if strategy in {"ai_first", "ai_only"}:
@@ -898,6 +904,52 @@ def _source_process_ids_from_row(row: dict[str, object]) -> set[str]:
     if isinstance(source_ids, str):
         return {item.strip() for item in re.split(r"[、,，;；\s]+", source_ids) if item.strip()}
     return set()
+
+
+def _source_process_names_from_row(row: dict[str, object]) -> set[str]:
+    values: set[str] = set()
+    for key in ("source_processes", "源功能过程"):
+        raw = row.get(key, [])
+        if isinstance(raw, list):
+            values.update(str(item).strip() for item in raw if str(item).strip())
+        elif isinstance(raw, str):
+            values.update(item.strip() for item in re.split(r"[、,，;；\s]+", raw) if item.strip())
+    return values
+
+
+def _ai_row_matches_type_judgement(
+    row: dict[str, object],
+    ai_type: str,
+    type_judgement: dict[str, object],
+) -> bool:
+    """Return true when a high-confidence agent judgement supports the AI row type."""
+    if not ai_type:
+        return False
+    row_ids = _source_process_ids_from_row(row)
+    row_names = _source_process_names_from_row(row)
+    judgements = type_judgement.get("judgements", []) if isinstance(type_judgement, dict) else []
+    if not isinstance(judgements, list):
+        return False
+    for judgement in judgements:
+        if not isinstance(judgement, dict):
+            continue
+        if str(judgement.get("confidence", "") or "") != "high":
+            continue
+        if str(judgement.get("suggested_type", "") or "").upper() != ai_type:
+            continue
+        judgement_ids = {
+            str(item).strip()
+            for item in judgement.get("source_process_ids", [])
+            if str(item).strip()
+        } if isinstance(judgement.get("source_process_ids", []), list) else set()
+        judgement_names = {
+            str(item).strip()
+            for item in judgement.get("source_process_names", [])
+            if str(item).strip()
+        } if isinstance(judgement.get("source_process_names", []), list) else set()
+        if (row_ids and row_ids & judgement_ids) or (row_names and row_names & judgement_names):
+            return True
+    return False
 
 
 def _source_process_set(row: dict[str, object]) -> set[str]:

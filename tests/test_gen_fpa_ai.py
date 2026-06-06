@@ -767,6 +767,52 @@ def test_ai_first_does_not_warn_type_conflict_when_rule_type_matches_ai_type():
     assert not any(hit["rule_id"] == "postprocess.ai_first_type_conflict" for hit in rows[0]["_规则命中详情"])
 
 
+def test_ai_first_does_not_warn_type_conflict_when_agent_judgement_supports_eif():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "权限管理",
+            "二级模块": "账号权限",
+            "三级模块": "用户中心账号引用",
+            "三级模块整体功能描述": "系统引用统一用户中心维护的人员账号，本系统不维护账号主数据。",
+            "功能过程": "引用统一用户中心账号",
+            "功能过程类型": "新增",
+            "功能过程描述": "引用统一用户中心账号基础信息和所属组织。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "权限管理",
+            "二级模块": "账号权限",
+            "三级模块": "用户中心账号引用",
+            "三级模块整体功能描述": "系统引用统一用户中心维护的人员账号，本系统不维护账号主数据。",
+            "功能过程": "选择业务负责人",
+            "功能过程类型": "新增",
+            "功能过程描述": "从用户中心账号中选择负责人并保存到本系统业务对象。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "统一用户中心账号数据组",
+                "type": "EIF",
+                "explanation": "来源场景：【地市后台】权限管理-账号权限-用户中心账号引用-统一用户中心账号数据组。\n业务数据：统一用户中心账号。\n业务规则：统一用户中心维护，本系统引用。\n计算说明：EIF。",
+                "source_process_ids": ["m1_p1"],
+                "source_processes": ["引用统一用户中心账号"],
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "EIF"
+    assert not any("AI type=EIF 与规则存在冲突" in warning for warning in warnings)
+    assert not any(hit["rule_id"] == "postprocess.ai_first_type_conflict" for hit in rows[0]["_规则命中详情"])
+
+
 def test_ai_first_data_function_supplement_warning_does_not_report_zero_missing_processes():
     group = _group_rows_by_l3([
         {
