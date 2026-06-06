@@ -192,6 +192,43 @@ Harness 通常包含：
 
 后续 harness 增强的重点，是让 prompt、golden fixtures、规则兜底、AI 后处理和确认流测试持续保持同一口径，避免某一层回退到逐 process 计数。
 
+### 实施记录
+
+2026-06-06 已将 `strict_fpa` 切换为逻辑事务合并口径，提交为 `7ae01cc6e842858a3ed91b00432b946fc33299b8`。
+
+本次实施范围：
+
+- `ai_gen_reimbursement_docs/fpa_profiles.py`：`StrictFpaProfile` 规则兜底支持同一业务对象的维护类 EI、查询类 EQ 合并。
+- `ai_gen_reimbursement_docs/gen_fpa.py`：AI 数据功能人工复核 warning 独立保留，不被其它类型冲突 warning 覆盖。
+- `config/fpa_config.yaml.example`：`strict_fpa` prompt 增加功能过程类型参考规则、processes 非计数单位、维护类 EI 合并、查询类 EQ 合并、普通外部服务不生成 EIF、合并行来源说明规则。
+- `tests/fixtures/fpa_golden_cases/vertical_industry_management.json`：垂直行业管理 strict 期望调整为逻辑事务合并结果。
+- `tests/test_gen_fpa_strict_profile.py`、`tests/test_fpa_profiles.py`、`tests/test_fpa_acceptance.py`、`tests/test_config_utils.py`：同步锁定新口径和工作量汇总期望。
+
+当前代表行为：
+
+```text
+垂直行业列表数据查询 + 查询垂直行业数据
+= 垂直行业查询：EQ
+
+添加垂直行业 + 编辑垂直行业 + 删除垂直行业
+= 垂直行业维护：EI
+
+新增垂直行业管理员 + 删除垂直行业管理员
+= 垂直行业管理员维护：EI
+```
+
+验证结果：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+最近一次结果：
+
+```text
+449 passed, 2 skipped
+```
+
 ### Golden Case 回归集
 
 准备 5 到 10 个典型 FPA 输入案例，每个案例配期望结果或关键断言。重点覆盖：
