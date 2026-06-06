@@ -598,6 +598,27 @@ scope: project_profile 才影响后续生成。
 
 这样类型判定节点不只是审计展示，也能在 AI 首次输出偏离高置信建议时参与自动纠偏。
 
+当前已继续修复 rules_only 基线中的确定性质量问题：
+
+- 规则兜底生成的 `计算依据说明` 会统一补齐 `来源场景`、`业务数据`、`业务规则`、`计算说明` 四段结构。
+- AI rows 仍保持透明策略，不由该规则静默改写；缺结构时继续进入 warning/quality review。
+- `validator.split_crud_ei` 改为按维护对象分桶判断，避免把“垂直行业维护”和“垂直行业管理员维护”误判为同一对象拆分。
+
+最新本地 rules_only standard 抽样结果：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py --preset "" --suite standard --profiles strict_fpa --strategies rules_only --rule-sets strict_fpa_rs --output-dir tmp_fpa_stability_ci_rules --max-retries 0 --max-quality-issues 0 --max-retryable-issues 0
+```
+
+```text
+Runs: 5
+Quality Issues: 0
+Retryable Issues: 0
+Retries: 0
+Quality Gate: PASS
+Recommendation: 当前质量信号稳定，可推进真实模型批量抽样。
+```
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。

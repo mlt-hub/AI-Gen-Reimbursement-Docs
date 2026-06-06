@@ -375,6 +375,62 @@ def module_change_status(processes: list[object]) -> str:
     return statuses[0]
 
 
+EXPLANATION_REQUIRED_LABELS = ("来源场景：", "业务数据：", "业务规则：", "计算说明：")
+
+
+def _structure_fallback_explanations(group: dict[str, object], rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Ensure deterministic fallback rows have the review-page explanation shape."""
+    for row in rows:
+        if str(row.get("生成方式", "") or "") != "fallback":
+            continue
+        explanation = str(row.get("计算依据说明", "") or "").strip()
+        if all(label in explanation for label in EXPLANATION_REQUIRED_LABELS):
+            continue
+        row["计算依据说明"] = _structured_fallback_explanation(group, row, explanation)
+    return rows
+
+
+def _structured_fallback_explanation(
+    group: dict[str, object],
+    row: dict[str, object],
+    original_explanation: str,
+) -> str:
+    point_name = str(row.get("新增/修改功能点", "") or group_tag(group))
+    fpa_type = str(row.get("类型", "") or "").strip().upper() or "FPA"
+    source_processes = str(row.get("源功能过程", "") or "").strip()
+    type_reason = str(row.get("类型理由", "") or "").strip()
+    business_data = _fallback_business_data(point_name, fpa_type, source_processes)
+    business_rule_parts = [
+        part for part in [
+            source_processes and f"来源功能过程：{source_processes}",
+            original_explanation,
+            type_reason,
+        ]
+        if part
+    ]
+    return "\n".join([
+        f"来源场景：来自“{point_name}”。",
+        f"业务数据：{business_data}",
+        f"业务规则：{'；'.join(business_rule_parts) or '按当前模块功能清单和规则兜底生成。'}",
+        f"计算说明：该功能点由规则兜底生成，可支撑 FPA 功能点计量，并按 {fpa_type} 识别。",
+    ])
+
+
+def _fallback_business_data(point_name: str, fpa_type: str, source_processes: str) -> str:
+    text = source_processes or point_name
+    clean = re.sub(r"^【[^】]+】", "", point_name)
+    clean = clean.rsplit("-", 1)[-1] if "-" in clean else clean
+    clean = re.sub(r"(数据组|维护|查询|输出|导出|报表|界面开发|接口开发)$", "", clean).strip()
+    subject = clean or text or "业务数据"
+    if fpa_type in {"ILF", "EIF"}:
+        return f"涉及{subject}逻辑数据组。"
+    if fpa_type == "EQ":
+        return f"读取并展示{subject}相关业务数据。"
+    if fpa_type == "EO":
+        return f"输出{subject}相关业务数据。"
+    return f"维护或处理{subject}相关业务数据。"
+
+
 def _prompt_payload(
     group: dict[str, object],
     domain_context: dict[str, object] | None = None,
@@ -996,7 +1052,7 @@ class CustomRulesProfile:
 
         process_rule = self._configured_process_row_planning_rule()
         if process_rule is None or process_rule.enabled is False:
-            return rows
+            return _structure_fallback_explanations(group, rows)
         for p in process_list:
             if not isinstance(p, dict):
                 continue
@@ -1027,7 +1083,7 @@ class CustomRulesProfile:
             }
             if _append_row_with_l3_name_policy(rows, row):
                 seq += 1
-        return rows
+        return _structure_fallback_explanations(group, rows)
 
     def build_prompt(
         self,
@@ -1260,7 +1316,7 @@ class StrictFpaProfile(CustomRulesProfile):
             }
             if _append_row_with_l3_name_policy(rows, row):
                 seq += 1
-        return rows
+        return _structure_fallback_explanations(group, rows)
 
     def _logical_transactions_for_group(self, process_list: list[object]) -> list[dict[str, object]]:
         singles: list[dict[str, object]] = []
@@ -1780,7 +1836,7 @@ class UiApiMappingProfile(CustomRulesProfile):
                 explicit_rows[point_name] = row
                 rows.append(row)
                 seq += 1
-        return rows
+        return _structure_fallback_explanations(group, rows)
 
     def _explicit_backend_interactions(self, name: str, desc: str) -> list[str]:
         text = f"{name}，{desc}"

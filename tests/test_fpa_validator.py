@@ -123,3 +123,26 @@ def test_validator_flags_split_crud_ei_for_same_business_object():
     issues = validate_fpa_rows(group=_group(), rows=rows)
 
     assert any(issue.code == "validator.split_crud_ei" for issue in issues)
+
+
+def test_validator_allows_distinct_maintenance_objects_in_same_module():
+    rows = [
+        {
+            "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业维护",
+            "类型": "EI",
+            "计算依据说明": "来源场景：垂直行业维护。\n业务数据：垂直行业。\n业务规则：新增和修改。\n计算说明：EI。",
+            "源功能过程": "添加垂直行业、编辑垂直行业",
+            "source_process_ids": ["m1_p2", "m1_p3"],
+        },
+        {
+            "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业管理员维护",
+            "类型": "EI",
+            "计算依据说明": "来源场景：垂直行业管理员维护。\n业务数据：垂直行业管理员。\n业务规则：新增和删除管理员。\n计算说明：EI。",
+            "源功能过程": "新增垂直行业管理员、删除垂直行业管理员",
+            "source_process_ids": ["m1_p4", "m1_p5"],
+        },
+    ]
+
+    issues = validate_fpa_rows(group=_group(), rows=rows)
+
+    assert not any(issue.code == "validator.split_crud_ei" for issue in issues)

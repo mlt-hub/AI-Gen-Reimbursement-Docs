@@ -196,18 +196,22 @@ def _split_transaction_issues(
         if str(row.get("类型", "") or "").strip().upper() == "EQ"
     ]
     if len(ei_rows) >= 2 and _same_module_business_object(group, [row for _, row in ei_rows]):
-        maintenance_names = [
-            str(row.get("新增/修改功能点", "") or "")
-            for _, row in ei_rows
-            if _looks_maintenance(str(row.get("新增/修改功能点", "") or "") + str(row.get("源功能过程", "") or ""))
-        ]
-        if len(maintenance_names) >= 2:
-            issues.append(FpaValidationIssue(
-                code="validator.split_crud_ei",
-                message="同一业务对象的多个维护动作疑似被拆成多个 EI，应合并为一个维护类 EI: "
-                + "、".join(maintenance_names[:5]),
-                retryable=True,
-            ))
+        maintenance_buckets: dict[str, list[str]] = {}
+        for _, row in ei_rows:
+            text = str(row.get("新增/修改功能点", "") or "") + str(row.get("源功能过程", "") or "")
+            if not _looks_maintenance(text):
+                continue
+            key = _maintenance_object_key(row)
+            maintenance_buckets.setdefault(key, []).append(str(row.get("新增/修改功能点", "") or ""))
+        for maintenance_names in maintenance_buckets.values():
+            if len(maintenance_names) >= 2:
+                issues.append(FpaValidationIssue(
+                    code="validator.split_crud_ei",
+                    message="同一业务对象的多个维护动作疑似被拆成多个 EI，应合并为一个维护类 EI: "
+                    + "、".join(maintenance_names[:5]),
+                    retryable=True,
+                ))
+                break
     if len(eq_rows) >= 2 and _same_module_business_object(group, [row for _, row in eq_rows]):
         query_names = [
             str(row.get("新增/修改功能点", "") or "")
@@ -234,3 +238,25 @@ def _same_module_business_object(group: dict[str, object], rows: list[dict[str, 
         if l3 in text or l3[: max(2, len(l3) - 2)] in text:
             hits += 1
     return hits >= 2
+
+
+def _maintenance_object_key(row: dict[str, object]) -> str:
+    text = str(row.get("新增/修改功能点", "") or "")
+    if "-" in text:
+        text = text.rsplit("-", 1)[-1]
+    source = str(row.get("源功能过程", "") or "")
+    source_parts = [part.strip() for part in re.split(r"[、,，;；\s]+", source) if part.strip()]
+    source_keys = [_clean_maintenance_object(part) for part in source_parts]
+    source_keys = [key for key in source_keys if key]
+    if source_keys and len(set(source_keys)) == 1:
+        return source_keys[0]
+    return _clean_maintenance_object(text) or text
+
+
+def _clean_maintenance_object(text: str) -> str:
+    value = str(text or "").strip()
+    if "-" in value:
+        value = value.rsplit("-", 1)[-1]
+    value = re.sub(r"^(新增|添加|新建|创建|录入|编辑|修改|更新|删除|移除|保存|维护|启用|停用)", "", value)
+    value = re.sub(r"(维护|新增|添加|编辑|修改|删除|保存|启用|停用)$", "", value)
+    return value.strip()

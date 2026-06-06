@@ -14,10 +14,18 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     set_current_fpa_rule_set_config,
     reset_current_fpa_rule_set_config,
 )
+from ai_gen_reimbursement_docs.fpa_validator import validate_fpa_rows
 
 
 def _fp_name(group: dict[str, str], name: str) -> str:
     return f"【{group['client_type']}】{group['l1']}-{group['l2']}-{group['l3']}-{name}"
+
+
+def _assert_structured_explanations(group, rows):
+    labels = ("来源场景：", "业务数据：", "业务规则：", "计算说明：")
+    assert rows
+    assert all(all(label in str(row["计算依据说明"]) for label in labels) for row in rows)
+    assert not any(issue.code == "validator.explanation_structure" for issue in validate_fpa_rows(group=group, rows=rows))
 
 
 @pytest.fixture(autouse=True)
@@ -297,6 +305,7 @@ def test_ui_api_mapping_fallback_generates_default_and_explicit_backend_rows():
     names = [str(row["新增/修改功能点"]) for row in rows]
     types = {str(row["新增/修改功能点"]): str(row["类型"]) for row in rows}
 
+    _assert_structured_explanations(group, rows)
     assert "【业务端】销售管理-合同中心-合同管理-查询合同列表-界面开发" in names
     assert "【业务端】销售管理-合同中心-合同管理-查询合同列表-接口开发" in names
     assert "【业务端】销售管理-合同中心-合同管理-OA 审批接口" in names
@@ -360,6 +369,7 @@ def test_strict_profile_merges_same_name_same_type_and_keeps_type_conflict():
     query_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "客户查询")]
     report_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "客户处理")]
 
+    _assert_structured_explanations(group, rows)
     assert len(query_rows) == 1
     assert query_rows[0]["类型"] == "EQ"
     assert query_rows[0]["源功能过程"] == "查询客户、查询客户"
@@ -388,6 +398,7 @@ def test_unified_ui_fallback_merges_duplicate_non_ui_process_rows(tmp_path):
             rows = config.profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
         finally:
             reset_current_fpa_rule_set_config(token)
+    _assert_structured_explanations(group, rows)
 
     process_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "查询客户-查询处理开发")]
     assert len(process_rows) == 1
