@@ -50,7 +50,11 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     resolve_fpa_execution_config,
     set_current_fpa_rule_set_config,
 )
-from ai_gen_reimbursement_docs.fpa_quality_review import build_fpa_quality_review
+from ai_gen_reimbursement_docs.fpa_quality_review import (
+    build_fpa_quality_review,
+    quality_feedback,
+    retryable_quality_issues,
+)
 from ai_gen_reimbursement_docs.fpa_stability_report import build_fpa_stability_report
 from ai_gen_reimbursement_docs.fpa_validator import (
     FpaValidationIssue,
@@ -2036,7 +2040,12 @@ def _plan_fpa_rows_with_execution(
                 rows=group_rows,
             )
             warnings.extend(validation_warnings)
-            retry_feedback = validation_feedback(validation_issues)
+            initial_quality_review = _build_quality_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
+            retry_feedback = validation_feedback(validation_issues) or quality_feedback(initial_quality_review)
             if retry_feedback and strategy == "ai_first":
                 logger.warning("FPA AI 输出触发稳定性重试 [%s]", _group_tag(group))
                 retry_raw_rows = _ai_plan_fpa_rows_for_l3(
@@ -2076,6 +2085,11 @@ def _plan_fpa_rows_with_execution(
                     rows=retry_group_rows,
                 )
                 retry_warnings.extend(retry_validation_warnings)
+                retry_quality_review = _build_quality_review_for_l3(
+                    group=group,
+                    rows=retry_group_rows,
+                    confirmed_decisions=confirmed_decisions,
+                )
                 retry_notice = f"{_group_tag(group)} AI 输出稳定性校验触发一次重试"
                 if retry_group_rows:
                     raw_rows = retry_raw_rows
@@ -2085,6 +2099,15 @@ def _plan_fpa_rows_with_execution(
                         warnings.append(
                             f"{_group_tag(group)} AI 重试后仍存在稳定性 warning: "
                             + "；".join(issue.message for issue in retryable_validation_issues(retry_issues))
+                        )
+                    retry_quality_issues = [
+                        issue for issue in retryable_quality_issues(retry_quality_review)
+                        if not str(issue.get("code", "") or "").startswith("validator.")
+                    ]
+                    if retry_quality_issues:
+                        warnings.append(
+                            f"{_group_tag(group)} AI 重试后仍存在质量审核 warning: "
+                            + "；".join(str(issue.get("message", "") or "") for issue in retry_quality_issues)
                         )
                 else:
                     warnings.append(f"{retry_notice}，但重试未生成有效 FPA 行，保留首次结果")

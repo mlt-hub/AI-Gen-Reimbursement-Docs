@@ -1,4 +1,8 @@
-from ai_gen_reimbursement_docs.fpa_quality_review import build_fpa_quality_review
+from ai_gen_reimbursement_docs.fpa_quality_review import (
+    build_fpa_quality_review,
+    quality_feedback,
+    retryable_quality_issues,
+)
 
 
 def _group():
@@ -95,3 +99,5 @@ def test_quality_review_flags_type_judgement_mismatch():
     review = build_fpa_quality_review(group=_group(), rows=rows)
 
     assert "quality.type_judgement_mismatch" in _issue_codes(review)
+    assert retryable_quality_issues(review)
+    assert "type_judgement" in quality_feedback(review)

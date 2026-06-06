@@ -61,6 +61,34 @@ def build_fpa_quality_review(
     }
 
 
+def retryable_quality_issues(review: dict[str, object]) -> list[dict[str, object]]:
+    issues = review.get("issues", []) if isinstance(review, dict) else []
+    if not isinstance(issues, list):
+        return []
+    return [
+        issue for issue in issues
+        if isinstance(issue, dict) and bool(issue.get("retryable"))
+    ]
+
+
+def quality_feedback(review: dict[str, object], *, limit: int = 6) -> str:
+    selected = retryable_quality_issues(review)[:limit]
+    if not selected:
+        return ""
+    lines = [
+        "上一次 FPA JSON 输出未通过质量审核，请只修正 rows JSON，不要解释。",
+        "必须修正以下问题：",
+    ]
+    lines.extend(f"- {issue.get('message', '')}" for issue in selected if str(issue.get("message", "") or "").strip())
+    lines.extend([
+        "硬约束：必须优先遵循 type_judgement 中的高置信类型建议。",
+        "硬约束：同一业务对象的维护动作应按 merge_review 合并为维护类 EI。",
+        "硬约束：同一列表、搜索或查看场景应按 merge_review 合并为查询类 EQ。",
+        "硬约束：普通校验、认证、短信、支付、消息调用没有外部维护数据组证据时不得生成 EIF。",
+    ])
+    return "\n".join(lines)
+
+
 def _merge_review_issues(
     *,
     rows: list[dict[str, object]],

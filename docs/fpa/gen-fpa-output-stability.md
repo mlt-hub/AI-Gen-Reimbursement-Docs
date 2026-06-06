@@ -586,6 +586,15 @@ scope: project_profile 才影响后续生成。
 
 `quality_review` 已接入 `type_judgement`：当最终 rows 的来源流程命中高置信类型建议但类型不一致时，会产生 `quality.type_judgement_mismatch`。该检查仍是非破坏式 warning/retry 信号，不直接改写 AI 输出。
 
+当前已继续将 `quality_review` 的高置信可重试问题接入 `ai_first` 稳定性重试链路：
+
+- validator 反馈优先，用于查询判 EI、普通服务判 EIF、来源流程越界等已有项目口径问题。
+- 如果 validator 没有触发重试，但 `quality_review` 发现 `type_judgement` 或 `merge_review` 高置信冲突，则同样只触发一次 AI 重试。
+- 重试反馈会明确要求模型遵循 `type_judgement`、`merge_review`，只修正 rows JSON。
+- 重试后仍存在质量审核问题时，结果仍保留并写入 warning、audit trace 和稳定性报告，不阻断交付。
+
+这样类型判定节点不只是审计展示，也能在 AI 首次输出偏离高置信建议时参与自动纠偏。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。
