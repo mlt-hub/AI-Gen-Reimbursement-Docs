@@ -217,7 +217,7 @@ user_prompt_sets:
     ${payload_json}
 
     请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"<多界面拆分理由，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<多界面拆分理由，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
   strict_fpa_up: |-
     ${core_rules}
@@ -235,7 +235,7 @@ user_prompt_sets:
     7. 对同一个 ILF 的新增、修改、删除、启用、停用、保存等维护动作，如果属于同一业务对象、同一管理界面或同一组操作入口，必须合并为一个维护类 EI，功能点名称建议使用「xxx维护」。
     8. 默认列表查询、条件搜索、按名称查询、筛选查询，如果读取同一数据组、展示同一类结果、属于同一列表或查询界面，必须合并为一个查询类 EQ，功能点名称建议使用「xxx查询」。
     9. 手机号校验、账号校验、权限校验、认证校验、短信发送、支付调用、OCR 调用、消息推送等普通外部服务调用，不生成 EIF；只有输入明确说明外部系统维护的数据组被本系统读取或引用时，才生成 EIF。
-    10. 合并行必须在 source_processes 中列出全部来源功能过程，并在 split_reason 中说明合并原因。
+    10. 合并行必须在 source_process_ids 中列出全部来源功能过程 ID，并在 source_processes 中列出对应功能过程名称，在 split_reason 中说明合并原因。
     11. ILF/EIF 数据功能名称建议使用「xxx数据组」后缀，例如「垂直行业数据组」；EI 维护类事务建议使用「xxx维护」，EQ 查询类事务建议使用「xxx查询」，EO 输出类事务建议使用「xxx输出/xxx导出/xxx报表」。
     12. name 必须使用模块输入 JSON 中的 client_type / l1 / l2 / l3 作为前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
     13. name 不得只返回功能过程名，不得用子系统（模块）替代客户端类型，不得省略客户端类型外侧的「【】」。
@@ -253,7 +253,7 @@ user_prompt_sets:
     ${payload_json}
 
     请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"<合并或拆分原因，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<合并或拆分原因，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
   multi_uis_up: |-
     ${core_rules}
@@ -271,7 +271,7 @@ user_prompt_sets:
     ${payload_json}
 
     请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"<独立页面/独立业务对象/独立业务流程/独立用户端>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<独立页面/独立业务对象/独立业务流程/独立用户端>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
   ui_api_mapping_up: |-
     ${core_rules}
@@ -290,7 +290,7 @@ user_prompt_sets:
     ${payload_json}
 
     请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_processes":["<功能过程名称>"],"split_reason":"","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
 rule_sets:
   # type_mapping_rules：直接把关键词映射到 EI/EQ/EO/ILF/EIF，适合项目级特例、业务对象或数据组边界。

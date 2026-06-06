@@ -8,6 +8,7 @@ from ai_gen_reimbursement_docs.config_utils import FpaConfigError, FpaPromptConf
 from ai_gen_reimbursement_docs.gen_fpa import (
     FPA_PROJECT_DESCRIPTION_MAX_CHARS,
     _build_domain_context,
+    _build_fpa_audit_reports_for_groups,
     _extract_json_obj,
     _fpa_ai_cache_key,
     _group_rows_for_audit,
@@ -808,6 +809,168 @@ def test_ai_first_data_function_supplement_warning_does_not_report_zero_missing_
     assert any(row["生成方式"] == "rules_fallback" and row["类型"] == "ILF" for row in combined)
     assert any("AI 结果未包含数据功能行" in warning for warning in warnings)
     assert not any("未覆盖 0 个功能过程" in warning for warning in warnings)
+
+
+def test_ai_first_process_id_covers_near_name_difference_without_rules_fallback():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "垂直行业营销",
+            "二级模块": "订单管理",
+            "三级模块": "卡券订单",
+            "三级模块整体功能描述": "查询卡券订单。",
+            "功能过程": "搜索卡劵订单",
+            "功能过程类型": "新增",
+            "功能过程描述": "按条件搜索卡劵订单。",
+        },
+    ])[0]
+    process_id = group["processes"][0]["process_id"]
+
+    ai_rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": "【地市后台】垂直行业营销-订单管理-卡券订单-搜索卡券订单",
+            "type": "EQ",
+            "explanation": "来源场景：按条件搜索卡券订单。\n业务数据：读取卡劵订单数据。\n业务规则：不改变系统状态。\n计算说明：查询条件输入并返回订单列表，按 EQ 识别。",
+            "source_process_ids": [process_id],
+            "source_processes": ["搜索卡券订单"],
+        }],
+    )
+
+    combined, supplement_warnings = _supplement_ai_rows_with_rules(
+        group=group,
+        meta=_meta(),
+        ai_rows=ai_rows,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        rule_set_config=FpaRuleSetConfig(
+            name="process_only",
+            coverage_rules=FpaCoverageRules(require_data_function=False),
+        ),
+    )
+    audit = _build_fpa_audit_reports_for_groups(
+        groups=[group],
+        rows_by_module={1: combined},
+        warnings_by_module={1: warnings + supplement_warnings},
+        profile=STRICT_FPA_PROFILE,
+        profile_version=STRICT_FPA_PROFILE.version,
+        strategy="ai_first",
+        rule_set="strict_fpa_rs",
+    )[0]
+
+    assert len(combined) == 1
+    assert supplement_warnings == []
+    assert combined[0]["新增/修改功能点"] == "【地市后台】垂直行业营销-订单管理-卡券订单-搜索卡劵订单"
+    assert combined[0]["源功能过程"] == "搜索卡劵订单"
+    assert combined[0]["source_process_ids"] == [process_id]
+    assert audit.covered_processes == ["搜索卡劵订单"]
+    assert audit.missing_processes == []
+
+
+def test_ai_first_missing_source_process_ids_warns_and_falls_back_to_source_names():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "查询客户。",
+            "功能过程": "查询客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "按客户名称查询客户列表。",
+        },
+    ])[0]
+
+    ai_rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": "查询客户",
+            "type": "EQ",
+            "explanation": "按客户名称查询客户列表。",
+            "source_processes": ["查询客户"],
+        }],
+    )
+    combined, supplement_warnings = _supplement_ai_rows_with_rules(
+        group=group,
+        meta=_meta(),
+        ai_rows=ai_rows,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        rule_set_config=FpaRuleSetConfig(
+            name="process_only",
+            coverage_rules=FpaCoverageRules(require_data_function=False),
+        ),
+    )
+
+    assert len(combined) == 1
+    assert supplement_warnings == []
+    assert any("AI 未返回合法 source_process_ids" in warning for warning in warnings)
+
+
+def test_ai_first_unknown_source_process_ids_warns_and_does_not_count_unknown_id():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "查询和导出客户。",
+            "功能过程": "查询客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "按客户名称查询客户列表。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "查询和导出客户。",
+            "功能过程": "导出客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "导出客户列表。",
+        },
+    ])[0]
+
+    ai_rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": "查询客户",
+            "type": "EQ",
+            "explanation": "按客户名称查询客户列表。",
+            "source_process_ids": [group["processes"][0]["process_id"], "m999_p9"],
+            "source_processes": ["查询客户"],
+        }],
+    )
+
+    audit = _build_fpa_audit_reports_for_groups(
+        groups=[group],
+        rows_by_module={1: ai_rows},
+        warnings_by_module={1: warnings},
+        profile=STRICT_FPA_PROFILE,
+        profile_version=STRICT_FPA_PROFILE.version,
+        strategy="ai_first",
+        rule_set="strict_fpa_rs",
+    )[0]
+
+    assert any("AI 返回未知 source_process_ids: m999_p9" in warning for warning in warnings)
+    assert ai_rows[0]["source_process_ids"] == [group["processes"][0]["process_id"]]
+    assert audit.covered_processes == ["查询客户"]
+    assert audit.missing_processes == ["导出客户"]
 
 
 def test_coverage_rules_can_disable_data_function_supplement():

@@ -392,7 +392,16 @@ def _prompt_payload(
             "l3": group.get("l3", ""),
             "l3_desc": group.get("l3_desc", ""),
         },
-        "processes": group.get("processes", []),
+        "processes": [
+            {
+                "process_id": str(process.get("process_id", "") or ""),
+                "process_name": str(process.get("process_name", "") or process.get("name", "") or ""),
+                "description": str(process.get("description", "") or process.get("desc", "") or ""),
+                "type": str(process.get("type", "") or ""),
+            }
+            for process in group.get("processes", [])
+            if isinstance(process, dict)
+        ] if isinstance(group.get("processes", []), list) else [],
         "domain_context": domain_context or {},
         "fpa_calculation": {
             "principles": [

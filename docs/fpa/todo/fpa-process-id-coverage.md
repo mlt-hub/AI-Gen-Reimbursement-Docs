@@ -183,3 +183,24 @@ tests/test_fpa_acceptance.py
   覆盖预览与正式 check.xlsx 的覆盖统计一致。
   覆盖 D 列名称末尾按 process_id 对应源功能过程名校正。
 ```
+
+## 实施记录
+
+状态：已实施。
+
+本次实现要点：
+
+- `_group_rows_by_l3` 为当前运行上下文中的每个功能过程生成 `process_id`，格式为 `m{模块序号}_p{过程序号}`。
+- Prompt payload 中的 `processes` 改为显式提供 `process_id`、`process_name`、`description` 和 `type`。
+- AI 行规范化时校验 `source_process_ids`，合法 ID 用于反查并展示原始 `源功能过程`；未知 ID 会被忽略并记录 warning。
+- AI 未返回合法 `source_process_ids` 但返回 `source_processes` 时，记录 warning 并降级使用名称精确匹配。
+- `ai_first` 覆盖补齐和审核覆盖统计优先使用合法 `source_process_ids`，缺失 ID 时保留旧的名称兜底。
+- AI 行 `新增/修改功能点` 保留完整路径，仅在单个合法 `source_process_id`、事务功能行且末尾名称与源功能过程高度相似时校正末尾功能过程名。
+- strict_fpa 数据功能补齐逻辑继续保留，不受功能过程覆盖 ID 化影响。
+
+验证结果：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_gen_fpa_ai.py
+.\.venv\Scripts\python.exe -m pytest tests/test_fpa_profiles.py tests/test_gen_fpa_preview.py tests/test_fpa_acceptance.py tests/test_config_utils.py
+```

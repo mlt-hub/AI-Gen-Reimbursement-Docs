@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import hashlib
+from difflib import SequenceMatcher
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -205,10 +206,16 @@ def _group_rows_by_l3(rows: list[dict[str, str]]) -> list[dict[str, object]]:
             group["l3_desc"] = str(r.get("三级模块整体功能描述", "")).strip()
         processes = group["processes"]
         if isinstance(processes, list):
+            process_id = f"m{groups.index(group) + 1}_p{len(processes) + 1}"
+            process_name = str(r.get("功能过程", "") or "").strip()
+            process_desc = str(r.get("功能过程描述", "") or "").strip()
             processes.append({
-                "name": str(r.get("功能过程", "") or "").strip(),
+                "process_id": process_id,
+                "process_name": process_name,
+                "description": process_desc,
+                "name": process_name,
                 "type": str(r.get("功能过程类型", "") or "").strip(),
-                "desc": str(r.get("功能过程描述", "") or "").strip(),
+                "desc": process_desc,
             })
     return groups
 
@@ -676,13 +683,75 @@ def _normalize_ai_fpa_rows_for_l3(
                 "warnings": explanation_warnings,
             })
 
+        id_to_name = _process_id_to_name_for_group(group)
+        valid_source_ids: list[str] = []
+        unknown_source_ids: list[str] = []
+        raw_source_ids = raw.get("source_process_ids", [])
+        if isinstance(raw_source_ids, list):
+            for item in raw_source_ids:
+                source_id = str(item).strip()
+                if not source_id:
+                    continue
+                if source_id in id_to_name:
+                    valid_source_ids.append(source_id)
+                else:
+                    unknown_source_ids.append(source_id)
+        elif str(raw_source_ids or "").strip():
+            unknown_source_ids.append(str(raw_source_ids).strip())
+
         source_processes = raw.get("source_processes", [])
-        if isinstance(source_processes, list):
-            source_text = "、".join(str(x) for x in source_processes if str(x).strip())
-        else:
-            source_text = str(source_processes or "")
+        raw_source_names = (
+            [str(x).strip() for x in source_processes if str(x).strip()]
+            if isinstance(source_processes, list)
+            else [x.strip() for x in str(source_processes or "").split("、") if x.strip()]
+        )
+        if unknown_source_ids:
+            warning = f"{_group_tag(group)} AI 返回未知 source_process_ids: {'、'.join(unknown_source_ids)}，已忽略"
+            warnings.append(warning)
+            row_warnings.append(warning)
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.unknown_source_process_ids",
+                "rule_desc": "source_process_ids 必须来自当前三级模块的功能过程候选列表。",
+                "suggested_type": fpa_type,
+                "adopted": "是",
+                "warnings": [warning],
+            })
+        if not valid_source_ids and raw_source_names:
+            warning = f"{_group_tag(group)} AI 未返回合法 source_process_ids，已降级使用 source_processes 名称匹配"
+            warnings.append(warning)
+            row_warnings.append(warning)
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.missing_source_process_ids",
+                "rule_desc": "AI 应返回 source_process_ids；缺失时仅以 source_processes 名称作为兜底覆盖依据。",
+                "suggested_type": fpa_type,
+                "adopted": "是",
+                "warnings": [warning],
+            })
+        source_names_from_ids = [id_to_name[source_id] for source_id in valid_source_ids]
+        source_text = "、".join(source_names_from_ids or raw_source_names)
 
         output_name = _normalize_ai_fpa_name_prefix(name, group)
+        if len(valid_source_ids) == 1:
+            suffixed_name = _normalize_ai_name_process_suffix(
+                output_name,
+                id_to_name[valid_source_ids[0]],
+                fpa_type,
+            )
+            if suffixed_name != output_name:
+                warning = f"{_group_tag(group)} AI 行名称末尾已按 source_process_id 规范化: {output_name} -> {suffixed_name}"
+                warnings.append(warning)
+                row_warnings.append(warning)
+                row_hits.append({
+                    "hit_object": output_name,
+                    "rule_id": "postprocess.ai_name_process_suffix",
+                    "rule_desc": "AI 行保留完整功能点结构，但末尾功能过程名优先使用 source_process_id 对应的源功能过程名称。",
+                    "suggested_type": "",
+                    "adopted": "是",
+                    "warnings": [warning],
+                })
+                output_name = suffixed_name
         if output_name != name:
             warning = f"{_group_tag(group)} AI 行名称前缀已按源功能清单规范化: {name} -> {output_name}"
             warnings.append(warning)
@@ -737,6 +806,7 @@ def _normalize_ai_fpa_rows_for_l3(
             "生成方式": "ai",
             "类型理由": type_reason,
             "源功能过程": source_text,
+            "source_process_ids": valid_source_ids,
             "后处理警告": "；".join(row_warnings),
             "复杂度": raw.get("complexity", ""),
             "DET": raw.get("det_count", ""),
@@ -778,9 +848,77 @@ def _process_names_for_group(group: dict[str, object]) -> list[str]:
     ]
 
 
+def _process_id_to_name_for_group(group: dict[str, object]) -> dict[str, str]:
+    processes = group.get("processes", [])
+    if not isinstance(processes, list):
+        return {}
+    result: dict[str, str] = {}
+    for process in processes:
+        if not isinstance(process, dict):
+            continue
+        process_id = str(process.get("process_id", "") or "").strip()
+        process_name = str(
+            process.get("process_name", "") or process.get("name", "") or ""
+        ).strip()
+        if process_id and process_name:
+            result[process_id] = process_name
+    return result
+
+
+def _process_name_to_id_for_group(group: dict[str, object]) -> dict[str, str]:
+    return {name: process_id for process_id, name in _process_id_to_name_for_group(group).items()}
+
+
+def _source_process_ids_from_row(row: dict[str, object]) -> set[str]:
+    source_ids = row.get("source_process_ids", [])
+    if isinstance(source_ids, list):
+        return {str(item).strip() for item in source_ids if str(item).strip()}
+    if isinstance(source_ids, str):
+        return {item.strip() for item in re.split(r"[、,，;；\s]+", source_ids) if item.strip()}
+    return set()
+
+
 def _source_process_set(row: dict[str, object]) -> set[str]:
     raw = str(row.get("源功能过程", "") or "")
     return {item.strip() for item in raw.split("、") if item.strip()}
+
+
+def _covered_process_ids_for_row(row: dict[str, object], group: dict[str, object]) -> set[str]:
+    """Prefer internal process IDs, falling back to exact source-process names."""
+    valid_ids = set(_process_id_to_name_for_group(group))
+    row_ids = _source_process_ids_from_row(row) & valid_ids
+    if row_ids:
+        return row_ids
+    name_to_id = _process_name_to_id_for_group(group)
+    return {
+        name_to_id[name]
+        for name in _source_process_set(row)
+        if name in name_to_id
+    }
+
+
+def _is_similar_process_name(left: str, right: str) -> bool:
+    clean_left = re.sub(r"\s+", "", str(left or ""))
+    clean_right = re.sub(r"\s+", "", str(right or ""))
+    if not clean_left or not clean_right:
+        return False
+    if clean_left == clean_right:
+        return True
+    return abs(len(clean_left) - len(clean_right)) <= 4 and SequenceMatcher(None, clean_left, clean_right).ratio() >= 0.75
+
+
+def _normalize_ai_name_process_suffix(name: str, source_name: str, fpa_type: str) -> str:
+    if fpa_type in {"ILF", "EIF"}:
+        return name
+    clean_name = str(name or "").strip()
+    clean_source = str(source_name or "").strip()
+    if not clean_name or not clean_source:
+        return clean_name
+    parts = clean_name.rsplit("-", 1)
+    suffix = parts[-1].strip()
+    if not suffix or suffix == clean_source or not _is_similar_process_name(suffix, clean_source):
+        return clean_name
+    return f"{parts[0]}-{clean_source}" if len(parts) == 2 else clean_source
 
 
 def _supplement_ai_rows_with_rules(
@@ -802,12 +940,20 @@ def _supplement_ai_rows_with_rules(
         return ai_rows, []
 
     rule_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
-    expected_processes = set(_process_names_for_group(group))
-    covered_processes: set[str] = set()
+    id_to_name = _process_id_to_name_for_group(group)
+    expected_process_ids = set(id_to_name)
+    expected_process_names = set(_process_names_for_group(group))
+    covered_process_ids: set[str] = set()
+    covered_process_names: set[str] = set()
     for row in ai_rows:
-        covered_processes.update(_source_process_set(row))
+        covered_process_ids.update(_covered_process_ids_for_row(row, group))
+        covered_process_names.update(_source_process_set(row))
 
-    missing_processes = expected_processes - covered_processes
+    if expected_process_ids:
+        missing_process_ids = expected_process_ids - covered_process_ids
+        missing_processes = {id_to_name[process_id] for process_id in missing_process_ids}
+    else:
+        missing_processes = expected_process_names - covered_process_names
     has_data_function = any(str(row.get("类型", "")) in {"ILF", "EIF"} for row in ai_rows)
     supplemental: list[dict[str, object]] = []
     data_function_supplements = 0
@@ -900,18 +1046,25 @@ def _build_fpa_audit_report(
     rule_hits: list[dict[str, object]] | None = None,
 ) -> FpaAuditReport:
     process_names = _process_names_for_group(group)
-    expected = set(process_names)
-    covered: set[str] = set()
+    id_to_name = _process_id_to_name_for_group(group)
+    expected_ids = set(id_to_name)
+    covered_ids: set[str] = set()
+    covered_names: set[str] = set()
     generation_counts: dict[str, int] = {}
     for row in fpa_rows:
         generation = str(row.get("生成方式", "") or "unknown")
         generation_counts[generation] = generation_counts.get(generation, 0) + 1
-        covered.update(_source_process_set(row))
+        covered_ids.update(_covered_process_ids_for_row(row, group))
+        covered_names.update(_source_process_set(row))
 
-    covered_processes = [name for name in process_names if name in covered]
-    missing_processes = [name for name in process_names if name not in covered]
+    if expected_ids:
+        covered_processes = [name for process_id, name in id_to_name.items() if process_id in covered_ids]
+        missing_processes = [name for process_id, name in id_to_name.items() if process_id not in covered_ids]
+    else:
+        covered_processes = [name for name in process_names if name in covered_names]
+        missing_processes = [name for name in process_names if name not in covered_names]
     audit_warnings = list(warnings)
-    if expected and missing_processes:
+    if process_names and missing_processes:
         audit_warnings.append(f"仍有 {len(missing_processes)} 个功能过程未被 FPA 行覆盖")
 
     return FpaAuditReport(
@@ -2711,6 +2864,7 @@ def preview_fpa_module(
                 "source_processes": [
                     x for x in str(row.get("源功能过程", "")).split("、") if x
                 ],
+                "source_process_ids": sorted(_source_process_ids_from_row(row)),
                 "generation": row.get("生成方式", "ai" if used_ai else "fallback"),
             }
 
