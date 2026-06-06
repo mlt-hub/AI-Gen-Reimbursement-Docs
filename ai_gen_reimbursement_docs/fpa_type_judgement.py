@@ -36,6 +36,17 @@ def build_fpa_type_judgement(group: dict[str, object]) -> dict[str, object]:
     merge_review = build_fpa_merge_review(group)
     judgements: list[FpaTypeJudgement] = []
     covered_ids: set[str] = set()
+    external_data_targets: set[str] = set()
+
+    for fact in facts:
+        external_judgement = _external_data_judgement_from_fact(fact)
+        if not external_judgement:
+            continue
+        target_key = _slug(external_judgement.target_data_group)
+        if target_key in external_data_targets:
+            continue
+        external_data_targets.add(target_key)
+        judgements.append(external_judgement)
 
     for review_group in _dict_list(merge_review.get("groups")):
         recommendation = str(review_group.get("recommendation", "") or "")
@@ -55,7 +66,7 @@ def build_fpa_type_judgement(group: dict[str, object]) -> dict[str, object]:
         process_id = str(fact.get("process_id", "") or "")
         if process_id and process_id in covered_ids:
             continue
-        judgement = _judgement_from_fact(fact)
+        judgement = _transaction_judgement_from_fact(fact)
         if judgement:
             judgements.append(judgement)
 
@@ -121,8 +132,7 @@ def _ordinary_service_judgement(review_group: dict[str, object]) -> FpaTypeJudge
     )
 
 
-def _judgement_from_fact(fact: dict[str, object]) -> FpaTypeJudgement | None:
-    operation = str(fact.get("operation", "") or "")
+def _external_data_judgement_from_fact(fact: dict[str, object]) -> FpaTypeJudgement | None:
     target = str(fact.get("target_data_group", "") or "业务数据")
     process_id = str(fact.get("process_id", "") or "")
     process_name = str(fact.get("process_name", "") or "")
@@ -130,6 +140,7 @@ def _judgement_from_fact(fact: dict[str, object]) -> FpaTypeJudgement | None:
     source_names = [process_name] if process_name else []
     evidence = _string_list(fact.get("evidence"))
     if str(fact.get("external_data_group_evidence", "") or ""):
+        external_evidence = str(fact.get("external_data_group_evidence", "") or "")
         return FpaTypeJudgement(
             id=f"type_eif_{_slug(target)}",
             candidate_name=f"{target}数据组",
@@ -139,9 +150,20 @@ def _judgement_from_fact(fact: dict[str, object]) -> FpaTypeJudgement | None:
             source_process_ids=source_ids,
             source_process_names=source_names,
             confidence="high",
-            evidence=[*evidence, str(fact.get("external_data_group_evidence", "") or "")],
+            evidence=[*evidence, *([] if external_evidence in evidence else [external_evidence])],
             rationale="输入明确体现外部系统维护或本系统不维护的数据组，本系统读取或引用该数据组，按 EIF 判断。",
         )
+    return None
+
+
+def _transaction_judgement_from_fact(fact: dict[str, object]) -> FpaTypeJudgement | None:
+    operation = str(fact.get("operation", "") or "")
+    target = str(fact.get("target_data_group", "") or "业务数据")
+    process_id = str(fact.get("process_id", "") or "")
+    process_name = str(fact.get("process_name", "") or "")
+    source_ids = [process_id] if process_id else []
+    source_names = [process_name] if process_name else []
+    evidence = _string_list(fact.get("evidence"))
     if bool(fact.get("ordinary_external_service")):
         return FpaTypeJudgement(
             id=f"type_no_eif_{_slug(target)}",

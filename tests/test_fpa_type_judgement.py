@@ -76,3 +76,25 @@ def test_type_judgement_distinguishes_services_external_data_and_output():
     assert by_kind["ordinary_external_service"][0]["applies_to_final_rows"] is False
     assert by_kind["external_data_function"][0]["suggested_type"] == "EIF"
     assert by_kind["output_eo"][0]["suggested_type"] == "EO"
+
+
+def test_type_judgement_uses_module_context_for_external_data_and_keeps_transaction():
+    review = build_fpa_type_judgement({
+        "l3": "用户中心账号引用",
+        "l3_desc": "系统引用统一用户中心维护的人员账号，本系统不维护账号主数据。",
+        "processes": [
+            {
+                "process_id": "m1_p1",
+                "process_name": "选择业务负责人",
+                "description": "从用户中心账号中选择负责人并保存到本系统业务对象。",
+                "type": "新增",
+            },
+        ],
+    })
+
+    by_kind = _judgements_by_kind(review)
+    assert by_kind["external_data_function"][0]["suggested_type"] == "EIF"
+    assert by_kind["external_data_function"][0]["target_data_group"] == "统一用户中心账号"
+    assert by_kind["maintenance_ei"][0]["suggested_type"] == "EI"
+    assert review["summary"]["suggested_type_counts"]["EIF"] == 1
+    assert review["summary"]["suggested_type_counts"]["EI"] == 1

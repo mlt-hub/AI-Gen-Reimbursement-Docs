@@ -143,13 +143,32 @@ def _type_judgement_issues(
             continue
         suggested_type = str(judgement.get("suggested_type", "") or "").upper()
         source_ids = set(_string_list(judgement.get("source_process_ids", [])))
-        if not suggested_type or not source_ids:
+        source_names = set(_string_list(judgement.get("source_process_names", [])))
+        if not suggested_type or (not source_ids and not source_names):
             continue
         matching = [
             (index, row)
             for index, row in enumerate(rows)
-            if _row_source_ids(row) & source_ids
+            if (_row_source_ids(row) & source_ids) or (_row_source_names(row) & source_names)
         ]
+        if suggested_type == "EIF" and str(judgement.get("judgement_kind", "") or "") == "external_data_function":
+            has_data_function_row = any(
+                str(row.get("类型", "") or row.get("type", "") or "").strip().upper() == "EIF"
+                for _index, row in matching
+            )
+            if not has_data_function_row:
+                issues.append(FpaQualityIssue(
+                    code="quality.external_data_function_missing",
+                    severity="warning",
+                    message=(
+                        f"{judgement.get('target_data_group', '外部数据组')} "
+                        "已由类型判定节点识别为外部维护数据组，当前结果缺少 EIF 数据功能行。"
+                    ),
+                    source_process_ids=sorted(source_ids),
+                    suggested_action="retry_or_confirm",
+                    retryable=True,
+                ))
+            continue
         if suggested_type == "NONE":
             for index, row in matching:
                 row_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
@@ -166,6 +185,11 @@ def _type_judgement_issues(
                         row_index=index,
                         retryable=True,
                     ))
+            continue
+        if any(
+            str(row.get("类型", "") or row.get("type", "") or "").strip().upper() == suggested_type
+            for _index, row in matching
+        ):
             continue
         for index, row in matching:
             row_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
@@ -192,6 +216,21 @@ def _row_source_ids(row: dict[str, object]) -> set[str]:
     if isinstance(raw, str):
         return {item.strip() for item in raw.replace("，", ",").replace("、", ",").split(",") if item.strip()}
     return set()
+
+
+def _row_source_names(row: dict[str, object]) -> set[str]:
+    values: set[str] = set()
+    for key in ("source_processes", "源功能过程"):
+        raw = row.get(key, [])
+        if isinstance(raw, list):
+            values.update(str(item).strip() for item in raw if str(item).strip())
+        elif isinstance(raw, str):
+            values.update(
+                item.strip()
+                for item in raw.replace("，", ",").replace("、", ",").split(",")
+                if item.strip()
+            )
+    return values
 
 
 def _string_list(value: Any) -> list[str]:

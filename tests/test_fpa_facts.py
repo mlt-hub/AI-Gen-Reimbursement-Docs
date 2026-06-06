@@ -80,6 +80,23 @@ def test_extract_process_facts_keeps_external_data_group_evidence():
 
     assert facts[0]["operation"] == "query"
     assert facts[0]["query_only"] is True
-    assert facts[0]["target_data_group"] in {"人员账号", "账号主数据"}
+    assert facts[0]["target_data_group"] == "统一用户中心账号"
     assert "本系统不维护" in facts[0]["external_data_group_evidence"]
     assert facts[0]["changes_internal_data"] is False
+
+
+def test_extract_process_facts_uses_module_description_for_external_data_evidence():
+    facts = extract_fpa_process_facts({
+        "l3": "归属组织选择",
+        "l3_desc": "系统引用主数据平台维护的组织主数据，本系统不维护组织主数据。",
+        "processes": [{
+            "process_id": "m1_p1",
+            "process_name": "选择归属组织",
+            "description": "从主数据平台组织主数据中选择归属组织并保存到当前业务对象。",
+            "type": "新增",
+        }],
+    })
+
+    assert facts[0]["target_data_group"] == "组织主数据"
+    assert "本系统不维护" in facts[0]["external_data_group_evidence"]
+    assert facts[0]["changes_internal_data"] is True

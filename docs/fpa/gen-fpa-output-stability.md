@@ -632,6 +632,13 @@ Recommendation: 当前质量信号稳定，可推进真实模型批量抽样。
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py --dry-run --preset strict-real-model
 ```
 
+当前继续收敛 agent 分工契约：
+
+- `业务事实抽取 Agent` 会把三级模块整体描述纳入外部维护数据组证据，避免只看单个功能过程时漏掉“本系统不维护”“外部系统维护”的边界信息。
+- `FPA 类型判定 Agent` 支持同一功能过程同时产生数据功能建议和事务功能建议，例如“引用外部主数据并保存到当前业务对象”应前置给出 `EIF + EI`，而不是二选一。
+- `质量审核 Agent` 对 `external_data_function` 改为检查“是否存在对应 EIF 数据功能行”，不会因为同源 EI 事务行存在而误判；同时支持按 `source_process_ids` 和规则兜底行中的源功能过程名称匹配。
+- rules-only 稳定性基线已重新通过 `quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=0`，真实模型抽样下一步重点转为验证模型是否按前置 agent judgement 主动输出 EIF 数据功能行。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。
