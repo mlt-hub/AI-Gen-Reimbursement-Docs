@@ -889,6 +889,7 @@ class TestLoadFpaUserPromptTemplate:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             custom = load_fpa_user_prompt_template("unified_ui")
             strict = load_fpa_user_prompt_template("strict_fpa")
+            strict_system = load_fpa_system_prompt_config("strict_fpa").text
 
         for template in (custom, strict):
             assert "计算依据说明生成规则" in template
@@ -911,6 +912,14 @@ class TestLoadFpaUserPromptTemplate:
         assert "xxx数据组" in strict
         assert "xxx维护" in strict
         assert "xxx查询" in strict
+        assert "payload_json.agent_review.type_judgement.judgements" in strict
+        assert "judgement_kind=external_data_function" in strict
+        assert "suggested_type=EIF" in strict
+        assert "同时输出 EIF 数据功能行和 EI 事务功能行" in strict
+        assert "judgement_kind=ordinary_external_service" in strict
+        assert "payload_json.merge_review.groups" in strict
+        assert "agent_review.type_judgement" in strict_system
+        assert "不得用 EI 替代 EIF" in strict_system
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
         _write_fpa_config(tmp_path)

@@ -167,7 +167,9 @@ system_prompt_sets:
     2. 类型必须为 EI / EO / EQ / ILF / EIF 之一。
     3. 用户提供了带序号的「计算依据归类判定原则列表」，请返回最匹配的 classification_basis_index。
     4. 计算依据说明必须基于输入业务内容，按用户提示词中的结构化证据说明规则生成；不要编造不存在的页面、表、服务、接口或流程。
-    5. 不允许输出除 JSON 外的任何内容。
+    5. 必须优先遵循模块输入 JSON 中的 agent_review.type_judgement、merge_review 和 process_facts；这些是前置 Agent 给出的硬约束证据，不是可忽略的参考说明。
+    6. 当 agent_review.type_judgement 中存在 judgement_kind=external_data_function 且 suggested_type=EIF 时，必须生成对应 EIF 数据功能行；同源 EI 事务行可以并存，但不得用 EI 替代 EIF。
+    7. 不允许输出除 JSON 外的任何内容。
 
   unified_ui_sp: |-
     你是一个严谨的 FPA 功能点评估助手。你的任务是根据用户提示词中给定的 unified_ui 口径、计算依据归类判定原则和三级模块业务输入，规划 FPA 功能点评估行。
@@ -239,6 +241,10 @@ user_prompt_sets:
     11. ILF/EIF 数据功能名称建议使用「xxx数据组」后缀，例如「垂直行业数据组」；EI 维护类事务建议使用「xxx维护」，EQ 查询类事务建议使用「xxx查询」，EO 输出类事务建议使用「xxx输出/xxx导出/xxx报表」。
     12. name 必须使用模块输入 JSON 中的 client_type / l1 / l2 / l3 作为前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
     13. name 不得只返回功能过程名，不得用子系统（模块）替代客户端类型，不得省略客户端类型外侧的「【】」。
+    14. 必须读取 payload_json.agent_review.type_judgement.judgements：confidence=high 的建议优先级高于自行推断；judgement_kind=external_data_function 且 suggested_type=EIF 表示外部维护数据组，必须输出一条 EIF 数据功能行。
+    15. 如果同一 source_process_ids 同时存在 external_data_function(EIF) 和 maintenance_ei(EI)，应同时输出 EIF 数据功能行和 EI 事务功能行；EIF 表示被引用的外部数据组，EI 表示选择、引用、保存等事务处理，不得互相替代。
+    16. 如果 judgement_kind=ordinary_external_service 且 suggested_type=NONE，不得为该普通外部服务生成 EIF；只保留必要的 EI/EQ/EO 事务功能。
+    17. 必须读取 payload_json.merge_review.groups：recommendation=merge 的维护类或查询类建议必须合并到一行，并在 source_process_ids/source_processes 中保留全部来源。
 
     计算依据说明生成规则：
     1. explanation 必须写成结构化证据说明，固定包含「来源场景」「业务数据」「业务规则」「计算说明」；只有输入中明确出现表、服务、接口、文件、外部系统等系统元素时，才输出「系统元素」。

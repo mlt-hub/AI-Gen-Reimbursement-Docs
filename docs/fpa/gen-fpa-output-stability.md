@@ -637,6 +637,7 @@ Recommendation: 当前质量信号稳定，可推进真实模型批量抽样。
 - `业务事实抽取 Agent` 会把三级模块整体描述纳入外部维护数据组证据，避免只看单个功能过程时漏掉“本系统不维护”“外部系统维护”的边界信息。
 - `FPA 类型判定 Agent` 支持同一功能过程同时产生数据功能建议和事务功能建议，例如“引用外部主数据并保存到当前业务对象”应前置给出 `EIF + EI`，而不是二选一。
 - `质量审核 Agent` 对 `external_data_function` 改为检查“是否存在对应 EIF 数据功能行”，不会因为同源 EI 事务行存在而误判；同时支持按 `source_process_ids` 和规则兜底行中的源功能过程名称匹配。
+- `strict_fpa` 默认提示词已把 `agent_review.type_judgement`、`merge_review` 和 `process_facts` 写成硬约束：`external_data_function(EIF)` 必须生成 EIF 数据功能行，同源 EI 事务行可以并存但不能替代 EIF。
 - rules-only 稳定性基线已重新通过 `quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=0`，真实模型抽样下一步重点转为验证模型是否按前置 agent judgement 主动输出 EIF 数据功能行。
 
 ### 多次采样与择优
