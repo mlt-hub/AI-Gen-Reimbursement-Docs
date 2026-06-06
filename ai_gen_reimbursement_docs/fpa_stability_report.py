@@ -20,6 +20,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
     retryable_quality_issue_count = 0
     retry_count = 0
     confirmed_decision_count = 0
+    retry_trigger_source_counts: Counter[str] = Counter()
     agent_role_counts: Counter[str] = Counter()
     pending_agent_role_counts: Counter[str] = Counter()
 
@@ -34,6 +35,9 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         warning_count += module_warning_count
         module_retry_count = sum(1 for warning in warnings if "稳定性校验触发一次重试" in warning)
         retry_count += module_retry_count
+        retry_trigger_source = str(module.get("retry_trigger_source", "") or "").strip()
+        if retry_trigger_source:
+            retry_trigger_source_counts[retry_trigger_source] += 1
 
         quality_review = module.get("quality_review", {})
         issues, summary = _quality_parts(quality_review)
@@ -76,6 +80,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             "retryable_quality_issue_count": module_retryable_count,
             "confirmed_decision_count": module_confirmed_count,
             "retry_count": module_retry_count,
+            "retry_trigger_source": retry_trigger_source,
             "issue_code_counts": dict(Counter(module_issue_codes)),
             "agent_role_counts": dict(Counter(
                 str(role.get("name", "") or "").strip()
@@ -97,6 +102,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             "retryable_quality_issue_count": retryable_quality_issue_count,
             "confirmed_decision_count": confirmed_decision_count,
             "retry_count": retry_count,
+            "retry_trigger_source_counts": dict(retry_trigger_source_counts),
             "source_counts": dict(source_counts),
             "issue_code_counts": dict(issue_code_counts),
             "agent_role_counts": dict(agent_role_counts),
@@ -140,6 +146,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
     total_confirmed_decisions = 0
     source_counts: Counter[str] = Counter()
     issue_code_counts: Counter[str] = Counter()
+    retry_trigger_source_counts: Counter[str] = Counter()
 
     for index, path in enumerate(trace_paths, 1):
         trace = load_fpa_stability_trace(path)
@@ -158,6 +165,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         confirmed_count = _int_or_default(summary.get("confirmed_decision_count"), 0)
         run_source_counts = _counter_from_dict(summary.get("source_counts", {}))
         run_issue_counts = _counter_from_dict(summary.get("issue_code_counts", {}))
+        run_retry_trigger_counts = _counter_from_dict(summary.get("retry_trigger_source_counts", {}))
 
         total_modules += module_count
         total_warnings += warning_count
@@ -167,6 +175,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         total_confirmed_decisions += confirmed_count
         source_counts.update(run_source_counts)
         issue_code_counts.update(run_issue_counts)
+        retry_trigger_source_counts.update(run_retry_trigger_counts)
         issue_details.extend(_issue_details_for_trace(index, trace, case_id, run_id))
         runs.append({
             "run_index": index,
@@ -186,6 +195,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
             "retry_count": retry_count,
             "source_counts": dict(run_source_counts),
             "issue_code_counts": dict(run_issue_counts),
+            "retry_trigger_source_counts": dict(run_retry_trigger_counts),
         })
 
     return {
@@ -197,6 +207,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
             "retryable_quality_issue_count": total_retryable_issues,
             "confirmed_decision_count": total_confirmed_decisions,
             "retry_count": total_retries,
+            "retry_trigger_source_counts": dict(retry_trigger_source_counts),
             "source_counts": dict(source_counts),
             "issue_code_counts": dict(issue_code_counts),
         },
@@ -333,6 +344,17 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
     ])
     for code, count in sorted(_counter_from_dict(summary.get("issue_code_counts", {})).items()):
         lines.append(f"| {_escape_md(code)} | {count} |")
+    retry_trigger_counts = _counter_from_dict(summary.get("retry_trigger_source_counts", {}))
+    if retry_trigger_counts:
+        lines.extend([
+            "",
+            "## Retry Triggers",
+            "",
+            "| Source | Count |",
+            "|---|---:|",
+        ])
+        for source, count in sorted(retry_trigger_counts.items()):
+            lines.append(f"| {_escape_md(source)} | {count} |")
     lines.extend([
         "",
         "## Sources",

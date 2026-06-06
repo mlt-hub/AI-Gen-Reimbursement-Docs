@@ -1034,6 +1034,7 @@ def test_ai_first_retries_once_when_validator_finds_high_confidence_issue(monkey
     assert "上一次 FPA JSON 输出未通过项目口径校验" in calls[1]
     assert any(row["类型"] == "EQ" for row in result)
     trace = json.loads(audit_trace.read_text(encoding="utf-8"))
+    assert trace["modules"][0]["retry_trigger_source"] == "validator"
     warnings = trace["modules"][0]["warnings"]
     assert any("AI 输出稳定性校验触发一次重试" in warning for warning in warnings)
 
@@ -1100,6 +1101,7 @@ def test_ai_first_retries_once_when_quality_review_finds_high_confidence_issue(m
     assert "type_judgement" in calls[1]
     assert any(row["类型"] == "EQ" for row in result)
     trace = json.loads(audit_trace.read_text(encoding="utf-8"))
+    assert trace["modules"][0]["retry_trigger_source"] == "quality_review"
     warnings = trace["modules"][0]["warnings"]
     assert any("AI 输出稳定性校验触发一次重试" in warning for warning in warnings)
 

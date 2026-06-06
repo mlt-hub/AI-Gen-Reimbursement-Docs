@@ -592,6 +592,8 @@ scope: project_profile 才影响后续生成。
 - 如果 validator 没有触发重试，但 `quality_review` 发现 `type_judgement` 或 `merge_review` 高置信冲突，则同样只触发一次 AI 重试。
 - 重试反馈会明确要求模型遵循 `type_judgement`、`merge_review`，只修正 rows JSON。
 - 重试后仍存在质量审核问题时，结果仍保留并写入 warning、audit trace 和稳定性报告，不阻断交付。
+- AI audit trace 会写入 `retry_trigger_source`，取值为 `validator` 或 `quality_review`。
+- 稳定性报告会汇总 `retry_trigger_source_counts`，Markdown 对比报告会新增 `Retry Triggers` 分布段。
 
 这样类型判定节点不只是审计展示，也能在 AI 首次输出偏离高置信建议时参与自动纠偏。
 

@@ -16,6 +16,7 @@ def test_stability_report_summarizes_module_quality_signals():
                 "l3": "客户档案",
                 "source": "ai",
                 "warnings": ["客户档案 AI 输出稳定性校验触发一次重试", "普通 warning"],
+                "retry_trigger_source": "quality_review",
                 "quality_review": {
                     "issues": [
                         {"code": "validator.query_as_ei", "retryable": True},
@@ -58,6 +59,7 @@ def test_stability_report_summarizes_module_quality_signals():
     assert summary["retryable_quality_issue_count"] == 2
     assert summary["confirmed_decision_count"] == 1
     assert summary["retry_count"] == 1
+    assert summary["retry_trigger_source_counts"] == {"quality_review": 1}
     assert summary["source_counts"] == {"ai": 1, "rules_fallback": 1}
     assert summary["issue_code_counts"]["validator.query_as_ei"] == 1
     assert summary["agent_role_counts"]["business_fact_extractor"] == 2
@@ -80,6 +82,7 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
             "l3": "客户档案",
             "source": "ai",
             "warnings": ["客户档案 AI 输出稳定性校验触发一次重试"],
+            "retry_trigger_source": "validator",
             "quality_review": {
                 "issues": [{
                     "code": "validator.query_as_ei",
@@ -102,6 +105,7 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
                 "retryable_quality_issue_count": 0,
                 "confirmed_decision_count": 0,
                 "retry_count": 0,
+                "retry_trigger_source_counts": {},
                 "source_counts": {"ai_cache": 2},
                 "issue_code_counts": {},
             },
@@ -116,12 +120,15 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert comparison["summary"]["module_count"] == 3
     assert comparison["summary"]["warning_count"] == 1
     assert comparison["summary"]["retry_count"] == 1
+    assert comparison["summary"]["retry_trigger_source_counts"] == {"validator": 1}
     assert comparison["summary"]["source_counts"] == {"ai": 1, "ai_cache": 2}
     assert comparison["runs"][0]["case_id"] == "customer_query"
     assert comparison["runs"][0]["run_id"] == "customer_query__strict_fpa__ai_first__strict_fpa_rs"
     assert comparison["issue_details"][0]["case_id"] == "customer_query"
     assert comparison["issue_details"][0]["message"] == "查询流程不应判为 EI"
     assert "validator.query_as_ei" in markdown
+    assert "## Retry Triggers" in markdown
+    assert "| validator | 1 |" in markdown
     assert "| customer_query | customer_query__strict_fpa__ai_first__strict_fpa_rs | model-a.json |" in markdown
     assert "## Issue Details" in markdown
     assert "| 1 | customer_query | 客户管理 | validator.query_as_ei | yes | 查询流程不应判为 EI |" in markdown

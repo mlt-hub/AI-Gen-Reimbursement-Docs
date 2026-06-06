@@ -2002,6 +2002,7 @@ def _plan_fpa_rows_with_execution(
                 logger.warning("FPA AI 缓存内容无效 [%s]: %s，将重新调用 AI", _group_tag(group), exc)
 
         attempted += 1
+        retry_trigger_source = ""
         try:
             logger.info("  FPA AI 规划三级模块 [%d/%d] %s", idx, len(groups), _group_tag(group))
             raw_rows = _ai_plan_fpa_rows_for_l3(
@@ -2045,7 +2046,13 @@ def _plan_fpa_rows_with_execution(
                 rows=group_rows,
                 confirmed_decisions=confirmed_decisions,
             )
-            retry_feedback = validation_feedback(validation_issues) or quality_feedback(initial_quality_review)
+            retry_feedback = validation_feedback(validation_issues)
+            if retry_feedback:
+                retry_trigger_source = "validator"
+            else:
+                retry_feedback = quality_feedback(initial_quality_review)
+                if retry_feedback:
+                    retry_trigger_source = "quality_review"
             if retry_feedback and strategy == "ai_first":
                 logger.warning("FPA AI 输出触发稳定性重试 [%s]", _group_tag(group))
                 retry_raw_rows = _ai_plan_fpa_rows_for_l3(
@@ -2142,6 +2149,7 @@ def _plan_fpa_rows_with_execution(
                 "source": "ai",
                 "raw_rows": raw_rows,
                 "warnings": _with_config_warnings(warnings, rule_set_config),
+                "retry_trigger_source": retry_trigger_source,
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
                 "agent_review": agent_review,
                 "quality_review": quality_review,
