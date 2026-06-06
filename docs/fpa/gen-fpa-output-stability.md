@@ -452,6 +452,35 @@ scope: project_profile 才影响后续生成。
 
 这一步先解决“中间结构可见、可测试、可进 prompt”的问题。后续多 Agent 工作流可以让“业务事实抽取 Agent”替换或复核这层输出，但最终仍应保留同样的 JSON 契约，便于 validator 和 golden cases 检查。
 
+当前也已完成第一版规则化合并审查中间结构，`prompt payload` 会新增 `merge_review`。该层由 `ai_gen_reimbursement_docs/fpa_merge_review.py` 基于 `process_facts` 生成，只提出合并边界建议，不直接改写最终 FPA rows。
+
+当前 `merge_review` 字段示例：
+
+```json
+{
+  "groups": [
+    {
+      "kind": "maintenance_ei",
+      "target_data_group": "垂直行业",
+      "process_ids": ["m1_p3", "m1_p4", "m1_p5"],
+      "process_names": ["添加垂直行业", "编辑垂直行业", "删除垂直行业"],
+      "recommendation": "merge",
+      "reason": "同一业务对象的数据维护动作按一个维护类 EI 合并。",
+      "needs_confirmation": false
+    },
+    {
+      "kind": "query_eq",
+      "target_data_group": "垂直行业",
+      "process_ids": ["m1_p1", "m1_p2"],
+      "recommendation": "merge",
+      "reason": "同一业务对象的默认查询、条件搜索或查看动作按一个查询类 EQ 合并。",
+      "needs_confirmation": false
+    }
+  ],
+  "questions": []
+}
+```
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。
@@ -493,7 +522,7 @@ P0：已完成。strict_fpa 逻辑事务合并口径已有 profile、prompt、fi
 P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试和 FPA 预览页确认卡片；批量暂停/继续流程待做。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
-两阶段生成：已完成第一版规则化 `process_facts` 中间结构；尚未拆成独立 AI Agent。
+两阶段生成：已完成第一版规则化 `process_facts` 和 `merge_review` 中间结构；尚未拆成独立 AI Agent。
 P4：未开始。仍需真实模型稳定性报告和指标沉淀。
 ```
 

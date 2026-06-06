@@ -111,6 +111,11 @@ def _target_data_group(text: str, fallback: str) -> str:
     external = _extract_external_data_name(text)
     if external:
         return external
+    admin_match = re.search(r"(?:新增|添加|删除|移除|编辑|修改|查询|查看)([^，。；、\s]{0,24}管理员)", text)
+    if admin_match:
+        value = _clean_data_name(admin_match.group(1))
+        if value:
+            return value
     patterns = [
         r"(?:新增|添加|新建|创建|录入|编辑|修改|删除|查询|搜索|查看|维护|保存)([^，。；、\s]{2,24}?)(?:信息|数据|列表|详情|记录|档案|关系|账号|管理员)?(?:，|。|；|、|$)",
         r"(?:保存|维护|读取|展示)([^，。；、\s]{2,24}(?:信息|数据|记录|档案|关系|账号|主数据))",

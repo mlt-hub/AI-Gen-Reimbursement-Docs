@@ -676,6 +676,43 @@ def test_prompt_payload_includes_extracted_process_facts(tmp_path):
     assert fact["query_only"] is True
     assert fact["changes_internal_data"] is False
     assert fact["input_type"] == "新增"
+    assert payload["merge_review"]["groups"] == []
+
+
+def test_prompt_payload_includes_merge_review(tmp_path):
+    _write_fpa_config(tmp_path)
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        prompt = STRICT_FPA_PROFILE.build_prompt(
+            {
+                "client_type": "后台",
+                "l1": "业务",
+                "l2": "管理",
+                "l3": "客户管理",
+                "l3_desc": "维护客户信息。",
+                "processes": [
+                    {
+                        "process_id": "m1_p1",
+                        "process_name": "添加客户",
+                        "description": "输入客户名称并保存。",
+                        "type": "新增",
+                    },
+                    {
+                        "process_id": "m1_p2",
+                        "process_name": "编辑客户",
+                        "description": "修改客户名称并保存。",
+                        "type": "新增",
+                    },
+                ],
+            },
+            ["规则一"],
+        )
+
+    payload = json.loads(prompt.split("PAYLOAD:", 1)[1])
+    group = payload["merge_review"]["groups"][0]
+    assert group["kind"] == "maintenance_ei"
+    assert group["recommendation"] == "merge"
+    assert group["process_ids"] == ["m1_p1", "m1_p2"]
 
 
 def test_strict_profile_normalizes_development_suffixes():
