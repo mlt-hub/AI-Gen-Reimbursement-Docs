@@ -131,6 +131,62 @@
           </div>
         </div>
 
+        <section v-if="confirmationQuestions.length || appliedConfirmationCount" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
+          <div class="flex flex-col gap-2 border-b border-[var(--color-rule)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div class="text-sm font-semibold text-[var(--color-ink)]">确认计量口径</div>
+              <div class="mt-1 text-xs text-[var(--color-ink-soft)]">
+                <span v-if="confirmationQuestions.length">发现 {{ confirmationQuestions.length }} 项需要确认的计量口径。</span>
+                <span v-else>已应用 {{ appliedConfirmationCount }} 项计量口径确认。</span>
+              </div>
+            </div>
+            <span v-if="appliedConfirmationCount" class="w-fit rounded bg-[var(--color-accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--color-accent-strong)]">
+              已应用 {{ appliedConfirmationCount }} 项
+            </span>
+          </div>
+
+          <div v-if="confirmationQuestions.length" class="divide-y divide-[var(--color-rule)]">
+            <article v-for="question in confirmationQuestions" :key="question.id" class="px-4 py-3">
+              <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div class="min-w-0">
+                  <div class="text-xs font-semibold text-[var(--color-accent-strong)]">{{ question.topic }}</div>
+                  <div class="mt-1 break-words text-sm font-semibold leading-5 text-[var(--color-ink)]">{{ question.question }}</div>
+                  <div class="mt-2 text-xs leading-5 text-[var(--color-ink-muted)]">{{ question.reason }}</div>
+                  <div class="mt-1 text-xs font-semibold text-[var(--color-ink-soft)]">推荐：{{ optionLabel(question, question.recommendation) }}</div>
+                </div>
+                <div class="flex shrink-0 flex-col gap-2 md:w-52">
+                  <label
+                    v-for="option in question.options"
+                    :key="option.value"
+                    class="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--color-rule)] px-3 py-2 text-xs text-[var(--color-ink-muted)]"
+                  >
+                    <input
+                      type="radio"
+                      :name="`fpa-confirm-${question.id}`"
+                      :value="option.value"
+                      v-model="confirmationSelections[question.id]"
+                      class="border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+                    />
+                    <span>{{ option.label }}</span>
+                  </label>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div v-if="confirmationQuestions.length" class="flex flex-col gap-2 border-t border-[var(--color-rule)] px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
+            <button
+              type="button"
+              class="btn-primary inline-flex items-center justify-center gap-2 px-5"
+              :disabled="previewLoading || !canApplyConfirmations"
+              @click="continuePreviewWithConfirmations"
+            >
+              <ArrowPathIcon class="h-4 w-4" />
+              {{ previewLoading ? '生成中...' : '继续生成' }}
+            </button>
+          </div>
+        </section>
+
         <div class="overflow-hidden rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
           <div class="divide-y divide-[var(--color-rule)] md:hidden">
             <article v-for="(row, idx) in result.rows" :key="idx" class="px-3 py-3">
@@ -337,7 +393,7 @@ interface FpaPreviewResult {
   warnings: string[]
   status?: 'ok' | 'needs_confirmation'
   confirmation_mode?: string
-  confirmation_questions?: Array<Record<string, unknown>>
+  confirmation_questions?: FpaConfirmationQuestion[]
   confirmed_decision_count?: number
   used_ai: boolean
   profile: string
@@ -346,6 +402,21 @@ interface FpaPreviewResult {
   rule_set: string
   audit?: FpaAuditReport
   debug?: FpaPreviewDebug
+}
+
+interface FpaConfirmationOption {
+  value: string
+  label: string
+}
+
+interface FpaConfirmationQuestion {
+  id: string
+  topic: string
+  question: string
+  recommendation: string
+  reason: string
+  options: FpaConfirmationOption[]
+  source_issue?: string
 }
 
 interface FpaAuditReport {
@@ -398,8 +469,16 @@ const modulesLoading = ref(false)
 const previewLoading = ref(false)
 const error = ref<PreviewErrorMessage | null>(null)
 const result = ref<FpaPreviewResult | null>(null)
+const confirmationSelections = ref<Record<string, string>>({})
+const confirmedDecisions = ref<Record<string, { value: string; scope: 'current_run' }>>({})
 
 const previewWarnings = computed(() => result.value?.warnings ?? [])
+const confirmationQuestions = computed(() => result.value?.confirmation_questions ?? [])
+const appliedConfirmationCount = computed(() => result.value?.confirmed_decision_count ?? Object.keys(confirmedDecisions.value).length)
+const canApplyConfirmations = computed(() => (
+  confirmationQuestions.value.length > 0
+  && confirmationQuestions.value.every(question => Boolean(confirmationSelections.value[question.id]))
+))
 const generationCountEntries = computed(() => Object.entries(result.value?.audit?.generation_counts ?? {}))
 const friendlyFpaOptionsError = computed(() => (
   toFriendlyError('options', fpaOptionsError.value).detail
@@ -442,7 +521,16 @@ watch(
     moduleWarnings.value = []
     selectedModuleIndex.value = ''
     result.value = null
+    resetConfirmations()
     error.value = null
+  },
+)
+
+watch(
+  () => [selectedModuleIndex.value, config.fpaProfile, config.fpaStrategy, config.fpaRuleSet, config.fpaConfirmationMode],
+  () => {
+    result.value = null
+    resetConfirmations()
   },
 )
 
@@ -471,6 +559,7 @@ async function loadModules() {
   modulesLoading.value = true
   error.value = null
   result.value = null
+  resetConfirmations()
   moduleWarnings.value = []
   selectedModuleIndex.value = ''
 
@@ -495,6 +584,21 @@ async function loadModules() {
 }
 
 async function runPreview() {
+  resetConfirmations()
+  await requestPreview(false)
+}
+
+async function continuePreviewWithConfirmations() {
+  const decisions: Record<string, { value: string; scope: 'current_run' }> = {}
+  for (const question of confirmationQuestions.value) {
+    const value = confirmationSelections.value[question.id]
+    if (value) decisions[question.id] = { value, scope: 'current_run' }
+  }
+  confirmedDecisions.value = { ...confirmedDecisions.value, ...decisions }
+  await requestPreview(true)
+}
+
+async function requestPreview(useConfirmedDecisions: boolean) {
   if (!canPreview.value) return
   previewLoading.value = true
   error.value = null
@@ -509,13 +613,18 @@ async function runPreview() {
   if (config.fpaStrategy) body.append('fpa_strategy', config.fpaStrategy)
   if (config.fpaRuleSet) body.append('fpa_rule_set', config.fpaRuleSet)
   if (config.fpaConfirmationMode) body.append('fpa_confirmation_mode', config.fpaConfirmationMode)
+  if (useConfirmedDecisions && Object.keys(confirmedDecisions.value).length) {
+    body.append('confirmed_decisions', JSON.stringify(confirmedDecisions.value))
+  }
   appendInputSource(body)
 
   try {
-    result.value = await apiFetch<FpaPreviewResult>('/api/fpa/preview-module', {
+    const data = await apiFetch<FpaPreviewResult>('/api/fpa/preview-module', {
       method: 'POST',
       body,
     })
+    result.value = data
+    hydrateConfirmationSelections(data.confirmation_questions ?? [])
   } catch (e) {
     const msg = normalizeApiError(e)
     error.value = toFriendlyError('preview', msg)
@@ -523,6 +632,23 @@ async function runPreview() {
   } finally {
     previewLoading.value = false
   }
+}
+
+function resetConfirmations() {
+  confirmationSelections.value = {}
+  confirmedDecisions.value = {}
+}
+
+function hydrateConfirmationSelections(questions: FpaConfirmationQuestion[]) {
+  const next: Record<string, string> = {}
+  for (const question of questions) {
+    next[question.id] = confirmationSelections.value[question.id] || question.recommendation || question.options[0]?.value || ''
+  }
+  confirmationSelections.value = next
+}
+
+function optionLabel(question: FpaConfirmationQuestion, value: string) {
+  return question.options.find(option => option.value === value)?.label ?? value
 }
 
 function toFriendlyError(context: 'options' | 'modules' | 'preview', message: string): PreviewErrorMessage {
