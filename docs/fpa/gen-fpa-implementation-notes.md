@@ -310,12 +310,15 @@ AI 输出要求为 JSON：
       "type_reason": "类型理由",
       "classification_basis_index": 1,
       "explanation": "计算依据说明",
+      "source_process_ids": ["m1_p1"],
       "source_processes": ["功能过程名称"],
       "split_reason": "多界面拆分理由，可空"
     }
   ]
 }
 ```
+
+当前 Prompt payload 会为每个功能过程提供 `process_id`、`process_name`、`description` 和 `type`。AI 输出应优先使用候选列表中的 `process_id` 填充 `source_process_ids`；`source_processes` 继续用于人工审阅展示。后处理覆盖统计和 `ai_first` 补齐逻辑优先使用合法 `source_process_ids`，AI 未返回合法 ID 时记录 warning 并降级使用 `source_processes` 名称匹配。
 
 ## 提示词与规则来源
 
@@ -1930,10 +1933,11 @@ AI 返回空响应。
 AI 返回不是合法 JSON。
 AI type 不属于 EI / EQ / EO / ILF / EIF。
 rows 为空。
-source_processes 覆盖不足。
+source_process_ids 覆盖不足。
 说明明显缺失。
 AI 返回 needs_review = true。
 AI confidence 低于阈值。
+source_process_ids 缺失、未知或覆盖不足。
 ```
 
 后续建议让 AI 输出：
@@ -2065,6 +2069,7 @@ fallback_reason:
 profile
 strategy
 rule_set
+source_process_ids
 source_processes
 coverage_status
 warnings
@@ -2272,6 +2277,7 @@ Warnings Sheet 新增“来源规则ID”“来源说明”两列，用于定位
 新增 _build_fpa_audit_reports_for_groups(...) 构建多模块 FpaAuditReport 列表。
 preview_fpa_module(...) 使用同一构建函数生成单模块 audit。
 generate_fpa_check_xlsx_from_md(...) 的覆盖审核 Sheet 使用同一构建函数输出功能过程总数、已覆盖数、未覆盖数、已覆盖功能过程、未覆盖功能过程和生成方式统计。
+覆盖统计优先使用行级内部字段 source_process_ids 与当前三级模块的功能过程候选 ID 比对；source_processes 继续作为用户可见的源功能过程展示和缺失 ID 时的名称匹配兜底。AI 返回未知 ID 时只忽略未知 ID 并记录 warning，合法 ID 仍参与覆盖统计。
 AI原始返回和规则命中详情仍继续读取生成期 audit trace，后续如需可继续推进为完整 FpaAuditReport 五 Sheet 统一写出。
 ```
 

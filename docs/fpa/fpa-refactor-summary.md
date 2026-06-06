@@ -61,11 +61,11 @@ FPA工作量评估-check.xlsx
 该文件不替代正式 `FPA工作量评估.xlsx`，只用于审核和复核。当前包含五张 Sheet：
 
 ```text
-FPA结果：逐行查看 generation、type_reason、source_processes、warnings 和规则集信息。
-覆盖审核：按三级模块查看功能过程覆盖、缺失过程和生成方式统计。
+FPA结果：逐行查看 generation、type_reason、source_processes、warnings 和规则集信息；正式审核主表不新增 source_process_ids 列。
+覆盖审核：按三级模块查看功能过程覆盖、缺失过程和生成方式统计；内部覆盖统计优先使用 source_process_ids，source_processes 仅作展示和缺失 ID 时的兜底线索。
 Warnings：集中查看行级 warning、模块级 warning 和来源规则 ID。
 规则命中详情：查看规则 ID、规则说明、建议类型、是否采用和 warning。
-AI原始返回：查看 AI 原始 rows JSON、缓存命中、rules_fallback 和规则优先未调用 AI 等来源。
+AI原始返回：查看 AI 原始 rows JSON、source_process_ids、缓存命中、rules_fallback 和规则优先未调用 AI 等来源。
 ```
 
 预览 audit 与正式审核副本已共用核心审核报告结构，重点检查：
