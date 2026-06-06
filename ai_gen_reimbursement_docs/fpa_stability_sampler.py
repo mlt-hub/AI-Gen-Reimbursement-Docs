@@ -90,6 +90,15 @@ def run_fpa_stability_sampling(
                 rule_set=config.rule_set,
                 audit_trace_path=str(audit_trace),
             )
+            _annotate_audit_trace(
+                audit_trace,
+                {
+                    "case_id": case_id,
+                    "run_id": run_id,
+                    "run_dir": str(run_dir),
+                    "fixture_path": fixture_path,
+                },
+            )
             trace_paths.append(str(audit_trace))
             runs.append({
                 "case_id": case_id,
@@ -215,6 +224,16 @@ def _write_tree_md(path: Path, rows: list[dict[str, str]]) -> None:
             + " |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _annotate_audit_trace(path: Path, metadata: dict[str, str]) -> None:
+    if not path.exists():
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return
+    data.update(metadata)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _csv_values(value: str) -> list[str]:

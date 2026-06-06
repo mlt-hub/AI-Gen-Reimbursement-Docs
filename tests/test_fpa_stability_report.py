@@ -54,6 +54,8 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     trace_a = tmp_path / "model-a.json"
     trace_b = tmp_path / "model-b.json"
     trace_a.write_text(json.dumps({
+        "case_id": "customer_query",
+        "run_id": "customer_query__strict_fpa__ai_first__strict_fpa_rs",
         "profile": "strict_fpa",
         "strategy": "ai_first",
         "rule_set": "strict_fpa_rs",
@@ -63,7 +65,11 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
             "source": "ai",
             "warnings": ["客户档案 AI 输出稳定性校验触发一次重试"],
             "quality_review": {
-                "issues": [{"code": "validator.query_as_ei", "retryable": True}],
+                "issues": [{
+                    "code": "validator.query_as_ei",
+                    "retryable": True,
+                    "message": "查询流程不应判为 EI",
+                }],
                 "summary": {"issue_count": 1, "retryable_count": 1},
             },
         }],
@@ -95,8 +101,14 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert comparison["summary"]["warning_count"] == 1
     assert comparison["summary"]["retry_count"] == 1
     assert comparison["summary"]["source_counts"] == {"ai": 1, "ai_cache": 2}
+    assert comparison["runs"][0]["case_id"] == "customer_query"
+    assert comparison["runs"][0]["run_id"] == "customer_query__strict_fpa__ai_first__strict_fpa_rs"
+    assert comparison["issue_details"][0]["case_id"] == "customer_query"
+    assert comparison["issue_details"][0]["message"] == "查询流程不应判为 EI"
     assert "validator.query_as_ei" in markdown
-    assert "| model-a.json | strict_fpa | ai_first | strict_fpa_rs |" in markdown
+    assert "| customer_query | customer_query__strict_fpa__ai_first__strict_fpa_rs | model-a.json |" in markdown
+    assert "## Issue Details" in markdown
+    assert "| 1 | customer_query | 客户管理 | validator.query_as_ei | yes | 查询流程不应判为 EI |" in markdown
 
 
 def test_stability_comparison_quality_gate_renders_failure():

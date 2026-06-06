@@ -549,7 +549,8 @@ ard --fpa-stability-report .\run-a\fpa_audit_trace.json .\run-b\fpa_audit_trace.
 输出 Markdown 会包含：
 
 - 总体 Runs/Modules/Warnings/Quality Issues/Confirmations/Retries。
-- 每次运行的 profile、strategy、rule_set 和稳定性指标。
+- 每次运行的 case_id、run_id、profile、strategy、rule_set 和稳定性指标。
+- `Issue Details` 明细，按 run/case/module 展示 issue code、是否可重试和问题说明，便于直接定位到触发样例。
 - issue code 分布。
 - `ai`、`ai_cache`、`rules`、`rules_fallback` 等生成来源分布。
 
@@ -568,6 +569,8 @@ ard --fpa-stability-sample-suite standard `
 - 每个 fixture/config 组合的 `module_tree.md`、`meta.md`、`fpa.md`、`summary.md`、`fpa_audit_trace.json`。
 - `fpa-stability-sampling-manifest.json`。
 - `fpa-stability-sampling-report.md`。
+
+采样器会把 `case_id`、`run_id`、`run_dir` 和 `fixture_path` 写回每个 `fpa_audit_trace.json`。后续即使只拿 trace 重新生成对比报告，也能保留样例和运行配置定位信息。
 
 第一版默认可用 `rules_only` 做无模型基线；传入 `--api-key`、`--model`、`--base-url` 并选择 `ai_first`/`ai_only` 后，可复用同一入口做真实模型抽样。
 
@@ -618,6 +621,8 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 - `--fpa-stability-max-retries`
 
 未传入阈值时只生成报告，不判定通过/失败；传入阈值后，Markdown 报告会增加 `Quality Gate` 区块，manifest/comparison 中会写入 `evaluation.status=pass|fail` 和每项检查结果。若质量门失败，CLI 会返回退出码 `2`，便于接入 CI 或自动验收。
+
+阅读报告时建议先看 `Quality Gate` 是否失败，再看 `Issue Details`。例如规则基线只配置 `max_retries=0` 时，报告可能因为未发生重试而 PASS，但仍会列出 `validator.explanation_structure` 等非阻断质量提示；如果出现 `retryable=yes` 的 `validator.split_crud_ei`、`validator.query_as_ei` 或 `validator.ordinary_service_as_eif`，应优先回到对应 `case_id/run_id` 检查输入和生成结果。
 
 也可以直接使用 CI 友好的脚本入口：
 

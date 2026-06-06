@@ -85,3 +85,11 @@
 - `fpa-stability-sampling-report.md`
 - `fpa-stability-sampling-manifest.json`
 - 每个样例和配置组合的 `fpa_audit_trace.json`
+
+报告中的 `Runs` 表会展示 `case_id` 和 `run_id`。如果存在质量问题，`Issue Details` 会进一步列出触发问题的 run、case、module、issue code、是否可重试和问题说明。
+
+建议解读顺序：
+
+1. 先看 `Quality Gate` 是否 PASS/FAIL。
+2. 再看 `Issue Details` 中是否有 `Retryable=yes` 的问题。
+3. 最后根据具体 `case_id/run_id` 回到对应目录查看 `fpa.md`、`summary.md` 和 `fpa_audit_trace.json`。

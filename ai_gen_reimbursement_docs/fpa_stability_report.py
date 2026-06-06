@@ -95,6 +95,7 @@ def load_fpa_stability_trace(path: str) -> dict[str, object]:
 def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
     """Compare stability summaries from multiple FPA audit traces."""
     runs: list[dict[str, object]] = []
+    issue_details: list[dict[str, object]] = []
     total_modules = 0
     total_warnings = 0
     total_quality_issues = 0
@@ -106,6 +107,9 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
 
     for index, path in enumerate(trace_paths, 1):
         trace = load_fpa_stability_trace(path)
+        case_id = str(trace.get("case_id", "") or "")
+        run_id = str(trace.get("run_id", "") or "")
+        run_dir = str(trace.get("run_dir", "") or "")
         report = trace["stability_report"]
         summary = report.get("summary", {}) if isinstance(report, dict) else {}
         if not isinstance(summary, dict):
@@ -127,8 +131,12 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         total_confirmed_decisions += confirmed_count
         source_counts.update(run_source_counts)
         issue_code_counts.update(run_issue_counts)
+        issue_details.extend(_issue_details_for_trace(index, trace, case_id, run_id))
         runs.append({
             "run_index": index,
+            "case_id": case_id,
+            "run_id": run_id,
+            "run_dir": run_dir,
             "trace_path": path,
             "trace_name": os.path.basename(path),
             "profile": str(trace.get("profile", "") or ""),
@@ -157,6 +165,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
             "issue_code_counts": dict(issue_code_counts),
         },
         "runs": runs,
+        "issue_details": issue_details,
     }
 
 
@@ -193,6 +202,9 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
     runs = comparison.get("runs", []) if isinstance(comparison, dict) else []
     if not isinstance(runs, list):
         runs = []
+    issue_details = comparison.get("issue_details", []) if isinstance(comparison, dict) else []
+    if not isinstance(issue_details, list):
+        issue_details = []
     lines = [
         "# FPA 稳定性对比报告",
         "",
@@ -236,14 +248,16 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
     lines.extend([
         "## Runs",
         "",
-        "| # | Trace | Profile | Strategy | Rule Set | Modules | Warnings | Quality Issues | Retryable | Confirmations | Retries |",
-        "|---:|---|---|---|---|---:|---:|---:|---:|---:|---:|",
+        "| # | Case ID | Run ID | Trace | Profile | Strategy | Rule Set | Modules | Warnings | Quality Issues | Retryable | Confirmations | Retries |",
+        "|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|",
     ])
     for run in runs:
         if not isinstance(run, dict):
             continue
         lines.append(
             f"| {_int_or_default(run.get('run_index'), 0)} "
+            f"| {_escape_md(str(run.get('case_id', '') or ''))} "
+            f"| {_escape_md(str(run.get('run_id', '') or ''))} "
             f"| {_escape_md(str(run.get('trace_name', '') or ''))} "
             f"| {_escape_md(str(run.get('profile', '') or ''))} "
             f"| {_escape_md(str(run.get('strategy', '') or ''))} "
@@ -255,6 +269,25 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
             f"| {_int_or_default(run.get('confirmed_decision_count'), 0)} "
             f"| {_int_or_default(run.get('retry_count'), 0)} |"
         )
+    if issue_details:
+        lines.extend([
+            "",
+            "## Issue Details",
+            "",
+            "| Run | Case ID | Module | Code | Retryable | Message |",
+            "|---:|---|---|---|---|---|",
+        ])
+        for issue in issue_details:
+            if not isinstance(issue, dict):
+                continue
+            lines.append(
+                f"| {_int_or_default(issue.get('run_index'), 0)} "
+                f"| {_escape_md(str(issue.get('case_id', '') or ''))} "
+                f"| {_escape_md(str(issue.get('module', '') or issue.get('l3', '') or ''))} "
+                f"| {_escape_md(str(issue.get('code', '') or ''))} "
+                f"| {'yes' if issue.get('retryable') else 'no'} "
+                f"| {_escape_md(str(issue.get('message', '') or ''))} |"
+            )
     lines.extend([
         "",
         "## Issue Codes",
@@ -283,6 +316,37 @@ def _quality_parts(value: object) -> tuple[list[dict[str, Any]], dict[str, objec
     issues = [issue for issue in raw_issues if isinstance(issue, dict)] if isinstance(raw_issues, list) else []
     summary = value.get("summary", {})
     return issues, summary if isinstance(summary, dict) else {}
+
+
+def _issue_details_for_trace(
+    run_index: int,
+    trace: dict[str, object],
+    case_id: str,
+    run_id: str,
+) -> list[dict[str, object]]:
+    modules = trace.get("modules", [])
+    if not isinstance(modules, list):
+        return []
+    details: list[dict[str, object]] = []
+    for module_index, module in enumerate(modules, 1):
+        if not isinstance(module, dict):
+            continue
+        issues, _summary = _quality_parts(module.get("quality_review", {}))
+        for issue in issues:
+            details.append({
+                "run_index": run_index,
+                "case_id": case_id,
+                "run_id": run_id,
+                "module_index": module_index,
+                "module": str(module.get("module", "") or ""),
+                "l3": str(module.get("l3", "") or ""),
+                "code": str(issue.get("code", "") or ""),
+                "severity": str(issue.get("severity", "") or ""),
+                "retryable": bool(issue.get("retryable")),
+                "message": str(issue.get("message", "") or ""),
+                "suggested_action": str(issue.get("suggested_action", "") or ""),
+            })
+    return details
 
 
 def _string_list(value: object) -> list[str]:
