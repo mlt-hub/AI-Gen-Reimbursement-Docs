@@ -34,6 +34,7 @@ ard-v*
 *.bak
 ~$*
 .cache/
+tmp_fpa_stability_ci/
 
 # 数据保护发行方敏感材料
 .ard-keys/
