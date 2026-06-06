@@ -28,6 +28,13 @@ from ai_gen_reimbursement_docs.excel_source import (
     replace_placeholders, strip_ai_marker, parse_module_tree_md,
     read_base_data_from_excel, safe_load_workbook,
 )
+from ai_gen_reimbursement_docs.fpa_confirmation import (
+    build_fpa_confirmation_questions,
+    confirmation_feedback,
+    confirmed_decision_count,
+    normalize_confirmed_decisions,
+    normalize_confirmation_mode,
+)
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     CustomRulesProfile,
@@ -1277,6 +1284,7 @@ def _ai_plan_fpa_rows_for_l3_debug(
     model: str,
     base_url: str,
     profile: CustomRulesProfile = FPA_PROFILE,
+    confirmed_decisions: object | None = None,
 ) -> tuple[list[dict[str, object]], dict[str, object]]:
     """调用 AI 规划一个三级模块的 FPA 行，并返回 Web 预览调试信息。"""
     prompt_context = _build_fpa_ai_prompt_context(
@@ -1295,8 +1303,14 @@ def _ai_plan_fpa_rows_for_l3_debug(
         "thinking": "",
         "parsed_rows": [],
     }
+    user_prompt = prompt_context.user_prompt
+    confirmed_feedback = confirmation_feedback(confirmed_decisions)
+    if confirmed_feedback:
+        user_prompt = f"{user_prompt}\n\n{confirmed_feedback}"
+        debug["user_prompt"] = user_prompt
+        debug["ai_prompt"] = f"[system]\n{prompt_context.system_prompt}\n\n[user]\n{user_prompt}"
     resp, thinking = _call_llm(
-        prompt_context.user_prompt,
+        user_prompt,
         prompt_context.system_prompt,
         api_key,
         model,
@@ -1328,12 +1342,16 @@ def _ai_plan_fpa_rows_for_l3(
     base_url: str,
     profile: CustomRulesProfile = FPA_PROFILE,
     validation_retry_feedback: str = "",
+    confirmed_decisions: object | None = None,
 ) -> list[dict[str, object]]:
     """调用 AI 规划一个三级模块的 FPA 行，返回原始 AI rows。"""
     prompt_context = _build_fpa_ai_prompt_context(
         group, judgement_rules, domain_context, profile
     )
     user_prompt = prompt_context.user_prompt
+    confirmed_feedback = confirmation_feedback(confirmed_decisions)
+    if confirmed_feedback:
+        user_prompt = f"{user_prompt}\n\n{confirmed_feedback}"
     if validation_retry_feedback:
         user_prompt = f"{user_prompt}\n\n{validation_retry_feedback}"
     resp = _call_llm(
@@ -1667,6 +1685,7 @@ def _plan_fpa_rows_with_ai(
     rule_set: str = "",
     rule_set_config: object | None = None,
     audit_trace_path: str = "",
+    confirmed_decisions: object | None = None,
 ) -> list[dict[str, object]]:
     execution = resolve_fpa_execution_config(profile.name, strategy, rule_set)
     profile = execution.profile
@@ -1688,6 +1707,7 @@ def _plan_fpa_rows_with_ai(
             rule_set=rule_set,
             rule_set_config=effective_rule_set_config,
             audit_trace_path=audit_trace_path,
+            confirmed_decisions=confirmed_decisions,
         )
     finally:
         reset_current_fpa_rule_set_config(rule_set_token)
@@ -1706,6 +1726,7 @@ def _plan_fpa_rows_with_execution(
     rule_set: str = "",
     rule_set_config: object | None = None,
     audit_trace_path: str = "",
+    confirmed_decisions: object | None = None,
 ) -> list[dict[str, object]]:
     groups = _group_rows_by_l3(rows)
     config_warnings = _rule_set_config_warnings(rule_set_config)
@@ -1886,7 +1907,14 @@ def _plan_fpa_rows_with_execution(
         try:
             logger.info("  FPA AI 规划三级模块 [%d/%d] %s", idx, len(groups), _group_tag(group))
             raw_rows = _ai_plan_fpa_rows_for_l3(
-                group, judgement_rules, domain_context, api_key, model, base_url, profile=profile
+                group,
+                judgement_rules,
+                domain_context,
+                api_key,
+                model,
+                base_url,
+                profile=profile,
+                confirmed_decisions=confirmed_decisions,
             )
             group_rows, warnings = _normalize_ai_fpa_rows_for_l3(
                 group=group,
@@ -1926,6 +1954,7 @@ def _plan_fpa_rows_with_execution(
                     base_url,
                     profile=profile,
                     validation_retry_feedback=retry_feedback,
+                    confirmed_decisions=confirmed_decisions,
                 )
                 retry_group_rows, retry_warnings = _normalize_ai_fpa_rows_for_l3(
                     group=group,
@@ -2642,6 +2671,7 @@ def plan_fpa_md_from_tree(
     strategy: str = "",
     rule_set: str = "",
     audit_trace_path: str = "",
+    confirmed_decisions: object | None = None,
 ) -> str:
     """以三级模块为单位 AI 规划 FPA 行，并写入 MD。"""
     logger.info("第1.3步：AI 规划 FPA 数据...")
@@ -2669,6 +2699,7 @@ def plan_fpa_md_from_tree(
             rule_set=execution.rule_set,
             rule_set_config=execution.rule_set_config,
             audit_trace_path=audit_trace_path,
+            confirmed_decisions=confirmed_decisions,
         )
     finally:
         reset_current_fpa_rule_set_config(rule_set_token)
@@ -2816,6 +2847,8 @@ def preview_fpa_module(
     profile_name: str = "",
     strategy: str = "",
     rule_set: str = "",
+    fpa_confirmation_mode: str = "auto",
+    confirmed_decisions: object | None = None,
     use_preview_cache: bool = False,
     keep_preview_files: bool = False,
 ) -> dict[str, object]:
@@ -2824,6 +2857,8 @@ def preview_fpa_module(
         raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
     execution = resolve_fpa_execution_config(profile_name, strategy, rule_set)
     profile = execution.profile
+    confirmation_mode = normalize_confirmation_mode(fpa_confirmation_mode or "auto")
+    normalized_decisions = normalize_confirmed_decisions(confirmed_decisions or {})
     temp_ctx = None
     cache_used = False
     md_dir = ""
@@ -2867,6 +2902,7 @@ def preview_fpa_module(
         idx, group = matches[0]
         judgement_rules = _read_fpa_judgement_rules(template_path)
         warnings: list[str] = []
+        confirmation_issues: list[FpaValidationIssue] = []
         used_ai = execution.strategy in {"ai_first", "ai_only"}
         debug: dict[str, object] = {
             "ai_called": False,
@@ -2897,6 +2933,7 @@ def preview_fpa_module(
                         raw_rows, debug = _ai_plan_fpa_rows_for_l3_debug(
                             group, judgement_rules, _build_domain_context(meta), api_key, model, base_url,
                             profile=profile,
+                            confirmed_decisions=normalized_decisions,
                         )
                         debug["reason"] = "rules_first_needs_ai"
                         fpa_rows, warnings = _normalize_ai_fpa_rows_for_l3(
@@ -2917,10 +2954,11 @@ def preview_fpa_module(
                             rule_set_config=execution.rule_set_config,
                         )
                         warnings.extend(supplement_warnings)
-                        _, validation_warnings = _validate_fpa_rows_for_l3(
+                        validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                             group=group,
                             rows=fpa_rows,
                         )
+                        confirmation_issues.extend(validation_issues)
                         warnings.extend(validation_warnings)
                         warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
                         if not fpa_rows:
@@ -2939,6 +2977,7 @@ def preview_fpa_module(
                 raw_rows, debug = _ai_plan_fpa_rows_for_l3_debug(
                     group, judgement_rules, _build_domain_context(meta), api_key, model, base_url,
                     profile=profile,
+                    confirmed_decisions=normalized_decisions,
                 )
                 fpa_rows, warnings = _normalize_ai_fpa_rows_for_l3(
                     group=group,
@@ -2958,10 +2997,11 @@ def preview_fpa_module(
                     rule_set_config=execution.rule_set_config,
                 )
                 warnings.extend(supplement_warnings)
-                _, validation_warnings = _validate_fpa_rows_for_l3(
+                validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                     group=group,
                     rows=fpa_rows,
                 )
+                confirmation_issues.extend(validation_issues)
                 warnings.extend(validation_warnings)
                 if not fpa_rows:
                     raise ValueError("AI 规划未生成有效 FPA 行")
@@ -3003,6 +3043,12 @@ def preview_fpa_module(
 
         preview_rows = [_row_to_preview(row) for row in fpa_rows]
         debug["final_rows"] = preview_rows
+        confirmation_questions = build_fpa_confirmation_questions(
+            group=group,
+            issues=confirmation_issues,
+            mode=confirmation_mode,
+            confirmed_decisions=normalized_decisions,
+        )
         raw_source = "ai" if debug.get("ai_called") and used_ai else "rules"
         if debug.get("reason") == "ai_failed_fallback":
             raw_source = "rules_fallback"
@@ -3029,6 +3075,10 @@ def preview_fpa_module(
             "module": module_payload,
             "rows": preview_rows,
             "warnings": warnings,
+            "status": "needs_confirmation" if confirmation_questions else "ok",
+            "confirmation_mode": confirmation_mode,
+            "confirmation_questions": confirmation_questions,
+            "confirmed_decision_count": confirmed_decision_count(normalized_decisions),
             "used_ai": used_ai,
             "profile": profile.name,
             "profile_version": profile.version,

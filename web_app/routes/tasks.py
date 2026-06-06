@@ -70,6 +70,12 @@ FPA_STRATEGY_LABELS = {
     "ai_only": "仅 AI",
 }
 
+FPA_CONFIRMATION_MODE_LABELS = {
+    "auto": "自动模式",
+    "cautious": "审慎模式",
+    "strict": "严格确认模式",
+}
+
 
 def create_router(
     *,
@@ -110,6 +116,7 @@ def create_router(
             VALID_FPA_STRATEGIES,
             load_fpa_config,
         )
+        from ai_gen_reimbursement_docs.fpa_confirmation import VALID_FPA_CONFIRMATION_MODES
 
         try:
             cfg = load_fpa_config()
@@ -154,6 +161,11 @@ def create_router(
                 "default_profile": str(cfg.get("default-profile") or ""),
                 "profiles": profile_options,
                 "strategies": strategy_options,
+                "confirmation_modes": [
+                    {"name": name, "label": FPA_CONFIRMATION_MODE_LABELS.get(name, name)}
+                    for name in FPA_CONFIRMATION_MODE_LABELS
+                    if name in VALID_FPA_CONFIRMATION_MODES
+                ],
                 "kinds": [{"name": name, "label": name} for name in sorted(VALID_FPA_PROFILE_KINDS)],
                 "rule_sets": rule_set_options,
             }
@@ -457,6 +469,8 @@ def create_router(
         fpa_profile: str = Form(""),
         fpa_strategy: str = Form(""),
         fpa_rule_set: str = Form(""),
+        fpa_confirmation_mode: str = Form("auto"),
+        confirmed_decisions: str = Form(""),
         file: UploadFile | None = File(None),
         user: str = Depends(require_auth),
     ):
@@ -505,6 +519,15 @@ def create_router(
             model_value = model or load_model_name()
             base_url_value = base_url or load_base_url()
             templates = _resolve_templates(str(file_path), None)
+            confirmed_decisions_payload = {}
+            if confirmed_decisions.strip():
+                try:
+                    parsed_decisions = json.loads(confirmed_decisions)
+                except json.JSONDecodeError as exc:
+                    raise HTTPException(400, "confirmed_decisions 必须是 JSON 对象") from exc
+                if not isinstance(parsed_decisions, dict):
+                    raise HTTPException(400, "confirmed_decisions 必须是 JSON 对象")
+                confirmed_decisions_payload = parsed_decisions
             result = preview_fpa_module(
                 file_path=str(file_path),
                 module_name=module_name.strip(),
@@ -517,6 +540,8 @@ def create_router(
                 profile_name=fpa_profile.strip() or load_fpa_profile(),
                 strategy=fpa_strategy.strip(),
                 rule_set=fpa_rule_set.strip(),
+                fpa_confirmation_mode=fpa_confirmation_mode.strip() or "auto",
+                confirmed_decisions=confirmed_decisions_payload,
             )
             return result
         except HTTPException:

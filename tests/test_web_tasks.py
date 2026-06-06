@@ -176,6 +176,11 @@ rule_sets:
         "strict_fpa_rs",
         "client_a_rules",
     }
+    assert data["confirmation_modes"] == [
+        {"name": "auto", "label": "自动模式"},
+        {"name": "cautious", "label": "审慎模式"},
+        {"name": "strict", "label": "严格确认模式"},
+    ]
     assert data["rule_sets"][2]["extends"] == "strict_fpa_rs"
     assert "secret" not in resp.text
 
@@ -363,6 +368,8 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
                 }
             ],
             "warnings": [],
+            "status": "ok",
+            "confirmation_questions": [],
             "used_ai": True,
         }
 
@@ -376,6 +383,8 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
             "fpa_profile": "unified_ui",
             "fpa_strategy": "rules_first",
             "fpa_rule_set": "unified_ui_rs",
+            "fpa_confirmation_mode": "cautious",
+            "confirmed_decisions": json.dumps({"merge_crud_demo": {"value": "yes", "scope": "current_run"}}),
         },
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
@@ -390,6 +399,8 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
     assert calls[0]["profile_name"] == "unified_ui"
     assert calls[0]["strategy"] == "rules_first"
     assert calls[0]["rule_set"] == "unified_ui_rs"
+    assert calls[0]["fpa_confirmation_mode"] == "cautious"
+    assert calls[0]["confirmed_decisions"] == {"merge_crud_demo": {"value": "yes", "scope": "current_run"}}
 
 
 def test_fpa_preview_modules_upload_returns_selectable_modules(monkeypatch):

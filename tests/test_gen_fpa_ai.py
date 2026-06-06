@@ -1541,6 +1541,103 @@ def test_ai_only_preview_empty_rows_does_not_fallback(monkeypatch, tmp_path):
         )
 
 
+def test_fpa_preview_returns_confirmation_questions_for_high_risk_validator_issue(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    xlsx = tmp_path / "功能清单.xlsx"
+    xlsx.write_bytes(b"placeholder")
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa.read_base_data_from_excel",
+        lambda path: {"tree_rows": _rows(), "meta": _meta()},
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa._call_llm",
+        lambda *args, **kwargs: (
+            json.dumps({
+                "rows": [{
+                    "name": "查询垂直行业",
+                    "type": "EI",
+                    "explanation": "来源场景：查询垂直行业。\n业务数据：垂直行业列表。\n业务规则：只读取并展示列表。\n计算说明：误判为 EI。",
+                    "source_process_ids": ["m1_p2"],
+                    "source_processes": ["查询垂直行业"],
+                }]
+            }, ensure_ascii=False),
+            "",
+        ),
+    )
+
+    result = preview_fpa_module(
+        file_path=str(xlsx),
+        module_name="垂直行业管理",
+        api_key="sk-test",
+        model="test-model",
+        base_url="",
+        profile_name="strict_fpa",
+        strategy="ai_only",
+        fpa_confirmation_mode="cautious",
+    )
+
+    assert result["status"] == "needs_confirmation"
+    assert result["confirmation_mode"] == "cautious"
+    assert result["confirmation_questions"][0]["topic"] == "类型判定"
+    assert result["confirmation_questions"][0]["recommendation"] == "eq"
+
+
+def test_fpa_preview_confirmed_decisions_enter_prompt_and_suppress_question(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    xlsx = tmp_path / "功能清单.xlsx"
+    xlsx.write_bytes(b"placeholder")
+    prompts = []
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.gen_fpa.read_base_data_from_excel",
+        lambda path: {"tree_rows": _rows(), "meta": _meta()},
+    )
+
+    def fake_call_llm(prompt, *args, **kwargs):
+        prompts.append(prompt)
+        return (
+            json.dumps({
+                "rows": [{
+                    "name": "查询垂直行业",
+                    "type": "EI",
+                    "explanation": "来源场景：查询垂直行业。\n业务数据：垂直行业列表。\n业务规则：只读取并展示列表。\n计算说明：误判为 EI。",
+                    "source_process_ids": ["m1_p2"],
+                    "source_processes": ["查询垂直行业"],
+                }]
+            }, ensure_ascii=False),
+            "",
+        )
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+
+    first = preview_fpa_module(
+        file_path=str(xlsx),
+        module_name="垂直行业管理",
+        api_key="sk-test",
+        model="test-model",
+        base_url="",
+        profile_name="strict_fpa",
+        strategy="ai_only",
+        fpa_confirmation_mode="cautious",
+    )
+    decision_id = first["confirmation_questions"][0]["id"]
+    second = preview_fpa_module(
+        file_path=str(xlsx),
+        module_name="垂直行业管理",
+        api_key="sk-test",
+        model="test-model",
+        base_url="",
+        profile_name="strict_fpa",
+        strategy="ai_only",
+        fpa_confirmation_mode="cautious",
+        confirmed_decisions={decision_id: {"value": "eq", "scope": "current_run"}},
+    )
+
+    assert "必须作为硬约束执行" in prompts[1]
+    assert second["confirmed_decision_count"] == 1
+    assert second["status"] == "ok"
+    assert second["confirmation_questions"] == []
+
+
 def test_fpa_preview_prompt_includes_project_domain_context(monkeypatch, tmp_path):
     _write_fpa_prompt_config(tmp_path, monkeypatch)
     (tmp_path / "domain_context.json").write_text(
