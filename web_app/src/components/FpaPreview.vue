@@ -335,6 +335,10 @@
                   <div class="font-semibold text-[var(--color-ink)]">解析结果</div>
                   <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ stringifyDebug(result.debug.parsed_rows) }}</pre>
                 </div>
+                <div v-if="result.debug.quality_review" class="rounded-md bg-[var(--color-surface-muted)] p-3">
+                  <div class="font-semibold text-[var(--color-ink)]">质量审核</div>
+                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ stringifyDebug(result.debug.quality_review) }}</pre>
+                </div>
               </div>
             </details>
           </div>
@@ -377,6 +381,7 @@ interface FpaPreviewDebug {
   thinking: string
   parsed_rows: unknown[]
   final_rows: FpaPreviewRow[]
+  quality_review?: unknown
   error?: string
 }
 

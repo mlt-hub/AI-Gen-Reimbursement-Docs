@@ -49,6 +49,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     resolve_fpa_execution_config,
     set_current_fpa_rule_set_config,
 )
+from ai_gen_reimbursement_docs.fpa_quality_review import build_fpa_quality_review
 from ai_gen_reimbursement_docs.fpa_validator import (
     FpaValidationIssue,
     retryable_validation_issues,
@@ -939,6 +940,19 @@ def _validate_fpa_rows_for_l3(
     issues = validate_fpa_rows(group=group, rows=rows)
     warnings = _apply_fpa_validation_issues(rows, issues)
     return issues, warnings
+
+
+def _build_quality_review_for_l3(
+    *,
+    group: dict[str, object],
+    rows: list[dict[str, object]],
+    confirmed_decisions: object | None = None,
+) -> dict[str, object]:
+    return build_fpa_quality_review(
+        group=group,
+        rows=rows,
+        confirmed_decisions=confirmed_decisions,
+    )
 
 
 def _covered_process_ids_for_row(row: dict[str, object], group: dict[str, object]) -> set[str]:
@@ -1884,6 +1898,11 @@ def _plan_fpa_rows_with_execution(
                     )
                     group_rows = []
                 if group_rows:
+                    quality_review = _build_quality_review_for_l3(
+                        group=group,
+                        rows=group_rows,
+                        confirmed_decisions=confirmed_decisions,
+                    )
                     cache_hits += 1
                     success += 1
                     generated += len(group_rows)
@@ -1898,6 +1917,7 @@ def _plan_fpa_rows_with_execution(
                         "raw_rows": raw_rows,
                         "warnings": _with_config_warnings(warnings, rule_set_config),
                         "rule_hits": _trace_rule_hits_for_rows(group_rows),
+                        "quality_review": quality_review,
                     })
                     continue
             except Exception as exc:
@@ -1997,6 +2017,11 @@ def _plan_fpa_rows_with_execution(
             warning_count += len(warnings)
             if not group_rows:
                 raise ValueError("AI 规划未生成有效 FPA 行")
+            quality_review = _build_quality_review_for_l3(
+                group=group,
+                rows=group_rows,
+                confirmed_decisions=confirmed_decisions,
+            )
             success += 1
             generated += len(group_rows)
             if cache_path:
@@ -2016,6 +2041,7 @@ def _plan_fpa_rows_with_execution(
                 "raw_rows": raw_rows,
                 "warnings": _with_config_warnings(warnings, rule_set_config),
                 "rule_hits": _trace_rule_hits_for_rows(group_rows),
+                "quality_review": quality_review,
             })
         except FpaPromptConfigError:
             raise
@@ -2918,6 +2944,7 @@ def preview_fpa_module(
             "thinking": "",
             "parsed_rows": [],
             "final_rows": [],
+            "quality_review": {},
         }
         rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
         try:
@@ -3043,6 +3070,12 @@ def preview_fpa_module(
 
         preview_rows = [_row_to_preview(row) for row in fpa_rows]
         debug["final_rows"] = preview_rows
+        quality_review = _build_quality_review_for_l3(
+            group=group,
+            rows=fpa_rows,
+            confirmed_decisions=normalized_decisions,
+        )
+        debug["quality_review"] = quality_review
         confirmation_questions = build_fpa_confirmation_questions(
             group=group,
             issues=confirmation_issues,

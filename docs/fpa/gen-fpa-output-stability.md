@@ -481,6 +481,32 @@ scope: project_profile 才影响后续生成。
 }
 ```
 
+当前还已完成第一版规则化质量审核输出，预览接口和 AI 审计信息会新增 `quality_review`。该层由 `ai_gen_reimbursement_docs/fpa_quality_review.py` 基于最终 rows、validator 和 `merge_review` 生成，只暴露风险和建议动作，不直接改写最终 FPA rows。
+
+当前 `quality_review` 字段示例：
+
+```json
+{
+  "issues": [
+    {
+      "code": "quality.merge_review_not_applied",
+      "severity": "warning",
+      "message": "合并审查建议合并同一数据组的维护动作，但结果仍按多个功能点拆分。",
+      "suggested_action": "retry_or_confirm",
+      "retryable": true,
+      "source_process_ids": ["m1_p3", "m1_p4"]
+    }
+  ],
+  "summary": {
+    "issue_count": 1,
+    "retryable_count": 1,
+    "confirmed_decision_count": 0
+  }
+}
+```
+
+这一步先把“审核 Agent”的职责落成可测试契约：审核节点可以发现 validator 误判和合并建议未应用，但不越权修改 AI 输出。后续如拆成独立 AI Agent，应继续沿用同样的 `quality_review` 结构，便于预览页、审计日志和真实模型稳定性报告复用。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。
@@ -522,7 +548,7 @@ P0：已完成。strict_fpa 逻辑事务合并口径已有 profile、prompt、fi
 P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试和 FPA 预览页确认卡片；批量暂停/继续流程待做。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
-两阶段生成：已完成第一版规则化 `process_facts` 和 `merge_review` 中间结构；尚未拆成独立 AI Agent。
+两阶段生成：已完成第一版规则化 `process_facts`、`merge_review` 和 `quality_review` 中间结构；尚未拆成独立 AI Agent。
 P4：未开始。仍需真实模型稳定性报告和指标沉淀。
 ```
 
@@ -608,6 +634,8 @@ FPA 结果生成 Agent
         ↓
 最终 rows / warning / 人工复核点
 ```
+
+当前实现中，`quality_review` 已先作为规则化审核节点接入预览 debug 和 AI audit metadata。它对应上图的“审核 Agent + validator”位置，但仍是确定性程序，不额外调用 AI。
 
 其中真正提升稳定性的不是“调用 AI 多次”，而是让每次 AI 只做小判断，并让中间结果可以被规则和测试检查。
 
