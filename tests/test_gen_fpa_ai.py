@@ -999,6 +999,71 @@ def test_ai_first_none_judgement_does_not_conflict_with_supported_transaction_ro
     )
 
 
+def test_ai_first_internal_data_group_with_external_reference_ids_keeps_ilf():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "供应商管理",
+            "二级模块": "准入协同",
+            "三级模块": "供应商准入协同",
+            "三级模块整体功能描述": "本系统维护供应商准入申请信息，同时引用 CRM 系统维护的客户档案和 OA 系统维护的审批流程单据。",
+            "功能过程": "新增准入申请",
+            "功能过程类型": "新增",
+            "功能过程描述": "录入供应商准入申请信息并保存。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "供应商管理",
+            "二级模块": "准入协同",
+            "三级模块": "供应商准入协同",
+            "三级模块整体功能描述": "本系统维护供应商准入申请信息，同时引用 CRM 系统维护的客户档案和 OA 系统维护的审批流程单据。",
+            "功能过程": "选择CRM客户档案",
+            "功能过程类型": "新增",
+            "功能过程描述": "从 CRM 客户档案中选择客户并关联到供应商准入申请。",
+        },
+    ])[0]
+    rule_set = FpaRuleSetConfig(
+        name="strict_fpa_rs",
+        external_data_rules=(
+            ExternalDataGroupRule(("CRM",), "CRM客户档案", ("档案", "ID")),
+            ExternalDataGroupRule(("OA",), "OA审批流程单据", ("单据", "ID")),
+        ),
+    )
+    token = set_current_fpa_rule_set_config(rule_set)
+    try:
+        rows, warnings = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            profile=STRICT_FPA_PROFILE,
+            strategy="ai_first",
+            ai_rows=[
+                {
+                    "name": "供应商准入申请数据组",
+                    "type": "ILF",
+                    "explanation": (
+                        "来源场景：【地市后台】供应商管理-准入协同-供应商准入协同-供应商准入申请数据组，本系统维护准入申请信息。"
+                        "\n业务数据：供应商准入申请信息，包括申请单号、供应商名称、关联CRM客户档案ID、关联OA审批单ID、申请状态等。"
+                        "\n业务规则：本系统内部维护该数据组，支持新增、修改、关联外部数据。"
+                        "\n计算说明：作为本系统内部维护的逻辑数据组，按 ILF 计量。"
+                    ),
+                    "source_process_ids": [],
+                    "source_processes": [],
+                },
+            ],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert rows[0]["类型"] == "ILF"
+    assert not any("AI type=ILF 与规则存在冲突" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.ai_first_type_conflict"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
 def test_ai_first_data_function_supplement_warning_does_not_report_zero_missing_processes():
     group = _group_rows_by_l3([
         {

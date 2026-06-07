@@ -1136,6 +1136,8 @@ class StrictFpaProfile(CustomRulesProfile):
         type_mapping = self._configured_type_mapping(text)
         if type_mapping:
             return type_mapping
+        if self._has_internal_data_function(text) and self._looks_like_data_group(name, desc):
+            return "ILF", "本系统维护的逻辑数据组，按 ILF。"
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
         name_action = self._explicit_transaction_type(name)
@@ -1217,6 +1219,8 @@ class StrictFpaProfile(CustomRulesProfile):
         name_action = self._explicit_transaction_type(name)
         if name_action:
             return name_action[0]
+        if self._has_internal_data_function(text) and self._looks_like_data_group(name, desc):
+            return "ILF"
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF"
         if self._is_external_data_group(text) and self._looks_like_external_data_function_name(name):
