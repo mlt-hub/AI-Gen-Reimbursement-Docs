@@ -372,9 +372,36 @@ def _backup_file_name(path: Path, timestamp: str) -> str:
     return f"{path.name}.{timestamp}.bak"
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write text through a same-directory temp file, then atomically replace."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{os.getpid()}.{datetime.now():%Y%m%d_%H%M%S_%f}.tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temp_path.replace(path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+def _atomic_copy_file(source: Path, destination: Path) -> None:
+    """Copy to a same-directory temp file, then atomically replace destination."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = destination.with_name(
+        f".{destination.name}.{os.getpid()}.{datetime.now():%Y%m%d_%H%M%S_%f}.tmp",
+    )
+    try:
+        shutil.copy2(source, temp_path)
+        temp_path.replace(destination)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def _write_backup_copy(source: Path, destination: Path) -> None:
     if source.name == ".env":
-        destination.write_text(mask_env_content(source), encoding="utf-8")
+        _atomic_write_text(destination, mask_env_content(source))
         shutil.copystat(source, destination)
         return
     shutil.copy2(source, destination)
@@ -491,7 +518,7 @@ def restore_config_backup(
         scope=scope,
     )
 
-    shutil.copy2(backup_path, target_dir / config_file)
+    _atomic_copy_file(backup_path, target_dir / config_file)
     try:
         from ai_gen_reimbursement_docs.config_utils import clear_config_caches
 
@@ -527,15 +554,14 @@ async def save_config_to_dir(data: dict, target_dir: Path, *, preserve_existing_
         lines = []
         for k, v in env.items():
             lines.append(f"{k}={v}")
-        (target_dir / ".env").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _atomic_write_text(target_dir / ".env", "\n".join(lines) + "\n")
 
     if "_system" in data and data["_system"]:
         import yaml
 
-        path = target_dir / "system_config.yaml"
-        path.write_text(
+        _atomic_write_text(
+            target_dir / "system_config.yaml",
             yaml.dump(data["_system"], allow_unicode=True, default_flow_style=False),
-            encoding="utf-8",
         )
 
 

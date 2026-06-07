@@ -278,6 +278,7 @@ PUT  /api/web-config
 - 配置页已接入 AI 配置编辑表单，可通过 `PUT /api/web-config` 保存 API Key、接口地址、模型、最大 Token 数和本机共享凭据开关；旧高级配置中的明文 API Key 输入已移除。
 - 配置页已接入运行默认值和 `out_templates` 模板映射编辑表单，可通过 `PUT /api/web-config` 保存项目名称、FPA 方案、FPA 执行策略、FPA 规则集、FPA 生成模式和模板映射。
 - 已新增配置备份列表与恢复入口：`GET /api/web-config/backups`、`POST /api/web-config/backups/restore`；本机管理员恢复全局配置备份，远程用户恢复个人配置备份，恢复前自动备份当前文件并写入脱敏审计记录。
+- 已实现 `.env` 和 `system_config.yaml` 的原子写入：保存和恢复均先写入同目录临时文件，再替换目标文件，降低写入中断导致配置文件半写入的风险。
 
 已确认决策：
 
@@ -367,7 +368,7 @@ PUT /api/web-config
   -> 前端同步 config store
 ```
 
-当前实现已覆盖：合并保存、API Key 加密、保存前备份、最近 5 个备份保留、备份列表、备份恢复、审计记录脱敏、配置缓存清理入口。原子写入后续继续补齐。
+当前实现已覆盖：合并保存、API Key 加密、保存前备份、最近 5 个备份保留、备份列表、备份恢复、原子写入、审计记录脱敏、配置缓存清理入口。
 
 即时生效边界：
 
@@ -588,7 +589,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 3 | 配置中心第一期 UI | 已完成基础闭环 | 配置页已展示并可编辑 AI 配置、运行默认值、`out_templates` 模板映射；模板上传/下载已迁入配置页。 | 后续可继续拆成 `AIConfigSection`、`WebRuntimeConfigSection`、`TemplateSettingsSection` 独立组件。 |
 | 4 | Web 配置接口 | 已完成基础闭环 | `d6961ea feat: add web config read model`、`150e6a2 feat: save web config with encrypted secrets`；AI 配置、运行默认值和模板映射表单均已接入 `PUT /api/web-config`。 | 后续高级 YAML/JSON 编辑继续复用该保存、备份和审计基础。 |
 | 5 | API Key 加密存储 | 已完成基础闭环 | `web_app/services/secret_service.py`，测试覆盖 DPAPI 兜底本机密钥文件。 | 后续任务启动读取密文时需接解密。 |
-| 6 | 配置备份、回滚与审计 | 已完成基础闭环 | `ad58628 feat: add web config backup audit`；保存前备份、最近 5 个版本保留、审计 JSONL、备份列表和恢复入口已接入。 | 原子写入可继续增强；后续高级配置编辑器复用同一备份/恢复基础。 |
+| 6 | 配置备份、回滚与审计 | 已完成基础闭环 | `ad58628 feat: add web config backup audit`；保存前备份、最近 5 个版本保留、审计 JSONL、备份列表、恢复入口和原子写入已接入。 | 后续高级配置编辑器复用同一备份/恢复基础。 |
 | 7 | 任务启动配置合并 | 已完成基础闭环 | `resolve_task_start_config()` 已接入 `/api/run-local`、`/api/run-upload` 和 `/api/fpa/preview-module`，形成正式任务和 FPA 预览的参数快照。 | `fpa_confirmation_mode` 目前在正式生成 pipeline 中尚无承接参数；后续如接入正式生成需继续传递该字段。 |
 | 8 | 远程用户凭据策略 | 已完成基础闭环 | 远程 AI 任务和 FPA AI 预览无可用 API Key 时返回明确错误；共享全局 Key 只有 `allow_shared_ai_credentials: true` 时可用。 | 后续新增其他 AI 预览/调试入口时继续复用同一策略。 |
 | 9 | FPA 预览和调试页 | 部分完成 | FPA 预览已在统一 AppShell 下；已新增 `/sessions/:sessionId/fpa/debug` 页面，复用现有 AI 交互记录和合并日志接口；FPA 预览页和历史页已有 session-aware 入口。 | 还需继续打磨 FPA 预览轻量调试结果与正式 session 日志之间的关联方式；后续再做结构化 FPA 调试接口。 |

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from pathlib import Path
 
 from web_app.services import config_service
 from web_app.services import secret_service
@@ -63,6 +64,49 @@ def test_save_config_to_dir_preserves_existing_sensitive_env_when_omitted(tmp_pa
     assert "ANTHROPIC_API_KEY=sk-existing" in env_text
     assert "ANTHROPIC_BASE_URL=https://new.example.test" in env_text
     assert "ANTHROPIC_MODEL=deepseek-v4-flash" in env_text
+
+
+def test_atomic_write_text_replaces_existing_file(tmp_path):
+    target = tmp_path / ".env"
+    target.write_text("ANTHROPIC_MODEL=old\n", encoding="utf-8")
+
+    config_service._atomic_write_text(target, "ANTHROPIC_MODEL=new\n")
+
+    assert target.read_text(encoding="utf-8") == "ANTHROPIC_MODEL=new\n"
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_atomic_write_text_keeps_existing_file_when_temp_write_fails(monkeypatch, tmp_path):
+    target = tmp_path / ".env"
+    target.write_text("ANTHROPIC_MODEL=old\n", encoding="utf-8")
+
+    class FailingHandle:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def write(self, text):
+            raise OSError("disk full")
+
+        def flush(self):
+            pass
+
+        def fileno(self):
+            return 0
+
+    monkeypatch.setattr(Path, "open", lambda self, *args, **kwargs: FailingHandle())
+
+    try:
+        config_service._atomic_write_text(target, "ANTHROPIC_MODEL=new\n")
+    except OSError as exc:
+        assert "disk full" in str(exc)
+    else:
+        raise AssertionError("_atomic_write_text should propagate write failure")
+
+    with open(target, encoding="utf-8") as handle:
+        assert handle.read() == "ANTHROPIC_MODEL=old\n"
 
 
 def test_redact_env_dict_hides_sensitive_values_without_fragments():
