@@ -307,6 +307,39 @@
       </div>
     </section>
 
+    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">业务规则</p>
+          <h2 class="mt-1 text-lg font-semibold">CFP 计算公式</h2>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="businessRulesLoading || businessRulesSaving" @click="loadBusinessRulesSettings">
+          {{ businessRulesLoading ? '加载中...' : '刷新业务规则' }}
+        </button>
+      </div>
+
+      <p v-if="businessRulesError" class="text-sm text-[var(--color-warning)]">{{ businessRulesError }}</p>
+      <div v-else class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+        <label for="business-cfp-formula" class="field-label text-xs">CFP 计算公式</label>
+        <textarea
+          id="business-cfp-formula"
+          v-model="businessRulesForm.cfpFormula"
+          rows="4"
+          class="field-control font-mono text-xs leading-relaxed"
+          spellcheck="false"
+        />
+        <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', businessRulesStatusClass]">{{ businessRulesStatusText }}</span>
+            <p v-if="businessRulesMsg" :class="['mt-2 text-sm', businessRulesOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ businessRulesMsg }}</p>
+          </div>
+          <button class="btn-primary w-fit" :disabled="businessRulesSaving || !hasBusinessRulesChanges" @click="saveBusinessRulesSettings">
+            {{ businessRulesSaving ? '保存中...' : '保存业务规则' }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">模板配置</p>
@@ -739,6 +772,11 @@ interface FpaJudgementRulesResponse {
   exists: boolean
 }
 
+interface BusinessRulesResponse {
+  cfp_formula: string
+  exists: boolean
+}
+
 // ── stores ────────────────────────────────────────────────
 
 const auth = useAuthStore()
@@ -828,6 +866,15 @@ const fpaJudgementRulesSaving = ref(false)
 const fpaJudgementRulesError = ref('')
 const fpaJudgementRulesMsg = ref('')
 const fpaJudgementRulesOk = ref(false)
+const businessRulesLoading = ref(false)
+const businessRulesSaving = ref(false)
+const businessRulesError = ref('')
+const businessRulesMsg = ref('')
+const businessRulesOk = ref(false)
+const businessRulesSnapshot = ref('')
+const businessRulesForm = reactive({
+  cfpFormula: '',
+})
 const webAiForm = reactive({
   apiKey: '',
   baseUrl: '',
@@ -970,6 +1017,12 @@ const fpaJudgementRulesSnapshotCurrent = computed(() => JSON.stringify(
 const hasFpaJudgementRulesChanges = computed(() => (
   fpaJudgementRulesSnapshot.value !== '' && fpaJudgementRulesSnapshotCurrent.value !== fpaJudgementRulesSnapshot.value
 ))
+const businessRulesFormSnapshot = computed(() => JSON.stringify({
+  cfpFormula: businessRulesForm.cfpFormula,
+}))
+const hasBusinessRulesChanges = computed(() => (
+  businessRulesSnapshot.value !== '' && businessRulesFormSnapshot.value !== businessRulesSnapshot.value
+))
 
 const webConfigSaveStatusText = computed(() => {
   if (webConfigSaving.value) return '保存中'
@@ -1020,6 +1073,18 @@ const fpaJudgementRulesStatusClass = computed(() => {
   if (hasFpaJudgementRulesChanges.value) return statusClass.warn
   return statusClass.ok
 })
+const businessRulesStatusText = computed(() => {
+  if (businessRulesSaving.value) return '保存中'
+  if (businessRulesMsg.value && !businessRulesOk.value) return '保存失败'
+  if (hasBusinessRulesChanges.value) return '有未保存修改'
+  return '已保存'
+})
+const businessRulesStatusClass = computed(() => {
+  if (businessRulesSaving.value) return statusClass.neutral
+  if (businessRulesMsg.value && !businessRulesOk.value) return statusClass.warn
+  if (hasBusinessRulesChanges.value) return statusClass.warn
+  return statusClass.ok
+})
 
 // ── 初始化 ────────────────────────────────────────────────
 
@@ -1034,6 +1099,7 @@ onMounted(async () => {
     await loadLocalConfig()
     await loadFpaStrategySettings()
     await loadFpaJudgementRules()
+    await loadBusinessRulesSettings()
     await loadAdvancedConfigFiles()
   }
 })
@@ -1247,6 +1313,58 @@ async function saveFpaJudgementRules() {
     fpaJudgementRulesMsg.value = normalizeApiError(e)
   } finally {
     fpaJudgementRulesSaving.value = false
+  }
+}
+
+async function loadBusinessRulesSettings() {
+  businessRulesLoading.value = true
+  businessRulesError.value = ''
+  try {
+    const data = await apiFetch<BusinessRulesResponse>('/api/web-config/business-rules')
+    businessRulesForm.cfpFormula = data.cfp_formula || ''
+    businessRulesMsg.value = ''
+    businessRulesOk.value = true
+    businessRulesSnapshot.value = businessRulesFormSnapshot.value
+  } catch (e) {
+    businessRulesForm.cfpFormula = ''
+    businessRulesSnapshot.value = ''
+    businessRulesError.value = normalizeApiError(e)
+  } finally {
+    businessRulesLoading.value = false
+  }
+}
+
+async function saveBusinessRulesSettings() {
+  if (!businessRulesForm.cfpFormula.trim()) {
+    businessRulesOk.value = false
+    businessRulesMsg.value = 'CFP 计算公式不能为空'
+    return
+  }
+
+  businessRulesSaving.value = true
+  businessRulesMsg.value = ''
+  try {
+    const data = await apiFetch<BusinessRulesResponse>('/api/web-config/business-rules', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cfp_formula: businessRulesForm.cfpFormula }),
+    })
+    businessRulesForm.cfpFormula = data.cfp_formula || businessRulesForm.cfpFormula
+    businessRulesSnapshot.value = businessRulesFormSnapshot.value
+    businessRulesOk.value = true
+    businessRulesMsg.value = '保存成功'
+    await loadConfigBackups()
+    await loadLocalConfig()
+    if (activeAdvancedFileId.value === 'business_rules') {
+      await loadAdvancedConfigFile('business_rules')
+    } else {
+      await loadAdvancedConfigFiles()
+    }
+  } catch (e) {
+    businessRulesOk.value = false
+    businessRulesMsg.value = normalizeApiError(e)
+  } finally {
+    businessRulesSaving.value = false
   }
 }
 

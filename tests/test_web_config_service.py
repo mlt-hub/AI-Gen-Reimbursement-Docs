@@ -792,3 +792,69 @@ def test_save_fpa_judgement_rules_rejects_empty_rules_without_overwrite(tmp_path
     assert not (tmp_path / "backups" / "config" / "unit").exists()
     record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
     assert record["result"] == "validation_failed"
+
+
+def test_build_business_rules_view_reads_cfp_formula(tmp_path):
+    (tmp_path / "business_rules.yaml").write_text(
+        "cfp_formula: '=IF(L{row}=\"新增\",1,0)'\nother_rule: keep\n",
+        encoding="utf-8",
+    )
+
+    view = config_service.build_business_rules_view(target_dir=tmp_path)
+
+    assert view["exists"] is True
+    assert view["cfp_formula"] == '=IF(L{row}="新增",1,0)'
+
+
+def test_save_business_rules_preserves_unknown_keys_backs_up_and_audits(tmp_path):
+    target = tmp_path / "business_rules.yaml"
+    target.write_text(
+        "cfp_formula: old\nother_rule: keep\n",
+        encoding="utf-8",
+    )
+
+    saved = config_service.save_business_rules(
+        cfp_formula='=IF(L{row}="复用",1/3,1)',
+        target_dir=tmp_path,
+        actor="local-admin",
+        audit_root=tmp_path,
+        backup_root=tmp_path,
+        backup_scope="unit",
+    )
+
+    assert saved["cfp_formula"] == '=IF(L{row}="复用",1/3,1)'
+    assert saved["backed_up"] == ["business_rules.yaml"]
+    text = target.read_text(encoding="utf-8")
+    assert "other_rule: keep" in text
+    assert "old" not in text
+    backups = list((tmp_path / "backups" / "config" / "unit").glob("business_rules.yaml.*.bak"))
+    assert len(backups) == 1
+    assert "cfp_formula: old" in backups[0].read_text(encoding="utf-8")
+    record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert record["files"] == ["business_rules.yaml"]
+    assert record["changed_fields"] == ["business_rules.cfp_formula"]
+    assert record["result"] == "success"
+
+
+def test_save_business_rules_rejects_blank_formula_without_overwrite(tmp_path):
+    target = tmp_path / "business_rules.yaml"
+    target.write_text("cfp_formula: old\n", encoding="utf-8")
+
+    try:
+        config_service.save_business_rules(
+            cfp_formula=" ",
+            target_dir=tmp_path,
+            actor="local-admin",
+            audit_root=tmp_path,
+            backup_root=tmp_path,
+            backup_scope="unit",
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "CFP 计算公式不能为空" in str(exc)
+    else:
+        raise AssertionError("save_business_rules should reject blank cfp_formula")
+
+    assert target.read_text(encoding="utf-8") == "cfp_formula: old\n"
+    assert not (tmp_path / "backups" / "config" / "unit").exists()
+    record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert record["result"] == "validation_failed"

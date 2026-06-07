@@ -121,6 +121,7 @@ Assert-AnyContains -Dom $configDom -Texts @("环境变量", "个人配置", "系
 Assert-Contains -Dom $configDom -Text "FPA 策略" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "方案与规则集" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "计算依据归类判定原则" -Url $configUrl
+Assert-Contains -Dom $configDom -Text "CFP 计算公式" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "高级配置" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "YAML / JSON 配置文件" -Url $configUrl
 

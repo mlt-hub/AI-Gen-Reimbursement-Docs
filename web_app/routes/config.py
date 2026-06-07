@@ -7,6 +7,7 @@ from ai_gen_reimbursement_docs.auth import user_config_dir
 from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
     AdvancedConfigError,
+    build_business_rules_view,
     build_fpa_judgement_rules_view,
     build_fpa_strategy_settings_view,
     build_web_config_view,
@@ -19,6 +20,7 @@ from web_app.services.config_service import (
     read_config_from_dir,
     redact_env_dict,
     restore_config_backup,
+    save_business_rules,
     save_fpa_judgement_rules,
     save_fpa_strategy_settings,
     save_advanced_config_file,
@@ -256,6 +258,33 @@ async def save_web_config_fpa_judgement_rules(data: dict, request: Request, user
     try:
         return save_fpa_judgement_rules(
             rules=rules,
+            target_dir=target_dir,
+            actor=user or "local-admin",
+            audit_root=config_dir(),
+            backup_root=config_dir(),
+            backup_scope="global",
+        )
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/api/web-config/business-rules")
+async def get_web_config_business_rules(request: Request, _user: str = Depends(require_auth)):
+    """读取结构化业务规则配置。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return build_business_rules_view(target_dir=target_dir)
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.put("/api/web-config/business-rules")
+async def save_web_config_business_rules(data: dict, request: Request, user: str = Depends(require_auth)):
+    """保存结构化业务规则配置。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return save_business_rules(
+            cfp_formula=data.get("cfp_formula"),
             target_dir=target_dir,
             actor=user or "local-admin",
             audit_root=config_dir(),

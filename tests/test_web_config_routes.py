@@ -392,3 +392,66 @@ def test_web_config_fpa_judgement_rules_rejects_remote_user(monkeypatch):
 
     assert resp.status_code == 403
     assert "本机管理员" in resp.json()["detail"]
+
+
+def test_web_config_business_rules_endpoint_reads_local_rules(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "build_business_rules_view", lambda *, target_dir: {
+        "cfp_formula": "FORMULA",
+        "exists": True,
+    })
+
+    resp = client.get("/api/web-config/business-rules")
+
+    assert resp.status_code == 200
+    assert resp.json()["cfp_formula"] == "FORMULA"
+
+
+def test_web_config_business_rules_put_saves_local_rules(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_save_business_rules(**kwargs):
+        calls.append(kwargs)
+        return {"cfp_formula": "FORMULA", "exists": True, "backed_up": ["business_rules.yaml"]}
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "save_business_rules", fake_save_business_rules)
+
+    resp = client.put("/api/web-config/business-rules", json={"cfp_formula": "FORMULA"})
+
+    assert resp.status_code == 200
+    assert resp.json()["backed_up"] == ["business_rules.yaml"]
+    assert calls == [{
+        "cfp_formula": "FORMULA",
+        "target_dir": tmp_path,
+        "actor": "local-admin",
+        "audit_root": tmp_path,
+        "backup_root": tmp_path,
+        "backup_scope": "global",
+    }]
+
+
+def test_web_config_business_rules_rejects_remote_user(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+
+    resp = client.put("/api/web-config/business-rules", json={"cfp_formula": "FORMULA"})
+
+    assert resp.status_code == 403
+    assert "本机管理员" in resp.json()["detail"]

@@ -933,6 +933,85 @@ def save_fpa_judgement_rules(
     return result
 
 
+def build_business_rules_view(*, target_dir: Path) -> dict:
+    """Read currently supported business_rules.yaml fields."""
+    from ai_gen_reimbursement_docs.config_utils import DEFAULT_CFP_FORMULA
+
+    path = target_dir / "business_rules.yaml"
+    if not path.exists():
+        return {
+            "cfp_formula": DEFAULT_CFP_FORMULA,
+            "exists": False,
+        }
+    parsed = _parse_advanced_config_content("business_rules", path.read_text(encoding="utf-8"))
+    cfg = _require_mapping_config(parsed, "business_rules.yaml")
+    return {
+        "cfp_formula": str(cfg.get("cfp_formula") or DEFAULT_CFP_FORMULA),
+        "exists": True,
+    }
+
+
+def save_business_rules(
+    *,
+    cfp_formula: object,
+    target_dir: Path,
+    actor: str,
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
+) -> dict:
+    """Save structured business rules fields while preserving unknown YAML keys."""
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
+    filename = "business_rules.yaml"
+    target_path = target_dir / filename
+    formula = str(cfp_formula or "").strip()
+    if not formula:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=[filename],
+            changed_fields=["business_rules.cfp_formula"],
+            result="validation_failed",
+        )
+        raise AdvancedConfigError("CFP 计算公式不能为空")
+
+    if target_path.exists():
+        parsed = _parse_advanced_config_content("business_rules", target_path.read_text(encoding="utf-8"))
+        payload = dict(_require_mapping_config(parsed, filename))
+    else:
+        payload = {}
+    payload["cfp_formula"] = formula
+
+    backed_up = backup_single_config_file(
+        source=target_path,
+        backup_root=backup_root,
+        scope=backup_scope,
+    )
+    import yaml
+
+    text = yaml.dump(payload, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    _atomic_write_text(target_path, text)
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=[filename],
+        changed_fields=["business_rules.cfp_formula"],
+        result="success",
+    )
+    result = build_business_rules_view(target_dir=target_dir)
+    result["backed_up"] = [backed_up] if backed_up else []
+    return result
+
+
 def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tuple[Path, str]:
     if "/" in backup_id or "\\" in backup_id or ".." in backup_id:
         raise ValueError("备份 ID 无效")
