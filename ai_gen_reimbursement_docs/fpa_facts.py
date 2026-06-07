@@ -20,6 +20,15 @@ EXTERNAL_DATA_EVIDENCE = (
     "外部系统维护", "外部应用维护", "第三方系统维护", "外部维护",
     "本系统不维护", "维护的主数据", "维护的数据组", "维护的档案", "维护的记录",
 )
+EXTERNAL_DATA_NEGATION_HINTS = (
+    "普通外部服务",
+    "普通外部调用",
+    "不作为外部维护数据组",
+    "不作为外部数据组",
+    "不作为数据组计量",
+    "不生成EIF",
+    "不生成 EIF",
+)
 LOCAL_CHANGE_HINTS = (
     "新增", "添加", "新建", "创建", "录入", "编辑", "修改", "更新", "调整",
     "保存", "写入", "删除", "移除", "启用", "停用", "关联到", "保存到",
@@ -141,6 +150,8 @@ def _module_data_group_name(l3: str) -> str:
 
 
 def _external_data_evidence(text: str) -> str:
+    if _has_any(text, EXTERNAL_DATA_NEGATION_HINTS):
+        return ""
     for hint in EXTERNAL_DATA_EVIDENCE:
         if hint in text:
             name = _extract_external_data_name(text)

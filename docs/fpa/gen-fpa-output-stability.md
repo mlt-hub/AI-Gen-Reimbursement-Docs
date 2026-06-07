@@ -704,6 +704,53 @@ Retries: 0
 
 五个标准样例 `vertical_industry_management`、`mixed_internal_external_data_functions`、`sms_notification_service`、`external_user_center_reference`、`master_data_org_reference` 均为 `warning_count=0`。当前 strict-real-model standard fresh 基线已完成 warning 收敛，可进入更大范围抽样或多次采样趋势对比。
 
+当前已将抽样范围从 standard 5 例扩展到 11 个 golden fixtures。首轮扩展 fresh real-model 抽样暴露 `payment_gateway_refund` 的质量门失败：输入明确说明“支付网关为普通外部服务，不作为外部维护数据组计量”，但事实抽取层曾把否定句中的 `外部维护` 误识别为 EIF 正向证据，导致 `quality.external_data_function_missing` 和一次质量审核重试。
+
+本轮已补充支付网关反例的三层回归测试：
+
+- `process_facts`：普通外部服务否定口径不产生 `external_data_group_evidence`。
+- `type_judgement`：支付网关退款结果不生成 `external_data_function`，查看退款结果仍可按查询类 EQ 判断。
+- `quality_review`：ILF + EI + EQ 的结果不要求额外补 EIF 行。
+
+实现层已新增外部数据组否定短语识别，并调整 `type_judgement` 顺序：`ordinary_external_service` 只作为“不生成 EIF”的非行级约束，不再吞掉后续查询类 EQ 建议。
+
+2026-06-07 扩展 fresh real-model 11 fixtures 复测结果：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --profiles strict_fpa `
+  --strategies ai_first `
+  --rule-sets strict_fpa_rs `
+  --fixture tests\fixtures\fpa_golden_cases\crm_customer_archive_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\customer_list_import.json `
+  --fixture tests\fixtures\fpa_golden_cases\erp_order_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\external_user_center_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\internal_vs_external_org_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\master_data_org_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\mixed_internal_external_data_functions.json `
+  --fixture tests\fixtures\fpa_golden_cases\oa_approval_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\payment_gateway_refund.json `
+  --fixture tests\fixtures\fpa_golden_cases\sms_notification_service.json `
+  --fixture tests\fixtures\fpa_golden_cases\vertical_industry_management.json `
+  --output-dir tmp_fpa_stability_ci_real_all_fixtures_fresh_after_payment_gateway_service_20260607 `
+  --max-quality-issues 0 `
+  --max-retryable-issues 0 `
+  --max-retries 0
+```
+
+```text
+Status: PASS
+Runs: 11
+Modules: 12
+Warnings: 7
+Quality Issues: 0
+Retryable Issues: 0
+Retries: 0
+Sources: ai=11, rules_fallback=1
+```
+
+其中 `payment_gateway_refund` 已归零。`crm_customer_archive_reference` 本轮真实模型输出发生一次 JSON 解析失败并由规则兜底生成，但质量门仍通过；下一步扩展抽样可优先看剩余 7 条 warning 的来源分布，区分真实复核点、解析失败兜底和可继续收敛的后处理误报。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。

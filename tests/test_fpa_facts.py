@@ -67,6 +67,34 @@ def test_extract_process_facts_marks_ordinary_external_service_without_eif_evide
     assert facts[0]["external_data_group_evidence"] == ""
 
 
+def test_extract_process_facts_treats_payment_gateway_result_as_service_not_eif():
+    facts = _by_id(extract_fpa_process_facts({
+        "l3": "退款处理",
+        "l3_desc": "系统调用支付网关发起退款并查询退款结果，支付网关为普通外部服务，不作为外部维护数据组计量。",
+        "processes": [
+            {
+                "process_id": "m1_p1",
+                "process_name": "发起退款",
+                "description": "调用支付网关提交退款请求，并记录本系统退款申请状态。",
+                "type": "新增",
+            },
+            {
+                "process_id": "m1_p2",
+                "process_name": "查看退款结果",
+                "description": "查询支付网关返回的退款状态、失败原因和处理时间。",
+                "type": "查询",
+            },
+        ],
+    }))
+
+    assert facts["m1_p1"]["ordinary_external_service"] is True
+    assert facts["m1_p1"]["external_data_group_evidence"] == ""
+    assert facts["m1_p2"]["ordinary_external_service"] is True
+    assert facts["m1_p2"]["external_data_group_evidence"] == ""
+    assert facts["m1_p2"]["operation"] == "query"
+    assert facts["m1_p2"]["query_only"] is True
+
+
 def test_extract_process_facts_keeps_external_data_group_evidence():
     facts = extract_fpa_process_facts({
         "l3": "用户中心账号引用",

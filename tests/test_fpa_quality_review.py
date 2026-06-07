@@ -178,3 +178,52 @@ def test_quality_review_matches_rules_rows_by_source_process_name():
     review = build_fpa_quality_review(group=group, rows=rows)
 
     assert review["summary"]["issue_count"] == 0
+
+
+def test_quality_review_accepts_payment_gateway_service_without_eif_row():
+    group = {
+        "client_type": "地市后台",
+        "l1": "支付管理",
+        "l2": "退款处理",
+        "l3": "退款处理",
+        "l3_desc": "系统调用支付网关发起退款并查询退款结果，支付网关为普通外部服务，不作为外部维护数据组计量。",
+        "processes": [
+            {
+                "process_id": "m1_p1",
+                "process_name": "发起退款",
+                "description": "调用支付网关提交退款请求，并记录本系统退款申请状态。",
+                "type": "新增",
+            },
+            {
+                "process_id": "m1_p2",
+                "process_name": "查看退款结果",
+                "description": "查询支付网关返回的退款状态、失败原因和处理时间。",
+                "type": "查询",
+            },
+        ],
+    }
+    rows = [
+        {
+            "新增/修改功能点": "退款申请数据组",
+            "类型": "ILF",
+            "计算依据说明": "来源场景：退款申请数据组。\n业务数据：退款申请状态。\n业务规则：本系统记录退款申请状态。\n计算说明：按 ILF 计量。",
+            "source_process_ids": ["m1_p1"],
+        },
+        {
+            "新增/修改功能点": "退款维护",
+            "类型": "EI",
+            "计算依据说明": "来源场景：发起退款。\n业务数据：退款申请状态。\n业务规则：调用支付网关并记录本系统状态。\n计算说明：按 EI 计量。",
+            "source_process_ids": ["m1_p1"],
+        },
+        {
+            "新增/修改功能点": "退款结果查询",
+            "类型": "EQ",
+            "计算依据说明": "来源场景：查看退款结果。\n业务数据：退款状态、失败原因、处理时间。\n业务规则：支付网关为普通外部服务，不作为外部维护数据组计量。\n计算说明：按 EQ 计量。",
+            "source_process_ids": ["m1_p2"],
+        },
+    ]
+
+    review = build_fpa_quality_review(group=group, rows=rows)
+
+    assert "quality.external_data_function_missing" not in _issue_codes(review)
+    assert review["summary"]["issue_count"] == 0

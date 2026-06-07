@@ -98,3 +98,30 @@ def test_type_judgement_uses_module_context_for_external_data_and_keeps_transact
     assert by_kind["maintenance_ei"][0]["suggested_type"] == "EI"
     assert review["summary"]["suggested_type_counts"]["EIF"] == 1
     assert review["summary"]["suggested_type_counts"]["EI"] == 1
+
+
+def test_type_judgement_does_not_require_eif_for_payment_gateway_result():
+    review = build_fpa_type_judgement({
+        "l3": "退款处理",
+        "l3_desc": "系统调用支付网关发起退款并查询退款结果，支付网关为普通外部服务，不作为外部维护数据组计量。",
+        "processes": [
+            {
+                "process_id": "m1_p1",
+                "process_name": "发起退款",
+                "description": "调用支付网关提交退款请求，并记录本系统退款申请状态。",
+                "type": "新增",
+            },
+            {
+                "process_id": "m1_p2",
+                "process_name": "查看退款结果",
+                "description": "查询支付网关返回的退款状态、失败原因和处理时间。",
+                "type": "查询",
+            },
+        ],
+    })
+
+    by_kind = _judgements_by_kind(review)
+    assert "external_data_function" not in by_kind
+    assert by_kind["ordinary_external_service"][0]["suggested_type"] == "NONE"
+    assert by_kind["ordinary_external_service"][0]["applies_to_final_rows"] is False
+    assert by_kind["query_eq"][0]["suggested_type"] == "EQ"

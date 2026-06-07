@@ -60,7 +60,6 @@ def build_fpa_type_judgement(group: dict[str, object]) -> dict[str, object]:
                 covered_ids.update(process_ids)
         elif recommendation == "do_not_create_eif":
             judgements.append(_ordinary_service_judgement(review_group))
-            covered_ids.update(process_ids)
 
     for fact in facts:
         process_id = str(fact.get("process_id", "") or "")
@@ -164,20 +163,6 @@ def _transaction_judgement_from_fact(fact: dict[str, object]) -> FpaTypeJudgemen
     source_ids = [process_id] if process_id else []
     source_names = [process_name] if process_name else []
     evidence = _string_list(fact.get("evidence"))
-    if bool(fact.get("ordinary_external_service")):
-        return FpaTypeJudgement(
-            id=f"type_no_eif_{_slug(target)}",
-            candidate_name=f"{target}普通外部服务",
-            suggested_type="NONE",
-            judgement_kind="ordinary_external_service",
-            target_data_group=target,
-            source_process_ids=source_ids,
-            source_process_names=source_names,
-            confidence="high",
-            evidence=evidence,
-            rationale="仅体现普通外部服务或校验调用，缺少外部维护数据组证据，不生成 EIF。",
-            applies_to_final_rows=False,
-        )
     if bool(fact.get("produces_external_output")) or operation == "output":
         return FpaTypeJudgement(
             id=f"type_output_eo_{_slug(target)}",
@@ -203,6 +188,20 @@ def _transaction_judgement_from_fact(fact: dict[str, object]) -> FpaTypeJudgemen
             confidence="high",
             evidence=evidence,
             rationale="流程只读取并展示数据，没有维护内部数据或派生输出，按 EQ 判断。",
+        )
+    if bool(fact.get("ordinary_external_service")):
+        return FpaTypeJudgement(
+            id=f"type_no_eif_{_slug(target)}",
+            candidate_name=f"{target}普通外部服务",
+            suggested_type="NONE",
+            judgement_kind="ordinary_external_service",
+            target_data_group=target,
+            source_process_ids=source_ids,
+            source_process_names=source_names,
+            confidence="high",
+            evidence=evidence,
+            rationale="仅体现普通外部服务或校验调用，缺少外部维护数据组证据，不生成 EIF。",
+            applies_to_final_rows=False,
         )
     if bool(fact.get("changes_internal_data")):
         return FpaTypeJudgement(
