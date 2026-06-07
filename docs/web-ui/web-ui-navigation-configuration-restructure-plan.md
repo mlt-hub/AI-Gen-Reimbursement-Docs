@@ -38,7 +38,7 @@ Web UI
 |   |   +-- 日志
 |   |   +-- 完成后操作
 |   |
-|   +-- 任务设置
+|   +-- 低频任务设置
 |       +-- 项目名称
 |       +-- FPA 方案
 |       +-- FPA 执行策略
@@ -50,7 +50,7 @@ Web UI
 |   +-- FPA 预览
 |       +-- 输入来源
 |       +-- 结果审阅
-|       +-- 查看 AI 调试信息 -> AI 调试页面
+|       +-- 查看 AI 调试信息 -> /sessions/:sessionId/fpa/debug
 |
 +-- 历史
 |   |
@@ -129,7 +129,7 @@ Web UI
 |                      | | 日志 / 完成后操作                           | |
 |                      | +-------------------------------------------+ |
 |                      |                                               |
-|                      | 任务设置                                      |
+|                      | 低频任务设置                                  |
 |                      | +-------------------------------------------+ |
 |                      | | 项目名称 / FPA 方案 / 策略 / 规则集         | |
 |                      | +-------------------------------------------+ |
@@ -138,7 +138,9 @@ Web UI
 
 说明：
 
-- `任务设置` 放在 `执行监控` 下方，避免用户刚进入页面就被 FPA 策略类字段压住。
+- 生成页设置分为两层：启动前必要设置和低频任务设置。
+- 启动前必要设置包含操作模式、输入文件或本地路径、输出目录等启动任务必须确认的字段。
+- 低频任务设置放在 `执行监控` 下方，包含项目名称、FPA 方案、FPA 执行策略、FPA 规则集、FPA 确认模式等字段，避免用户刚进入页面就被策略类字段压住。
 - `AI 配置` 不出现在生成页，减少普通任务路径上的干扰。
 - `模板配置` 不出现在生成页，因为它属于全局低频配置。
 
@@ -169,8 +171,12 @@ Web UI
 - `配置` 页只放跨任务复用或低频维护的设置。
 - AI 配置保留“留空使用系统配置”的说明。
 - API Key 输入仍应继续使用现有敏感输入保护逻辑。
+- 配置页字段默认即时写入前端 `config` store；已经启动的任务不受影响，只影响下一次生成或下一次预览。
+- 如果后端后续提供持久化配置接口，再把“即时写入前端状态”和“保存到后端配置”拆成两个明确反馈。
 
 ## FPA 预览页布局示意
+
+`预览` 近期默认进入 FPA 预览；后续可扩展为预览中心，承载 FPA、COSMIC、需求清单、需求说明书等预览入口。当前阶段不需要一次性实现所有预览类型，但路由和导航命名应避免把 `预览` 固化成只能承载 FPA。
 
 ```text
 +----------------------+-----------------------------------------------+
@@ -189,7 +195,7 @@ Web UI
 |                      | |    | 计算依据说明                         | |
 |                      | +-------------------------------------------+ |
 |                      |                                               |
-|                      | [查看 AI 调试信息]                            |
+|                      | [查看 AI 调试信息] -> /sessions/:sessionId/fpa/debug |
 +----------------------+-----------------------------------------------+
 ```
 
@@ -210,8 +216,10 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 推荐路由：
 
 ```text
-/preview/fpa/debug
+/sessions/:sessionId/fpa/debug
 ```
+
+该路由更偏工作流语义，明确调试信息属于某一次 session 的 FPA 结果。FPA 预览页跳转时必须带上当前 `sessionId`；如果没有可用 session，应禁用入口并提示先生成或恢复一次可预览的任务。
 
 页面结构：
 
@@ -219,7 +227,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 +----------------------+-----------------------------------------------+
 | 左侧导航             | FPA AI 调试信息                               |
 |                      |-----------------------------------------------|
-|   生成               | [返回 FPA 预览]                               |
+|   生成               | [返回 FPA 预览]   Session: :sessionId         |
 | > 预览               |                                               |
 |   历史               | 调试筛选                                      |
 |   配置               | +-------------------------------------------+ |
@@ -240,7 +248,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 
 - FPA 预览页的核心任务是人工审阅，不应被大段调试数据干扰。
 - 调试信息主要服务开发和排障，用户角色与普通审阅不同。
-- 独立路由方便刷新、复制链接、复盘问题和后续扩展筛选。
+- 独立且带 `sessionId` 的路由方便刷新、复制链接、从历史任务进入、复盘问题和后续扩展筛选。
 
 ## 组件拆分建议
 
@@ -248,7 +256,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 |---|---|---|
 | `ConfigPanel.vue` 中的模板上传/下载 | `Config.vue` | 迁移为配置页的模板配置区。 |
 | `AdvancedOptions.vue` 中的 AI 配置 | `Config.vue` | 拆成 `AIConfigSection.vue`。 |
-| `AdvancedOptions.vue` 中的 FPA 策略 | `Home.vue` 生成页下方 | 拆成 `FpaRunSettingsSection.vue`。 |
+| `AdvancedOptions.vue` 中的 FPA 策略 | `Home.vue` 执行监控下方 | 拆成 `FpaRunSettingsSection.vue`，作为低频任务设置。 |
 | `ConfigPanel.vue` 中的 FPA 预览入口 | 左侧 `预览` 或生成页辅助入口 | 不再藏在高级选项附近。 |
 | `PromptDebug.vue` | `FpaAiDebugPage.vue` 或复用后改名 | 作为独立调试页面承载 AI 调试信息。 |
 
@@ -270,13 +278,13 @@ web_app/src/views/FpaAiDebugPage.vue
 | 文件 | 修改目的 |
 |---|---|
 | `web_app/src/App.vue` | 接入左侧栏应用骨架。 |
-| `web_app/src/router/index.ts` | 调整主导航路由，新增 FPA AI 调试路由。 |
+| `web_app/src/router/index.ts` | 调整主导航路由，新增 `/sessions/:sessionId/fpa/debug`。 |
 | `web_app/src/views/Home.vue` | 收敛为生成页，保留启动任务和执行监控。 |
 | `web_app/src/views/Config.vue` | 承接 AI 配置、模板上传、模板下载。 |
 | `web_app/src/views/FpaPreviewPage.vue` | 接入统一布局，增加 AI 调试页面跳转。 |
 | `web_app/src/views/PromptDebug.vue` | 复用或迁移为 FPA AI 调试页面。 |
 | `web_app/src/components/ConfigPanel.vue` | 移除全局配置职责，只保留生成相关输入。 |
-| `web_app/src/components/AdvancedOptions.vue` | 拆分为 AI 配置与 FPA 运行设置。 |
+| `web_app/src/components/AdvancedOptions.vue` | 拆分为 AI 配置与低频 FPA 运行设置。 |
 | `web_app/src/components/TemplateUpload.vue` | 迁移挂载位置，不改变模板上传能力。 |
 | `web_app/src/components/TemplateDownload.vue` | 迁移挂载位置，不改变模板下载能力。 |
 | `web_app/src/assets/main.css` | 补齐左侧栏、移动端抽屉等布局样式。 |
@@ -295,9 +303,19 @@ npm run build
 - 左侧栏在 `生成`、`预览`、`历史`、`配置`、`FPA 预览`、`FPA AI 调试信息` 页面保持一致。
 - 自定义输出模板、下载模板只出现在 `配置` 页。
 - AI 配置只出现在 `配置` 页。
-- FPA 策略和任务设置位于 `执行监控` 下方。
+- FPA 策略和低频任务设置位于 `执行监控` 下方。
 - FPA 预览页术语符合 `docs/fpa/result-review-terminology.md`。
 - 移动端没有横向滚动，导航可以通过菜单打开。
+
+状态验收矩阵：
+
+| 状态 | 预期行为 |
+|---|---|
+| 后端离线 | 左侧栏和页面仍可访问；生成页禁用开始生成；配置页可编辑前端配置但提示后端未连接。 |
+| 未选择输入文件 | 生成页明确提示选择上传文件或填写本地 Excel 路径；开始生成保持禁用或点击后给出明确错误。 |
+| 任务运行中 | 左侧栏保持可导航；生成页展示执行监控；低频任务设置可查看但不应影响已启动任务。 |
+| 任务完成 | 执行监控展示完成状态和产物操作；FPA 预览和 AI 调试入口可携带当前 `sessionId` 跳转。 |
+| 从历史记录恢复 session | 进入 FPA 预览或 AI 调试页时使用历史 session 上下文；`/sessions/:sessionId/fpa/debug` 刷新后仍能定位该 session。 |
 
 ## 风险与边界
 
