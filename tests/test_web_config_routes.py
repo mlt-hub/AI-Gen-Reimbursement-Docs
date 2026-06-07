@@ -107,3 +107,82 @@ def test_web_config_put_saves_and_returns_redacted_view(monkeypatch, tmp_path):
     }]
     assert "sk-new-secret" not in resp.text
     assert resp.json()["ai"]["api_key_configured"] is True
+
+
+def test_web_config_backups_endpoint_uses_current_scope(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_list_config_backups(*, backup_root, scope):
+        calls.append({"backup_root": backup_root, "scope": scope})
+        return [{"id": ".env.20260607_120000_000001.bak", "file": ".env", "created_at": "2026-06-07T12:00:00", "size_bytes": 32}]
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "list_config_backups", fake_list_config_backups)
+
+    resp = client.get("/api/web-config/backups")
+
+    assert resp.status_code == 200
+    assert calls == [{"backup_root": tmp_path, "scope": "user-alice"}]
+    assert resp.json()["scope"] == {"mode": "remote", "username": "alice"}
+    assert resp.json()["items"][0]["file"] == ".env"
+
+
+def test_web_config_restore_restores_scope_and_returns_redacted_view(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_restore_config_backup(**kwargs):
+        calls.append(kwargs)
+        return {}
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "restore_config_backup", fake_restore_config_backup)
+    monkeypatch.setattr(config_routes, "read_config", lambda: {
+        "_env": {
+            "ANTHROPIC_API_KEY": "sk-route-secret",
+            "ANTHROPIC_MODEL": "restored-model",
+        },
+        "_system": {},
+    })
+
+    resp = client.post(
+        "/api/web-config/backups/restore",
+        json={"backup_id": ".env.20260607_120000_000001.bak"},
+    )
+
+    assert resp.status_code == 200
+    assert calls == [{
+        "target_dir": tmp_path,
+        "backup_root": tmp_path,
+        "scope": "global",
+        "backup_id": ".env.20260607_120000_000001.bak",
+        "actor": "local-admin",
+        "audit_root": tmp_path,
+    }]
+    assert resp.json()["ai"]["model"] == {"value": "restored-model", "source": "global"}
+    assert "sk-route-secret" not in resp.text
+
+
+def test_web_config_restore_requires_backup_id(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+
+    resp = client.post("/api/web-config/backups/restore", json={})
+
+    assert resp.status_code == 400
+    assert "backup_id" in resp.json()["detail"]

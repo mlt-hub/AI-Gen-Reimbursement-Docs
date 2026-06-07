@@ -220,6 +220,51 @@
       </div>
     </section>
 
+    <section class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">配置备份</p>
+          <h2 class="mt-1 text-lg font-semibold">备份与恢复</h2>
+          <p class="mt-1 text-sm text-[var(--color-ink-muted)]">每次保存前自动生成备份；恢复前也会先备份当前配置。</p>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="configBackupsLoading || configRestoreLoading" @click="loadConfigBackups">
+          {{ configBackupsLoading ? '加载中...' : '刷新备份' }}
+        </button>
+      </div>
+
+      <p v-if="configBackupsError" class="text-sm text-[var(--color-warning)]">{{ configBackupsError }}</p>
+      <div v-else-if="configBackups.length" class="overflow-x-auto">
+        <table class="w-full min-w-[560px] text-left text-sm">
+          <thead class="border-b border-[var(--color-rule)] text-xs text-[var(--color-ink-soft)]">
+            <tr>
+              <th class="px-3 py-2 font-semibold">配置文件</th>
+              <th class="px-3 py-2 font-semibold">备份时间</th>
+              <th class="px-3 py-2 font-semibold">大小</th>
+              <th class="px-3 py-2 font-semibold">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in configBackups" :key="item.id" class="border-b border-[var(--color-rule)] last:border-b-0">
+              <td class="px-3 py-2 font-mono text-xs text-[var(--color-ink-muted)]">{{ item.file }}</td>
+              <td class="px-3 py-2 text-[var(--color-ink-muted)]">{{ formatTime(item.created_at) }}</td>
+              <td class="px-3 py-2 text-[var(--color-ink-soft)]">{{ formatBytes(item.size_bytes) }}</td>
+              <td class="px-3 py-2">
+                <button
+                  class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                  :disabled="configRestoreLoading"
+                  @click="restoreConfigBackup(item)"
+                >
+                  {{ configRestoreLoading && restoringBackupId === item.id ? '恢复中...' : '恢复' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="text-sm text-[var(--color-ink-soft)]">暂无可恢复备份。</p>
+      <p v-if="configRestoreMsg" :class="['mt-3 text-sm', configRestoreOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ configRestoreMsg }}</p>
+    </section>
+
     <nav class="flex flex-wrap gap-2 border-b border-[var(--color-rule)] pb-3" aria-label="配置分区">
       <button
         v-for="tab in configTabs"
@@ -433,6 +478,17 @@ interface WebConfigResponse {
   run_defaults: Record<string, WebConfigField<unknown>>
 }
 
+interface ConfigBackupItem {
+  id: string
+  file: string
+  created_at: string
+  size_bytes: number
+}
+
+interface ConfigBackupsResponse {
+  items: ConfigBackupItem[]
+}
+
 // ── stores ────────────────────────────────────────────────
 
 const auth = useAuthStore()
@@ -487,6 +543,13 @@ const webConfigSaving = ref(false)
 const webConfigSaveMsg = ref('')
 const webConfigSaveOk = ref(false)
 const webConfigSnapshot = ref('')
+const configBackups = ref<ConfigBackupItem[]>([])
+const configBackupsLoading = ref(false)
+const configBackupsError = ref('')
+const configRestoreLoading = ref(false)
+const configRestoreMsg = ref('')
+const configRestoreOk = ref(false)
+const restoringBackupId = ref('')
 const webAiForm = reactive({
   apiKey: '',
   baseUrl: '',
@@ -627,6 +690,7 @@ onMounted(async () => {
   await refreshHealth()
   await loadFpaOptions()
   await loadWebConfig()
+  await loadConfigBackups()
   if (showUserConfig.value) {
     await loadUserConfig()
   } else {
@@ -693,6 +757,20 @@ async function loadWebConfig() {
   }
 }
 
+async function loadConfigBackups() {
+  configBackupsLoading.value = true
+  configBackupsError.value = ''
+  try {
+    const data = await apiFetch<ConfigBackupsResponse>('/api/web-config/backups')
+    configBackups.value = data.items || []
+  } catch (e) {
+    configBackups.value = []
+    configBackupsError.value = normalizeApiError(e)
+  } finally {
+    configBackupsLoading.value = false
+  }
+}
+
 function applyWebConfigToForm(data: WebConfigResponse) {
   webAiForm.apiKey = ''
   webAiForm.baseUrl = String(data.ai.base_url.value || '')
@@ -745,6 +823,7 @@ async function saveWebConfig() {
     applySavedWebConfig(data)
     webConfigSaveOk.value = true
     webConfigSaveMsg.value = '保存成功'
+    await loadConfigBackups()
     await loadLocalConfig()
     if (showUserConfig.value) {
       await loadUserConfig()
@@ -805,6 +884,7 @@ async function saveWebConfigPayload(payload: Record<string, unknown>, successMes
     applySavedWebConfig(data)
     webConfigSaveOk.value = true
     webConfigSaveMsg.value = successMessage
+    await loadConfigBackups()
     await loadLocalConfig()
     if (showUserConfig.value) {
       await loadUserConfig()
@@ -852,6 +932,49 @@ function formatConfigValue(value: unknown, formatter?: ((value: unknown) => stri
   if (value === null || value === undefined || value === '') return '未设置'
   if (typeof value === 'boolean') return formatEnabled(value)
   return String(value)
+}
+
+function formatTime(value: string): string {
+  if (!value) return '-'
+  return new Date(value).toLocaleString()
+}
+
+function formatBytes(value: number): string {
+  if (!Number.isFinite(value)) return '-'
+  if (value < 1024) return `${value} B`
+  return `${(value / 1024).toFixed(1)} KB`
+}
+
+async function restoreConfigBackup(item: ConfigBackupItem) {
+  const confirmed = window.confirm(`确认恢复 ${item.file} 的这份备份？恢复前会先备份当前配置。`)
+  if (!confirmed) return
+
+  configRestoreLoading.value = true
+  configRestoreMsg.value = ''
+  configRestoreOk.value = false
+  restoringBackupId.value = item.id
+  try {
+    const data = await apiFetch<WebConfigResponse>('/api/web-config/backups/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backup_id: item.id }),
+    })
+    webConfig.value = data
+    applySavedWebConfig(data)
+    configRestoreOk.value = true
+    configRestoreMsg.value = '恢复成功'
+    await loadConfigBackups()
+    await loadLocalConfig()
+    if (showUserConfig.value) {
+      await loadUserConfig()
+    }
+  } catch (e) {
+    configRestoreOk.value = false
+    configRestoreMsg.value = normalizeApiError(e)
+  } finally {
+    configRestoreLoading.value = false
+    restoringBackupId.value = ''
+  }
 }
 
 function webSectionStatusText(hasChanges: boolean): string {

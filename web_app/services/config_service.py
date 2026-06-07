@@ -412,6 +412,105 @@ def backup_config_files(
     return backed_up
 
 
+def _backup_scope_dir(backup_root: Path, scope: str) -> Path:
+    safe_scope = scope or "global"
+    return backup_root / "backups" / "config" / safe_scope
+
+
+def list_config_backups(
+    *,
+    backup_root: Path,
+    scope: str = "global",
+) -> list[dict]:
+    """List restorable config backups for a scope without exposing file contents."""
+    backup_dir = _backup_scope_dir(backup_root, scope)
+    if not backup_dir.exists():
+        return []
+
+    items: list[dict] = []
+    for path in backup_dir.glob("*.bak"):
+        if path.name.startswith(".env."):
+            config_file = ".env"
+        elif path.name.startswith("system_config.yaml."):
+            config_file = "system_config.yaml"
+        else:
+            continue
+        stat = path.stat()
+        items.append({
+            "id": path.name,
+            "file": config_file,
+            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "size_bytes": stat.st_size,
+        })
+
+    return sorted(items, key=lambda item: item["created_at"], reverse=True)
+
+
+def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tuple[Path, str]:
+    if "/" in backup_id or "\\" in backup_id or ".." in backup_id:
+        raise ValueError("备份 ID 无效")
+    if backup_id.startswith(".env."):
+        config_file = ".env"
+    elif backup_id.startswith("system_config.yaml."):
+        config_file = "system_config.yaml"
+    else:
+        raise ValueError("只支持恢复 .env 或 system_config.yaml 备份")
+    if not backup_id.endswith(".bak"):
+        raise ValueError("备份 ID 无效")
+
+    backup_dir = _backup_scope_dir(backup_root, scope)
+    candidate = (backup_dir / backup_id).resolve()
+    backup_dir_resolved = backup_dir.resolve()
+    if candidate.parent != backup_dir_resolved:
+        raise ValueError("备份 ID 无效")
+    if not candidate.exists() or not candidate.is_file():
+        raise FileNotFoundError("备份不存在")
+    return candidate, config_file
+
+
+def restore_config_backup(
+    *,
+    target_dir: Path,
+    backup_root: Path,
+    scope: str,
+    backup_id: str,
+    actor: str,
+    audit_root: Path | None = None,
+) -> dict:
+    """Restore a single config backup after backing up the current target file."""
+    backup_path, config_file = _resolve_backup_path(
+        backup_root=backup_root,
+        scope=scope,
+        backup_id=backup_id,
+    )
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    backup_config_files(
+        target_dir=target_dir,
+        backup_root=backup_root,
+        scope=scope,
+    )
+
+    shutil.copy2(backup_path, target_dir / config_file)
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+
+    field_name = "env" if config_file == ".env" else config_file
+    append_config_audit_record(
+        audit_root=audit_root or backup_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=[config_file],
+        changed_fields=[f"restore.{field_name}"],
+        result="success",
+    )
+    return read_config_from_dir(target_dir)
+
+
 async def save_config_to_dir(data: dict, target_dir: Path, *, preserve_existing_sensitive: bool = True):
     """保存配置到指定目录。"""
     target_dir.mkdir(parents=True, exist_ok=True)

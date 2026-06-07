@@ -407,3 +407,71 @@ def test_backup_config_files_redacts_plaintext_env_secrets(tmp_path):
     assert "ANTHROPIC_API_KEY=***" in backup_text
     assert "sk-plaintext-secret" not in backup_text
     assert "ANTHROPIC_API_KEY_ENC=fernet:ciphertext" in backup_text
+
+
+def test_list_config_backups_returns_restorable_items(tmp_path):
+    backup_dir = tmp_path / "backups" / "config" / "unit"
+    backup_dir.mkdir(parents=True)
+    (backup_dir / ".env.20260607_120000_000001.bak").write_text("ANTHROPIC_MODEL=old\n", encoding="utf-8")
+    (backup_dir / "system_config.yaml.20260607_120000_000001.bak").write_text("max_tokens: 8K\n", encoding="utf-8")
+    (backup_dir / "business_rules.yaml.20260607_120000_000001.bak").write_text("ignored: true\n", encoding="utf-8")
+
+    items = config_service.list_config_backups(backup_root=tmp_path, scope="unit")
+
+    assert {item["file"] for item in items} == {".env", "system_config.yaml"}
+    assert {item["id"] for item in items} == {
+        ".env.20260607_120000_000001.bak",
+        "system_config.yaml.20260607_120000_000001.bak",
+    }
+    assert all("size_bytes" in item for item in items)
+
+
+def test_restore_config_backup_restores_file_and_writes_audit(tmp_path):
+    (tmp_path / ".env").write_text(
+        "ANTHROPIC_MODEL=current-model\n",
+        encoding="utf-8",
+    )
+    backup_dir = tmp_path / "backups" / "config" / "unit"
+    backup_dir.mkdir(parents=True)
+    backup = backup_dir / ".env.20260607_120000_000001.bak"
+    backup.write_text(
+        "ANTHROPIC_MODEL=restored-model\n",
+        encoding="utf-8",
+    )
+
+    restored = config_service.restore_config_backup(
+        target_dir=tmp_path,
+        backup_root=tmp_path,
+        scope="unit",
+        backup_id=backup.name,
+        actor="alice",
+        audit_root=tmp_path,
+    )
+
+    assert restored["_env"]["ANTHROPIC_MODEL"] == "restored-model"
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == "ANTHROPIC_MODEL=restored-model\n"
+    current_backups = list(backup_dir.glob(".env.*.bak"))
+    assert len(current_backups) == 2
+    assert any("current-model" in path.read_text(encoding="utf-8") for path in current_backups)
+
+    audit_path = tmp_path / "audit" / "config_changes.jsonl"
+    record = json.loads(audit_path.read_text(encoding="utf-8").splitlines()[-1])
+    assert record["actor"] == "alice"
+    assert record["files"] == [".env"]
+    assert record["changed_fields"] == ["restore.env"]
+    assert "restored-model" not in audit_path.read_text(encoding="utf-8")
+
+
+def test_restore_config_backup_rejects_invalid_backup_id(tmp_path):
+    try:
+        config_service.restore_config_backup(
+            target_dir=tmp_path,
+            backup_root=tmp_path,
+            scope="unit",
+            backup_id="../.env.20260607.bak",
+            actor="alice",
+        )
+    except ValueError as exc:
+        assert "备份 ID 无效" in str(exc)
+    else:
+        raise AssertionError("restore_config_backup should reject path traversal")

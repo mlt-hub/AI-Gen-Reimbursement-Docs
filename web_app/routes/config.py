@@ -1,17 +1,19 @@
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ai_gen_reimbursement_docs.auth import user_config_dir
 from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
     build_web_config_view,
     config_dir,
+    list_config_backups,
     mask_env_content,
     read_config,
     read_config_from_dir,
     redact_env_dict,
+    restore_config_backup,
     save_config_to_dir,
     save_web_config_to_dir,
 )
@@ -71,6 +73,62 @@ async def save_web_config(data: dict, request: Request, user: str = Depends(requ
         backup_root=config_dir(),
         backup_scope="global" if local_mode else f"user-{user}",
     )
+
+    global_config = read_config()
+    user_config = None
+    if not local_mode and user:
+        user_config = read_config_from_dir(user_config_dir(user))
+
+    return build_web_config_view(
+        global_config=global_config,
+        user_config=user_config,
+        username=username,
+        local_mode=local_mode,
+    )
+
+
+@router.get("/api/web-config/backups")
+async def get_web_config_backups(request: Request, user: str = Depends(require_auth)):
+    """列出当前配置作用域可恢复的备份。"""
+    local_mode = is_local_mode(request)
+    scope = "global" if local_mode else f"user-{user}"
+    return {
+        "scope": {
+            "mode": "local" if local_mode else "remote",
+            "username": user or "",
+        },
+        "items": list_config_backups(
+            backup_root=config_dir(),
+            scope=scope,
+        ),
+    }
+
+
+@router.post("/api/web-config/backups/restore")
+async def restore_web_config_backup(data: dict, request: Request, user: str = Depends(require_auth)):
+    """恢复当前配置作用域的一份备份，并返回最新脱敏业务视图。"""
+    backup_id = str(data.get("backup_id") or "").strip()
+    if not backup_id:
+        raise HTTPException(400, "请提供 backup_id")
+
+    local_mode = is_local_mode(request)
+    username = user or None
+    scope = "global" if local_mode else f"user-{user}"
+    target_dir = config_dir() if local_mode else user_config_dir(user)
+
+    try:
+        restore_config_backup(
+            target_dir=target_dir,
+            backup_root=config_dir(),
+            scope=scope,
+            backup_id=backup_id,
+            actor=username or "local-admin",
+            audit_root=config_dir(),
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     global_config = read_config()
     user_config = None
