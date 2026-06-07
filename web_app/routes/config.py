@@ -13,6 +13,7 @@ from web_app.services.config_service import (
     read_config_from_dir,
     redact_env_dict,
     save_config_to_dir,
+    save_web_config_to_dir,
 )
 
 
@@ -43,6 +44,32 @@ async def get_web_config(request: Request, user: str = Depends(require_auth)):
     user_config = None
     username = user or None
 
+    if not local_mode and user:
+        user_config = read_config_from_dir(user_config_dir(user))
+
+    return build_web_config_view(
+        global_config=global_config,
+        user_config=user_config,
+        username=username,
+        local_mode=local_mode,
+    )
+
+
+@router.put("/api/web-config")
+async def save_web_config(data: dict, request: Request, user: str = Depends(require_auth)):
+    """保存第一阶段 Web 配置，并返回最新脱敏业务视图。"""
+    local_mode = is_local_mode(request)
+    username = user or None
+    target_dir = config_dir() if local_mode else user_config_dir(user)
+
+    await save_web_config_to_dir(
+        data,
+        target_dir,
+        allow_shared_credentials_write=local_mode,
+    )
+
+    global_config = read_config()
+    user_config = None
     if not local_mode and user:
         user_config = read_config_from_dir(user_config_dir(user))
 

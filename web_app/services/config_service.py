@@ -2,6 +2,8 @@ import os
 import re
 from pathlib import Path
 
+from web_app.services.secret_service import encrypt_secret
+
 
 DEFAULT_WEB_CONFIG = {
     "base_url": "",
@@ -249,18 +251,19 @@ def read_config_from_dir(cfg_dir: Path) -> dict:
     return result
 
 
-async def save_config_to_dir(data: dict, target_dir: Path):
+async def save_config_to_dir(data: dict, target_dir: Path, *, preserve_existing_sensitive: bool = True):
     """保存配置到指定目录。"""
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    if "_env" in data and data["_env"]:
+    if "_env" in data:
         env = {
             str(k): str(v)
             for k, v in data["_env"].items()
             if str(v) and str(v) != "***"
         }
-        for key, value in _existing_sensitive_env(target_dir).items():
-            env.setdefault(key, value)
+        if preserve_existing_sensitive:
+            for key, value in _existing_sensitive_env(target_dir).items():
+                env.setdefault(key, value)
         lines = []
         for k, v in env.items():
             lines.append(f"{k}={v}")
@@ -274,3 +277,65 @@ async def save_config_to_dir(data: dict, target_dir: Path):
             yaml.dump(data["_system"], allow_unicode=True, default_flow_style=False),
             encoding="utf-8",
         )
+
+
+def _editable_value(payload: dict, section: str, key: str):
+    value = payload.get(section, {}).get(key)
+    if isinstance(value, dict) and "value" in value:
+        return value.get("value")
+    return value
+
+
+async def save_web_config_to_dir(
+    payload: dict,
+    target_dir: Path,
+    *,
+    allow_shared_credentials_write: bool = False,
+) -> dict:
+    """Save the first-phase Web config payload without writing plaintext API keys."""
+    existing = read_config_from_dir(target_dir)
+    env = dict(existing.get("_env") if isinstance(existing.get("_env"), dict) else {})
+    system = dict(existing.get("_system") if isinstance(existing.get("_system"), dict) else {})
+
+    ai = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+    api_key = ai.get("api_key")
+    clear_api_key = bool(ai.get("clear_api_key", False))
+    if clear_api_key:
+        env.pop("ANTHROPIC_API_KEY", None)
+        env.pop("ANTHROPIC_API_KEY_ENC", None)
+    elif isinstance(api_key, str) and api_key.strip() and api_key.strip() != "***":
+        env.pop("ANTHROPIC_API_KEY", None)
+        env["ANTHROPIC_API_KEY_ENC"] = encrypt_secret(api_key, config_root=target_dir)
+
+    base_url = _editable_value(payload, "ai", "base_url")
+    if base_url is not None:
+        env["ANTHROPIC_BASE_URL"] = str(base_url).strip()
+    model = _editable_value(payload, "ai", "model")
+    if model is not None:
+        env["ANTHROPIC_MODEL"] = str(model).strip()
+    max_tokens = _editable_value(payload, "ai", "max_tokens")
+    if max_tokens is not None:
+        system["max_tokens"] = max_tokens
+    if allow_shared_credentials_write:
+        shared = _editable_value(payload, "ai", "allow_shared_ai_credentials")
+        if shared is not None:
+            system["allow_shared_ai_credentials"] = bool(shared)
+
+    out_templates = _editable_value(payload, "templates", "out_templates")
+    if out_templates is not None:
+        system["out_templates"] = out_templates if isinstance(out_templates, dict) else {}
+
+    run_defaults = payload.get("run_defaults") if isinstance(payload.get("run_defaults"), dict) else {}
+    for key in ("project_name", "fpa_profile", "fpa_strategy", "fpa_rule_set", "fpa_confirmation_mode"):
+        value = run_defaults.get(key)
+        if isinstance(value, dict) and "value" in value:
+            value = value.get("value")
+        if value is not None:
+            system[key] = value
+
+    await save_config_to_dir(
+        {"_env": env, "_system": system},
+        target_dir,
+        preserve_existing_sensitive=False,
+    )
+    return read_config_from_dir(target_dir)
