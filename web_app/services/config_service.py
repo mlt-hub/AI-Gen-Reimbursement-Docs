@@ -861,6 +861,78 @@ def save_fpa_strategy_settings(
     return result
 
 
+def build_fpa_judgement_rules_view(*, target_dir: Path) -> dict:
+    """Read FPA judgement rules as a structured list for Web editing."""
+    path = target_dir / "fpa_judgement_rules.yaml"
+    if not path.exists():
+        return {"rules": [], "exists": False}
+    parsed = _parse_advanced_config_content("fpa_judgement_rules", path.read_text(encoding="utf-8"))
+    _validate_fpa_judgement_rules_payload(parsed)
+    rules = parsed.get("judgement_rules") if isinstance(parsed, dict) else []
+    return {
+        "rules": [str(rule).strip() for rule in rules],
+        "exists": True,
+    }
+
+
+def save_fpa_judgement_rules(
+    *,
+    rules: list[object],
+    target_dir: Path,
+    actor: str,
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
+) -> dict:
+    """Save structured FPA judgement rules after validation."""
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
+    filename = "fpa_judgement_rules.yaml"
+    target_path = target_dir / filename
+    normalized = [str(rule).strip() for rule in rules if str(rule).strip()]
+    payload = {"judgement_rules": normalized}
+
+    try:
+        _validate_fpa_judgement_rules_payload(payload)
+    except AdvancedConfigError:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=[filename],
+            changed_fields=["fpa_judgement_rules"],
+            result="validation_failed",
+        )
+        raise
+
+    backed_up = backup_single_config_file(
+        source=target_path,
+        backup_root=backup_root,
+        scope=backup_scope,
+    )
+    import yaml
+
+    text = yaml.dump(payload, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    _atomic_write_text(target_path, text)
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=[filename],
+        changed_fields=["fpa_judgement_rules"],
+        result="success",
+    )
+    result = build_fpa_judgement_rules_view(target_dir=target_dir)
+    result["backed_up"] = [backed_up] if backed_up else []
+    return result
+
+
 def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tuple[Path, str]:
     if "/" in backup_id or "\\" in backup_id or ".." in backup_id:
         raise ValueError("备份 ID 无效")

@@ -329,3 +329,66 @@ def test_web_config_fpa_strategy_rejects_remote_user(monkeypatch):
 
     assert resp.status_code == 403
     assert "本机管理员" in resp.json()["detail"]
+
+
+def test_web_config_fpa_judgement_rules_endpoint_reads_local_rules(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "build_fpa_judgement_rules_view", lambda *, target_dir: {
+        "rules": ["规则一", "规则二"],
+        "exists": True,
+    })
+
+    resp = client.get("/api/web-config/fpa-judgement-rules")
+
+    assert resp.status_code == 200
+    assert resp.json()["rules"] == ["规则一", "规则二"]
+
+
+def test_web_config_fpa_judgement_rules_put_saves_local_rules(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_save_fpa_judgement_rules(**kwargs):
+        calls.append(kwargs)
+        return {"rules": ["规则一"], "exists": True, "backed_up": ["fpa_judgement_rules.yaml"]}
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "save_fpa_judgement_rules", fake_save_fpa_judgement_rules)
+
+    resp = client.put("/api/web-config/fpa-judgement-rules", json={"rules": ["规则一"]})
+
+    assert resp.status_code == 200
+    assert resp.json()["backed_up"] == ["fpa_judgement_rules.yaml"]
+    assert calls == [{
+        "rules": ["规则一"],
+        "target_dir": tmp_path,
+        "actor": "local-admin",
+        "audit_root": tmp_path,
+        "backup_root": tmp_path,
+        "backup_scope": "global",
+    }]
+
+
+def test_web_config_fpa_judgement_rules_rejects_remote_user(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+
+    resp = client.put("/api/web-config/fpa-judgement-rules", json={"rules": ["规则一"]})
+
+    assert resp.status_code == 403
+    assert "本机管理员" in resp.json()["detail"]

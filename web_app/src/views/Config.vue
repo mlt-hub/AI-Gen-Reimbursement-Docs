@@ -261,6 +261,52 @@
       <p v-else class="text-sm text-[var(--color-ink-soft)]">暂无 FPA 策略配置。</p>
     </section>
 
+    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">FPA 判定规则</p>
+          <h2 class="mt-1 text-lg font-semibold">计算依据归类判定原则</h2>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="fpaJudgementRulesLoading || fpaJudgementRulesSaving" @click="loadFpaJudgementRules">
+          {{ fpaJudgementRulesLoading ? '加载中...' : '刷新规则' }}
+        </button>
+      </div>
+
+      <p v-if="fpaJudgementRulesError" class="text-sm text-[var(--color-warning)]">{{ fpaJudgementRulesError }}</p>
+      <div v-else class="space-y-3">
+        <div
+          v-for="(rule, index) in fpaJudgementRules"
+          :key="rule.id"
+          class="grid gap-2 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-3 sm:grid-cols-[auto,1fr,auto]"
+        >
+          <div class="pt-2 text-xs font-semibold text-[var(--color-ink-soft)]">{{ index + 1 }}</div>
+          <textarea
+            v-model="rule.text"
+            rows="2"
+            class="field-control resize-y text-sm"
+            spellcheck="false"
+          />
+          <div class="flex flex-wrap gap-1 sm:flex-col">
+            <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="index === 0" @click="moveFpaJudgementRule(index, -1)">上移</button>
+            <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="index === fpaJudgementRules.length - 1" @click="moveFpaJudgementRule(index, 1)">下移</button>
+            <button class="btn-danger min-h-0 px-2 py-1 text-xs" :disabled="fpaJudgementRules.length <= 1" @click="removeFpaJudgementRule(index)">删除</button>
+          </div>
+        </div>
+
+        <button class="btn-secondary w-fit" @click="addFpaJudgementRule">新增判定原则</button>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', fpaJudgementRulesStatusClass]">{{ fpaJudgementRulesStatusText }}</span>
+            <p v-if="fpaJudgementRulesMsg" :class="['mt-2 text-sm', fpaJudgementRulesOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ fpaJudgementRulesMsg }}</p>
+          </div>
+          <button class="btn-primary w-fit" :disabled="fpaJudgementRulesSaving || !hasFpaJudgementRulesChanges" @click="saveFpaJudgementRules">
+            {{ fpaJudgementRulesSaving ? '保存中...' : '保存判定原则' }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">模板配置</p>
@@ -683,6 +729,16 @@ interface FpaStrategySettingsResponse {
   rule_sets: FpaStrategyRuleSet[]
 }
 
+interface FpaJudgementRuleItem {
+  id: number
+  text: string
+}
+
+interface FpaJudgementRulesResponse {
+  rules: string[]
+  exists: boolean
+}
+
 // ── stores ────────────────────────────────────────────────
 
 const auth = useAuthStore()
@@ -764,6 +820,14 @@ const fpaStrategyForm = reactive({
   profiles: [] as FpaStrategyProfile[],
   ruleSets: [] as FpaStrategyRuleSet[],
 })
+const fpaJudgementRules = ref<FpaJudgementRuleItem[]>([])
+const fpaJudgementRuleNextId = ref(1)
+const fpaJudgementRulesSnapshot = ref('')
+const fpaJudgementRulesLoading = ref(false)
+const fpaJudgementRulesSaving = ref(false)
+const fpaJudgementRulesError = ref('')
+const fpaJudgementRulesMsg = ref('')
+const fpaJudgementRulesOk = ref(false)
 const webAiForm = reactive({
   apiKey: '',
   baseUrl: '',
@@ -900,6 +964,12 @@ const fpaStrategyFormSnapshot = computed(() => JSON.stringify({
 const hasFpaStrategyChanges = computed(() => (
   fpaStrategySnapshot.value !== '' && fpaStrategyFormSnapshot.value !== fpaStrategySnapshot.value
 ))
+const fpaJudgementRulesSnapshotCurrent = computed(() => JSON.stringify(
+  fpaJudgementRules.value.map(rule => rule.text),
+))
+const hasFpaJudgementRulesChanges = computed(() => (
+  fpaJudgementRulesSnapshot.value !== '' && fpaJudgementRulesSnapshotCurrent.value !== fpaJudgementRulesSnapshot.value
+))
 
 const webConfigSaveStatusText = computed(() => {
   if (webConfigSaving.value) return '保存中'
@@ -938,6 +1008,18 @@ const fpaStrategyStatusClass = computed(() => {
   if (hasFpaStrategyChanges.value) return statusClass.warn
   return statusClass.ok
 })
+const fpaJudgementRulesStatusText = computed(() => {
+  if (fpaJudgementRulesSaving.value) return '保存中'
+  if (fpaJudgementRulesMsg.value && !fpaJudgementRulesOk.value) return '保存失败'
+  if (hasFpaJudgementRulesChanges.value) return '有未保存修改'
+  return '已保存'
+})
+const fpaJudgementRulesStatusClass = computed(() => {
+  if (fpaJudgementRulesSaving.value) return statusClass.neutral
+  if (fpaJudgementRulesMsg.value && !fpaJudgementRulesOk.value) return statusClass.warn
+  if (hasFpaJudgementRulesChanges.value) return statusClass.warn
+  return statusClass.ok
+})
 
 // ── 初始化 ────────────────────────────────────────────────
 
@@ -951,6 +1033,7 @@ onMounted(async () => {
   } else {
     await loadLocalConfig()
     await loadFpaStrategySettings()
+    await loadFpaJudgementRules()
     await loadAdvancedConfigFiles()
   }
 })
@@ -1090,6 +1173,80 @@ async function saveFpaStrategySettings() {
     fpaStrategyMsg.value = normalizeApiError(e)
   } finally {
     fpaStrategySaving.value = false
+  }
+}
+
+async function loadFpaJudgementRules() {
+  fpaJudgementRulesLoading.value = true
+  fpaJudgementRulesError.value = ''
+  try {
+    const data = await apiFetch<FpaJudgementRulesResponse>('/api/web-config/fpa-judgement-rules')
+    applyFpaJudgementRules(data.rules || [])
+  } catch (e) {
+    fpaJudgementRules.value = []
+    fpaJudgementRulesSnapshot.value = ''
+    fpaJudgementRulesError.value = normalizeApiError(e)
+  } finally {
+    fpaJudgementRulesLoading.value = false
+  }
+}
+
+function applyFpaJudgementRules(rules: string[]) {
+  fpaJudgementRules.value = rules.length
+    ? rules.map(text => ({ id: fpaJudgementRuleNextId.value++, text }))
+    : [{ id: fpaJudgementRuleNextId.value++, text: '' }]
+  fpaJudgementRulesMsg.value = ''
+  fpaJudgementRulesOk.value = true
+  fpaJudgementRulesSnapshot.value = fpaJudgementRulesSnapshotCurrent.value
+}
+
+function addFpaJudgementRule() {
+  fpaJudgementRules.value.push({ id: fpaJudgementRuleNextId.value++, text: '' })
+}
+
+function removeFpaJudgementRule(index: number) {
+  if (fpaJudgementRules.value.length <= 1) return
+  fpaJudgementRules.value.splice(index, 1)
+}
+
+function moveFpaJudgementRule(index: number, direction: -1 | 1) {
+  const nextIndex = index + direction
+  if (nextIndex < 0 || nextIndex >= fpaJudgementRules.value.length) return
+  const [item] = fpaJudgementRules.value.splice(index, 1)
+  fpaJudgementRules.value.splice(nextIndex, 0, item)
+}
+
+async function saveFpaJudgementRules() {
+  const rules = fpaJudgementRules.value.map(rule => rule.text.trim()).filter(Boolean)
+  if (!rules.length) {
+    fpaJudgementRulesOk.value = false
+    fpaJudgementRulesMsg.value = '至少保留 1 条计算依据归类判定原则'
+    return
+  }
+
+  fpaJudgementRulesSaving.value = true
+  fpaJudgementRulesMsg.value = ''
+  try {
+    const data = await apiFetch<FpaJudgementRulesResponse>('/api/web-config/fpa-judgement-rules', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules }),
+    })
+    applyFpaJudgementRules(data.rules || rules)
+    fpaJudgementRulesOk.value = true
+    fpaJudgementRulesMsg.value = '保存成功'
+    await loadConfigBackups()
+    await loadLocalConfig()
+    if (activeAdvancedFileId.value === 'fpa_judgement_rules') {
+      await loadAdvancedConfigFile('fpa_judgement_rules')
+    } else {
+      await loadAdvancedConfigFiles()
+    }
+  } catch (e) {
+    fpaJudgementRulesOk.value = false
+    fpaJudgementRulesMsg.value = normalizeApiError(e)
+  } finally {
+    fpaJudgementRulesSaving.value = false
   }
 }
 

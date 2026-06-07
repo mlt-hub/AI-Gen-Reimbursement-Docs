@@ -732,3 +732,63 @@ def test_save_fpa_strategy_settings_validation_failure_does_not_overwrite(tmp_pa
     record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
     assert record["files"] == ["fpa_config.yaml"]
     assert record["result"] == "validation_failed"
+
+
+def test_build_fpa_judgement_rules_view_reads_rules(tmp_path):
+    (tmp_path / "fpa_judgement_rules.yaml").write_text(
+        "judgement_rules:\n  - 规则一\n  - 规则二\n",
+        encoding="utf-8",
+    )
+
+    view = config_service.build_fpa_judgement_rules_view(target_dir=tmp_path)
+
+    assert view == {"rules": ["规则一", "规则二"], "exists": True}
+
+
+def test_save_fpa_judgement_rules_backs_up_and_audits(tmp_path):
+    target = tmp_path / "fpa_judgement_rules.yaml"
+    target.write_text("judgement_rules:\n  - 旧规则\n", encoding="utf-8")
+
+    saved = config_service.save_fpa_judgement_rules(
+        rules=["新规则一", " 新规则二 "],
+        target_dir=tmp_path,
+        actor="local-admin",
+        audit_root=tmp_path,
+        backup_root=tmp_path,
+        backup_scope="unit",
+    )
+
+    assert saved["rules"] == ["新规则一", "新规则二"]
+    assert saved["backed_up"] == ["fpa_judgement_rules.yaml"]
+    assert "旧规则" not in target.read_text(encoding="utf-8")
+    backups = list((tmp_path / "backups" / "config" / "unit").glob("fpa_judgement_rules.yaml.*.bak"))
+    assert len(backups) == 1
+    assert "旧规则" in backups[0].read_text(encoding="utf-8")
+    record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert record["files"] == ["fpa_judgement_rules.yaml"]
+    assert record["changed_fields"] == ["fpa_judgement_rules"]
+    assert record["result"] == "success"
+
+
+def test_save_fpa_judgement_rules_rejects_empty_rules_without_overwrite(tmp_path):
+    target = tmp_path / "fpa_judgement_rules.yaml"
+    target.write_text("judgement_rules:\n  - 原规则\n", encoding="utf-8")
+
+    try:
+        config_service.save_fpa_judgement_rules(
+            rules=["  "],
+            target_dir=tmp_path,
+            actor="local-admin",
+            audit_root=tmp_path,
+            backup_root=tmp_path,
+            backup_scope="unit",
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "judgement_rules 必须是非空字符串列表" in str(exc)
+    else:
+        raise AssertionError("save_fpa_judgement_rules should reject empty rules")
+
+    assert target.read_text(encoding="utf-8") == "judgement_rules:\n  - 原规则\n"
+    assert not (tmp_path / "backups" / "config" / "unit").exists()
+    record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert record["result"] == "validation_failed"
