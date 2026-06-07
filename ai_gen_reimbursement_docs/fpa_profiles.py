@@ -1189,12 +1189,13 @@ class StrictFpaProfile(CustomRulesProfile):
         return None
 
     def _looks_like_external_data_function_name(self, name: str) -> bool:
+        point_name = self._function_point_tail(name)
         action_keywords = self._configured_transaction_keywords()
-        if "数据组" in name:
-            return any(noun in name for noun in EXTERNAL_DATA_GROUP_NOUNS)
+        if "数据组" in point_name:
+            return any(noun in point_name for noun in EXTERNAL_DATA_GROUP_NOUNS)
         return (
-            any(noun in name for noun in EXTERNAL_DATA_GROUP_NOUNS)
-            and not any(action in name for action in action_keywords)
+            any(noun in point_name for noun in EXTERNAL_DATA_GROUP_NOUNS)
+            and not any(action in point_name for action in action_keywords)
         )
 
     def has_obvious_conflict(self, name: str, desc: str, ai_type: str) -> bool:
@@ -1216,15 +1217,15 @@ class StrictFpaProfile(CustomRulesProfile):
         type_mapping = self._configured_type_mapping(text)
         if type_mapping:
             return type_mapping[0]
-        name_action = self._explicit_transaction_type(name)
-        if name_action:
-            return name_action[0]
         if self._has_internal_data_function(text) and self._looks_like_data_group(name, desc):
             return "ILF"
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF"
         if self._is_external_data_group(text) and self._looks_like_external_data_function_name(name):
             return "EIF"
+        name_action = self._explicit_transaction_type(self._function_point_tail(name))
+        if name_action:
+            return name_action[0]
         if self._matching_internal_data_rule(text) is not None:
             return "ILF"
         if self._looks_like_data_group(name, desc):
@@ -1472,15 +1473,22 @@ class StrictFpaProfile(CustomRulesProfile):
         return has_data_noun and (has_external_source or has_maintenance_hint or has_generic_external_maintenance)
 
     def _looks_like_data_group(self, name: str, desc: str = "") -> bool:
+        point_name = self._function_point_tail(name)
         text = f"{name} {desc}"
         if (
             any(k in text for k in EXTERNAL_MAINTAINED_HINTS)
             or re.search(r"(?:外部应用|外部系统|第三方系统|外部|第三方)[^，。；、\s]{0,16}(?:维护|提供)", text)
         ) and not self._has_internal_data_function(text):
             return False
-        if any(k in name for k in ["信息", "数据组", "主数据", "名单", "关系", "配置", "记录", "模板"]):
-            return not any(k in name for k in ["查询", "查看", "详情", "新增", "添加", "修改", "编辑", "删除", "维护", "保存", "配置", "导入", "导出"])
-        return "维护" in text and not any(k in name for k in ["查询", "查看", "新增", "添加", "修改", "编辑", "删除"])
+        if any(k in point_name for k in ["信息", "数据组", "主数据", "名单", "关系", "配置", "记录", "模板"]):
+            return not any(
+                k in point_name
+                for k in ["查询", "查看", "详情", "新增", "添加", "修改", "编辑", "删除", "维护", "保存", "配置", "导入", "导出"]
+            )
+        return "维护" in text and not any(k in point_name for k in ["查询", "查看", "新增", "添加", "修改", "编辑", "删除"])
+
+    def _function_point_tail(self, name: str) -> str:
+        return str(name or "").rsplit("-", maxsplit=1)[-1].strip()
 
     def _data_functions_for_group(
         self,
@@ -1580,6 +1588,10 @@ class StrictFpaProfile(CustomRulesProfile):
         return result
 
     def _has_internal_data_function(self, text: str) -> bool:
+        if re.search(r"(?:外部|第三方|CRM|ERP|OA|主数据平台|统一用户中心)[^，。；、\s]{0,24}维护本系统引用", text):
+            return False
+        if re.search(r"本系统引用[^，。；、\s]{0,24}(?:维护|提供)", text):
+            return False
         return any(k in text for k in [
             "本系统维护", "本系统保存", "本系统继续维护",
             "维护本系统", "记录本系统",

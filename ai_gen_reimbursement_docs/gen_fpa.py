@@ -171,7 +171,11 @@ def _explanation_quality_warnings(
         f"【{group.get('client_type', '')}】"
         f"{group.get('l1', '')}-{group.get('l2', '')}-{group.get('l3', '')}-"
     )
-    if source_prefix.strip("-") and source_prefix not in text:
+    if (
+        source_prefix.strip("-")
+        and source_prefix not in text
+        and not _explanation_has_source_anchor(group=group, explanation=text, name=name)
+    ):
         expected_tail = "<数据组名称>" if fpa_type in {"ILF", "EIF"} else "<功能点名称>"
         warnings.append(
             f"{name} 计算依据说明来源场景未使用完整路径格式: {source_prefix}{expected_tail}"
@@ -190,6 +194,33 @@ def _explanation_quality_warnings(
         )
 
     return warnings
+
+
+def _explanation_has_source_anchor(
+    *,
+    group: dict[str, object],
+    explanation: str,
+    name: str,
+) -> bool:
+    """Accept source-scene text that names the module or source processes."""
+    text = str(explanation or "")
+    processes = group.get("processes", [])
+    if isinstance(processes, list):
+        process_anchors = [
+            str(process.get("name", "") or "").strip()
+            for process in processes
+            if isinstance(process, dict)
+        ]
+        if any(anchor and anchor in text for anchor in process_anchors):
+            return True
+    source_anchor_markers = ("模块描述", "业务场景", "功能过程", "流程", "场景「", "操作")
+    if not any(marker in text for marker in source_anchor_markers):
+        return False
+    anchors = [
+        str(group.get("l3", "") or "").strip(),
+        str(name or "").rsplit("-", maxsplit=1)[-1].strip(),
+    ]
+    return any(anchor and anchor in text for anchor in anchors)
 
 
 def _receiver_from_client_type(client_type: str, rules_text: str) -> str:
@@ -771,6 +802,8 @@ def _normalize_ai_fpa_rows_for_l3(
         source_text = "、".join(source_names_from_ids or raw_source_names)
 
         output_name = _normalize_ai_fpa_name_prefix(name, group)
+        prefixed_name = output_name
+        prefix_changed = prefixed_name != name
         if len(valid_source_ids) == 1:
             suffixed_name = _normalize_ai_name_process_suffix(
                 output_name,
@@ -790,8 +823,8 @@ def _normalize_ai_fpa_rows_for_l3(
                     "warnings": [warning],
                 })
                 output_name = suffixed_name
-        if output_name != name:
-            warning = f"{_group_tag(group)} AI 行名称前缀已按源功能清单规范化: {name} -> {output_name}"
+        if prefix_changed:
+            warning = f"{_group_tag(group)} AI 行名称前缀已按源功能清单规范化: {name} -> {prefixed_name}"
             warnings.append(warning)
             row_warnings.append(warning)
             row_hits.append({

@@ -751,6 +751,50 @@ Sources: ai=11, rules_fallback=1
 
 其中 `payment_gateway_refund` 已归零。`crm_customer_archive_reference` 本轮真实模型输出发生一次 JSON 解析失败并由规则兜底生成，但质量门仍通过；下一步扩展抽样可优先看剩余 7 条 warning 的来源分布，区分真实复核点、解析失败兜底和可继续收敛的后处理误报。
 
+当前继续收敛扩展集 warning 的确定性误报：
+
+- `计算依据说明` 的来源场景检查不再只接受完整路径；当说明明确引用“模块描述”“业务场景”或源功能过程名时，也视为有可审阅来源锚点，避免用户中心、短信模板、外部组织等自然语言说明被误报。
+- 数据组识别改为优先看功能点尾部，避免完整路径中的三级模块动作词（例如“内部组织维护”）污染 `xxx数据组` 的 ILF/EIF 判断。
+- 内部数据组证据收窄，避免“外部维护本系统引用的数据组”中的 `维护本系统` 子串被误判为本系统内部维护。
+- AI 名称后处理先固定前缀变更，再做 source_process_id 尾部规范化，避免同一名称调整同时产生“末尾规范化”和“前缀规范化”两条 warning。
+
+2026-06-07 扩展 fresh real-model 11 fixtures 最新复测结果：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --profiles strict_fpa `
+  --strategies ai_first `
+  --rule-sets strict_fpa_rs `
+  --fixture tests\fixtures\fpa_golden_cases\crm_customer_archive_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\customer_list_import.json `
+  --fixture tests\fixtures\fpa_golden_cases\erp_order_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\external_user_center_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\internal_vs_external_org_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\master_data_org_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\mixed_internal_external_data_functions.json `
+  --fixture tests\fixtures\fpa_golden_cases\oa_approval_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\payment_gateway_refund.json `
+  --fixture tests\fixtures\fpa_golden_cases\sms_notification_service.json `
+  --fixture tests\fixtures\fpa_golden_cases\vertical_industry_management.json `
+  --output-dir tmp_fpa_stability_ci_real_all_fixtures_fresh_after_external_reference_text_20260607 `
+  --max-quality-issues 0 `
+  --max-retryable-issues 0 `
+  --max-retries 0
+```
+
+```text
+Status: PASS
+Runs: 11
+Modules: 12
+Warnings: 6
+Quality Issues: 0
+Retryable Issues: 0
+Retries: 0
+Sources: ai=12
+```
+
+本轮复测中 `external_user_center_reference`、`internal_vs_external_org_reference`、`mixed_internal_external_data_functions`、`oa_approval_reference` 均已归零。剩余 warning 主要是 AI 行名称末尾按 `source_process_id` 规范化，以及 `sms_notification_service` 一次覆盖补齐；下一步可考虑把确定性名称规范化从稳定性 warning 中降级为 rule hit 信息，或继续从 prompt 侧要求模型直接使用源功能过程名作为事务行尾部。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。

@@ -459,6 +459,82 @@ def test_data_function_source_path_warning_mentions_data_group_name():
     assert any("<数据组名称>" in warning for warning in quality_hit["warnings"])
 
 
+def test_explanation_quality_accepts_module_or_business_scene_source_text():
+    group = _group_rows_by_l3([{
+        "客户端类型": "地市后台",
+        "一级模块": "权限管理",
+        "二级模块": "账号权限",
+        "三级模块": "用户中心账号引用",
+        "三级模块整体功能描述": "系统引用统一用户中心维护的人员账号，本系统不维护账号主数据。",
+        "功能过程": "引用统一用户中心账号",
+        "功能过程类型": "新增",
+        "功能过程描述": "引用统一用户中心账号基础信息和所属组织。",
+    }])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "统一用户中心账号数据组",
+            "type": "EIF",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：模块描述「用户中心账号引用」中明确本系统不维护账号主数据，引用统一用户中心账号。"
+                "\n业务数据：统一用户中心账号基础信息和所属组织。"
+                "\n业务规则：本系统读取外部数据组，不进行插入、修改或删除。"
+                "\n计算说明：按 EIF 评估外部引用的逻辑数据组。"
+            ),
+        }],
+    )
+
+    assert rows[0]["新增/修改功能点"] == "【地市后台】权限管理-账号权限-用户中心账号引用-统一用户中心账号数据组"
+    assert not any("来源场景未使用完整路径格式" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_explanation_quality_accepts_source_process_operation_anchor():
+    group = _group_rows_by_l3([{
+        "客户端类型": "地市后台",
+        "一级模块": "消息管理",
+        "二级模块": "通知发送",
+        "三级模块": "短信通知",
+        "三级模块整体功能描述": "运营人员配置短信内容并触发短信发送。",
+        "功能过程": "编辑短信模板",
+        "功能过程类型": "新增",
+        "功能过程描述": "维护短信标题、正文和变量。",
+    }])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "短信模板数据组",
+            "type": "ILF",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：编辑短信模板操作维护短信模板数据组"
+                "\n业务数据：短信模板数据组，包含标题、正文、变量等字段。"
+                "\n业务规则：运营人员编辑短信模板后，系统保存至本系统数据库。"
+                "\n计算说明：短信模板为内部逻辑数据组，按 ILF 计量。"
+            ),
+        }],
+    )
+
+    assert rows[0]["新增/修改功能点"] == "【地市后台】消息管理-通知发送-短信通知-短信模板数据组"
+    assert not any("来源场景未使用完整路径格式" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
 def test_explanation_warns_when_table_count_basis_is_used_as_detail():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(
@@ -752,6 +828,37 @@ def test_ai_name_prefix_is_forced_from_source_module_path():
         any(hit["rule_id"] == "postprocess.ai_name_prefix" for hit in row["_规则命中详情"])
         for row in rows
     )
+
+
+def test_ai_name_process_suffix_normalization_does_not_duplicate_prefix_warning():
+    group = _group_rows_by_l3([{
+        "客户端类型": "地市后台",
+        "一级模块": "采购管理",
+        "二级模块": "供应商协同",
+        "三级模块": "ERP订单引用",
+        "三级模块整体功能描述": "引用 ERP 订单。",
+        "功能过程": "查看ERP订单信息",
+        "功能过程类型": "查询",
+        "功能过程描述": "查看 ERP 订单的供应商、金额和状态。",
+    }])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": "【地市后台】采购管理-供应商协同-ERP订单引用-ERP订单信息查询",
+            "type": "EQ",
+            "explanation": "来源场景：【地市后台】采购管理-供应商协同-ERP订单引用-ERP订单信息查询\n业务数据：ERP订单。\n业务规则：只读取展示。\n计算说明：按 EQ 计量。",
+            "source_process_ids": ["m1_p1"],
+        }],
+    )
+
+    assert rows[0]["新增/修改功能点"] == "【地市后台】采购管理-供应商协同-ERP订单引用-查看ERP订单信息"
+    assert len([w for w in warnings if "AI 行名称末尾已按 source_process_id 规范化" in w]) == 1
+    assert not any("AI 行名称前缀已按源功能清单规范化" in w for w in warnings)
 
 
 def test_strict_profile_corrects_external_service_eif_misclassification():
@@ -1060,6 +1167,111 @@ def test_ai_first_internal_data_group_with_external_reference_ids_keeps_ilf():
     assert not any("AI type=ILF 与规则存在冲突" in warning for warning in warnings)
     assert not any(
         hit["rule_id"] == "postprocess.ai_first_type_conflict"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_ai_first_external_data_group_with_system_reference_text_keeps_eif():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "供应商管理",
+            "二级模块": "准入协同",
+            "三级模块": "供应商准入协同",
+            "三级模块整体功能描述": "本系统维护供应商准入申请信息，同时引用 CRM 系统维护的客户档案。",
+            "功能过程": "选择CRM客户档案",
+            "功能过程类型": "新增",
+            "功能过程描述": "从 CRM 客户档案中选择客户并关联到供应商准入申请。",
+        },
+    ])[0]
+    rule_set = FpaRuleSetConfig(
+        name="strict_fpa_rs",
+        external_data_rules=(ExternalDataGroupRule(("CRM",), "CRM客户档案", ("档案", "ID")),),
+    )
+    token = set_current_fpa_rule_set_config(rule_set)
+    try:
+        rows, warnings = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            profile=STRICT_FPA_PROFILE,
+            strategy="ai_first",
+            ai_rows=[
+                {
+                    "name": "CRM客户档案数据组",
+                    "type": "EIF",
+                    "explanation": (
+                        "来源场景：【地市后台】供应商管理-准入协同-供应商准入协同-CRM客户档案数据组，作为外部引用数据组识别。"
+                        "\n业务数据：CRM客户档案信息。"
+                        "\n业务规则：本系统引用CRM系统维护的客户档案。"
+                        "\n计算说明：外部维护本系统引用的数据组为 EIF。"
+                    ),
+                },
+            ],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert rows[0]["类型"] == "EIF"
+    assert not any("AI type=EIF 与规则存在冲突" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.ai_first_type_conflict"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_ai_first_internal_data_group_suffix_keeps_ilf_when_module_path_has_maintenance():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "组织管理",
+            "二级模块": "内部组织",
+            "三级模块": "内部组织维护",
+            "三级模块整体功能描述": "本系统维护内部组织信息，包括组织名称、组织编码和启停状态。",
+            "功能过程": "新增内部组织",
+            "功能过程类型": "新增",
+            "功能过程描述": "录入内部组织名称、编码并保存。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "组织管理",
+            "二级模块": "内部组织",
+            "三级模块": "内部组织维护",
+            "三级模块整体功能描述": "本系统维护内部组织信息，包括组织名称、组织编码和启停状态。",
+            "功能过程": "查询内部组织",
+            "功能过程类型": "查询",
+            "功能过程描述": "按组织名称和状态查询内部组织列表。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "【地市后台】组织管理-内部组织-内部组织维护-内部组织数据组",
+                "type": "ILF",
+                "explanation": (
+                    "来源场景：【地市后台】组织管理-内部组织-内部组织维护-内部组织数据组\n"
+                    "业务数据：内部组织，包含组织名称、组织编码和启停状态。\n"
+                    "业务规则：本系统内部维护该数据组。\n"
+                    "计算说明：本系统维护的逻辑数据组，按 ILF 计量。"
+                ),
+                "source_process_ids": ["m1_p1", "m1_p2"],
+                "source_processes": ["新增内部组织", "查询内部组织"],
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "ILF"
+    assert not any("AI type=ILF 与规则存在冲突" in warning for warning in warnings)
+    assert not any("AI 数据功能需人工复核" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] in {"postprocess.ai_first_type_conflict", "postprocess.ai_data_group_review"}
         for hit in rows[0]["_规则命中详情"]
     )
 
