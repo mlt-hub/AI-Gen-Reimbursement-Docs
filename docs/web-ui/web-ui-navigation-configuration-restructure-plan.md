@@ -185,12 +185,21 @@ GET  /api/web-config
 PUT  /api/web-config
 ```
 
+接口命名固定使用 `/api/web-config`，不复用现有 `/api/config` 的内部结构接口。`/api/config` 可继续服务原有 `_env` / `_system` / `_biz` 配置编辑能力，`/api/web-config` 面向新配置页提供稳定、脱敏、业务化的配置视图。
+
+配置保存权限：
+
+- 本机模式保存全局默认配置，写入 `~/.ai-gen-reimbursement-docs/` 下的配置文件。
+- 远程登录用户保存个人覆盖配置，写入该用户自己的配置目录。
+- 本机全局配置不会直接覆盖已有个人配置；全局配置只作为未设置个人覆盖项时的默认值来源。
+
 `GET /api/web-config` 返回脱敏后的配置视图：
 
 ```json
 {
   "ai": {
     "api_key_configured": true,
+    "shared_api_key_enabled": false,
     "base_url": "https://api.example.test",
     "model": "deepseek-v4-flash",
     "max_tokens": "384K"
@@ -214,8 +223,8 @@ PUT  /api/web-config
 | Web 配置区 | 配置文件 | 建议字段 |
 |---|---|---|
 | AI 配置 | `~/.ai-gen-reimbursement-docs/.env` | `ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL` |
-| AI 配置 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | `max_tokens` |
-| 模板配置 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | `out_templates` 或自定义输出模板目录字段 |
+| AI 配置 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | `max_tokens`、`allow_shared_ai_credentials` |
+| 模板配置 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | `out_templates` |
 | 运行默认值 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | FPA 方案、策略、规则集、确认模式等 Web 默认值 |
 
 敏感字段规则：
@@ -224,6 +233,24 @@ PUT  /api/web-config
 - `PUT` 中省略 `api_key` 或传入遮罩值时，保留已有 API Key。
 - `PUT` 中传入新的 `api_key` 时，覆盖写入 `.env`。
 - 如需清空 API Key，使用显式字段，例如 `clear_api_key: true`，不要把空字符串解释成删除。
+- API Key 不参与普通全局默认继承。远程用户只有在配置了个人 API Key，或管理员显式开启 `allow_shared_ai_credentials: true` 时，才可使用服务端共享 API Key。
+- `allow_shared_ai_credentials` 默认值为 `false`，避免远程用户未配置个人 Key 时静默消耗管理员或本机全局 Key。
+
+配置合并优先级：
+
+```text
+普通配置：本次请求显式值 > 用户个人配置 > 全局配置 > 系统默认值
+敏感凭据：本次请求显式值 > 用户个人配置 > 共享凭据策略 > 系统默认值
+```
+
+普通配置包括 `base_url`、`model`、`max_tokens`、模板映射、运行默认值等。敏感凭据当前主要指 API Key。
+
+远程用户未配置个人 API Key 时：
+
+- `allow_shared_ai_credentials: false`：后端返回未配置凭据错误，提示用户配置个人 API Key，或联系管理员开启共享凭据。
+- `allow_shared_ai_credentials: true`：允许使用服务端共享 API Key。
+
+模板配置模型采用 `out_templates` 映射，支持不同文档类型绑定不同模板；不降级为单一 `custom_output_template_dir`。如果前端需要简化显示，可在 UI 层把常用模板映射整理成更易理解的表单。
 
 保存流程：
 
@@ -257,7 +284,7 @@ PUT /api/web-config
 任务启动参数优先级：
 
 ```text
-前端请求显式值 > Web 配置文件默认值 > 系统默认值
+前端请求显式值 > 用户个人配置 > 全局配置 > 系统默认值
 ```
 
 这样配置页可以作为默认值来源，但生成页仍允许用户在本次任务中临时覆盖低频任务设置。
@@ -338,6 +365,12 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 - 调试信息主要服务开发和排障，用户角色与普通审阅不同。
 - 独立且带 `sessionId` 的路由方便刷新、复制链接、从历史任务进入、复盘问题和后续扩展筛选。
 
+数据源策略：
+
+- 第一阶段先复用现有 AI 日志/交互接口，例如会话级 AI 对话日志和 prompts/responses 文件清单，让页面先跑通。
+- 第二阶段如需筛选到某个 FPA 功能点、某次模型调用、某条解析错误，再新增结构化 FPA 调试接口。
+- 新增结构化接口前，不要求后端重写现有日志产物格式。
+
 ## 组件拆分建议
 
 | 当前位置 | 建议目标 | 说明 |
@@ -403,6 +436,8 @@ npm run build
 - AI 配置只出现在 `配置` 页。
 - 配置页保存后写入配置文件，刷新页面或重启后仍能读取。
 - API Key 不在读取接口中返回原文；省略 API Key 保存时保留旧值。
+- 远程用户未配置个人 API Key 且 `allow_shared_ai_credentials: false` 时，不继承全局 API Key，并给出明确提示。
+- 管理员显式开启 `allow_shared_ai_credentials: true` 后，远程用户才可使用服务端共享 API Key。
 - FPA 策略和低频任务设置位于 `执行监控` 下方。
 - FPA 预览页术语符合 `docs/fpa/result-review-terminology.md`。
 - 移动端没有横向滚动，导航可以通过菜单打开。
@@ -418,6 +453,7 @@ npm run build
 | 从历史记录恢复 session | 进入 FPA 预览或 AI 调试页时使用历史 session 上下文；`/sessions/:sessionId/fpa/debug` 刷新后仍能定位该 session。 |
 | 保存配置后刷新页面 | 前端重新读取配置文件视图，AI 配置、模板配置和运行默认值保持一致。 |
 | 保存配置后启动新任务 | 新任务使用最新配置作为默认值，同时保留生成页本次请求显式覆盖能力。 |
+| 远程用户无个人 API Key | 默认不使用全局 API Key；仅当 `allow_shared_ai_credentials: true` 时使用共享凭据。 |
 
 ## 风险与边界
 
@@ -426,6 +462,8 @@ npm run build
 - 拆分 `AdvancedOptions.vue` 时要确保 `startTask()` 提交的字段不变，并且能用配置文件默认值兜底。
 - API Key 输入应继续沿用现有敏感输入保护逻辑。
 - 配置文件写入必须保护敏感字段：遮罩值不能覆盖真实 API Key，空字符串不能误删旧 Key。
+- 远程用户个人配置不能被本机全局配置覆盖；全局配置变化只影响未设置个人覆盖项的普通配置。
+- API Key 不能按普通配置继承全局默认值；共享系统 API Key 必须由 `allow_shared_ai_credentials` 显式开启。
 - 保存配置后要清理后端配置读取缓存，否则 `system_config.yaml` 中的部分字段可能无法即时生效。
 - 正在运行中的任务不得被新配置影响，避免不可复盘。
 - 如果后续要把调试信息做成可筛选、可复制、可导出页面，需要再确认后端是否已经提供足够结构化的数据。
