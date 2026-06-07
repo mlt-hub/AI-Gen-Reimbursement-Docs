@@ -596,7 +596,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 7 | 任务启动配置合并 | 已完成基础闭环 | `resolve_task_start_config()` 已接入 `/api/run-local`、`/api/run-upload` 和 `/api/fpa/preview-module`，形成正式任务和 FPA 预览的参数快照。 | `fpa_confirmation_mode` 目前在正式生成 pipeline 中尚无承接参数；后续如接入正式生成需继续传递该字段。 |
 | 8 | 远程用户凭据策略 | 已完成基础闭环 | 远程 AI 任务和 FPA AI 预览无可用 API Key 时返回明确错误；共享全局 Key 只有 `allow_shared_ai_credentials: true` 时可用。 | 后续新增其他 AI 预览/调试入口时继续复用同一策略。 |
 | 9 | FPA 预览和调试页 | 已完成第一阶段闭环 | FPA 预览已在统一 AppShell 下；已新增 `/sessions/:sessionId/fpa/debug` 页面，复用现有 AI 交互记录和合并日志接口；FPA 预览页和历史页已有 session-aware 入口；FPA 轻量预览 debug 可写入可访问 session 的 AI 日志目录。 | 后续如需按功能点、模型调用、规则命中筛选，再做结构化 FPA 调试接口。 |
-| 10 | 回归与打磨 | 部分完成 | 当前每轮提交已跑相关 pytest 和 `npm run build`；已新增 `tests/test_web_fpa_debug.py` 覆盖 FPA AI 调试页所需会话访问和日志数据读取；已新增 `tests/test_web_config_audit.py` 覆盖配置变更审计脱敏；第一期指定 pytest 已完整跑通。 | 第一阶段收尾时继续做移动端人工检查。 |
+| 10 | 回归与打磨 | 已完成第一阶段基础闭环 | 当前每轮提交已跑相关 pytest 和 `npm run build`；已新增 `tests/test_web_fpa_debug.py` 覆盖 FPA AI 调试页所需会话访问和日志数据读取；已新增 `tests/test_web_config_audit.py` 覆盖配置变更审计脱敏；第一期指定 pytest 已完整跑通；`scripts/web_mobile_smoke.ps1` 已覆盖 390x844 移动视口下的首页、配置页、FPA 预览页和 FPA AI 调试页横向溢出检查与抽屉导航可用性。 | 后续可补真实手机或更多浏览器人工复核，不阻塞第一阶段闭环。 |
 
 ### 第一期建议提交顺序
 
@@ -751,6 +751,10 @@ npm run build
 ```
 
 ```powershell
+.\scripts\check_web_ui.ps1
+```
+
+```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_web_config_audit.py tests/test_web_secret_service.py tests/test_web_tasks.py tests/test_web_system.py tests/test_web_fpa_debug.py
 ```
 
@@ -774,7 +778,7 @@ npm run build
 - 配置变更审计写入 `~/.ai-gen-reimbursement-docs/audit/config_changes.jsonl`，记录谁在什么时候改了哪个配置文件，但不记录敏感值。
 - FPA 策略和低频任务设置位于 `执行监控` 下方。
 - FPA 预览页术语符合 `docs/fpa/result-review-terminology.md`。
-- 移动端没有横向滚动，使用顶部栏 + 抽屉菜单。
+- 移动端没有横向滚动，使用顶部栏 + 抽屉菜单；基础移动端 smoke 可通过 `.\scripts\web_mobile_smoke.ps1 -BaseUrl http://127.0.0.1:5173/static/dist/` 单独执行，或随 `.\scripts\check_web_ui.ps1` 一起执行。
 - 第一期开工前检查项全部确认。
 - 第一期 10 个工作包均可独立验收和提交。
 

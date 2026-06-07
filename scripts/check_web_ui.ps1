@@ -10,6 +10,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $webRoot = Join-Path $repoRoot "web_app"
 $artifactCheck = Join-Path $PSScriptRoot "check_web_source_artifacts.ps1"
 $smokeScript = Join-Path $PSScriptRoot "web_smoke.ps1"
+$mobileSmokeScript = Join-Path $PSScriptRoot "web_mobile_smoke.ps1"
 
 function Test-PortOpen {
     param(
@@ -105,10 +106,10 @@ if (!(Test-Path $webRoot)) {
     throw "未找到前端目录: $webRoot"
 }
 
-Write-Host "Step 1/4: 检查 web_app/src 生成物"
+Write-Host "Step 1/5: 检查 web_app/src 生成物"
 & $artifactCheck
 
-Write-Host "Step 2/4: 执行前端生产构建"
+Write-Host "Step 2/5: 执行前端生产构建"
 Push-Location $webRoot
 try {
     npm run build
@@ -135,7 +136,7 @@ if (!$npm) {
 
 $devProcess = $null
 try {
-    Write-Host "Step 3/4: 启动 Vite dev server ($baseUrl)"
+    Write-Host "Step 3/5: 启动 Vite dev server ($baseUrl)"
     $devProcess = Start-Process -FilePath $npm.Source -ArgumentList @(
         "run",
         "dev",
@@ -148,8 +149,14 @@ try {
 
     Wait-ForUrl -Url $baseUrl -TimeoutSeconds $StartupTimeoutSeconds
 
-    Write-Host "Step 4/4: 执行 Web UI smoke test"
+    Write-Host "Step 4/5: 执行 Web UI smoke test"
     & $smokeScript -BaseUrl $baseUrl
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+
+    Write-Host "Step 5/5: 执行移动端 Web UI smoke test"
+    & $mobileSmokeScript -BaseUrl $baseUrl
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
