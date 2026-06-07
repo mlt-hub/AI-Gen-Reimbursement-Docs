@@ -576,6 +576,85 @@ def test_fpa_preview_rules_only_allows_missing_ai_key(monkeypatch):
     assert calls[0]["strategy"] == "rules_only"
 
 
+def test_fpa_preview_appends_debug_to_accessible_session(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "fpa_preview_debug"
+    work_dir = tmp_path / "work"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=work_dir)
+
+    def fake_preview_fpa_module(**kwargs):
+        return {
+            "module": {"index": 1, "l3": "垂直行业管理"},
+            "rows": [],
+            "warnings": [],
+            "status": "ok",
+            "debug": {
+                "ai_called": True,
+                "system_prompt": "SYSTEM PROMPT",
+                "user_prompt": "USER PROMPT",
+                "ai_prompt": "AI PROMPT",
+                "raw_response": "RAW RESPONSE",
+                "thinking": "THINKING",
+                "parsed_rows": [{"name": "功能点"}],
+                "quality_review": {"ok": True},
+            },
+        }
+
+    monkeypatch.setattr(tasks, "preview_fpa_module", fake_preview_fpa_module)
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        data={
+            "module_name": "垂直行业管理",
+            "api_key": "sk-test",
+            "session_id": session_id,
+        },
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 200
+    log_dir = work_dir / "output" / "日志"
+    prompt_text = next((log_dir / "ai_prompts").glob("fpa_preview_*_prompt.txt")).read_text(encoding="utf-8")
+    response_text = next((log_dir / "ai_responses").glob("fpa_preview_*_response.txt")).read_text(encoding="utf-8")
+    combined_text = (log_dir / "ai_对话日志.md").read_text(encoding="utf-8")
+    assert "SYSTEM PROMPT" in prompt_text
+    assert "USER PROMPT" in prompt_text
+    assert "RAW RESPONSE" in response_text
+    assert "垂直行业管理" in combined_text
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_fpa_preview_rejects_debug_session_without_access(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="bob")
+    session_id = "fpa_preview_debug_forbidden"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path / "work")
+
+    def fake_preview_fpa_module(**kwargs):
+        return {
+            "module": {"index": 1, "l3": "垂直行业管理"},
+            "rows": [],
+            "warnings": [],
+            "status": "ok",
+            "debug": {"ai_called": True, "system_prompt": "secret"},
+        }
+
+    monkeypatch.setattr(tasks, "preview_fpa_module", fake_preview_fpa_module)
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        data={
+            "module_name": "垂直行业管理",
+            "api_key": "sk-test",
+            "session_id": session_id,
+        },
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 404
+    assert not (tmp_path / "work" / "output" / "日志").exists()
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_fpa_preview_modules_upload_returns_selectable_modules(monkeypatch):
     client = _client(monkeypatch, user="alice")
     calls: list[dict] = []

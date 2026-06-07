@@ -5,6 +5,7 @@ import queue
 import shutil
 import tempfile
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -146,6 +147,84 @@ def create_router(
             if os.path.basename(f) in ("功能清单-录入模板.xlsx", "功能清单.xlsx")
         ]
         return Path(preferred[0] if preferred else xlsx_files[0])
+
+    def _session_log_dir(session_id: str) -> Path | None:
+        state = session_manager.get(session_id)
+        if state is None:
+            return None
+        if state.output_dir is not None:
+            out_dir = state.output_dir
+        elif state.work_dir is not None:
+            out_dir = state.work_dir / "output"
+        else:
+            return None
+        log_dir = out_dir / "日志"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir
+
+    def _append_fpa_preview_debug_to_session(
+        *,
+        session_id: str,
+        result: dict,
+        request: Request,
+        user: str,
+    ) -> None:
+        require_session_access(session_manager, session_id, request, user)
+        debug = result.get("debug") if isinstance(result, dict) else None
+        if not isinstance(debug, dict):
+            return
+        log_dir = _session_log_dir(session_id)
+        if log_dir is None:
+            return
+
+        module = result.get("module") if isinstance(result.get("module"), dict) else {}
+        module_label = str(module.get("l3") or module.get("index") or "module")
+        safe_module = "".join(ch if ch.isalnum() else "_" for ch in module_label).strip("_") or "module"
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        base_name = f"fpa_preview_{stamp}_{safe_module}"
+        prompts_dir = log_dir / "ai_prompts"
+        responses_dir = log_dir / "ai_responses"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        responses_dir.mkdir(parents=True, exist_ok=True)
+
+        prompt_text = "\n".join([
+            f"# FPA 预览调试: {module_label}",
+            "",
+            "## System Prompt",
+            str(debug.get("system_prompt") or ""),
+            "",
+            "## User Prompt",
+            str(debug.get("user_prompt") or ""),
+            "",
+            "## AI Prompts",
+            str(debug.get("ai_prompt") or ""),
+        ]).strip() + "\n"
+        response_text = "\n".join([
+            f"# FPA 预览响应: {module_label}",
+            "",
+            "## Raw Response",
+            str(debug.get("raw_response") or ""),
+            "",
+            "## Thinking",
+            str(debug.get("thinking") or ""),
+            "",
+            "## Parsed Rows",
+            json.dumps(debug.get("parsed_rows") or [], ensure_ascii=False, indent=2),
+            "",
+            "## Quality Review",
+            json.dumps(debug.get("quality_review") or {}, ensure_ascii=False, indent=2),
+        ]).strip() + "\n"
+
+        (prompts_dir / f"{base_name}_prompt.txt").write_text(prompt_text, encoding="utf-8")
+        (responses_dir / f"{base_name}_response.txt").write_text(response_text, encoding="utf-8")
+
+        combined = log_dir / "ai_对话日志.md"
+        with combined.open("a", encoding="utf-8") as handle:
+            handle.write(f"\n\n# FPA 预览调试 - {module_label} - {stamp}\n\n")
+            handle.write("## Prompt\n\n")
+            handle.write(prompt_text)
+            handle.write("\n## Response\n\n")
+            handle.write(response_text)
 
     @router.get("/api/fpa/options")
     async def api_fpa_options(user: str = Depends(require_auth)):
@@ -545,6 +624,7 @@ def create_router(
         fpa_rule_set: str = Form(""),
         fpa_confirmation_mode: str = Form(""),
         confirmed_decisions: str = Form(""),
+        session_id: str = Form(""),
         file: UploadFile | None = File(None),
         user: str = Depends(require_auth),
     ):
@@ -614,6 +694,13 @@ def create_router(
                 fpa_confirmation_mode=task_config["fpa_confirmation_mode"] or "auto",
                 confirmed_decisions=confirmed_decisions_payload,
             )
+            if session_id.strip():
+                _append_fpa_preview_debug_to_session(
+                    session_id=session_id.strip(),
+                    result=result,
+                    request=request,
+                    user=user,
+                )
             return result
         except HTTPException:
             raise

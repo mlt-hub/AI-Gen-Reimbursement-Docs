@@ -603,6 +603,7 @@ async function requestPreview(useConfirmedDecisions: boolean) {
   if (useConfirmedDecisions && Object.keys(confirmedDecisions.value).length) {
     body.append('confirmed_decisions', JSON.stringify(confirmedDecisions.value))
   }
+  if (session.sessionId) body.append('session_id', session.sessionId)
   appendInputSource(body)
 
   try {
