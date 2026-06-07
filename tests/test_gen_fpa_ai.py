@@ -476,7 +476,7 @@ def test_explanation_warns_when_table_count_basis_is_used_as_detail():
                 "本系统维护垂直行业基础信息。"
                 "\n业务数据：涉及垂直行业数据，字段包括行业名称。"
                 "\n业务规则：系统保存并持续维护垂直行业逻辑数据组。"
-                "\n计算说明：该数据组由本系统维护，符合 ILF 定义，按后台数据库变更的表个数计量。"
+                "\n计算说明：该数据组由本系统维护，数据库表个数=1，按表数量作为详细计量解释。"
             ),
         }],
     )
@@ -488,6 +488,36 @@ def test_explanation_warns_when_table_count_basis_is_used_as_detail():
         if hit["rule_id"] == "postprocess.explanation_quality"
     )
     assert any("数据库表个数" in warning for warning in quality_hit["warnings"])
+
+
+def test_explanation_allows_classification_basis_wording_with_fpa_definition():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["按后台数据库变更的表个数计量"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "垂直行业数据组",
+            "type": "ILF",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：来自“【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组”，"
+                "本系统维护垂直行业基础信息。"
+                "\n业务数据：涉及垂直行业数据，字段包括行业名称。"
+                "\n业务规则：系统保存并持续维护垂直行业逻辑数据组。"
+                "\n计算说明：根据系统边界，本系统维护的逻辑数据集合符合 ILF 定义，按后台数据库变更的表个数计量。"
+            ),
+        }],
+    )
+
+    assert rows[0]["计算依据归类"] == "按后台数据库变更的表个数计量"
+    assert not any("数据库表个数" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for hit in rows[0]["_规则命中详情"]
+    )
 
 
 def test_unstructured_explanation_records_quality_warning():
@@ -507,7 +537,7 @@ def test_unstructured_explanation_records_quality_warning():
 
     assert any("计算依据说明格式不完整" in warning for warning in warnings)
     assert any("未使用完整路径格式" in warning for warning in warnings)
-    assert any("未明确当前 FPA 类型: ILF" in warning for warning in warnings)
+    assert any("未明确当前 FPA 类型: EI" in warning for warning in warnings)
     rule_hits = rows[0]["_规则命中详情"]
     quality_hit = next(hit for hit in rule_hits if hit["rule_id"] == "postprocess.explanation_quality")
     assert "结构化证据说明规则" in quality_hit["rule_desc"]
@@ -811,6 +841,94 @@ def test_ai_first_does_not_warn_type_conflict_when_agent_judgement_supports_eif(
     assert rows[0]["类型"] == "EIF"
     assert not any("AI type=EIF 与规则存在冲突" in warning for warning in warnings)
     assert not any(hit["rule_id"] == "postprocess.ai_first_type_conflict" for hit in rows[0]["_规则命中详情"])
+
+
+def test_ai_first_data_function_review_uses_agent_external_data_judgement():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "组织管理",
+            "二级模块": "归属组织",
+            "三级模块": "归属组织选择",
+            "三级模块整体功能描述": "引用主数据平台维护的组织主数据，本系统不维护组织主数据。",
+            "功能过程": "选择归属组织",
+            "功能过程类型": "新增",
+            "功能过程描述": "从主数据平台维护的组织主数据中选择记录，并保存到本系统业务对象。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "组织主数据数据组",
+                "type": "EIF",
+                "explanation": (
+                    "来源场景：【地市后台】组织管理-归属组织-归属组织选择-组织主数据数据组\n"
+                    "业务数据：组织主数据。\n"
+                    "业务规则：主数据平台维护，本系统引用。\n"
+                    "计算说明：外部系统维护且本系统引用的数据组，按 EIF 计量。"
+                ),
+                "source_process_ids": ["m1_p1"],
+                "source_processes": ["选择归属组织"],
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "EIF"
+    assert not any("AI 数据功能需人工复核" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.ai_data_group_review"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_ai_first_none_judgement_does_not_conflict_with_supported_transaction_row():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "消息管理",
+            "二级模块": "通知发送",
+            "三级模块": "短信通知",
+            "三级模块整体功能描述": "运营人员配置短信内容并触发短信发送，系统调用短信平台完成发送。",
+            "功能过程": "编辑短信模板",
+            "功能过程类型": "新增",
+            "功能过程描述": "维护短信标题、正文和变量。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "短信模板维护",
+                "type": "EI",
+                "explanation": (
+                    "来源场景：【地市后台】消息管理-通知发送-短信通知-短信模板维护\n"
+                    "业务数据：短信模板。\n"
+                    "业务规则：运营人员编辑短信模板并保存到本系统。\n"
+                    "计算说明：本功能维护内部 ILF，按 EI 计量。"
+                ),
+                "source_process_ids": ["m1_p1"],
+                "source_processes": ["编辑短信模板"],
+            },
+        ],
+    )
+
+    assert rows[0]["类型"] == "EI"
+    assert not any("AI type=EI 与规则存在冲突" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.ai_first_type_conflict"
+        for hit in rows[0]["_规则命中详情"]
+    )
 
 
 def test_ai_first_data_function_supplement_warning_does_not_report_zero_missing_processes():

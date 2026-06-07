@@ -74,7 +74,7 @@ CONFIG_WARNING_PREFIX = "FPA 配置 warning:"
 EXPLANATION_REQUIRED_LABELS = ("来源场景：", "业务数据：", "业务规则：", "计算说明：")
 EXPLANATION_MISSING_HINTS = ("未识别到", "未明确说明", "需求未明确说明")
 FPA_PROJECT_DESCRIPTION_MAX_CHARS = 5000
-EXPLANATION_TABLE_COUNT_HINTS = ("按后台数据库变更的表个数计量", "按数据库表个数计量", "按表个数计量")
+EXPLANATION_TABLE_COUNT_DETAIL_HINTS = ("数据库表个数=", "表个数=", "表数量", "1张表", "1 张表", "1个表", "1 个表")
 
 
 @dataclass(frozen=True)
@@ -176,7 +176,7 @@ def _explanation_quality_warnings(
     if any(hint in text for hint in EXPLANATION_MISSING_HINTS):
         warnings.append(f"{name} 正式计算依据说明包含缺失提示，应移入 check/debug 输出")
 
-    if any(hint in text for hint in EXPLANATION_TABLE_COUNT_HINTS):
+    if any(hint in text for hint in EXPLANATION_TABLE_COUNT_DETAIL_HINTS):
         warnings.append(
             f"{name} 计算依据说明疑似将数据库表个数作为详细计量解释，应保留在计算依据归类而非计算依据说明"
         )
@@ -680,7 +680,9 @@ def _normalize_ai_fpa_rows_for_l3(
                     "warnings": [warning],
                 })
 
-        review_warning = profile.ai_data_group_review_warning(name, explanation, fpa_type)
+        review_warning = ""
+        if not _ai_row_matches_type_judgement(raw, fpa_type, type_judgement):
+            review_warning = profile.ai_data_group_review_warning(name, explanation, fpa_type)
         if review_warning:
             warnings.append(review_warning)
             row_warnings.append(review_warning)
@@ -927,6 +929,8 @@ def _ai_row_matches_type_judgement(
         return False
     row_ids = _source_process_ids_from_row(row)
     row_names = _source_process_names_from_row(row)
+    row_name = str(row.get("name", "") or row.get("新增/修改功能点", "") or "")
+    row_text = f"{row_name} {row.get('explanation', '')} {row.get('计算依据说明', '')}"
     judgements = type_judgement.get("judgements", []) if isinstance(type_judgement, dict) else []
     if not isinstance(judgements, list):
         return False
@@ -934,8 +938,6 @@ def _ai_row_matches_type_judgement(
         if not isinstance(judgement, dict):
             continue
         if str(judgement.get("confidence", "") or "") != "high":
-            continue
-        if str(judgement.get("suggested_type", "") or "").upper() != ai_type:
             continue
         judgement_ids = {
             str(item).strip()
@@ -947,7 +949,21 @@ def _ai_row_matches_type_judgement(
             for item in judgement.get("source_process_names", [])
             if str(item).strip()
         } if isinstance(judgement.get("source_process_names", []), list) else set()
-        if (row_ids and row_ids & judgement_ids) or (row_names and row_names & judgement_names):
+        target = str(judgement.get("target_data_group", "") or "").strip()
+        source_matches = bool(
+            (row_ids and row_ids & judgement_ids)
+            or (row_names and row_names & judgement_names)
+            or (target and target in row_text)
+        )
+        suggested_type = str(judgement.get("suggested_type", "") or "").upper()
+        judgement_kind = str(judgement.get("judgement_kind", "") or "")
+        if suggested_type == "NONE" and judgement_kind == "ordinary_external_service" and ai_type != "EIF":
+            if source_matches:
+                return True
+            continue
+        if suggested_type != ai_type:
+            continue
+        if source_matches:
             return True
     return False
 

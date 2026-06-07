@@ -1188,6 +1188,8 @@ class StrictFpaProfile(CustomRulesProfile):
 
     def _looks_like_external_data_function_name(self, name: str) -> bool:
         action_keywords = self._configured_transaction_keywords()
+        if "数据组" in name:
+            return any(noun in name for noun in EXTERNAL_DATA_GROUP_NOUNS)
         return (
             any(noun in name for noun in EXTERNAL_DATA_GROUP_NOUNS)
             and not any(action in name for action in action_keywords)
@@ -1473,7 +1475,7 @@ class StrictFpaProfile(CustomRulesProfile):
         ) and not self._has_internal_data_function(text):
             return False
         if any(k in name for k in ["信息", "数据组", "主数据", "名单", "关系", "配置", "记录", "模板"]):
-            return not any(k in name for k in ["查询", "查看", "详情", "新增", "添加", "修改", "编辑", "删除", "导入", "导出"])
+            return not any(k in name for k in ["查询", "查看", "详情", "新增", "添加", "修改", "编辑", "删除", "维护", "保存", "配置", "导入", "导出"])
         return "维护" in text and not any(k in name for k in ["查询", "查看", "新增", "添加", "修改", "编辑", "删除"])
 
     def _data_functions_for_group(
