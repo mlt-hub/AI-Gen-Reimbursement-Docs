@@ -188,6 +188,43 @@ def test_web_config_restore_requires_backup_id(monkeypatch):
     assert "backup_id" in resp.json()["detail"]
 
 
+def test_web_config_backup_diff_uses_current_scope(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_build_config_backup_diff(**kwargs):
+        calls.append(kwargs)
+        return {
+            "id": kwargs["backup_id"],
+            "file": "system_config.yaml",
+            "current_exists": True,
+            "backup_created_at": "2026-06-07T12:00:00",
+            "diff": "-max_tokens: 8K\n+max_tokens: 16K",
+            "has_changes": True,
+        }
+
+    user_dir = tmp_path / "users" / "alice"
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "user_config_dir", lambda username: user_dir)
+    monkeypatch.setattr(config_routes, "build_config_backup_diff", fake_build_config_backup_diff)
+
+    resp = client.get("/api/web-config/backups/system_config.yaml.20260607_120000_000001.bak/diff")
+
+    assert resp.status_code == 200
+    assert resp.json()["has_changes"] is True
+    assert calls == [{
+        "target_dir": user_dir,
+        "backup_root": tmp_path,
+        "scope": "user-alice",
+        "backup_id": "system_config.yaml.20260607_120000_000001.bak",
+    }]
+
+
 def test_web_config_files_endpoint_lists_local_advanced_configs(monkeypatch, tmp_path):
     app = FastAPI()
     app.include_router(config_routes.router)

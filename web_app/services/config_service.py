@@ -2,6 +2,7 @@ import os
 import json
 import re
 import shutil
+import difflib
 from datetime import datetime
 from pathlib import Path
 
@@ -54,6 +55,12 @@ ADVANCED_CONFIG_FILES = {
         "phase": 3,
     },
 }
+
+RESTORABLE_CONFIG_FILES = (
+    ".env",
+    "system_config.yaml",
+    *tuple(str(meta["filename"]) for meta in ADVANCED_CONFIG_FILES.values()),
+)
 
 AI_TASK_MODES = {
     "from-excel-gen-all",
@@ -114,9 +121,7 @@ def remote_session_retention_seconds(default: int = 24 * 3600) -> int:
     return int(days * 24 * 3600) if days > 0 else default
 
 
-def mask_env_content(path: Path) -> str:
-    """读取 .env 文件内容，遮住敏感值，不暴露任何原文片段。"""
-    text = path.read_text(encoding="utf-8")
+def _mask_env_text(text: str) -> str:
     sensitive_keys = re.compile(
         r'^(.*_(?:KEY|SECRET|TOKEN|PASSWORD)\s*=)(.+)$',
         re.IGNORECASE,
@@ -129,6 +134,11 @@ def mask_env_content(path: Path) -> str:
         else:
             lines.append(line)
     return "\n".join(lines)
+
+
+def mask_env_content(path: Path) -> str:
+    """读取 .env 文件内容，遮住敏感值，不暴露任何原文片段。"""
+    return _mask_env_text(path.read_text(encoding="utf-8"))
 
 
 def redact_env_dict(env: dict[str, str]) -> dict[str, str]:
@@ -517,11 +527,8 @@ def list_config_backups(
 
     items: list[dict] = []
     for path in backup_dir.glob("*.bak"):
-        if path.name.startswith(".env."):
-            config_file = ".env"
-        elif path.name.startswith("system_config.yaml."):
-            config_file = "system_config.yaml"
-        else:
+        config_file = _config_file_from_backup_id(path.name)
+        if not config_file:
             continue
         stat = path.stat()
         items.append({
@@ -532,6 +539,15 @@ def list_config_backups(
         })
 
     return sorted(items, key=lambda item: item["created_at"], reverse=True)
+
+
+def _config_file_from_backup_id(backup_id: str) -> str | None:
+    if not backup_id.endswith(".bak"):
+        return None
+    for filename in sorted(RESTORABLE_CONFIG_FILES, key=len, reverse=True):
+        if backup_id.startswith(f"{filename}."):
+            return filename
+    return None
 
 
 def _advanced_config_meta(file_id: str) -> dict:
@@ -1115,13 +1131,8 @@ def save_ai_prompt_settings(
 def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tuple[Path, str]:
     if "/" in backup_id or "\\" in backup_id or ".." in backup_id:
         raise ValueError("备份 ID 无效")
-    if backup_id.startswith(".env."):
-        config_file = ".env"
-    elif backup_id.startswith("system_config.yaml."):
-        config_file = "system_config.yaml"
-    else:
-        raise ValueError("只支持恢复 .env 或 system_config.yaml 备份")
-    if not backup_id.endswith(".bak"):
+    config_file = _config_file_from_backup_id(backup_id)
+    if not config_file:
         raise ValueError("备份 ID 无效")
 
     backup_dir = _backup_scope_dir(backup_root, scope)
@@ -1132,6 +1143,48 @@ def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tu
     if not candidate.exists() or not candidate.is_file():
         raise FileNotFoundError("备份不存在")
     return candidate, config_file
+
+
+def _read_diff_text(path: Path, config_file: str) -> str:
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8")
+    if config_file == ".env":
+        return _mask_env_text(text)
+    return text
+
+
+def build_config_backup_diff(
+    *,
+    target_dir: Path,
+    backup_root: Path,
+    scope: str,
+    backup_id: str,
+) -> dict:
+    """Build a redacted unified diff between a backup and the current config file."""
+    backup_path, config_file = _resolve_backup_path(
+        backup_root=backup_root,
+        scope=scope,
+        backup_id=backup_id,
+    )
+    target_path = target_dir / config_file
+    backup_text = _read_diff_text(backup_path, config_file)
+    current_text = _read_diff_text(target_path, config_file)
+    diff_lines = list(difflib.unified_diff(
+        backup_text.splitlines(),
+        current_text.splitlines(),
+        fromfile=f"backup/{config_file}",
+        tofile=f"current/{config_file}",
+        lineterm="",
+    ))
+    return {
+        "id": backup_id,
+        "file": config_file,
+        "current_exists": target_path.exists(),
+        "backup_created_at": datetime.fromtimestamp(backup_path.stat().st_mtime).isoformat(),
+        "diff": "\n".join(diff_lines),
+        "has_changes": bool(diff_lines),
+    }
 
 
 def restore_config_backup(
@@ -1151,8 +1204,8 @@ def restore_config_backup(
     )
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    backup_config_files(
-        target_dir=target_dir,
+    backup_single_config_file(
+        source=target_dir / config_file,
         backup_root=backup_root,
         scope=scope,
     )

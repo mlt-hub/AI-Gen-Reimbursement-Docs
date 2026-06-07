@@ -543,7 +543,7 @@
 
       <p v-if="configBackupsError" class="text-sm text-[var(--color-warning)]">{{ configBackupsError }}</p>
       <div v-else-if="configBackups.length" class="overflow-x-auto">
-        <table class="w-full min-w-[560px] text-left text-sm">
+        <table class="w-full min-w-[680px] text-left text-sm">
           <thead class="border-b border-[var(--color-rule)] text-xs text-[var(--color-ink-soft)]">
             <tr>
               <th class="px-3 py-2 font-semibold">配置文件</th>
@@ -559,6 +559,13 @@
               <td class="px-3 py-2 text-[var(--color-ink-soft)]">{{ formatBytes(item.size_bytes) }}</td>
               <td class="px-3 py-2">
                 <button
+                  class="btn-secondary mr-2 min-h-0 px-3 py-1.5 text-xs"
+                  :disabled="configBackupDiffLoading || configRestoreLoading"
+                  @click="loadConfigBackupDiff(item)"
+                >
+                  {{ configBackupDiffLoading && configBackupDiffId === item.id ? '读取中...' : '查看差异' }}
+                </button>
+                <button
                   class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
                   :disabled="configRestoreLoading"
                   @click="restoreConfigBackup(item)"
@@ -571,6 +578,18 @@
         </table>
       </div>
       <p v-else class="text-sm text-[var(--color-ink-soft)]">暂无可恢复备份。</p>
+      <div v-if="configBackupDiff || configBackupDiffError" class="mt-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+        <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p class="text-xs font-semibold text-[var(--color-ink-soft)]">备份差异</p>
+            <h3 class="mt-1 text-sm font-semibold">{{ configBackupDiff?.file || '读取失败' }}</h3>
+            <p v-if="configBackupDiff" class="mt-1 text-xs text-[var(--color-ink-soft)]">备份时间：{{ formatTime(configBackupDiff.backup_created_at) }}</p>
+          </div>
+          <button class="btn-secondary w-fit min-h-0 px-3 py-1.5 text-xs" @click="clearConfigBackupDiff">关闭</button>
+        </div>
+        <p v-if="configBackupDiffError" class="text-sm text-[var(--color-warning)]">{{ configBackupDiffError }}</p>
+        <pre v-else class="max-h-[24rem] overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-4 font-mono text-xs leading-relaxed text-slate-300">{{ configBackupDiff?.diff || '当前文件与备份一致。' }}</pre>
+      </div>
       <p v-if="configRestoreMsg" :class="['mt-3 text-sm', configRestoreOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ configRestoreMsg }}</p>
     </section>
 
@@ -798,6 +817,15 @@ interface ConfigBackupsResponse {
   items: ConfigBackupItem[]
 }
 
+interface ConfigBackupDiffResponse {
+  id: string
+  file: string
+  current_exists: boolean
+  backup_created_at: string
+  diff: string
+  has_changes: boolean
+}
+
 interface AdvancedConfigFileItem {
   id: string
   label: string
@@ -927,6 +955,10 @@ const configRestoreLoading = ref(false)
 const configRestoreMsg = ref('')
 const configRestoreOk = ref(false)
 const restoringBackupId = ref('')
+const configBackupDiff = ref<ConfigBackupDiffResponse | null>(null)
+const configBackupDiffLoading = ref(false)
+const configBackupDiffError = ref('')
+const configBackupDiffId = ref('')
 const advancedConfigFiles = ref<AdvancedConfigFileItem[]>([])
 const activeAdvancedFileId = ref('')
 const advancedConfigContent = ref('')
@@ -1295,6 +1327,26 @@ async function loadConfigBackups() {
   } finally {
     configBackupsLoading.value = false
   }
+}
+
+async function loadConfigBackupDiff(item: ConfigBackupItem) {
+  configBackupDiffLoading.value = true
+  configBackupDiffError.value = ''
+  configBackupDiffId.value = item.id
+  try {
+    configBackupDiff.value = await apiFetch<ConfigBackupDiffResponse>(`/api/web-config/backups/${encodeURIComponent(item.id)}/diff`)
+  } catch (e) {
+    configBackupDiff.value = null
+    configBackupDiffError.value = normalizeApiError(e)
+  } finally {
+    configBackupDiffLoading.value = false
+  }
+}
+
+function clearConfigBackupDiff() {
+  configBackupDiff.value = null
+  configBackupDiffError.value = ''
+  configBackupDiffId.value = ''
 }
 
 async function loadFpaStrategySettings() {
@@ -1855,10 +1907,17 @@ async function restoreConfigBackup(item: ConfigBackupItem) {
     applySavedWebConfig(data)
     configRestoreOk.value = true
     configRestoreMsg.value = '恢复成功'
+    clearConfigBackupDiff()
     await loadConfigBackups()
     await loadLocalConfig()
     if (showUserConfig.value) {
       await loadUserConfig()
+    } else {
+      await loadFpaStrategySettings()
+      await loadFpaJudgementRules()
+      await loadBusinessRulesSettings()
+      await loadAiPromptSettings()
+      await loadAdvancedConfigFiles()
     }
   } catch (e) {
     configRestoreOk.value = false

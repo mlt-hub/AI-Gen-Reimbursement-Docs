@@ -458,16 +458,69 @@ def test_list_config_backups_returns_restorable_items(tmp_path):
     backup_dir.mkdir(parents=True)
     (backup_dir / ".env.20260607_120000_000001.bak").write_text("ANTHROPIC_MODEL=old\n", encoding="utf-8")
     (backup_dir / "system_config.yaml.20260607_120000_000001.bak").write_text("max_tokens: 8K\n", encoding="utf-8")
-    (backup_dir / "business_rules.yaml.20260607_120000_000001.bak").write_text("ignored: true\n", encoding="utf-8")
+    (backup_dir / "business_rules.yaml.20260607_120000_000001.bak").write_text("cfp_formula: old\n", encoding="utf-8")
 
     items = config_service.list_config_backups(backup_root=tmp_path, scope="unit")
 
-    assert {item["file"] for item in items} == {".env", "system_config.yaml"}
+    assert {item["file"] for item in items} == {".env", "system_config.yaml", "business_rules.yaml"}
     assert {item["id"] for item in items} == {
         ".env.20260607_120000_000001.bak",
         "system_config.yaml.20260607_120000_000001.bak",
+        "business_rules.yaml.20260607_120000_000001.bak",
     }
     assert all("size_bytes" in item for item in items)
+
+
+def test_build_config_backup_diff_masks_env_secrets(tmp_path):
+    (tmp_path / ".env").write_text(
+        "ANTHROPIC_API_KEY=sk-current-secret\nANTHROPIC_MODEL=current\n",
+        encoding="utf-8",
+    )
+    backup_dir = tmp_path / "backups" / "config" / "unit"
+    backup_dir.mkdir(parents=True)
+    backup = backup_dir / ".env.20260607_120000_000001.bak"
+    backup.write_text(
+        "ANTHROPIC_API_KEY=sk-backup-secret\nANTHROPIC_MODEL=old\n",
+        encoding="utf-8",
+    )
+
+    diff = config_service.build_config_backup_diff(
+        target_dir=tmp_path,
+        backup_root=tmp_path,
+        scope="unit",
+        backup_id=backup.name,
+    )
+
+    assert diff["file"] == ".env"
+    assert diff["has_changes"] is True
+    assert "sk-current-secret" not in diff["diff"]
+    assert "sk-backup-secret" not in diff["diff"]
+    assert "ANTHROPIC_API_KEY=***" in diff["diff"]
+    assert "-ANTHROPIC_MODEL=old" in diff["diff"]
+    assert "+ANTHROPIC_MODEL=current" in diff["diff"]
+
+
+def test_restore_config_backup_supports_advanced_config_files(tmp_path):
+    target = tmp_path / "fpa_config.yaml"
+    target.write_text("default-profile: current\n", encoding="utf-8")
+    backup_dir = tmp_path / "backups" / "config" / "unit"
+    backup_dir.mkdir(parents=True)
+    backup = backup_dir / "fpa_config.yaml.20260607_120000_000001.bak"
+    backup.write_text("default-profile: restored\n", encoding="utf-8")
+
+    config_service.restore_config_backup(
+        target_dir=tmp_path,
+        backup_root=tmp_path,
+        scope="unit",
+        backup_id=backup.name,
+        actor="local-admin",
+        audit_root=tmp_path,
+    )
+
+    assert target.read_text(encoding="utf-8") == "default-profile: restored\n"
+    current_backups = list(backup_dir.glob("fpa_config.yaml.*.bak"))
+    assert len(current_backups) == 2
+    assert any("default-profile: current" in path.read_text(encoding="utf-8") for path in current_backups)
 
 
 def test_restore_config_backup_restores_file_and_writes_audit(tmp_path):

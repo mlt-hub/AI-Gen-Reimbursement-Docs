@@ -278,7 +278,7 @@ PUT  /api/web-config
 - 已实现 FPA 轻量预览调试记录与 session 日志关联：预览请求带 `session_id` 且用户有访问权限时，后端把本次预览 debug 写入该 session 的 `日志/ai_prompts`、`日志/ai_responses` 和 `ai_对话日志.md`，供独立调试页查看。
 - 配置页已接入 AI 配置编辑表单，可通过 `PUT /api/web-config` 保存 API Key、接口地址、模型、最大 Token 数和本机共享凭据开关；旧高级配置中的明文 API Key 输入已移除。
 - 配置页已接入运行默认值和 `out_templates` 模板映射编辑表单，可通过 `PUT /api/web-config` 保存项目名称、FPA 方案、FPA 执行策略、FPA 规则集、FPA 生成模式和模板映射。
-- 已新增配置备份列表与恢复入口：`GET /api/web-config/backups`、`POST /api/web-config/backups/restore`；本机管理员恢复全局配置备份，远程用户恢复个人配置备份，恢复前自动备份当前文件并写入脱敏审计记录。
+- 已新增配置备份列表、差异查看与恢复入口：`GET /api/web-config/backups`、`GET /api/web-config/backups/{backup_id}/diff`、`POST /api/web-config/backups/restore`；本机管理员恢复全局配置备份，远程用户恢复个人配置备份，恢复前自动备份当前文件并写入脱敏审计记录。
 - 已实现 `.env` 和 `system_config.yaml` 的原子写入：保存和恢复均先写入同目录临时文件，再替换目标文件，降低写入中断导致配置文件半写入的风险。
 - 已新增 `tests/test_web_fpa_debug.py`，专项覆盖 `/sessions/:sessionId/fpa/debug` 所需的 session 状态恢复、AI 交互记录读取、合并日志读取和远程用户访问隔离。
 - 已新增 `tests/test_web_config_audit.py`，专项覆盖配置变更审计 JSONL 写入和敏感字段脱敏。
@@ -592,7 +592,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 3 | 配置中心第一期 UI | 已完成基础闭环 | 配置页已展示并可编辑 AI 配置、运行默认值、`out_templates` 模板映射；模板上传/下载已迁入配置页。 | 后续可继续拆成 `AIConfigSection`、`WebRuntimeConfigSection`、`TemplateSettingsSection` 独立组件。 |
 | 4 | Web 配置接口 | 已完成基础闭环 | `d6961ea feat: add web config read model`、`150e6a2 feat: save web config with encrypted secrets`；AI 配置、运行默认值和模板映射表单均已接入 `PUT /api/web-config`。 | 后续高级 YAML/JSON 编辑继续复用该保存、备份和审计基础。 |
 | 5 | API Key 加密存储 | 已完成基础闭环 | `web_app/services/secret_service.py`，测试覆盖 DPAPI 兜底本机密钥文件。 | 后续任务启动读取密文时需接解密。 |
-| 6 | 配置备份、回滚与审计 | 已完成基础闭环 | `ad58628 feat: add web config backup audit`；保存前备份、最近 5 个版本保留、审计 JSONL、备份列表、恢复入口和原子写入已接入。 | 后续高级配置编辑器复用同一备份/恢复基础。 |
+| 6 | 配置备份、回滚与审计 | 已完成基础闭环 | `ad58628 feat: add web config backup audit` 起步；保存前备份、最近 5 个版本保留、审计 JSONL、备份列表、脱敏差异查看、恢复入口和原子写入已接入；高级配置文件备份也可在同一列表中查看差异和恢复。 | 后续可继续补按文件筛选、diff 高亮和恢复前二次对比。 |
 | 7 | 任务启动配置合并 | 已完成基础闭环 | `resolve_task_start_config()` 已接入 `/api/run-local`、`/api/run-upload` 和 `/api/fpa/preview-module`，形成正式任务和 FPA 预览的参数快照。 | `fpa_confirmation_mode` 目前在正式生成 pipeline 中尚无承接参数；后续如接入正式生成需继续传递该字段。 |
 | 8 | 远程用户凭据策略 | 已完成基础闭环 | 远程 AI 任务和 FPA AI 预览无可用 API Key 时返回明确错误；共享全局 Key 只有 `allow_shared_ai_credentials: true` 时可用。 | 后续新增其他 AI 预览/调试入口时继续复用同一策略。 |
 | 9 | FPA 预览和调试页 | 已完成第一阶段闭环 | FPA 预览已在统一 AppShell 下；已新增 `/sessions/:sessionId/fpa/debug` 页面，复用现有 AI 交互记录和合并日志接口；FPA 预览页和历史页已有 session-aware 入口；FPA 轻量预览 debug 可写入可访问 session 的 AI 日志目录。 | 后续如需按功能点、模型调用、规则命中筛选，再做结构化 FPA 调试接口。 |
@@ -671,7 +671,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 |---:|---|---|---|---|
 | 1 | Prompt 配置 UI | 已完成第一阶段基础闭环 | 已新增 `/api/web-config/ai-prompts` 读写接口；配置页已新增“Prompt 配置 / AI 场景提示词”表单，可按场景编辑 `name`、`scene`、`system`、`examples`；保存时写入 `ai_system_prompts_config.yaml`、保留未知顶层 key、保存前备份、审计、校验失败不覆盖原文件并清理配置缓存；完整 YAML 仍可通过高级配置入口编辑。 | 后续可补 prompt 模板变量提示、场景搜索、批量导入，以及按调用场景跳转到 AI 调试页。 |
 | 2 | 领域上下文 UI | 高级 JSON 基础已完成 | `domain_context.json` 已纳入高级 YAML/JSON 配置文件入口，保存前执行 JSON 语法校验和 `validate_fpa_domain_context()` 业务校验。 | 尚未提供结构化表单；后续可按项目背景、术语、业务边界拆成可视化字段。 |
-| 3 | 配置历史与差异 | 部分完成 | 已有最近备份列表和恢复入口，恢复前会备份当前配置并清缓存。 | 尚未在 UI 中展示备份 diff。 |
+| 3 | 配置历史与差异 | 已完成第一阶段基础闭环 | 已有最近备份列表、`/api/web-config/backups/{backup_id}/diff` 脱敏差异接口和恢复入口；备份列表已覆盖 `.env`、`system_config.yaml` 以及 `business_rules.yaml`、`fpa_config.yaml`、`fpa_judgement_rules.yaml`、`ai_system_prompts_config.yaml`、`domain_context.json` 等高级配置文件；配置页可点“查看差异”展示备份与当前文件的 unified diff；恢复前会备份当前目标文件，恢复后清缓存并刷新结构化配置表单。 | 后续可补按文件筛选、行级 diff 高亮、恢复默认版本。 |
 | 4 | 导入导出 | 未开始 | 现有配置页仍保留浏览器本地设置导入导出能力。 | 尚未实现后端配置包导入导出，也尚未定义敏感文件排除清单。 |
 | 5 | 结构化 FPA 调试接口 | 未开始 | 当前 `/sessions/:sessionId/fpa/debug` 先复用现有 AI 日志/交互接口。 | 后续再按 session、功能点、模型调用补结构化筛选接口。 |
 
@@ -748,17 +748,17 @@ web_app/src/views/FpaAiDebugPage.vue
 | `web_app/src/components/TemplateUpload.vue` | 迁移挂载位置，不改变模板上传能力。 |
 | `web_app/src/components/TemplateDownload.vue` | 迁移挂载位置，不改变模板下载能力。 |
 | `web_app/src/assets/main.css` | 补齐左侧栏、移动端抽屉等布局样式。 |
-| `web_app/routes/config.py` | 增加 Web 配置读写接口、高级配置文件接口、FPA 策略结构化接口、FPA 判定规则列表接口、业务规则结构化接口和 Prompt 配置结构化接口。 |
-| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、最近 5 个备份、回滚、高级 YAML/JSON 配置文件校验保存、FPA 策略结构化保存、FPA 判定规则列表保存、业务规则结构化保存和 Prompt 配置结构化保存。 |
+| `web_app/routes/config.py` | 增加 Web 配置读写接口、高级配置文件接口、配置备份差异接口、FPA 策略结构化接口、FPA 判定规则列表接口、业务规则结构化接口和 Prompt 配置结构化接口。 |
+| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、最近 5 个备份、回滚、脱敏 diff、高级 YAML/JSON 配置文件校验保存、FPA 策略结构化保存、FPA 判定规则列表保存、业务规则结构化保存和 Prompt 配置结构化保存。 |
 | `web_app/services/config_audit_service.py` | 新增配置变更审计能力，记录操作者、时间、文件和结果，不记录敏感值。 |
 | `web_app/services/secret_service.py` | 新增 API Key 加密存储能力，Windows 优先 DPAPI，不可用时退到本机密钥文件。 |
 | `ai_gen_reimbursement_docs/config_utils.py` | 补充配置校验和缓存清理入口，确保保存后即时生效。 |
 | `web_app/routes/tasks.py` | 任务启动时合并请求参数与配置默认值，形成运行快照。 |
-| `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏、敏感值保留，高级配置文件读取、语法校验、业务校验、保存前备份、原子写入、校验失败不覆盖，以及 FPA 策略、FPA 判定规则、业务规则和 Prompt 配置结构化保存。 |
+| `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏、敏感值保留，高级配置文件读取、语法校验、业务校验、保存前备份、原子写入、校验失败不覆盖、备份列表、脱敏差异、高级配置备份恢复，以及 FPA 策略、FPA 判定规则、业务规则和 Prompt 配置结构化保存。 |
 | `tests/test_web_config_audit.py` | 覆盖配置变更审计不记录敏感值。 |
 | `tests/test_web_secret_service.py` | 覆盖 API Key 加密、读取脱敏、DPAPI 不可用时兜底本机密钥文件。 |
 | `tests/test_web_tasks.py` | 覆盖任务启动参数快照和配置默认值兜底。 |
-| `tests/test_web_config_routes.py` | 覆盖 `/api/web-config` 读取、保存、权限、来源标记、脱敏响应、高级配置文件接口、FPA 策略接口、FPA 判定规则接口、业务规则接口和 Prompt 配置接口。 |
+| `tests/test_web_config_routes.py` | 覆盖 `/api/web-config` 读取、保存、权限、来源标记、脱敏响应、备份列表/恢复/差异接口、高级配置文件接口、FPA 策略接口、FPA 判定规则接口、业务规则接口和 Prompt 配置接口。 |
 | `tests/test_web_fpa_debug.py` | 覆盖 `/sessions/:sessionId/fpa/debug` 所需会话访问和日志数据读取。 |
 
 ## 验证方式

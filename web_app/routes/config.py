@@ -9,6 +9,7 @@ from web_app.services.config_service import (
     AdvancedConfigError,
     build_ai_prompt_settings_view,
     build_business_rules_view,
+    build_config_backup_diff,
     build_fpa_judgement_rules_view,
     build_fpa_strategy_settings_view,
     build_web_config_view,
@@ -160,6 +161,25 @@ async def restore_web_config_backup(data: dict, request: Request, user: str = De
         username=username,
         local_mode=local_mode,
     )
+
+
+@router.get("/api/web-config/backups/{backup_id}/diff")
+async def get_web_config_backup_diff(backup_id: str, request: Request, user: str = Depends(require_auth)):
+    """查看当前配置作用域中一份备份与当前文件的脱敏差异。"""
+    local_mode = is_local_mode(request)
+    scope = "global" if local_mode else f"user-{user}"
+    target_dir = config_dir() if local_mode else user_config_dir(user)
+    try:
+        return build_config_backup_diff(
+            target_dir=target_dir,
+            backup_root=config_dir(),
+            scope=scope,
+            backup_id=backup_id,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/api/web-config/files")
