@@ -223,19 +223,22 @@ PUT  /api/web-config
 
 | Web 配置区 | 配置文件 | 建议字段 |
 |---|---|---|
-| AI 配置 | `~/.ai-gen-reimbursement-docs/.env` | `ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL` |
+| AI 配置 | `~/.ai-gen-reimbursement-docs/.env` | `ANTHROPIC_API_KEY_ENC` 或等价密文字段、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL` |
 | AI 配置 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | `max_tokens`、`allow_shared_ai_credentials` |
 | 模板配置 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | `out_templates` |
 | 运行默认值 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | FPA 方案、策略、规则集、确认模式等 Web 默认值 |
 
 敏感字段规则：
 
+- API Key 不得明文保存。后端只能保存加密后的密文，例如 `ANTHROPIC_API_KEY_ENC`；`.env`、YAML、备份文件、导出文件中都不得出现 API Key 原文。
 - `GET` 不返回 API Key 原文，只返回 `api_key_configured: true/false`。
-- `PUT` 中省略 `api_key` 或传入遮罩值时，保留已有 API Key。
-- `PUT` 中传入新的 `api_key` 时，覆盖写入 `.env`。
+- `PUT` 中省略 `api_key` 或传入遮罩值时，保留已有加密 API Key。
+- `PUT` 中传入新的 `api_key` 时，后端加密后覆盖密文字段。
 - 如需清空 API Key，使用显式字段，例如 `clear_api_key: true`，不要把空字符串解释成删除。
 - API Key 不参与普通全局默认继承。远程用户只有在配置了个人 API Key，或管理员显式开启 `allow_shared_ai_credentials: true` 时，才可使用服务端共享 API Key。
 - `allow_shared_ai_credentials` 默认值为 `false`，避免远程用户未配置个人 Key 时静默消耗管理员或本机全局 Key。
+- 日志、错误信息、AI 调试页、配置预览、配置备份和配置导出都必须脱敏，不得输出 API Key 原文或可还原片段。
+- 加密密钥不得和配置密文放在同一份可导出的配置包中；如使用本机密钥文件、系统凭据库、KMS 或其他密钥来源，应在部署文档中说明恢复和迁移方式。
 
 配置合并优先级：
 
@@ -259,6 +262,7 @@ PUT  /api/web-config
 PUT /api/web-config
   -> 校验 payload
   -> 合并现有配置，保留未提交的敏感值
+  -> 加密新的 API Key，仅写入密文
   -> 原子写入 .env / system_config.yaml
   -> 清理当前进程的配置读取缓存
   -> 返回脱敏后的最新 web-config
@@ -271,6 +275,13 @@ PUT /api/web-config
 - 下一次生成立即使用新配置。
 - 下一次 FPA 预览立即使用新配置。
 - 已经运行中的 session 不重新读取配置，继续使用任务启动时的参数快照。
+
+API Key 安全边界：
+
+- 系统必须保证管理员无法通过配置文件、读取接口、日志、调试信息、备份或导出文件直接取得 API Key 原文。
+- 在后端代调用 AI 服务的架构下，后端进程在调用模型时需要使用可用凭据，因此不能承诺拥有服务器最高权限的管理员绝对无法通过修改代码、读取进程内存或拦截请求取得运行时凭据。
+- 如需达到“系统管理员也无法取得用户 API Key”的强隔离目标，应改用浏览器端直连 AI 服务、用户本地代理，或外部 KMS/HSM 托管等方案；该能力属于后续架构升级，不纳入当前默认实现。
+- 当前默认实现采用加密落盘、读取脱敏、日志脱敏、备份脱敏、不默认共享全局 Key、显式清空的安全模型。
 
 后端实现落点：
 
@@ -502,7 +513,8 @@ npm run build
 - 自定义输出模板、下载模板只出现在 `配置` 页。
 - AI 配置只出现在 `配置` 页。
 - 配置页保存后写入配置文件，刷新页面或重启后仍能读取。
-- API Key 不在读取接口中返回原文；省略 API Key 保存时保留旧值。
+- API Key 不明文落盘；配置文件、备份、导出、日志、错误信息和调试页面都不出现 API Key 原文。
+- API Key 不在读取接口中返回原文；省略 API Key 保存时保留旧的加密密文。
 - 远程用户未配置个人 API Key 且 `allow_shared_ai_credentials: false` 时，不继承全局 API Key，并给出明确提示。
 - 管理员显式开启 `allow_shared_ai_credentials: true` 后，远程用户才可使用服务端共享 API Key。
 - 配置中心第一阶段可编辑基础配置和模板配置。
@@ -524,6 +536,7 @@ npm run build
 | 保存配置后刷新页面 | 前端重新读取配置文件视图，AI 配置、模板配置和运行默认值保持一致。 |
 | 保存配置后启动新任务 | 新任务使用最新配置作为默认值，同时保留生成页本次请求显式覆盖能力。 |
 | 远程用户无个人 API Key | 默认不使用全局 API Key；仅当 `allow_shared_ai_credentials: true` 时使用共享凭据。 |
+| 保存 API Key | 只写入加密密文；读取配置、备份、导出和日志均不可见原文。 |
 | 高级配置校验失败 | 显示具体错误，不写入目标配置文件，保留原配置。 |
 | 配置误保存 | 可从备份版本恢复上一份配置，并在恢复后清理配置缓存。 |
 
@@ -533,7 +546,9 @@ npm run build
 - `config` store 中的字段仍可复用，但保存成功后应以后端返回的脱敏配置视图为准。
 - 拆分 `AdvancedOptions.vue` 时要确保 `startTask()` 提交的字段不变，并且能用配置文件默认值兜底。
 - API Key 输入应继续沿用现有敏感输入保护逻辑。
-- 配置文件写入必须保护敏感字段：遮罩值不能覆盖真实 API Key，空字符串不能误删旧 Key。
+- 配置文件写入必须保护敏感字段：遮罩值不能覆盖真实 API Key 密文，空字符串不能误删旧 Key。
+- API Key 不得明文保存；配置文件、备份、导出、日志、错误信息和调试页面都不得泄露原文。
+- 在后端代调用 AI 服务的架构下，不能承诺拥有服务器最高权限的管理员绝对无法取得运行时凭据；默认实现只承诺配置文件、接口、日志、备份和导出中拿不到 API Key 原文。
 - 远程用户个人配置不能被本机全局配置覆盖；全局配置变化只影响未设置个人覆盖项的普通配置。
 - API Key 不能按普通配置继承全局默认值；共享系统 API Key 必须由 `allow_shared_ai_credentials` 显式开启。
 - 保存配置后要清理后端配置读取缓存，否则 `system_config.yaml` 中的部分字段可能无法即时生效。
