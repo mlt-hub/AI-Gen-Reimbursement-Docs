@@ -42,6 +42,12 @@ const router = createRouter({
       meta: { nav: 'preview' },
     },
     {
+      path: '/sessions/:sessionId/fpa/debug',
+      name: 'fpa-ai-debug',
+      component: () => import('@/views/FpaAiDebugPage.vue'),
+      meta: { nav: 'preview' },
+    },
+    {
       path: '/prompt-debug',
       name: 'prompt-debug',
       component: () => import('@/views/PromptDebug.vue'),

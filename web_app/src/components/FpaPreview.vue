@@ -294,53 +294,32 @@
             </details>
           </div>
 
-          <div v-if="result.debug" class="border-t border-[var(--color-rule)] px-3 py-2">
-            <details>
-              <summary class="subtle-link cursor-pointer select-none text-xs">
-                AI 调试信息
-                <span class="ml-2 text-[var(--color-ink-soft)]">{{ result.debug.ai_called ? '已调用 AI' : debugReasonLabel(result.debug.reason) }}</span>
-              </summary>
-              <div class="mt-3 space-y-3 text-xs">
-                <div v-if="result.debug.error" class="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-[var(--color-warning)]">
-                  {{ result.debug.error }}
-                </div>
-                <div v-if="result.debug.system_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-semibold text-[var(--color-ink)]">系统提示词</span>
-                    <span class="text-[var(--color-ink-soft)]">{{ result.debug.system_prompt_source || '未配置' }}</span>
-                  </div>
-                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.system_prompt }}</pre>
-                </div>
-                <div v-if="result.debug.user_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-semibold text-[var(--color-ink)]">用户提示词</span>
-                    <span class="text-[var(--color-ink-soft)]">{{ result.debug.user_prompt_source || '未配置' }}</span>
-                  </div>
-                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.user_prompt }}</pre>
-                </div>
-                <div v-if="result.debug.ai_prompt" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                  <div class="font-semibold text-[var(--color-ink)]">AI Prompts</div>
-                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.ai_prompt }}</pre>
-                </div>
-                <div v-if="result.debug.raw_response" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                  <div class="font-semibold text-[var(--color-ink)]">AI Responses</div>
-                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.raw_response }}</pre>
-                </div>
-                <div class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                  <div class="font-semibold text-[var(--color-ink)]">AI Thinking</div>
-                  <pre v-if="result.debug.thinking" class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ result.debug.thinking }}</pre>
-                  <div v-else class="mt-2 text-[var(--color-ink-soft)]">当前模型未返回思考过程</div>
-                </div>
-                <div v-if="result.debug.parsed_rows.length" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                  <div class="font-semibold text-[var(--color-ink)]">解析结果</div>
-                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ stringifyDebug(result.debug.parsed_rows) }}</pre>
-                </div>
-                <div v-if="result.debug.quality_review" class="rounded-md bg-[var(--color-surface-muted)] p-3">
-                  <div class="font-semibold text-[var(--color-ink)]">质量审核</div>
-                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono leading-5 text-[var(--color-ink-muted)]">{{ stringifyDebug(result.debug.quality_review) }}</pre>
+          <div v-if="result.debug" class="border-t border-[var(--color-rule)] px-3 py-3">
+            <div class="flex flex-col gap-3 rounded-md bg-[var(--color-surface-muted)] p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-[var(--color-ink)]">AI 调试信息</div>
+                <div class="mt-1 text-xs text-[var(--color-ink-soft)]">
+                  {{ result.debug.ai_called ? '已调用 AI' : debugReasonLabel(result.debug.reason) }}
+                  <span v-if="result.debug.error"> · {{ result.debug.error }}</span>
                 </div>
               </div>
-            </details>
+              <router-link
+                v-if="fpaDebugLink"
+                :to="fpaDebugLink"
+                class="btn-secondary inline-flex shrink-0 justify-center px-3 py-1.5 text-xs"
+              >
+                查看 AI 调试信息
+              </router-link>
+              <button
+                v-else
+                type="button"
+                class="btn-secondary inline-flex shrink-0 justify-center px-3 py-1.5 text-xs"
+                disabled
+                title="请先从 FPA 预览或历史任务进入"
+              >
+                查看 AI 调试信息
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -517,6 +496,9 @@ const defaultStrategyLabel = computed(() => {
 })
 const defaultRuleSetLabel = computed(() => (
   selectedProfile.value?.rule_set ? `默认（${selectedProfile.value.rule_set}）` : '默认'
+))
+const fpaDebugLink = computed(() => (
+  session.sessionId ? `/sessions/${session.sessionId}/fpa/debug` : ''
 ))
 
 watch(
@@ -706,9 +688,5 @@ function debugReasonLabel(reason?: string) {
     ai_failed_fallback: 'AI 失败后兜底',
   }
   return labels[reason || ''] ?? '未调用 AI'
-}
-
-function stringifyDebug(value: unknown) {
-  return JSON.stringify(value, null, 2)
 }
 </script>

@@ -636,6 +636,7 @@ def test_fpa_preview_requires_module_target(monkeypatch):
         "/static/dist/history",
         "/static/dist/prompt-debug",
         "/static/dist/preview/fpa",
+        "/static/dist/sessions/demo-session/fpa/debug",
     ],
 )
 def test_static_dist_spa_routes_return_spa_index(monkeypatch, path):
@@ -650,7 +651,7 @@ def test_static_dist_spa_routes_return_spa_index(monkeypatch, path):
 
 @pytest.mark.parametrize(
     "path",
-    ["/login", "/preview/fpa"],
+    ["/login", "/preview/fpa", "/sessions/demo-session/fpa/debug"],
 )
 def test_top_level_spa_routes_return_spa_index(monkeypatch, path):
     client = _client(monkeypatch, user="alice")

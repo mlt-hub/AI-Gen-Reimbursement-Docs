@@ -94,12 +94,12 @@ defineEmits<{ navigate: [] }>()
 const route = useRoute()
 
 const primaryItems: NavItem[] = [
-  { label: '生成', to: '/', icon: HomeIcon, match: path => path === '/' },
+  { label: '生成', to: '/', icon: HomeIcon, match: path => path === '/' || path === '/static/dist/' },
   {
     label: '预览',
     to: '/preview/fpa',
     icon: DocumentMagnifyingGlassIcon,
-    match: path => path.startsWith('/preview') || path.startsWith('/sessions/'),
+    match: path => path.startsWith('/preview') || path.startsWith('/sessions/') || path.startsWith('/static/dist/sessions/'),
   },
   { label: '历史', to: '/history', icon: ClockIcon, match: path => path.startsWith('/history') },
   { label: '配置', to: '/config', icon: Cog6ToothIcon, match: path => path.startsWith('/config') },

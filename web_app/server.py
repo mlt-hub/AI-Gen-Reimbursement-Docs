@@ -121,6 +121,11 @@ async def static_dist_preview_page(path: str):
     return _spa_index()
 
 
+@app.get("/static/dist/sessions/{path:path}")
+async def static_dist_sessions_page(path: str):
+    return _spa_index()
+
+
 # 静态文件：Vite 构建产物
 _dist_dir = Path(__file__).parent / "static" / "dist"
 if _dist_dir.exists():
@@ -159,6 +164,11 @@ async def history_page():
 
 @app.get("/preview/{path:path}")
 async def preview_page(path: str):
+    return _spa_index()
+
+
+@app.get("/sessions/{path:path}")
+async def sessions_page(path: str):
     return _spa_index()
 
 

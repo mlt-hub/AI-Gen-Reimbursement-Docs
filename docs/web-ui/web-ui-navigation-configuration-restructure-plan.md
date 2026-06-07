@@ -274,6 +274,7 @@ PUT  /api/web-config
 - 已实现正式任务启动的配置默认值合并：请求显式值优先，其次个人配置、全局配置、系统默认值。
 - 已实现远程 AI 任务启动凭据阻断：远程用户无个人 API Key 且未开启共享系统 API Key 时拒绝启动。
 - 已实现 FPA 预览的配置默认值合并和远程凭据策略：预览请求显式值优先，其次个人配置、全局配置、系统默认值；远程用户无个人 API Key 且未开启共享系统 API Key 时拒绝 AI 预览。
+- 已新增 FPA AI 调试页面路由 `/sessions/:sessionId/fpa/debug`，第一阶段复用现有 AI 交互记录和合并日志接口；FPA 预览页和历史页可带 session 上下文跳转，缺少 session 时显示空态。
 - 配置页已接入 AI 配置编辑表单，可通过 `PUT /api/web-config` 保存 API Key、接口地址、模型、最大 Token 数和本机共享凭据开关；旧高级配置中的明文 API Key 输入已移除。
 - 配置页已接入运行默认值和 `out_templates` 模板映射编辑表单，可通过 `PUT /api/web-config` 保存项目名称、FPA 方案、FPA 执行策略、FPA 规则集、FPA 生成模式和模板映射。
 
@@ -589,7 +590,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 6 | 配置备份、回滚与审计 | 部分完成 | `ad58628 feat: add web config backup audit`；保存前备份、最近 5 个版本保留、审计 JSONL 已接入保存流程。 | 还需补恢复备份 API/UI；原子写入可继续增强。 |
 | 7 | 任务启动配置合并 | 已完成基础闭环 | `resolve_task_start_config()` 已接入 `/api/run-local`、`/api/run-upload` 和 `/api/fpa/preview-module`，形成正式任务和 FPA 预览的参数快照。 | `fpa_confirmation_mode` 目前在正式生成 pipeline 中尚无承接参数；后续如接入正式生成需继续传递该字段。 |
 | 8 | 远程用户凭据策略 | 已完成基础闭环 | 远程 AI 任务和 FPA AI 预览无可用 API Key 时返回明确错误；共享全局 Key 只有 `allow_shared_ai_credentials: true` 时可用。 | 后续新增其他 AI 预览/调试入口时继续复用同一策略。 |
-| 9 | FPA 预览和调试页 | 未开始 | FPA 预览已在统一 AppShell 下。 | 需新增 `/sessions/:sessionId/fpa/debug` 页面和 session-aware 入口。 |
+| 9 | FPA 预览和调试页 | 部分完成 | FPA 预览已在统一 AppShell 下；已新增 `/sessions/:sessionId/fpa/debug` 页面，复用现有 AI 交互记录和合并日志接口；FPA 预览页和历史页已有 session-aware 入口。 | 还需继续打磨 FPA 预览轻量调试结果与正式 session 日志之间的关联方式；后续再做结构化 FPA 调试接口。 |
 | 10 | 回归与打磨 | 持续进行 | 当前每轮提交已跑相关 pytest 和 `npm run build`。 | 第一阶段收尾时跑完整指定测试和移动端人工检查。 |
 
 ### 第一期建议提交顺序

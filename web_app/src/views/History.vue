@@ -82,7 +82,17 @@
                   <button v-else-if="item.open_folder_available" class="btn-secondary min-h-0 px-3 py-1.5 text-xs" @click="openFolder(item)">
                     打开目录
                   </button>
-                  <span v-else class="rounded-md bg-[var(--color-surface-muted)] px-2 py-1 text-xs text-[var(--color-ink-muted)]">
+                  <RouterLink
+                    v-if="canOpenFpaDebug(item)"
+                    :to="`/sessions/${item.session_id}/fpa/debug`"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                  >
+                    AI 调试
+                  </RouterLink>
+                  <span
+                    v-if="!item.download_available && !item.open_folder_available && !canOpenFpaDebug(item)"
+                    class="rounded-md bg-[var(--color-surface-muted)] px-2 py-1 text-xs text-[var(--color-ink-muted)]"
+                  >
                     {{ unavailableLabel(item) }}
                   </span>
                 </div>
@@ -97,6 +107,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 interface DoneFile {
@@ -188,6 +199,10 @@ function artifactLabel(item: HistoryItem) {
 
 function unavailableLabel(item: HistoryItem) {
   return item.artifact_kind === 'remote_zip' ? '已过期' : '目录不存在'
+}
+
+function canOpenFpaDebug(item: HistoryItem) {
+  return item.source === 'web' && item.session_id && item.task_mode === 'from-excel-gen-fpa'
 }
 
 function formatTime(value: string) {
