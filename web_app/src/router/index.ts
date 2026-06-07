@@ -9,36 +9,43 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: Login,
+      meta: { shell: false },
     },
     {
       path: '/',
       name: 'home',
       component: Home,
+      meta: { nav: 'generate' },
     },
     {
       path: '/config',
       name: 'config',
       component: () => import('@/views/Config.vue'),
+      meta: { nav: 'config' },
     },
     {
       path: '/license',
       name: 'license',
       component: () => import('@/views/License.vue'),
+      meta: { nav: 'license' },
     },
     {
       path: '/history',
       name: 'history',
       component: () => import('@/views/History.vue'),
+      meta: { nav: 'history' },
     },
     {
       path: '/preview/fpa',
       name: 'preview-fpa',
       component: () => import('@/views/FpaPreviewPage.vue'),
+      meta: { nav: 'preview' },
     },
     {
       path: '/prompt-debug',
       name: 'prompt-debug',
       component: () => import('@/views/PromptDebug.vue'),
+      meta: { nav: 'prompt-debug' },
     },
   ],
 })

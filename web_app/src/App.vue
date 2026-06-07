@@ -1,45 +1,18 @@
 <template>
-  <div class="app-chrome flex h-screen w-full max-w-full flex-col overflow-x-hidden">
-    <header class="topbar shrink-0 px-4 py-3 md:px-6">
-      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div class="flex min-w-0 items-center gap-3">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-raised)] text-sm font-black text-[var(--color-accent-strong)]">
-            ARD
-          </div>
-          <div class="min-w-0">
-            <h1 class="truncate text-base font-bold text-[var(--color-ink)] md:text-lg">AI 生成项目报账文档</h1>
-            <div class="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-ink-soft)]">
-              <span>{{ modeLabel }}</span>
-              <span class="h-1 w-1 rounded-full bg-[var(--color-rule-strong)]" />
-              <span>v{{ version }}</span>
-              <span class="h-1 w-1 rounded-full bg-[var(--color-rule-strong)]" />
-              <span :class="['inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold', backendStatusClass]">
-                <span class="h-1.5 w-1.5 rounded-full" :class="backendDotClass" />
-                {{ backendStatusText }}
-              </span>
-            </div>
-          </div>
-      </div>
-        <nav class="flex flex-wrap items-center gap-1 text-sm">
-          <router-link to="/" class="nav-link" active-class="nav-link-active">生成</router-link>
-          <router-link to="/preview/fpa" class="nav-link" active-class="nav-link-active">预览</router-link>
-          <router-link to="/history" class="nav-link" active-class="nav-link-active">历史</router-link>
-          <router-link to="/config" class="nav-link" active-class="nav-link-active">配置</router-link>
-          <span class="mx-1 hidden h-5 w-px bg-[var(--color-rule)] lg:inline-block" />
-          <router-link to="/license" class="nav-link hidden opacity-80 lg:inline-flex" active-class="nav-link-active">授权</router-link>
-          <router-link to="/prompt-debug" class="nav-link hidden opacity-80 lg:inline-flex" active-class="nav-link-active">提示词调试</router-link>
-          <template v-if="auth.isRemote && auth.isLoggedIn">
-            <span class="mx-2 hidden h-5 w-px bg-[var(--color-rule)] md:inline-block" />
-            <span class="rounded-md bg-[var(--color-surface-muted)] px-2 py-1 text-xs text-[var(--color-ink-muted)]">{{ auth.username }}</span>
-            <button @click="doLogout" class="btn-quiet min-h-0 px-2 py-1 text-xs">退出</button>
-        </template>
-      </nav>
-      </div>
-    </header>
-    <main class="min-h-0 min-w-0 flex-1 overflow-x-hidden">
-      <router-view />
-    </main>
-  </div>
+  <AppShell
+    v-if="usesShell"
+    :mode-label="modeLabel"
+    :version="version"
+    :backend-status-text="backendStatusText"
+    :backend-status-class="backendStatusClass"
+    :backend-dot-class="backendDotClass"
+    :show-user-actions="auth.isRemote && auth.isLoggedIn"
+    :username="auth.username"
+    @logout="doLogout"
+  >
+    <router-view />
+  </AppShell>
+  <router-view v-else />
 </template>
 
 <script setup lang="ts">
@@ -48,6 +21,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useConfigStore } from '@/stores/config.ts'
 import { useAuthStore } from '@/stores/auth.ts'
 import { apiFetch } from '@/lib/api.ts'
+import AppShell from '@/components/layout/AppShell.vue'
 
 interface VersionResponse {
   version?: string
@@ -73,6 +47,7 @@ const config = useConfigStore()
 const auth = useAuthStore()
 const version = ref('-')
 
+const usesShell = computed(() => route.meta.shell !== false)
 const modeLabel = computed(() => config.workMode === 'local' ? '本机模式' : '远程服务模式')
 const backendStatusText = computed(() => {
   const map = {
