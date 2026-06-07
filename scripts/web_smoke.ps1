@@ -118,6 +118,8 @@ Write-Host "Web smoke test: $configUrl"
 $configDom = Get-Dom -Url $configUrl -BrowserPath $edge
 Assert-Contains -Dom $configDom -Text "AI 生成项目报账文档" -Url $configUrl
 Assert-AnyContains -Dom $configDom -Texts @("环境变量", "个人配置", "系统配置") -Url $configUrl
+Assert-Contains -Dom $configDom -Text "高级配置" -Url $configUrl
+Assert-Contains -Dom $configDom -Text "YAML / JSON 配置文件" -Url $configUrl
 
 Write-Host "Web smoke test: $promptDebugUrl"
 $promptDebugDom = Get-Dom -Url $promptDebugUrl -BrowserPath $edge

@@ -223,6 +223,88 @@
     <section class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">高级配置</p>
+          <h2 class="mt-1 text-lg font-semibold">YAML / JSON 配置文件</h2>
+        </div>
+        <button
+          v-if="!showUserConfig"
+          class="btn-secondary w-fit"
+          :disabled="advancedConfigLoading || advancedConfigSaving"
+          @click="loadAdvancedConfigFiles"
+        >
+          {{ advancedConfigLoading ? '加载中...' : '刷新文件' }}
+        </button>
+      </div>
+
+      <p v-if="showUserConfig" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-4 py-3 text-sm text-[var(--color-ink-muted)]">
+        高级配置文件由本机管理员维护。远程用户可在上方维护个人 AI 配置、模板和运行默认值。
+      </p>
+
+      <div v-else class="space-y-4">
+        <p v-if="advancedConfigError" class="text-sm text-[var(--color-warning)]">{{ advancedConfigError }}</p>
+        <div v-else-if="advancedConfigFiles.length" class="grid gap-2 sm:grid-cols-2">
+          <button
+            v-for="item in advancedConfigFiles"
+            :key="item.id"
+            type="button"
+            :class="[
+              'flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors',
+              activeAdvancedFileId === item.id
+                ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]'
+                : 'border-[var(--color-rule)] bg-[var(--color-surface)] text-[var(--color-ink-muted)] hover:border-[var(--color-rule-strong)] hover:text-[var(--color-ink)]',
+            ]"
+            @click="selectAdvancedFile(item.id)"
+          >
+            <span class="min-w-0">
+              <span class="block truncate font-semibold">{{ item.label }}</span>
+              <span class="mt-0.5 block truncate text-xs">{{ item.file }}</span>
+            </span>
+            <span :class="['shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold', item.exists ? statusClass.ok : statusClass.neutral]">
+              {{ item.exists ? item.format.toUpperCase() : '未创建' }}
+            </span>
+          </button>
+        </div>
+        <p v-else-if="advancedConfigLoading" class="text-sm text-[var(--color-ink-soft)]">加载中...</p>
+        <p v-else class="text-sm text-[var(--color-ink-soft)]">暂无可编辑配置文件。</p>
+
+        <div v-if="activeAdvancedFile" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+          <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <h3 class="truncate text-sm font-semibold text-[var(--color-ink)]">{{ activeAdvancedFile.label }}</h3>
+              <p class="mt-1 text-xs text-[var(--color-ink-soft)]">{{ activeAdvancedFile.file }} · {{ activeAdvancedFile.format.toUpperCase() }} · 第{{ activeAdvancedFile.phase }}期</p>
+            </div>
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', advancedConfigStatusClass]">{{ advancedConfigStatusText }}</span>
+          </div>
+
+          <textarea
+            v-model="advancedConfigContent"
+            rows="18"
+            class="field-control min-h-[24rem] resize-y font-mono text-xs leading-relaxed"
+            spellcheck="false"
+          />
+
+          <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p v-if="advancedConfigMessage" :class="['text-sm', advancedConfigOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ advancedConfigMessage }}</p>
+            <span v-else class="text-sm text-[var(--color-ink-soft)]">保存前会先校验，通过后自动备份当前文件。</span>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn-secondary w-fit" :disabled="advancedConfigLoading || advancedConfigSaving || !activeAdvancedFileId" @click="loadAdvancedConfigFile(activeAdvancedFileId)">
+                重新读取
+              </button>
+              <button class="btn-secondary w-fit" :disabled="advancedConfigSaving || !activeAdvancedFileId" @click="validateAdvancedConfig">
+                {{ advancedConfigSaving ? '校验中...' : '校验' }}
+              </button>
+              <button class="btn-primary w-fit" :disabled="advancedConfigSaving || !hasAdvancedConfigChanges" @click="saveAdvancedConfig">
+                {{ advancedConfigSaving ? '保存中...' : '保存配置文件' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">配置备份</p>
           <h2 class="mt-1 text-lg font-semibold">备份与恢复</h2>
           <p class="mt-1 text-sm text-[var(--color-ink-muted)]">每次保存前自动生成备份；恢复前也会先备份当前配置。</p>
@@ -489,6 +571,25 @@ interface ConfigBackupsResponse {
   items: ConfigBackupItem[]
 }
 
+interface AdvancedConfigFileItem {
+  id: string
+  label: string
+  file: string
+  format: 'yaml' | 'json'
+  phase: number
+  exists: boolean
+  updated_at?: string
+  size_bytes?: number
+}
+
+interface AdvancedConfigFilesResponse {
+  items: AdvancedConfigFileItem[]
+}
+
+interface AdvancedConfigFileResponse extends AdvancedConfigFileItem {
+  content: string
+}
+
 // ── stores ────────────────────────────────────────────────
 
 const auth = useAuthStore()
@@ -550,6 +651,15 @@ const configRestoreLoading = ref(false)
 const configRestoreMsg = ref('')
 const configRestoreOk = ref(false)
 const restoringBackupId = ref('')
+const advancedConfigFiles = ref<AdvancedConfigFileItem[]>([])
+const activeAdvancedFileId = ref('')
+const advancedConfigContent = ref('')
+const advancedConfigSnapshot = ref('')
+const advancedConfigLoading = ref(false)
+const advancedConfigSaving = ref(false)
+const advancedConfigError = ref('')
+const advancedConfigMessage = ref('')
+const advancedConfigOk = ref(false)
 const webAiForm = reactive({
   apiKey: '',
   baseUrl: '',
@@ -669,6 +779,12 @@ const hasWebRunChanges = computed(() => webRunSnapshot.value !== '' && webRunFor
 const hasWebTemplateChanges = computed(() => (
   webTemplateSnapshot.value !== '' && webTemplateFormSnapshot.value !== webTemplateSnapshot.value
 ))
+const activeAdvancedFile = computed(() => (
+  advancedConfigFiles.value.find(item => item.id === activeAdvancedFileId.value) || null
+))
+const hasAdvancedConfigChanges = computed(() => (
+  activeAdvancedFileId.value !== '' && advancedConfigContent.value !== advancedConfigSnapshot.value
+))
 
 const webConfigSaveStatusText = computed(() => {
   if (webConfigSaving.value) return '保存中'
@@ -683,6 +799,18 @@ const webConfigSaveStatusClass = computed(() => {
   if (hasWebConfigChanges.value) return statusClass.warn
   return statusClass.ok
 })
+const advancedConfigStatusText = computed(() => {
+  if (advancedConfigSaving.value) return '处理中'
+  if (advancedConfigMessage.value && !advancedConfigOk.value) return '校验失败'
+  if (hasAdvancedConfigChanges.value) return '有未保存修改'
+  return '已保存'
+})
+const advancedConfigStatusClass = computed(() => {
+  if (advancedConfigSaving.value) return statusClass.neutral
+  if (advancedConfigMessage.value && !advancedConfigOk.value) return statusClass.warn
+  if (hasAdvancedConfigChanges.value) return statusClass.warn
+  return statusClass.ok
+})
 
 // ── 初始化 ────────────────────────────────────────────────
 
@@ -695,6 +823,7 @@ onMounted(async () => {
     await loadUserConfig()
   } else {
     await loadLocalConfig()
+    await loadAdvancedConfigFiles()
   }
 })
 
@@ -768,6 +897,98 @@ async function loadConfigBackups() {
     configBackupsError.value = normalizeApiError(e)
   } finally {
     configBackupsLoading.value = false
+  }
+}
+
+async function loadAdvancedConfigFiles() {
+  advancedConfigLoading.value = true
+  advancedConfigError.value = ''
+  try {
+    const data = await apiFetch<AdvancedConfigFilesResponse>('/api/web-config/files')
+    advancedConfigFiles.value = data.items || []
+    if (!activeAdvancedFileId.value && advancedConfigFiles.value.length) {
+      await loadAdvancedConfigFile(advancedConfigFiles.value[0].id)
+    }
+  } catch (e) {
+    advancedConfigFiles.value = []
+    activeAdvancedFileId.value = ''
+    advancedConfigContent.value = ''
+    advancedConfigSnapshot.value = ''
+    advancedConfigError.value = normalizeApiError(e)
+  } finally {
+    advancedConfigLoading.value = false
+  }
+}
+
+async function selectAdvancedFile(fileId: string) {
+  if (fileId === activeAdvancedFileId.value) return
+  if (hasAdvancedConfigChanges.value) {
+    const confirmed = window.confirm('当前高级配置有未保存修改，确认切换文件？')
+    if (!confirmed) return
+  }
+  await loadAdvancedConfigFile(fileId)
+}
+
+async function loadAdvancedConfigFile(fileId: string) {
+  if (!fileId) return
+  advancedConfigLoading.value = true
+  advancedConfigError.value = ''
+  advancedConfigMessage.value = ''
+  advancedConfigOk.value = false
+  try {
+    const data = await apiFetch<AdvancedConfigFileResponse>(`/api/web-config/files/${encodeURIComponent(fileId)}`)
+    activeAdvancedFileId.value = data.id
+    advancedConfigContent.value = data.content || ''
+    advancedConfigSnapshot.value = advancedConfigContent.value
+  } catch (e) {
+    advancedConfigError.value = normalizeApiError(e)
+  } finally {
+    advancedConfigLoading.value = false
+  }
+}
+
+async function validateAdvancedConfig() {
+  if (!activeAdvancedFileId.value) return
+  advancedConfigSaving.value = true
+  advancedConfigMessage.value = ''
+  try {
+    await apiFetch(`/api/web-config/files/${encodeURIComponent(activeAdvancedFileId.value)}/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: advancedConfigContent.value }),
+    })
+    advancedConfigOk.value = true
+    advancedConfigMessage.value = '校验通过'
+  } catch (e) {
+    advancedConfigOk.value = false
+    advancedConfigMessage.value = normalizeApiError(e)
+  } finally {
+    advancedConfigSaving.value = false
+  }
+}
+
+async function saveAdvancedConfig() {
+  if (!activeAdvancedFileId.value) return
+  advancedConfigSaving.value = true
+  advancedConfigMessage.value = ''
+  try {
+    const data = await apiFetch<AdvancedConfigFileResponse>(`/api/web-config/files/${encodeURIComponent(activeAdvancedFileId.value)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: advancedConfigContent.value }),
+    })
+    advancedConfigContent.value = data.content || advancedConfigContent.value
+    advancedConfigSnapshot.value = advancedConfigContent.value
+    advancedConfigOk.value = true
+    advancedConfigMessage.value = '保存成功'
+    await loadAdvancedConfigFiles()
+    await loadConfigBackups()
+    await loadLocalConfig()
+  } catch (e) {
+    advancedConfigOk.value = false
+    advancedConfigMessage.value = normalizeApiError(e)
+  } finally {
+    advancedConfigSaving.value = false
   }
 }
 
