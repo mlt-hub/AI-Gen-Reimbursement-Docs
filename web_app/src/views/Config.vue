@@ -25,6 +25,37 @@
     </section>
 
     <section class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">AI 配置</p>
+          <h2 class="mt-1 text-lg font-semibold">模型与凭据</h2>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="webConfigLoading" @click="loadWebConfig">
+          {{ webConfigLoading ? '加载中...' : '刷新配置' }}
+        </button>
+      </div>
+
+      <p v-if="webConfigError" class="text-sm text-[var(--color-warning)]">{{ webConfigError }}</p>
+      <div v-else-if="webConfig" class="grid gap-3 md:grid-cols-2">
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm text-[var(--color-ink-muted)]">API Key</span>
+            <span :class="['rounded-md px-2 py-0.5 text-xs font-semibold', webConfig.ai.api_key_configured ? statusClass.ok : statusClass.warn]">
+              {{ webConfig.ai.api_key_configured ? '已配置' : '未配置' }}
+            </span>
+          </div>
+          <p class="mt-1 text-xs text-[var(--color-ink-soft)]">来源：{{ sourceLabel(webConfig.ai.api_key_source) }}</p>
+        </div>
+
+        <ConfigValueCard label="接口地址" :field="webConfig.ai.base_url" />
+        <ConfigValueCard label="模型" :field="webConfig.ai.model" />
+        <ConfigValueCard label="最大 Token 数" :field="webConfig.ai.max_tokens" />
+        <ConfigValueCard label="共享系统 API Key" :field="webConfig.ai.allow_shared_ai_credentials" :format="formatEnabled" />
+      </div>
+      <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中...</p>
+    </section>
+
+    <section class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">模板配置</p>
         <h2 class="mt-1 text-lg font-semibold">输出与下载模板</h2>
@@ -192,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { defineComponent, h, ref, computed, onMounted, reactive, type PropType } from 'vue'
 import { useAuthStore } from '@/stores/auth.ts'
 import { normalizeApiKeyInput, useConfigStore } from '@/stores/config.ts'
 import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
@@ -235,6 +266,32 @@ interface HealthResponse {
   api?: Record<string, boolean | null>
   paths?: Record<string, boolean | null>
   features?: Record<string, boolean | null>
+}
+
+type ConfigSource = 'personal' | 'global' | 'default'
+
+interface WebConfigField<T = unknown> {
+  value: T
+  source: ConfigSource
+}
+
+interface WebConfigResponse {
+  scope: {
+    mode: 'local' | 'remote'
+    username: string
+  }
+  ai: {
+    api_key_configured: boolean
+    api_key_source: ConfigSource
+    base_url: WebConfigField<string>
+    model: WebConfigField<string>
+    max_tokens: WebConfigField<string | number>
+    allow_shared_ai_credentials: WebConfigField<boolean>
+  }
+  templates: {
+    out_templates: WebConfigField<Record<string, string>>
+  }
+  run_defaults: Record<string, WebConfigField<unknown>>
 }
 
 // ── stores ────────────────────────────────────────────────
@@ -294,6 +351,9 @@ const health = ref<HealthResponse | null>(null)
 const healthLoading = ref(false)
 const healthError = ref('')
 const healthCheckedAt = ref('')
+const webConfig = ref<WebConfigResponse | null>(null)
+const webConfigLoading = ref(false)
+const webConfigError = ref('')
 
 const statusClass = {
   ok: 'bg-[var(--color-success-soft)] text-[var(--color-success)]',
@@ -370,11 +430,30 @@ const saveStatusClass = computed(() => {
 
 onMounted(async () => {
   await refreshHealth()
+  await loadWebConfig()
   if (showUserConfig.value) {
     await loadUserConfig()
   } else {
     await loadLocalConfig()
   }
+})
+
+const ConfigValueCard = defineComponent({
+  name: 'ConfigValueCard',
+  props: {
+    label: { type: String, required: true },
+    field: { type: Object as PropType<WebConfigField>, required: true },
+    format: { type: Function as PropType<(value: unknown) => string>, default: null },
+  },
+  setup(props) {
+    return () => h('div', { class: 'rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2' }, [
+      h('div', { class: 'flex items-center justify-between gap-3' }, [
+        h('span', { class: 'text-sm text-[var(--color-ink-muted)]' }, props.label),
+        h('span', { class: 'min-w-0 truncate text-sm font-semibold text-[var(--color-ink)]' }, formatConfigValue(props.field.value, props.format)),
+      ]),
+      h('p', { class: 'mt-1 text-xs text-[var(--color-ink-soft)]' }, `来源：${sourceLabel(props.field.source)}`),
+    ])
+  },
 })
 
 function formatStatus(value: boolean | null | undefined): string {
@@ -402,6 +481,39 @@ async function refreshHealth() {
   } finally {
     healthLoading.value = false
   }
+}
+
+async function loadWebConfig() {
+  webConfigLoading.value = true
+  webConfigError.value = ''
+  try {
+    webConfig.value = await apiFetch<WebConfigResponse>('/api/web-config')
+  } catch (e) {
+    webConfig.value = null
+    webConfigError.value = normalizeApiError(e)
+  } finally {
+    webConfigLoading.value = false
+  }
+}
+
+function sourceLabel(source: ConfigSource | string): string {
+  const labels: Record<string, string> = {
+    personal: '个人配置',
+    global: '全局配置',
+    default: '系统默认',
+  }
+  return labels[source] || source
+}
+
+function formatEnabled(value: unknown): string {
+  return value ? '开启' : '关闭'
+}
+
+function formatConfigValue(value: unknown, formatter?: ((value: unknown) => string) | null): string {
+  if (formatter) return formatter(value)
+  if (value === null || value === undefined || value === '') return '未设置'
+  if (typeof value === 'boolean') return formatEnabled(value)
+  return String(value)
 }
 
 async function loadLocalConfig() {

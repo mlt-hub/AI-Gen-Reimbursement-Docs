@@ -70,3 +70,94 @@ def test_redact_env_dict_hides_sensitive_values_without_fragments():
 
     assert redacted["ANTHROPIC_API_KEY"] == "***"
     assert redacted["ANTHROPIC_BASE_URL"] == "https://api.example.test"
+
+
+def test_build_web_config_view_redacts_api_key_and_marks_global_sources():
+    view = config_service.build_web_config_view(
+        global_config={
+            "_env": {
+                "ANTHROPIC_API_KEY": "sk-global-secret",
+                "ANTHROPIC_BASE_URL": "https://global.example.test",
+                "ANTHROPIC_MODEL": "global-model",
+            },
+            "_system": {
+                "max_tokens": "8K",
+                "allow_shared_ai_credentials": True,
+                "out_templates": {"fpa": "data/out_templates/fpa.xlsx"},
+            },
+        },
+        local_mode=True,
+    )
+
+    assert view["ai"]["api_key_configured"] is True
+    assert view["ai"]["api_key_source"] == "global"
+    assert "sk-global-secret" not in str(view)
+    assert view["ai"]["base_url"] == {
+        "value": "https://global.example.test",
+        "source": "global",
+    }
+    assert view["ai"]["model"] == {"value": "global-model", "source": "global"}
+    assert view["ai"]["max_tokens"] == {"value": "8K", "source": "global"}
+    assert view["ai"]["allow_shared_ai_credentials"] == {"value": True, "source": "global"}
+    assert view["templates"]["out_templates"]["source"] == "global"
+
+
+def test_build_web_config_view_uses_personal_overrides_for_remote_user():
+    view = config_service.build_web_config_view(
+        global_config={
+            "_env": {
+                "ANTHROPIC_API_KEY": "sk-global-secret",
+                "ANTHROPIC_BASE_URL": "https://global.example.test",
+                "ANTHROPIC_MODEL": "global-model",
+            },
+            "_system": {
+                "max_tokens": "8K",
+                "fpa_profile": "strict_fpa",
+                "allow_shared_ai_credentials": False,
+            },
+        },
+        user_config={
+            "_env": {
+                "ANTHROPIC_BASE_URL": "https://personal.example.test",
+            },
+            "_system": {
+                "fpa_profile": "custom_rules",
+            },
+        },
+        username="alice",
+        local_mode=False,
+    )
+
+    assert view["scope"] == {"mode": "remote", "username": "alice"}
+    assert view["ai"]["api_key_configured"] is False
+    assert view["ai"]["api_key_source"] == "default"
+    assert "sk-global-secret" not in str(view)
+    assert view["ai"]["base_url"] == {
+        "value": "https://personal.example.test",
+        "source": "personal",
+    }
+    assert view["ai"]["model"] == {"value": "global-model", "source": "global"}
+    assert view["run_defaults"]["fpa_profile"] == {
+        "value": "custom_rules",
+        "source": "personal",
+    }
+
+
+def test_build_web_config_view_allows_shared_global_api_key_only_when_enabled():
+    view = config_service.build_web_config_view(
+        global_config={
+            "_env": {
+                "ANTHROPIC_API_KEY": "sk-global-secret",
+            },
+            "_system": {
+                "allow_shared_ai_credentials": True,
+            },
+        },
+        user_config={"_env": {}, "_system": {}},
+        username="alice",
+        local_mode=False,
+    )
+
+    assert view["ai"]["api_key_configured"] is True
+    assert view["ai"]["api_key_source"] == "global"
+    assert "sk-global-secret" not in str(view)

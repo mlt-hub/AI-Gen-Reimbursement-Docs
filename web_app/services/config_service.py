@@ -3,6 +3,20 @@ import re
 from pathlib import Path
 
 
+DEFAULT_WEB_CONFIG = {
+    "base_url": "",
+    "model": "",
+    "max_tokens": "",
+    "allow_shared_ai_credentials": False,
+    "out_templates": {},
+    "project_name": "",
+    "fpa_profile": "strict_fpa",
+    "fpa_strategy": "",
+    "fpa_rule_set": "",
+    "fpa_confirmation_mode": "cautious",
+}
+
+
 def config_dir() -> Path:
     return Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs"
 
@@ -72,6 +86,124 @@ def redact_env_dict(env: dict[str, str]) -> dict[str, str]:
     return {
         key: ("***" if sensitive_key.search(key) and value else value)
         for key, value in env.items()
+    }
+
+
+def _field(value, source: str) -> dict:
+    return {"value": value, "source": source}
+
+
+def _configured_env_key(env: dict, key: str) -> bool:
+    value = env.get(key, "")
+    return bool(str(value).strip())
+
+
+def _pick_env_field(user_env: dict, global_env: dict, key: str, default: str = "") -> dict:
+    if _configured_env_key(user_env, key):
+        return _field(str(user_env[key]), "personal")
+    if _configured_env_key(global_env, key):
+        return _field(str(global_env[key]), "global")
+    return _field(default, "default")
+
+
+def _pick_system_field(user_system: dict, global_system: dict, key: str, default):
+    if key in user_system and user_system[key] not in (None, ""):
+        return _field(user_system[key], "personal")
+    if key in global_system and global_system[key] not in (None, ""):
+        return _field(global_system[key], "global")
+    return _field(default, "default")
+
+
+def build_web_config_view(
+    *,
+    global_config: dict,
+    user_config: dict | None = None,
+    username: str | None = None,
+    local_mode: bool = True,
+) -> dict:
+    """Build the business-facing, redacted Web UI config view.
+
+    The view never returns API Key material. Remote users receive an effective
+    merged view with per-field source markers.
+    """
+    user_config = user_config or {}
+    user_env = user_config.get("_env") if isinstance(user_config.get("_env"), dict) else {}
+    user_system = user_config.get("_system") if isinstance(user_config.get("_system"), dict) else {}
+    global_env = global_config.get("_env") if isinstance(global_config.get("_env"), dict) else {}
+    global_system = global_config.get("_system") if isinstance(global_config.get("_system"), dict) else {}
+
+    if local_mode:
+        user_env = {}
+        user_system = {}
+
+    personal_api_key = _configured_env_key(user_env, "ANTHROPIC_API_KEY") or _configured_env_key(
+        user_env,
+        "ANTHROPIC_API_KEY_ENC",
+    )
+    global_api_key = _configured_env_key(global_env, "ANTHROPIC_API_KEY") or _configured_env_key(
+        global_env,
+        "ANTHROPIC_API_KEY_ENC",
+    )
+    shared_credentials = bool(global_system.get("allow_shared_ai_credentials", False))
+    usable_global_api_key = global_api_key and (local_mode or shared_credentials)
+    api_key_source = "personal" if personal_api_key else "global" if usable_global_api_key else "default"
+
+    return {
+        "scope": {
+            "mode": "local" if local_mode else "remote",
+            "username": username or "",
+        },
+        "ai": {
+            "api_key_configured": personal_api_key or usable_global_api_key,
+            "api_key_source": api_key_source,
+            "base_url": _pick_env_field(user_env, global_env, "ANTHROPIC_BASE_URL", DEFAULT_WEB_CONFIG["base_url"]),
+            "model": _pick_env_field(user_env, global_env, "ANTHROPIC_MODEL", DEFAULT_WEB_CONFIG["model"]),
+            "max_tokens": _pick_system_field(user_system, global_system, "max_tokens", DEFAULT_WEB_CONFIG["max_tokens"]),
+            "allow_shared_ai_credentials": _field(
+                shared_credentials,
+                "global" if "allow_shared_ai_credentials" in global_system else "default",
+            ),
+        },
+        "templates": {
+            "out_templates": _pick_system_field(
+                user_system,
+                global_system,
+                "out_templates",
+                DEFAULT_WEB_CONFIG["out_templates"],
+            ),
+        },
+        "run_defaults": {
+            "project_name": _pick_system_field(
+                user_system,
+                global_system,
+                "project_name",
+                DEFAULT_WEB_CONFIG["project_name"],
+            ),
+            "fpa_profile": _pick_system_field(
+                user_system,
+                global_system,
+                "fpa_profile",
+                DEFAULT_WEB_CONFIG["fpa_profile"],
+            ),
+            "fpa_strategy": _pick_system_field(
+                user_system,
+                global_system,
+                "fpa_strategy",
+                DEFAULT_WEB_CONFIG["fpa_strategy"],
+            ),
+            "fpa_rule_set": _pick_system_field(
+                user_system,
+                global_system,
+                "fpa_rule_set",
+                DEFAULT_WEB_CONFIG["fpa_rule_set"],
+            ),
+            "fpa_confirmation_mode": _pick_system_field(
+                user_system,
+                global_system,
+                "fpa_confirmation_mode",
+                DEFAULT_WEB_CONFIG["fpa_confirmation_mode"],
+            ),
+        },
     }
 
 

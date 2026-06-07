@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, Request
 from ai_gen_reimbursement_docs.auth import user_config_dir
 from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
+    build_web_config_view,
     config_dir,
     mask_env_content,
     read_config,
+    read_config_from_dir,
     redact_env_dict,
     save_config_to_dir,
 )
@@ -31,6 +33,25 @@ async def get_config():
     if isinstance(data.get("_env"), dict):
         data["_env"] = redact_env_dict(data["_env"])
     return data
+
+
+@router.get("/api/web-config")
+async def get_web_config(request: Request, user: str = Depends(require_auth)):
+    """返回面向 Web UI 配置中心的脱敏业务视图。"""
+    local_mode = is_local_mode(request)
+    global_config = read_config()
+    user_config = None
+    username = user or None
+
+    if not local_mode and user:
+        user_config = read_config_from_dir(user_config_dir(user))
+
+    return build_web_config_view(
+        global_config=global_config,
+        user_config=user_config,
+        username=username,
+        local_mode=local_mode,
+    )
 
 
 @router.post("/api/config")
