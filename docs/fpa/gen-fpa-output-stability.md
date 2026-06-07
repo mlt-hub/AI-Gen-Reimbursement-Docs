@@ -641,6 +641,30 @@ Recommendation: 当前质量信号稳定，可推进真实模型批量抽样。
 - 后处理类型冲突检查已消费 `type_judgement` 高置信建议；当 AI 的 EIF 数据功能行被 `external_data_function` 支持时，不再误报 `postprocess.ai_first_type_conflict`。
 - rules-only 稳定性基线已重新通过 `quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=0`，真实模型抽样下一步重点转为验证模型是否按前置 agent judgement 主动输出 EIF 数据功能行。
 
+当前 fresh 真实模型标准套件已阶段性通过：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset strict-real-model `
+  --output-dir tmp_fpa_stability_ci_real_standard_fresh_20260607 `
+  --max-quality-issues 0 `
+  --max-retryable-issues 0 `
+  --max-retries 0
+```
+
+结果：
+
+```text
+Status: PASS
+Sources: ai=5
+Warnings: 6
+Quality Issues: 0
+Retryable Issues: 0
+Retries: 0
+```
+
+剩余 warning 均为非阻断后处理提示，集中在三类：计算依据说明仍夹带数据库表个数口径、少数 EIF/ILF 与事务类型规则冲突、以及外部数据组边界需人工复核。下一步应优先收敛 warning，而不是继续扩大抽样。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。
