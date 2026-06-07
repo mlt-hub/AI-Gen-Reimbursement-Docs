@@ -171,8 +171,96 @@ Web UI
 - `配置` 页只放跨任务复用或低频维护的设置。
 - AI 配置保留“留空使用系统配置”的说明。
 - API Key 输入仍应继续使用现有敏感输入保护逻辑。
-- 配置页字段默认即时写入前端 `config` store；已经启动的任务不受影响，只影响下一次生成或下一次预览。
-- 如果后端后续提供持久化配置接口，再把“即时写入前端状态”和“保存到后端配置”拆成两个明确反馈。
+- 配置页字段保存后写入配置文件，并同步更新前端 `config` store；除已启动的后台任务外，对后续生成、预览和新打开页面即时生效。
+- 正在运行中的任务使用启动时提交的参数快照，不受配置页后续修改影响，避免中途换模型、接口或模板导致结果不可复盘。
+
+## 配置持久化与即时生效
+
+配置页不应只修改前端状态。后端需要提供正式的 Web UI 配置保存能力，保证用户保存后可以跨页面、跨刷新、跨重启复用。
+
+推荐新增面向 Web UI 的配置接口：
+
+```text
+GET  /api/web-config
+PUT  /api/web-config
+```
+
+`GET /api/web-config` 返回脱敏后的配置视图：
+
+```json
+{
+  "ai": {
+    "api_key_configured": true,
+    "base_url": "https://api.example.test",
+    "model": "deepseek-v4-flash",
+    "max_tokens": "384K"
+  },
+  "templates": {
+    "custom_output_template_dir": "C:/templates/out"
+  },
+  "run_defaults": {
+    "fpa_profile": "default",
+    "fpa_strategy": "rule-first",
+    "fpa_rule_set": "standard",
+    "fpa_confirmation_mode": "auto"
+  }
+}
+```
+
+`PUT /api/web-config` 接收同结构或等价的可编辑字段，保存成功后返回最新的脱敏配置视图，前端用返回值同步 `config` store。
+
+配置文件映射建议：
+
+| Web 配置区 | 配置文件 | 建议字段 |
+|---|---|---|
+| AI 配置 | `~/.ai-gen-reimbursement-docs/.env` | `ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL` |
+| AI 配置 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | `max_tokens` |
+| 模板配置 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | `out_templates` 或自定义输出模板目录字段 |
+| 运行默认值 | `~/.ai-gen-reimbursement-docs/system_config.yaml` | FPA 方案、策略、规则集、确认模式等 Web 默认值 |
+
+敏感字段规则：
+
+- `GET` 不返回 API Key 原文，只返回 `api_key_configured: true/false`。
+- `PUT` 中省略 `api_key` 或传入遮罩值时，保留已有 API Key。
+- `PUT` 中传入新的 `api_key` 时，覆盖写入 `.env`。
+- 如需清空 API Key，使用显式字段，例如 `clear_api_key: true`，不要把空字符串解释成删除。
+
+保存流程：
+
+```text
+PUT /api/web-config
+  -> 校验 payload
+  -> 合并现有配置，保留未提交的敏感值
+  -> 原子写入 .env / system_config.yaml
+  -> 清理当前进程的配置读取缓存
+  -> 返回脱敏后的最新 web-config
+  -> 前端同步 config store
+```
+
+即时生效边界：
+
+- 新打开页面立即读到新配置。
+- 下一次生成立即使用新配置。
+- 下一次 FPA 预览立即使用新配置。
+- 已经运行中的 session 不重新读取配置，继续使用任务启动时的参数快照。
+
+后端实现落点：
+
+| 文件 | 目的 |
+|---|---|
+| `web_app/routes/config.py` | 新增或扩展 Web 配置读写路由。 |
+| `web_app/services/config_service.py` | 增加 Web 配置视图转换、校验、合并保存、脱敏返回和缓存刷新。 |
+| `ai_gen_reimbursement_docs/config_utils.py` | 如存在缓存读取函数，提供统一的缓存清理入口。 |
+| `web_app/routes/tasks.py` | 任务启动时按“请求参数优先，配置文件默认值兜底”的规则形成参数快照。 |
+| `web_app/services/task_runner.py` | 保持运行中任务只使用启动参数，不动态读取配置。 |
+
+任务启动参数优先级：
+
+```text
+前端请求显式值 > Web 配置文件默认值 > 系统默认值
+```
+
+这样配置页可以作为默认值来源，但生成页仍允许用户在本次任务中临时覆盖低频任务设置。
 
 ## FPA 预览页布局示意
 
@@ -288,6 +376,12 @@ web_app/src/views/FpaAiDebugPage.vue
 | `web_app/src/components/TemplateUpload.vue` | 迁移挂载位置，不改变模板上传能力。 |
 | `web_app/src/components/TemplateDownload.vue` | 迁移挂载位置，不改变模板下载能力。 |
 | `web_app/src/assets/main.css` | 补齐左侧栏、移动端抽屉等布局样式。 |
+| `web_app/routes/config.py` | 增加 Web 配置读写接口。 |
+| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新。 |
+| `ai_gen_reimbursement_docs/config_utils.py` | 补充配置缓存清理入口，确保保存后即时生效。 |
+| `web_app/routes/tasks.py` | 任务启动时合并请求参数与配置默认值，形成运行快照。 |
+| `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏和敏感值保留。 |
+| `tests/test_web_tasks.py` | 覆盖任务启动参数快照和配置默认值兜底。 |
 
 ## 验证方式
 
@@ -298,11 +392,17 @@ cd web_app
 npm run build
 ```
 
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_web_config_service.py tests/test_web_tasks.py tests/test_web_system.py
+```
+
 人工检查：
 
 - 左侧栏在 `生成`、`预览`、`历史`、`配置`、`FPA 预览`、`FPA AI 调试信息` 页面保持一致。
 - 自定义输出模板、下载模板只出现在 `配置` 页。
 - AI 配置只出现在 `配置` 页。
+- 配置页保存后写入配置文件，刷新页面或重启后仍能读取。
+- API Key 不在读取接口中返回原文；省略 API Key 保存时保留旧值。
 - FPA 策略和低频任务设置位于 `执行监控` 下方。
 - FPA 预览页术语符合 `docs/fpa/result-review-terminology.md`。
 - 移动端没有横向滚动，导航可以通过菜单打开。
@@ -313,14 +413,19 @@ npm run build
 |---|---|
 | 后端离线 | 左侧栏和页面仍可访问；生成页禁用开始生成；配置页可编辑前端配置但提示后端未连接。 |
 | 未选择输入文件 | 生成页明确提示选择上传文件或填写本地 Excel 路径；开始生成保持禁用或点击后给出明确错误。 |
-| 任务运行中 | 左侧栏保持可导航；生成页展示执行监控；低频任务设置可查看但不应影响已启动任务。 |
+| 任务运行中 | 左侧栏保持可导航；生成页展示执行监控；低频任务设置可查看但不应影响已启动任务；配置页保存的新配置只影响后续任务。 |
 | 任务完成 | 执行监控展示完成状态和产物操作；FPA 预览和 AI 调试入口可携带当前 `sessionId` 跳转。 |
 | 从历史记录恢复 session | 进入 FPA 预览或 AI 调试页时使用历史 session 上下文；`/sessions/:sessionId/fpa/debug` 刷新后仍能定位该 session。 |
+| 保存配置后刷新页面 | 前端重新读取配置文件视图，AI 配置、模板配置和运行默认值保持一致。 |
+| 保存配置后启动新任务 | 新任务使用最新配置作为默认值，同时保留生成页本次请求显式覆盖能力。 |
 
 ## 风险与边界
 
-- 本方案只调整前端信息架构，不改变后端接口。
-- `config` store 中的字段仍可复用，避免引入数据迁移风险。
-- 拆分 `AdvancedOptions.vue` 时要确保 `startTask()` 提交的字段不变。
+- 本方案主要调整信息架构，并新增 Web 配置持久化接口；不改变核心 pipeline 执行接口。
+- `config` store 中的字段仍可复用，但保存成功后应以后端返回的脱敏配置视图为准。
+- 拆分 `AdvancedOptions.vue` 时要确保 `startTask()` 提交的字段不变，并且能用配置文件默认值兜底。
 - API Key 输入应继续沿用现有敏感输入保护逻辑。
+- 配置文件写入必须保护敏感字段：遮罩值不能覆盖真实 API Key，空字符串不能误删旧 Key。
+- 保存配置后要清理后端配置读取缓存，否则 `system_config.yaml` 中的部分字段可能无法即时生效。
+- 正在运行中的任务不得被新配置影响，避免不可复盘。
 - 如果后续要把调试信息做成可筛选、可复制、可导出页面，需要再确认后端是否已经提供足够结构化的数据。
