@@ -219,6 +219,23 @@ PUT  /api/web-config
 
 `PUT /api/web-config` 接收同结构或等价的可编辑字段，保存成功后返回最新的脱敏配置视图，前端用返回值同步 `config` store。
 
+已确认决策：
+
+| 决策项 | 结论 |
+|---|---|
+| 配置中心实施范围 | 按三期推进：第一期基础配置和模板配置；第二期 FPA/业务规则；第三期 Prompt/领域上下文。 |
+| 高级配置编辑 | 允许 Web UI 直接编辑完整 YAML/JSON，但保存前必须校验和备份。 |
+| API Key 加密密钥 | 第一版优先使用系统凭据库；系统凭据库不可用时退到本机密钥文件。 |
+| 共享系统 API Key | 允许管理员通过 `allow_shared_ai_credentials: true` 显式开启，默认关闭。 |
+| 远程用户无 API Key | 阻止 AI 任务启动，并提示配置个人 API Key 或联系管理员开启共享凭据。 |
+| 模板配置模型 | 使用 `out_templates` 映射，按文档类型分别绑定模板，不做单一模板目录。 |
+| 配置备份保留 | 每次保存前自动备份，保留最近 5 个版本。 |
+| 配置变更审计 | 记录谁在什么时候改了哪个配置文件，但不记录敏感值。 |
+| 保存失败策略 | 所有高级配置采用“校验全通过才保存”的强规则。 |
+| AI 调试数据源 | 第一阶段复用现有 AI 日志/交互接口，后续再做结构化 FPA 调试接口。 |
+| 预览中心扩展 | 第一期只做 FPA，COSMIC、需求清单、需求说明书先保留导航和架构余量。 |
+| 运行中任务配置 | 运行中任务继续使用启动时参数快照，不受新配置影响。 |
+
 配置文件映射建议：
 
 | Web 配置区 | 配置文件 | 建议字段 |
@@ -238,7 +255,7 @@ PUT  /api/web-config
 - API Key 不参与普通全局默认继承。远程用户只有在配置了个人 API Key，或管理员显式开启 `allow_shared_ai_credentials: true` 时，才可使用服务端共享 API Key。
 - `allow_shared_ai_credentials` 默认值为 `false`，避免远程用户未配置个人 Key 时静默消耗管理员或本机全局 Key。
 - 日志、错误信息、AI 调试页、配置预览、配置备份和配置导出都必须脱敏，不得输出 API Key 原文或可还原片段。
-- 加密密钥不得和配置密文放在同一份可导出的配置包中；如使用本机密钥文件、系统凭据库、KMS 或其他密钥来源，应在部署文档中说明恢复和迁移方式。
+- 加密密钥第一版优先使用系统凭据库；系统凭据库不可用时退到本机密钥文件。加密密钥不得和配置密文放在同一份可导出的配置包中，并应在部署文档中说明恢复和迁移方式。
 
 配置合并优先级：
 
@@ -254,6 +271,8 @@ PUT  /api/web-config
 - `allow_shared_ai_credentials: false`：后端返回未配置凭据错误，提示用户配置个人 API Key，或联系管理员开启共享凭据。
 - `allow_shared_ai_credentials: true`：允许使用服务端共享 API Key。
 
+在 `allow_shared_ai_credentials: false` 且远程用户没有个人 API Key 时，后端应阻止 AI 任务启动，不自动降级、不继续运行。
+
 模板配置模型采用 `out_templates` 映射，支持不同文档类型绑定不同模板；不降级为单一 `custom_output_template_dir`。如果前端需要简化显示，可在 UI 层把常用模板映射整理成更易理解的表单。
 
 保存流程：
@@ -263,7 +282,9 @@ PUT /api/web-config
   -> 校验 payload
   -> 合并现有配置，保留未提交的敏感值
   -> 加密新的 API Key，仅写入密文
+  -> 生成配置文件备份，保留最近 5 个版本
   -> 原子写入 .env / system_config.yaml
+  -> 记录配置变更审计，不记录敏感值
   -> 清理当前进程的配置读取缓存
   -> 返回脱敏后的最新 web-config
   -> 前端同步 config store
@@ -275,6 +296,7 @@ PUT /api/web-config
 - 下一次生成立即使用新配置。
 - 下一次 FPA 预览立即使用新配置。
 - 已经运行中的 session 不重新读取配置，继续使用任务启动时的参数快照。
+- 运行中任务始终使用启动时参数快照，不受后续配置修改影响。
 
 API Key 安全边界：
 
@@ -338,6 +360,7 @@ API Key 安全边界：
 - Web 与运行配置中的常用项。
 - 模板配置和 `out_templates` 映射。
 - 配置文件保存、脱敏、备份、缓存刷新、即时生效。
+- 第一期预览只做 FPA；COSMIC、需求清单、需求说明书先保留导航和架构余量。
 
 第二阶段实现：
 
@@ -356,14 +379,16 @@ API Key 安全边界：
 高级配置文件编辑规则：
 
 - 高级 YAML/JSON 编辑器只面向复杂配置，不替代常用项表单。
-- 保存前必须先做语法校验，再做业务校验。
-- 保存成功前必须生成备份版本，支持回滚。
+- 允许 Web UI 直接编辑完整 YAML/JSON，但保存前必须先做语法校验，再做业务校验。
+- 所有高级配置采用“校验全通过才保存”的强规则；校验失败不得写入目标文件。
+- 保存成功前必须生成备份版本，保留最近 5 个版本，支持回滚。
 - 保存成功后清理配置缓存，保证后续生成和预览即时使用新配置。
+- 配置变更审计记录操作者、时间、配置文件、变更类型和校验结果，不记录敏感值。
 - 对 FPA 页面和规则中出现的用户可见术语，仍必须遵循 `docs/fpa/result-review-terminology.md`。
 
 ## FPA 预览页布局示意
 
-`预览` 近期默认进入 FPA 预览；后续可扩展为预览中心，承载 FPA、COSMIC、需求清单、需求说明书等预览入口。当前阶段不需要一次性实现所有预览类型，但路由和导航命名应避免把 `预览` 固化成只能承载 FPA。
+`预览` 第一期只实现 FPA 预览；后续可扩展为预览中心，承载 FPA、COSMIC、需求清单、需求说明书等预览入口。当前阶段不需要一次性实现所有预览类型，但路由和导航命名应避免把 `预览` 固化成只能承载 FPA。
 
 ```text
 +----------------------+-----------------------------------------------+
@@ -488,10 +513,14 @@ web_app/src/views/FpaAiDebugPage.vue
 | `web_app/src/components/TemplateDownload.vue` | 迁移挂载位置，不改变模板下载能力。 |
 | `web_app/src/assets/main.css` | 补齐左侧栏、移动端抽屉等布局样式。 |
 | `web_app/routes/config.py` | 增加 Web 配置读写接口。 |
-| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、备份和回滚。 |
+| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、最近 5 个备份和回滚。 |
+| `web_app/services/config_audit_service.py` | 新增配置变更审计能力，记录操作者、时间、文件和结果，不记录敏感值。 |
+| `web_app/services/secret_service.py` | 新增 API Key 加密存储能力，优先系统凭据库，不可用时退到本机密钥文件。 |
 | `ai_gen_reimbursement_docs/config_utils.py` | 补充配置校验和缓存清理入口，确保保存后即时生效。 |
 | `web_app/routes/tasks.py` | 任务启动时合并请求参数与配置默认值，形成运行快照。 |
 | `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏和敏感值保留。 |
+| `tests/test_web_config_audit.py` | 覆盖配置变更审计不记录敏感值。 |
+| `tests/test_web_secret_service.py` | 覆盖 API Key 加密、读取脱敏、系统凭据库不可用时兜底本机密钥文件。 |
 | `tests/test_web_tasks.py` | 覆盖任务启动参数快照和配置默认值兜底。 |
 
 ## 验证方式
@@ -504,7 +533,7 @@ npm run build
 ```
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_web_config_service.py tests/test_web_tasks.py tests/test_web_system.py
+.\.venv\Scripts\python.exe -m pytest tests/test_web_config_service.py tests/test_web_config_audit.py tests/test_web_secret_service.py tests/test_web_tasks.py tests/test_web_system.py
 ```
 
 人工检查：
@@ -514,12 +543,14 @@ npm run build
 - AI 配置只出现在 `配置` 页。
 - 配置页保存后写入配置文件，刷新页面或重启后仍能读取。
 - API Key 不明文落盘；配置文件、备份、导出、日志、错误信息和调试页面都不出现 API Key 原文。
+- API Key 第一版优先使用系统凭据库加密；系统凭据库不可用时退到本机密钥文件。
 - API Key 不在读取接口中返回原文；省略 API Key 保存时保留旧的加密密文。
 - 远程用户未配置个人 API Key 且 `allow_shared_ai_credentials: false` 时，不继承全局 API Key，并给出明确提示。
 - 管理员显式开启 `allow_shared_ai_credentials: true` 后，远程用户才可使用服务端共享 API Key。
 - 配置中心第一阶段可编辑基础配置和模板配置。
 - 高级 YAML/JSON 配置保存前必须校验，保存失败不得覆盖原文件。
-- 每次保存配置文件前自动生成备份，并支持恢复上一版本。
+- 每次保存配置文件前自动生成备份，保留最近 5 个版本，并支持恢复上一版本。
+- 配置变更审计记录谁在什么时候改了哪个配置文件，但不记录敏感值。
 - FPA 策略和低频任务设置位于 `执行监控` 下方。
 - FPA 预览页术语符合 `docs/fpa/result-review-terminology.md`。
 - 移动端没有横向滚动，导航可以通过菜单打开。
@@ -538,7 +569,8 @@ npm run build
 | 远程用户无个人 API Key | 默认不使用全局 API Key；仅当 `allow_shared_ai_credentials: true` 时使用共享凭据。 |
 | 保存 API Key | 只写入加密密文；读取配置、备份、导出和日志均不可见原文。 |
 | 高级配置校验失败 | 显示具体错误，不写入目标配置文件，保留原配置。 |
-| 配置误保存 | 可从备份版本恢复上一份配置，并在恢复后清理配置缓存。 |
+| 配置误保存 | 可从最近 5 个备份版本恢复配置，并在恢复后清理配置缓存。 |
+| 配置变更审计 | 审计记录包含操作者、时间、配置文件和结果，不包含 API Key、密文原文或其他敏感值。 |
 
 ## 风险与边界
 
@@ -548,6 +580,7 @@ npm run build
 - API Key 输入应继续沿用现有敏感输入保护逻辑。
 - 配置文件写入必须保护敏感字段：遮罩值不能覆盖真实 API Key 密文，空字符串不能误删旧 Key。
 - API Key 不得明文保存；配置文件、备份、导出、日志、错误信息和调试页面都不得泄露原文。
+- API Key 加密第一版优先使用系统凭据库；不可用时退到本机密钥文件。
 - 在后端代调用 AI 服务的架构下，不能承诺拥有服务器最高权限的管理员绝对无法取得运行时凭据；默认实现只承诺配置文件、接口、日志、备份和导出中拿不到 API Key 原文。
 - 远程用户个人配置不能被本机全局配置覆盖；全局配置变化只影响未设置个人覆盖项的普通配置。
 - API Key 不能按普通配置继承全局默认值；共享系统 API Key 必须由 `allow_shared_ai_credentials` 显式开启。
@@ -555,5 +588,6 @@ npm run build
 - 正在运行中的任务不得被新配置影响，避免不可复盘。
 - 所有配置文件都进入 Web UI 是长期目标，第一阶段不应强行表单化复杂 FPA、Prompt 和领域上下文配置。
 - 复杂配置必须保留高级 YAML/JSON 编辑入口，但保存前要经过语法校验和业务校验。
-- 配置备份和回滚是高级配置编辑的前置能力，不应等线上出错后再补。
+- 配置备份和回滚是高级配置编辑的前置能力，不应等线上出错后再补；备份保留最近 5 个版本。
+- 配置变更审计必须脱敏，不记录 API Key、密文原文或其他敏感值。
 - 如果后续要把调试信息做成可筛选、可复制、可导出页面，需要再确认后端是否已经提供足够结构化的数据。
