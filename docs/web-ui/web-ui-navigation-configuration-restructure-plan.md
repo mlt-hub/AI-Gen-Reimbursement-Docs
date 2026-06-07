@@ -468,6 +468,123 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 - 第二阶段如需筛选到某个 FPA 功能点、某次模型调用、某条解析错误，再新增结构化 FPA 调试接口。
 - 新增结构化接口前，不要求后端重写现有日志产物格式。
 
+## 实施路线
+
+本方案按可独立提交、可独立验收的工作包推进。第一期先完成导航重构、基础配置中心、模板配置、FPA 预览与 AI 调试入口；第二期和第三期只预留结构，不阻塞第一期上线。
+
+### 第一期交付目标
+
+第一期完成后应满足：
+
+- 左侧栏成为 Web UI 主导航。
+- 生成页只保留高频启动路径、执行监控和低频任务设置。
+- 配置页可以保存基础配置和模板配置，配置写入文件后即时生效。
+- API Key 加密落盘，读取、日志、备份、导出均不泄露原文。
+- FPA 预览页接入统一布局。
+- FPA AI 调试页使用 `/sessions/:sessionId/fpa/debug`，第一阶段复用现有 AI 日志/交互接口。
+- 运行中任务继续使用启动快照，不受后续配置修改影响。
+
+### 第一期工作包
+
+| 顺序 | 工作包 | 主要改动 | 验收标准 |
+|---:|---|---|---|
+| 1 | 应用骨架与左侧栏 | 新增 `AppShell`、`SideNav`，调整 `App.vue` 和路由元信息。 | `生成`、`预览`、`历史`、`配置`、FPA 预览、AI 调试页共享同一导航；移动端可通过菜单打开导航。 |
+| 2 | 生成页职责收敛 | 拆分 `ConfigPanel` / `AdvancedOptions`，生成页保留输入、操作模式、启动、状态、执行监控和低频任务设置。 | `AI 配置`、模板上传/下载不再出现在生成页；输出目录位于低频任务设置中项目名称后面。 |
+| 3 | 配置中心第一期 UI | 配置页新增 `ConfigCenterNav`、`AIConfigSection`、`WebRuntimeConfigSection`、`TemplateSettingsSection`。 | 配置页可编辑 AI 配置、Web/运行常用项、`out_templates` 模板映射。 |
+| 4 | Web 配置接口 | 新增 `GET/PUT /api/web-config`，返回业务化脱敏配置视图。 | 前端不再直接依赖 `_env` / `_system` / `_biz` 结构；保存成功后返回最新脱敏配置。 |
+| 5 | API Key 加密存储 | 新增 `secret_service`，优先系统凭据库，不可用时退到本机密钥文件。 | 配置文件只出现密文字段；读取接口、日志、备份、导出均不出现 API Key 原文。 |
+| 6 | 配置备份、回滚与审计 | `config_service` 保存前备份，保留最近 5 个版本；新增配置变更审计。 | 保存前生成备份；可恢复备份；审计记录操作者、时间、文件和结果，不记录敏感值。 |
+| 7 | 任务启动配置合并 | `tasks.py` 启动时合并请求显式值、个人配置、全局配置和系统默认值。 | 新任务使用最新配置默认值；运行中任务不受后续配置修改影响。 |
+| 8 | 远程用户凭据策略 | 远程用户无个人 API Key 且未开启共享凭据时阻止 AI 任务启动。 | 返回明确错误，提示配置个人 API Key 或联系管理员开启共享凭据。 |
+| 9 | FPA 预览和调试页 | FPA 预览接入统一布局；新增或迁移 `FpaAiDebugPage`。 | `查看 AI 调试信息` 携带 `sessionId` 跳转；无 session 时入口禁用并提示。 |
+| 10 | 回归与打磨 | 补测试、移动端检查、错误态和空态文案。 | 前后端构建和指定 pytest 通过；人工验收清单通过。 |
+
+### 第一期建议提交顺序
+
+为降低风险，建议按以下提交顺序实现：
+
+```text
+1. layout: add app shell and side navigation
+2. frontend: split generation and config sections
+3. backend: add web-config read model
+4. backend: add encrypted secret storage
+5. backend: add config save, backup, audit, cache refresh
+6. backend: merge config defaults into task start snapshot
+7. frontend: wire config center to web-config API
+8. frontend: add FPA AI debug route and session-aware links
+9. tests: cover config, secret, audit, task snapshot behavior
+10. polish: responsive QA, empty/error states, docs final check
+```
+
+### 第二期交付目标
+
+第二期聚焦 FPA 和业务规则配置：
+
+- `business_rules.yaml` 可通过结构化表单和高级 YAML 编辑器维护。
+- `fpa_config.yaml` 可编辑常用 FPA 方案、策略、规则集，完整 YAML 可高级编辑。
+- `fpa_judgement_rules.yaml` 可通过规则列表编辑器维护。
+- 所有高级配置保存前必须通过语法校验和业务校验。
+- 校验失败不得写入目标文件。
+
+第二期工作包：
+
+| 顺序 | 工作包 | 主要改动 | 验收标准 |
+|---:|---|---|---|
+| 1 | 高级配置编辑器基础 | 新增 YAML/JSON 编辑器、校验错误定位、保存前备份。 | 语法错误能定位；保存失败不覆盖原文件。 |
+| 2 | FPA 配置校验接入 | 复用或补充 `validate_fpa_config` 等后端校验入口。 | 非法 profile、strategy、rule_set 不能保存。 |
+| 3 | FPA 策略表单 | 常用 FPA profile、strategy、rule_set 表单化。 | 用户能编辑常用 FPA 策略，不必直接改完整 YAML。 |
+| 4 | 业务规则编辑 | `business_rules.yaml` 支持表单和高级 YAML 双入口。 | 规则保存后下一次生成/预览即时生效。 |
+| 5 | FPA 判定规则编辑 | `fpa_judgement_rules.yaml` 支持规则列表编辑。 | 保存前校验规则结构，失败不写入。 |
+
+### 第三期交付目标
+
+第三期聚焦 Prompt、领域上下文和配置运维能力：
+
+- `ai_system_prompts_config.yaml` 支持按场景编辑 prompt。
+- `domain_context.json` 支持 JSON 表单/编辑器。
+- 配置历史版本可查看差异。
+- 支持恢复默认、导入导出。
+- 如 FPA AI 调试需要更细粒度筛选，再新增结构化 FPA 调试接口。
+
+第三期工作包：
+
+| 顺序 | 工作包 | 主要改动 | 验收标准 |
+|---:|---|---|---|
+| 1 | Prompt 配置 UI | 场景列表、多行编辑、YAML 校验。 | 可编辑 prompt，保存后后续 AI 调用生效。 |
+| 2 | 领域上下文 UI | `domain_context.json` 表单/JSON 编辑器。 | JSON schema 校验通过才保存。 |
+| 3 | 配置历史与差异 | 查看最近备份，展示 diff，支持恢复。 | 可选择备份恢复，恢复后清缓存。 |
+| 4 | 导入导出 | 导出配置包时排除 API Key 原文和加密密钥。 | 导出包不含敏感原文；导入前校验。 |
+| 5 | 结构化 FPA 调试接口 | 按 session、功能点、模型调用筛选调试数据。 | AI 调试页可定位到具体功能点和调用记录。 |
+
+### 依赖关系
+
+```text
+AppShell / SideNav
+  -> 生成页拆分
+  -> 配置中心 UI
+
+secret_service
+  -> web-config 保存
+  -> 远程用户凭据策略
+  -> 任务启动配置合并
+
+config backup / audit
+  -> 基础配置保存
+  -> 高级 YAML/JSON 编辑
+
+session-aware FPA preview
+  -> /sessions/:sessionId/fpa/debug
+  -> 后续结构化 FPA 调试接口
+```
+
+### 第一期开工前检查
+
+- 确认现有 `/api/config` 继续保留，新增 `/api/web-config` 不破坏旧功能。
+- 确认系统凭据库在 Windows 打包环境中的可用性；不可用时启用本机密钥文件兜底。
+- 确认本机模式和远程用户模式的配置目录分别可读写。
+- 确认现有模板上传/下载接口可以迁移到配置页复用。
+- 确认现有 AI 日志/交互接口能支撑第一阶段 FPA AI 调试页。
+
 ## 组件拆分建议
 
 | 当前位置 | 建议目标 | 说明 |
@@ -522,6 +639,8 @@ web_app/src/views/FpaAiDebugPage.vue
 | `tests/test_web_config_audit.py` | 覆盖配置变更审计不记录敏感值。 |
 | `tests/test_web_secret_service.py` | 覆盖 API Key 加密、读取脱敏、系统凭据库不可用时兜底本机密钥文件。 |
 | `tests/test_web_tasks.py` | 覆盖任务启动参数快照和配置默认值兜底。 |
+| `tests/test_web_config_routes.py` | 覆盖 `/api/web-config` 读取、保存、权限和脱敏响应。 |
+| `tests/test_web_fpa_debug.py` | 覆盖 `/sessions/:sessionId/fpa/debug` 所需会话访问和日志数据读取。 |
 
 ## 验证方式
 
@@ -533,7 +652,7 @@ npm run build
 ```
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_web_config_service.py tests/test_web_config_audit.py tests/test_web_secret_service.py tests/test_web_tasks.py tests/test_web_system.py
+.\.venv\Scripts\python.exe -m pytest tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_web_config_audit.py tests/test_web_secret_service.py tests/test_web_tasks.py tests/test_web_system.py tests/test_web_fpa_debug.py
 ```
 
 人工检查：
@@ -554,6 +673,8 @@ npm run build
 - FPA 策略和低频任务设置位于 `执行监控` 下方。
 - FPA 预览页术语符合 `docs/fpa/result-review-terminology.md`。
 - 移动端没有横向滚动，导航可以通过菜单打开。
+- 第一期开工前检查项全部确认。
+- 第一期 10 个工作包均可独立验收和提交。
 
 状态验收矩阵：
 
