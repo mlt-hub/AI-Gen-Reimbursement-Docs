@@ -13,8 +13,16 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import StreamingResponse
 
 from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module, preview_fpa_modules
+from ai_gen_reimbursement_docs.auth import user_config_dir
 from web_app.dependencies import require_auth, require_local
-from web_app.services.config_service import remote_session_retention_seconds
+from web_app.services.config_service import (
+    config_dir,
+    mode_requires_ai,
+    read_config,
+    read_config_from_dir,
+    remote_session_retention_seconds,
+    resolve_task_start_config,
+)
 from web_app.services import pipeline_runtime
 from web_app.services.run_history_service import finish_web_run, start_web_run
 from web_app.services.session_access import require_session_access
@@ -85,6 +93,38 @@ def create_router(
     base_dir: Path,
 ) -> APIRouter:
     router = APIRouter()
+
+    def _explicit_task_config(**values: str) -> dict[str, str]:
+        return {key: value for key, value in values.items() if str(value or "").strip()}
+
+    def _resolve_task_config_snapshot(
+        *,
+        explicit: dict[str, str],
+        local_mode: bool,
+        user: str = "",
+        mode: str,
+    ) -> dict:
+        global_root = config_dir()
+        user_root = user_config_dir(user) if user and not local_mode else None
+        user_config = read_config_from_dir(user_root) if user_root is not None else None
+        snapshot = resolve_task_start_config(
+            explicit=explicit,
+            global_config=read_config(),
+            user_config=user_config,
+            local_mode=local_mode,
+            global_config_root=global_root,
+            user_config_root=user_root,
+        )
+        if (
+            not local_mode
+            and mode_requires_ai(mode, snapshot.get("fpa_strategy", ""))
+            and not snapshot.get("api_key")
+        ):
+            raise HTTPException(
+                400,
+                "未配置可用 API Key。请配置个人 API Key，或联系管理员开启共享系统 API Key。",
+            )
+        return snapshot
 
     def _resolve_local_xlsx_input(xlsx_path: str) -> Path:
         xlsx_input = Path(xlsx_path)
@@ -278,6 +318,23 @@ def create_router(
         import re
         from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
 
+        task_config = _resolve_task_config_snapshot(
+            explicit=_explicit_task_config(
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                max_tokens=max_tokens,
+                project_name=project_name,
+                fpa_profile=fpa_profile,
+                fpa_strategy=fpa_strategy,
+                fpa_rule_set=fpa_rule_set,
+                fpa_confirmation_mode=fpa_confirmation_mode,
+            ),
+            local_mode=True,
+            mode=mode,
+        )
+        project_name = task_config["project_name"]
+
         if output_dir:
             out = Path(output_dir)
         elif project_name:
@@ -330,14 +387,14 @@ def create_router(
                 str(xlsx),
                 str(out),
                 custom_t_dir,
-                api_key,
-                model,
-                base_url,
-                project_name,
-                max_tokens,
-                fpa_profile,
-                fpa_strategy,
-                fpa_rule_set,
+                task_config["api_key"],
+                task_config["model"],
+                task_config["base_url"],
+                task_config["project_name"],
+                task_config["max_tokens"],
+                task_config["fpa_profile"],
+                task_config["fpa_strategy"],
+                task_config["fpa_rule_set"],
                 bool(clean),
                 mode,
                 mode_info=mode_info,
@@ -378,6 +435,22 @@ def create_router(
         cleanup_expired_sessions(
             session_manager,
             max_age_seconds=remote_session_retention_seconds(),
+        )
+        task_config = _resolve_task_config_snapshot(
+            explicit=_explicit_task_config(
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                max_tokens=max_tokens,
+                project_name=project_name,
+                fpa_profile=fpa_profile,
+                fpa_strategy=fpa_strategy,
+                fpa_rule_set=fpa_rule_set,
+                fpa_confirmation_mode=fpa_confirmation_mode,
+            ),
+            local_mode=False,
+            user=user,
+            mode=mode,
         )
 
         session_id = uuid.uuid4().hex[:8]
@@ -440,14 +513,14 @@ def create_router(
                 str(file_path),
                 str(output_dir),
                 str(custom_t_dir),
-                api_key,
-                model,
-                base_url,
-                project_name,
-                max_tokens,
-                fpa_profile,
-                fpa_strategy,
-                fpa_rule_set,
+                task_config["api_key"],
+                task_config["model"],
+                task_config["base_url"],
+                task_config["project_name"],
+                task_config["max_tokens"],
+                task_config["fpa_profile"],
+                task_config["fpa_strategy"],
+                task_config["fpa_rule_set"],
                 bool(clean),
                 mode,
                 mode_info=mode_info,

@@ -271,6 +271,8 @@ PUT  /api/web-config
 - 已实现省略 API Key 时保留旧密文，`clear_api_key: true` 时显式清空。
 - 已实现远程用户凭据策略的读取语义：远程用户无个人 Key 时，只有 `allow_shared_ai_credentials: true` 才视为可用共享 Key。
 - 已实现保存前备份和配置变更审计基础能力。
+- 已实现正式任务启动的配置默认值合并：请求显式值优先，其次个人配置、全局配置、系统默认值。
+- 已实现远程 AI 任务启动凭据阻断：远程用户无个人 API Key 且未开启共享系统 API Key 时拒绝启动。
 
 已确认决策：
 
@@ -365,7 +367,7 @@ PUT /api/web-config
 即时生效边界：
 
 - 新打开页面立即读到新配置。
-- 下一次生成立即使用新配置。
+- 下一次生成立即使用新配置作为默认值；生成页本次请求显式填写的字段优先。
 - 下一次 FPA 预览立即使用新配置。
 - 已经运行中的 session 不重新读取配置，继续使用任务启动时的参数快照。
 - 运行中任务始终使用启动时参数快照，不受后续配置修改影响。
@@ -581,9 +583,9 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 3 | 配置中心第一期 UI | 部分完成 | 配置页已展示 AI 配置摘要和模板配置区。 | 还需把 AI 配置、运行默认值、`out_templates` 做成可编辑表单并接保存。 |
 | 4 | Web 配置接口 | 已完成基础闭环 | `d6961ea feat: add web config read model`、`150e6a2 feat: save web config with encrypted secrets` | 还需把前端编辑表单完整接入 `PUT /api/web-config`。 |
 | 5 | API Key 加密存储 | 已完成基础闭环 | `web_app/services/secret_service.py`，测试覆盖 DPAPI 兜底本机密钥文件。 | 后续任务启动读取密文时需接解密。 |
-| 6 | 配置备份、回滚与审计 | 部分完成 | 保存前备份、最近 5 个版本保留、审计 JSONL 已接入保存流程。 | 还需补恢复备份 API/UI；原子写入可继续增强。 |
-| 7 | 任务启动配置合并 | 未开始 | - | 需合并请求显式值、个人配置、全局配置和系统默认值，形成启动快照。 |
-| 8 | 远程用户凭据策略 | 部分完成 | `/api/web-config` 读取视图已按共享开关判断可用凭据。 | 任务启动时还需阻止无个人 Key 且未开启共享凭据的 AI 任务。 |
+| 6 | 配置备份、回滚与审计 | 部分完成 | `ad58628 feat: add web config backup audit`；保存前备份、最近 5 个版本保留、审计 JSONL 已接入保存流程。 | 还需补恢复备份 API/UI；原子写入可继续增强。 |
+| 7 | 任务启动配置合并 | 部分完成 | `resolve_task_start_config()` 已接入 `/api/run-local` 和 `/api/run-upload`，形成启动参数快照。 | `fpa_confirmation_mode` 目前在正式生成 pipeline 中尚无承接参数；FPA 预览默认值合并还需继续接入。 |
+| 8 | 远程用户凭据策略 | 已完成任务启动基础闭环 | 远程 AI 任务无可用 API Key 时返回明确错误；共享全局 Key 只有 `allow_shared_ai_credentials: true` 时可用。 | 后续需把同样策略接入 FPA 预览 AI 调用。 |
 | 9 | FPA 预览和调试页 | 未开始 | FPA 预览已在统一 AppShell 下。 | 需新增 `/sessions/:sessionId/fpa/debug` 页面和 session-aware 入口。 |
 | 10 | 回归与打磨 | 持续进行 | 当前每轮提交已跑相关 pytest 和 `npm run build`。 | 第一阶段收尾时跑完整指定测试和移动端人工检查。 |
 

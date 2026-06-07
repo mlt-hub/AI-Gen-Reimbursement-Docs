@@ -316,6 +316,7 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
         "/api/run-upload",
         data={
             "mode": "from-excel-gen-fpa",
+            "api_key": "sk-explicit",
             "fpa_profile": "strict_fpa",
             "fpa_strategy": "ai_first",
             "fpa_rule_set": "strict_fpa_rs",
@@ -334,10 +335,84 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
     assert state.work_dir.exists()
     assert state.task_created_at is not None
     assert calls
+    assert calls[0]["args"][5] == "sk-explicit"
     assert calls[0]["args"][10] == "strict_fpa"
     assert calls[0]["args"][11] == "ai_first"
     assert calls[0]["args"][12] == "strict_fpa_rs"
     server.session_manager.cleanup_download(data["session_id"])
+
+
+def test_run_upload_blocks_ai_task_without_personal_or_shared_api_key(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+    monkeypatch.setattr(tasks, "cleanup_expired_sessions", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(tasks, "read_config", lambda: {
+        "_env": {"ANTHROPIC_API_KEY_ENC": "fernet:global-ciphertext"},
+        "_system": {"allow_shared_ai_credentials": False},
+    })
+    monkeypatch.setattr(tasks, "read_config_from_dir", lambda path: {"_env": {}, "_system": {}})
+
+    resp = client.post(
+        "/api/run-upload",
+        data={"mode": "from-excel-gen-fpa"},
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 400
+    assert "配置个人 API Key" in resp.json()["detail"]
+
+
+def test_run_upload_uses_config_defaults_snapshot(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    calls: list[dict] = []
+    user_dir = tmp_path / "users" / "alice"
+    user_dir.mkdir(parents=True)
+
+    def fake_execute_in_session(*args, **kwargs):
+        calls.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(tasks, "execute_in_session", fake_execute_in_session)
+    monkeypatch.setattr(tasks, "cleanup_expired_sessions", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(tasks, "user_config_dir", lambda user: user_dir)
+    monkeypatch.setattr(tasks, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(tasks, "read_config", lambda: {
+        "_env": {
+            "ANTHROPIC_API_KEY": "sk-global",
+            "ANTHROPIC_BASE_URL": "https://global.example.test",
+            "ANTHROPIC_MODEL": "global-model",
+        },
+        "_system": {
+            "allow_shared_ai_credentials": True,
+            "max_tokens": "16K",
+            "fpa_profile": "strict_fpa",
+            "fpa_strategy": "ai_first",
+            "fpa_rule_set": "strict_fpa_rs",
+        },
+    })
+    monkeypatch.setattr(tasks, "read_config_from_dir", lambda path: {
+        "_env": {
+            "ANTHROPIC_MODEL": "personal-model",
+        },
+        "_system": {
+            "fpa_strategy": "rules_first",
+        },
+    })
+
+    resp = client.post(
+        "/api/run-upload",
+        data={"mode": "from-excel-gen-fpa"},
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 200
+    assert calls
+    assert calls[0]["args"][5] == "sk-global"
+    assert calls[0]["args"][6] == "personal-model"
+    assert calls[0]["args"][7] == "https://global.example.test"
+    assert calls[0]["args"][9] == "16K"
+    assert calls[0]["args"][10] == "strict_fpa"
+    assert calls[0]["args"][11] == "rules_first"
+    assert calls[0]["args"][12] == "strict_fpa_rs"
+    server.session_manager.cleanup_download(resp.json()["session_id"])
 
 
 def test_fpa_preview_upload_returns_preview(monkeypatch):

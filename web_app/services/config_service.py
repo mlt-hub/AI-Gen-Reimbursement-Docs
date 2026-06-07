@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from web_app.services.config_audit_service import append_config_audit_record
-from web_app.services.secret_service import encrypt_secret
+from web_app.services.secret_service import SecretServiceError, decrypt_secret, encrypt_secret
 
 
 DEFAULT_WEB_CONFIG = {
@@ -19,6 +19,14 @@ DEFAULT_WEB_CONFIG = {
     "fpa_strategy": "",
     "fpa_rule_set": "",
     "fpa_confirmation_mode": "cautious",
+}
+
+AI_TASK_MODES = {
+    "from-excel-gen-all",
+    "from-excel-gen-fpa",
+    "from-excel-gen-cosmic",
+    "from-excel-gen-list",
+    "from-excel-gen-spec",
 }
 
 
@@ -103,6 +111,19 @@ def _configured_env_key(env: dict, key: str) -> bool:
     return bool(str(value).strip())
 
 
+def _read_secret_from_env(env: dict, *, config_root: Path) -> str:
+    plain = str(env.get("ANTHROPIC_API_KEY", "")).strip()
+    if plain:
+        return plain
+    encrypted = str(env.get("ANTHROPIC_API_KEY_ENC", "")).strip()
+    if not encrypted:
+        return ""
+    try:
+        return decrypt_secret(encrypted, config_root=config_root)
+    except SecretServiceError:
+        return ""
+
+
 def _pick_env_field(user_env: dict, global_env: dict, key: str, default: str = "") -> dict:
     if _configured_env_key(user_env, key):
         return _field(str(user_env[key]), "personal")
@@ -117,6 +138,99 @@ def _pick_system_field(user_system: dict, global_system: dict, key: str, default
     if key in global_system and global_system[key] not in (None, ""):
         return _field(global_system[key], "global")
     return _field(default, "default")
+
+
+def _first_explicit(explicit: dict, key: str) -> str:
+    value = explicit.get(key, "")
+    return str(value).strip() if value is not None else ""
+
+
+def _effective_env_value(explicit: dict, explicit_key: str, env_key: str, user_env: dict, global_env: dict) -> str:
+    value = _first_explicit(explicit, explicit_key)
+    if value:
+        return value
+    if _configured_env_key(user_env, env_key):
+        return str(user_env[env_key]).strip()
+    if _configured_env_key(global_env, env_key):
+        return str(global_env[env_key]).strip()
+    return ""
+
+
+def _effective_system_value(explicit: dict, key: str, user_system: dict, global_system: dict) -> str:
+    value = _first_explicit(explicit, key)
+    if value:
+        return value
+    if key in user_system and user_system[key] not in (None, ""):
+        return str(user_system[key]).strip()
+    if key in global_system and global_system[key] not in (None, ""):
+        return str(global_system[key]).strip()
+    default = DEFAULT_WEB_CONFIG.get(key, "")
+    return str(default).strip()
+
+
+def mode_requires_ai(mode: str, fpa_strategy: str = "") -> bool:
+    if mode == "from-excel-gen-basedata":
+        return False
+    if mode == "from-excel-gen-fpa" and fpa_strategy == "rules_only":
+        return False
+    return mode in AI_TASK_MODES
+
+
+def resolve_task_start_config(
+    *,
+    explicit: dict,
+    global_config: dict,
+    user_config: dict | None = None,
+    local_mode: bool,
+    global_config_root: Path,
+    user_config_root: Path | None = None,
+) -> dict:
+    """Resolve a task-start parameter snapshot from explicit values and config files."""
+    user_config = user_config or {}
+    user_env = user_config.get("_env") if isinstance(user_config.get("_env"), dict) else {}
+    user_system = user_config.get("_system") if isinstance(user_config.get("_system"), dict) else {}
+    global_env = global_config.get("_env") if isinstance(global_config.get("_env"), dict) else {}
+    global_system = global_config.get("_system") if isinstance(global_config.get("_system"), dict) else {}
+
+    if local_mode:
+        user_env = {}
+        user_system = {}
+        user_config_root = None
+
+    fpa_strategy = _effective_system_value(explicit, "fpa_strategy", user_system, global_system)
+    resolved = {
+        "api_key": _first_explicit(explicit, "api_key"),
+        "model": _effective_env_value(explicit, "model", "ANTHROPIC_MODEL", user_env, global_env),
+        "base_url": _effective_env_value(explicit, "base_url", "ANTHROPIC_BASE_URL", user_env, global_env),
+        "max_tokens": _effective_system_value(explicit, "max_tokens", user_system, global_system),
+        "project_name": _effective_system_value(explicit, "project_name", user_system, global_system),
+        "fpa_profile": _effective_system_value(explicit, "fpa_profile", user_system, global_system),
+        "fpa_strategy": fpa_strategy,
+        "fpa_rule_set": _effective_system_value(explicit, "fpa_rule_set", user_system, global_system),
+        "fpa_confirmation_mode": _effective_system_value(explicit, "fpa_confirmation_mode", user_system, global_system),
+        "api_key_source": "explicit" if _first_explicit(explicit, "api_key") else "missing",
+        "uses_shared_api_key": False,
+    }
+
+    if resolved["api_key"]:
+        return resolved
+
+    if user_config_root is not None:
+        user_api_key = _read_secret_from_env(user_env, config_root=user_config_root)
+        if user_api_key:
+            resolved["api_key"] = user_api_key
+            resolved["api_key_source"] = "personal"
+            return resolved
+
+    shared_credentials = bool(global_system.get("allow_shared_ai_credentials", False))
+    if local_mode or shared_credentials:
+        global_api_key = _read_secret_from_env(global_env, config_root=global_config_root)
+        if global_api_key:
+            resolved["api_key"] = global_api_key
+            resolved["api_key_source"] = "global"
+            resolved["uses_shared_api_key"] = not local_mode
+
+    return resolved
 
 
 def build_web_config_view(

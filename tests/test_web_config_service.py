@@ -166,6 +166,94 @@ def test_build_web_config_view_allows_shared_global_api_key_only_when_enabled():
     assert "sk-global-secret" not in str(view)
 
 
+def test_resolve_task_start_config_prefers_explicit_then_personal_then_global(monkeypatch, tmp_path):
+    user_root = tmp_path / "user"
+    global_root = tmp_path / "global"
+    user_root.mkdir()
+    global_root.mkdir()
+    monkeypatch.setattr(secret_service, "_encrypt_with_dpapi", lambda value: (_ for _ in ()).throw(secret_service.SecretServiceError("no dpapi")))
+    personal_key = secret_service.encrypt_secret("sk-personal", config_root=user_root)
+    global_key = secret_service.encrypt_secret("sk-global", config_root=global_root)
+
+    resolved = config_service.resolve_task_start_config(
+        explicit={
+            "model": "explicit-model",
+            "fpa_strategy": "rules_only",
+        },
+        user_config={
+            "_env": {
+                "ANTHROPIC_API_KEY_ENC": personal_key,
+                "ANTHROPIC_MODEL": "personal-model",
+            },
+            "_system": {
+                "fpa_profile": "personal_profile",
+            },
+        },
+        global_config={
+            "_env": {
+                "ANTHROPIC_API_KEY_ENC": global_key,
+                "ANTHROPIC_BASE_URL": "https://global.example.test",
+            },
+            "_system": {
+                "fpa_profile": "global_profile",
+                "fpa_strategy": "ai_first",
+            },
+        },
+        local_mode=False,
+        global_config_root=global_root,
+        user_config_root=user_root,
+    )
+
+    assert resolved["api_key"] == "sk-personal"
+    assert resolved["api_key_source"] == "personal"
+    assert resolved["model"] == "explicit-model"
+    assert resolved["base_url"] == "https://global.example.test"
+    assert resolved["fpa_profile"] == "personal_profile"
+    assert resolved["fpa_strategy"] == "rules_only"
+
+
+def test_resolve_task_start_config_uses_shared_global_key_only_when_enabled(monkeypatch, tmp_path):
+    global_root = tmp_path / "global"
+    global_root.mkdir()
+    monkeypatch.setattr(secret_service, "_encrypt_with_dpapi", lambda value: (_ for _ in ()).throw(secret_service.SecretServiceError("no dpapi")))
+    global_key = secret_service.encrypt_secret("sk-global", config_root=global_root)
+
+    disabled = config_service.resolve_task_start_config(
+        explicit={},
+        user_config={"_env": {}, "_system": {}},
+        global_config={
+            "_env": {"ANTHROPIC_API_KEY_ENC": global_key},
+            "_system": {"allow_shared_ai_credentials": False},
+        },
+        local_mode=False,
+        global_config_root=global_root,
+        user_config_root=tmp_path / "user",
+    )
+    enabled = config_service.resolve_task_start_config(
+        explicit={},
+        user_config={"_env": {}, "_system": {}},
+        global_config={
+            "_env": {"ANTHROPIC_API_KEY_ENC": global_key},
+            "_system": {"allow_shared_ai_credentials": True},
+        },
+        local_mode=False,
+        global_config_root=global_root,
+        user_config_root=tmp_path / "user",
+    )
+
+    assert disabled["api_key"] == ""
+    assert disabled["api_key_source"] == "missing"
+    assert enabled["api_key"] == "sk-global"
+    assert enabled["api_key_source"] == "global"
+    assert enabled["uses_shared_api_key"] is True
+
+
+def test_mode_requires_ai_skips_basedata_and_rules_only_fpa():
+    assert config_service.mode_requires_ai("from-excel-gen-basedata") is False
+    assert config_service.mode_requires_ai("from-excel-gen-fpa", "rules_only") is False
+    assert config_service.mode_requires_ai("from-excel-gen-fpa", "ai_first") is True
+
+
 def test_save_web_config_to_dir_encrypts_api_key_and_saves_editable_fields(monkeypatch, tmp_path):
     monkeypatch.setattr(secret_service, "_encrypt_with_dpapi", lambda value: (_ for _ in ()).throw(secret_service.SecretServiceError("no dpapi")))
 
