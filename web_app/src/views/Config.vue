@@ -24,6 +24,21 @@
       <p v-else-if="healthCheckedAt" class="mt-3 text-xs text-[var(--color-ink-soft)]">最近检查：{{ healthCheckedAt }}</p>
     </section>
 
+    <section class="surface rounded-lg p-5">
+      <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
+        <p class="text-xs font-semibold text-[var(--color-ink-soft)]">模板配置</p>
+        <h2 class="mt-1 text-lg font-semibold">输出与下载模板</h2>
+      </div>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-4">
+          <TemplateUpload />
+        </div>
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-4">
+          <TemplateDownload />
+        </div>
+      </div>
+    </section>
+
     <nav class="flex flex-wrap gap-2 border-b border-[var(--color-rule)] pb-3" aria-label="配置分区">
       <button
         v-for="tab in configTabs"
@@ -182,6 +197,8 @@ import { useAuthStore } from '@/stores/auth.ts'
 import { normalizeApiKeyInput, useConfigStore } from '@/stores/config.ts'
 import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import TemplateDownload from '@/components/TemplateDownload.vue'
+import TemplateUpload from '@/components/TemplateUpload.vue'
 
 // ── 类型 ──────────────────────────────────────────────────
 

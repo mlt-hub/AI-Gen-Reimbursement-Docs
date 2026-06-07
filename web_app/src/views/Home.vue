@@ -1,39 +1,43 @@
 <template>
-  <div class="box-border flex h-full max-w-full flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 lg:flex-row lg:overflow-hidden lg:p-5">
+  <div class="box-border grid h-full max-w-full grid-cols-1 gap-4 overflow-x-hidden overflow-y-auto p-4 xl:grid-cols-[390px_minmax(0,1fr)] xl:p-5">
     <!-- 左侧配置面板 -->
-    <aside class="surface min-h-0 w-full max-w-full min-w-0 shrink-0 overflow-y-auto rounded-xl p-4 lg:w-[390px]">
+    <aside class="surface min-h-0 w-full max-w-full min-w-0 shrink-0 rounded-xl p-4">
       <div class="mb-5 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">任务设置</p>
         <h2 class="mt-1 text-xl font-bold text-[var(--color-ink)]">生成任务</h2>
-        <p class="mt-1 text-sm text-[var(--color-ink-muted)]">选择输入、模式和模板后启动文档生成。</p>
+        <p class="mt-1 text-sm text-[var(--color-ink-muted)]">选择输入和操作模式后启动文档生成。</p>
       </div>
       <ConfigPanel @start="startTask" />
     </aside>
 
     <!-- 右侧日志区 -->
-    <div class="surface flex min-h-[420px] min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
-      <div class="border-b border-[var(--color-rule)] px-5 py-4">
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div class="min-w-0">
-            <p class="text-xs font-semibold text-[var(--color-ink-soft)]">执行监控</p>
-            <h2 class="mt-1 truncate text-lg font-bold text-[var(--color-ink)]">{{ runTitle }}</h2>
-          </div>
-          <div :class="['inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
-            <span class="h-2 w-2 rounded-full" :class="runDotClass" />
-            {{ runStateText }}
+    <div class="flex min-w-0 flex-col gap-4">
+      <section class="surface flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-xl">
+        <div class="border-b border-[var(--color-rule)] px-5 py-4">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-[var(--color-ink-soft)]">执行监控</p>
+              <h2 class="mt-1 truncate text-lg font-bold text-[var(--color-ink)]">{{ runTitle }}</h2>
+            </div>
+            <div :class="['inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
+              <span class="h-2 w-2 rounded-full" :class="runDotClass" />
+              {{ runStateText }}
+            </div>
           </div>
         </div>
-      </div>
-      <GenerationProgress v-if="session.isRunning || session.isDone || session.runState === 'cancelled' || steps.hasProgress" />
-      <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
-        <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
-          运行详情 / 排错信息
-        </summary>
-        <div class="h-80 border-t border-[var(--color-rule)]">
-          <LogViewer />
-        </div>
-      </details>
-      <ActionBar @ai="openAIModal" @reset="resetTask" />
+        <GenerationProgress v-if="session.isRunning || session.isDone || session.runState === 'cancelled' || steps.hasProgress" />
+        <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
+          <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
+            运行详情 / 排错信息
+          </summary>
+          <div class="h-80 border-t border-[var(--color-rule)]">
+            <LogViewer />
+          </div>
+        </details>
+        <ActionBar @ai="openAIModal" @reset="resetTask" />
+      </section>
+
+      <FpaRunSettingsSection />
     </div>
 
     <!-- FPA核减后的工作量输入弹窗 -->
@@ -153,6 +157,7 @@ import ConfigPanel from '@/components/ConfigPanel.vue'
 import GenerationProgress from '@/components/GenerationProgress.vue'
 import LogViewer from '@/components/LogViewer.vue'
 import ActionBar from '@/components/ActionBar.vue'
+import FpaRunSettingsSection from '@/components/run/FpaRunSettingsSection.vue'
 import type { StepProgress } from '@/stores/steps.ts'
 
 interface RunTaskResponse {

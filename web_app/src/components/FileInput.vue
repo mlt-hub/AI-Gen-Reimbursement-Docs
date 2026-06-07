@@ -7,13 +7,6 @@
         placeholder="C:\...\功能清单.xlsx  或  C:\...\项目目录\"
         class="field-control" />
       <p class="mt-1 text-xs leading-5 text-[var(--color-ink-soft)]">可填写单个功能清单文件，也可填写包含项目资料的目录。</p>
-      <div class="mt-3">
-        <label for="output-dir" class="field-label">交付物输出目录</label>
-        <input id="output-dir" type="text" v-model="config.outputDir"
-          placeholder="留空使用默认：xlsx 同级或目录/项目名"
-          class="field-control" />
-        <p class="mt-1 text-xs leading-5 text-[var(--color-ink-soft)]">留空时系统会按输入来源自动选择输出位置。</p>
-      </div>
     </div>
     <!-- 远程模式 -->
     <div v-else>

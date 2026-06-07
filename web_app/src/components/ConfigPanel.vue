@@ -31,12 +31,6 @@
       </div>
     </router-link>
 
-    <div class="space-y-3 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3">
-      <AdvancedOptions />
-      <TemplateUpload />
-      <TemplateDownload />
-    </div>
-
     <button @click="$emit('start')"
       :disabled="!config.isValid || session.isRunning || config.backendStatus === 'offline'"
       class="btn-primary w-full text-base">
@@ -57,9 +51,6 @@ import { computed } from 'vue'
 import { useConfigStore } from '@/stores/config.ts'
 import { useSessionStore } from '@/stores/session.ts'
 import FileInput from './FileInput.vue'
-import AdvancedOptions from './AdvancedOptions.vue'
-import TemplateUpload from './TemplateUpload.vue'
-import TemplateDownload from './TemplateDownload.vue'
 import { apiFetch } from '@/lib/api.ts'
 
 import { ref, onMounted } from 'vue'
