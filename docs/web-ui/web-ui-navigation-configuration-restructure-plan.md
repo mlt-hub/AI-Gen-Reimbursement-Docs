@@ -290,6 +290,66 @@ PUT /api/web-config
 
 这样配置页可以作为默认值来源，但生成页仍允许用户在本次任务中临时覆盖低频任务设置。
 
+## 配置中心扩展范围
+
+长期目标是让所有用户可维护的配置文件都能在 Web UI 中查看、编辑、校验和保存。配置页应升级为“配置中心”，但不建议把所有 YAML/JSON 一次性做成普通表单；应按风险和编辑体验分层实现。
+
+推荐配置中心结构：
+
+```text
+配置中心
+|
++-- AI 配置
++-- Web 与运行配置
++-- 模板配置
++-- FPA 策略与规则
++-- Prompt 配置
++-- 领域上下文
++-- 高级配置文件
+```
+
+配置文件分层：
+
+| 层级 | 配置文件 / 资源 | Web UI 形态 | 实施建议 |
+|---|---|---|---|
+| 基础配置 | `.env` | 表单 + 脱敏凭据输入 | 第一阶段实现。 |
+| 基础配置 | `system_config.yaml` | 表单、开关、数字输入、下拉框 | 第一阶段实现常用项；低频内部字段可放高级区。 |
+| 模板配置 | `data/out_templates/*`、`out_templates` | 文件管理 + 模板映射表 | 第一阶段实现。 |
+| 业务规则 | `business_rules.yaml` | 结构化表单 + 高级 YAML 编辑器 | 第二阶段实现，保存前必须校验。 |
+| FPA 配置 | `fpa_config.yaml` | 常用项表单 + 高级 YAML 编辑器 | 第二阶段实现，必须复用 FPA 配置校验。 |
+| FPA 判定规则 | `fpa_judgement_rules.yaml` | 规则列表编辑器 + 高级 YAML 编辑器 | 第二阶段实现，建议提供预览和校验。 |
+| Prompt 配置 | `ai_system_prompts_config.yaml` | 多行文本编辑器 + 场景列表 | 第三阶段实现，保存前做 YAML 和必填字段校验。 |
+| 领域上下文 | `domain_context.json` | JSON 表单/编辑器 | 第三阶段实现，保存前做 JSON schema 校验。 |
+
+第一阶段优先实现：
+
+- AI 配置。
+- Web 与运行配置中的常用项。
+- 模板配置和 `out_templates` 映射。
+- 配置文件保存、脱敏、备份、缓存刷新、即时生效。
+
+第二阶段实现：
+
+- FPA 策略与规则。
+- `business_rules.yaml`。
+- `fpa_config.yaml`。
+- `fpa_judgement_rules.yaml`。
+- 常用字段表单化，完整文件保留高级 YAML 编辑器。
+
+第三阶段实现：
+
+- Prompt 配置。
+- 领域上下文。
+- 配置历史版本、差异对比、恢复默认、导入导出。
+
+高级配置文件编辑规则：
+
+- 高级 YAML/JSON 编辑器只面向复杂配置，不替代常用项表单。
+- 保存前必须先做语法校验，再做业务校验。
+- 保存成功前必须生成备份版本，支持回滚。
+- 保存成功后清理配置缓存，保证后续生成和预览即时使用新配置。
+- 对 FPA 页面和规则中出现的用户可见术语，仍必须遵循 `docs/fpa/result-review-terminology.md`。
+
 ## FPA 预览页布局示意
 
 `预览` 近期默认进入 FPA 预览；后续可扩展为预览中心，承载 FPA、COSMIC、需求清单、需求说明书等预览入口。当前阶段不需要一次性实现所有预览类型，但路由和导航命名应避免把 `预览` 固化成只能承载 FPA。
@@ -389,6 +449,12 @@ web_app/src/components/layout/AppShell.vue
 web_app/src/components/layout/SideNav.vue
 web_app/src/components/config/AIConfigSection.vue
 web_app/src/components/config/TemplateSettingsSection.vue
+web_app/src/components/config/ConfigCenterNav.vue
+web_app/src/components/config/WebRuntimeConfigSection.vue
+web_app/src/components/config/FpaConfigSection.vue
+web_app/src/components/config/PromptConfigSection.vue
+web_app/src/components/config/DomainContextSection.vue
+web_app/src/components/config/AdvancedConfigFileEditor.vue
 web_app/src/components/run/FpaRunSettingsSection.vue
 web_app/src/views/FpaAiDebugPage.vue
 ```
@@ -411,8 +477,8 @@ web_app/src/views/FpaAiDebugPage.vue
 | `web_app/src/components/TemplateDownload.vue` | 迁移挂载位置，不改变模板下载能力。 |
 | `web_app/src/assets/main.css` | 补齐左侧栏、移动端抽屉等布局样式。 |
 | `web_app/routes/config.py` | 增加 Web 配置读写接口。 |
-| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新。 |
-| `ai_gen_reimbursement_docs/config_utils.py` | 补充配置缓存清理入口，确保保存后即时生效。 |
+| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、备份和回滚。 |
+| `ai_gen_reimbursement_docs/config_utils.py` | 补充配置校验和缓存清理入口，确保保存后即时生效。 |
 | `web_app/routes/tasks.py` | 任务启动时合并请求参数与配置默认值，形成运行快照。 |
 | `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏和敏感值保留。 |
 | `tests/test_web_tasks.py` | 覆盖任务启动参数快照和配置默认值兜底。 |
@@ -439,6 +505,9 @@ npm run build
 - API Key 不在读取接口中返回原文；省略 API Key 保存时保留旧值。
 - 远程用户未配置个人 API Key 且 `allow_shared_ai_credentials: false` 时，不继承全局 API Key，并给出明确提示。
 - 管理员显式开启 `allow_shared_ai_credentials: true` 后，远程用户才可使用服务端共享 API Key。
+- 配置中心第一阶段可编辑基础配置和模板配置。
+- 高级 YAML/JSON 配置保存前必须校验，保存失败不得覆盖原文件。
+- 每次保存配置文件前自动生成备份，并支持恢复上一版本。
 - FPA 策略和低频任务设置位于 `执行监控` 下方。
 - FPA 预览页术语符合 `docs/fpa/result-review-terminology.md`。
 - 移动端没有横向滚动，导航可以通过菜单打开。
@@ -455,6 +524,8 @@ npm run build
 | 保存配置后刷新页面 | 前端重新读取配置文件视图，AI 配置、模板配置和运行默认值保持一致。 |
 | 保存配置后启动新任务 | 新任务使用最新配置作为默认值，同时保留生成页本次请求显式覆盖能力。 |
 | 远程用户无个人 API Key | 默认不使用全局 API Key；仅当 `allow_shared_ai_credentials: true` 时使用共享凭据。 |
+| 高级配置校验失败 | 显示具体错误，不写入目标配置文件，保留原配置。 |
+| 配置误保存 | 可从备份版本恢复上一份配置，并在恢复后清理配置缓存。 |
 
 ## 风险与边界
 
@@ -467,4 +538,7 @@ npm run build
 - API Key 不能按普通配置继承全局默认值；共享系统 API Key 必须由 `allow_shared_ai_credentials` 显式开启。
 - 保存配置后要清理后端配置读取缓存，否则 `system_config.yaml` 中的部分字段可能无法即时生效。
 - 正在运行中的任务不得被新配置影响，避免不可复盘。
+- 所有配置文件都进入 Web UI 是长期目标，第一阶段不应强行表单化复杂 FPA、Prompt 和领域上下文配置。
+- 复杂配置必须保留高级 YAML/JSON 编辑入口，但保存前要经过语法校验和业务校验。
+- 配置备份和回滚是高级配置编辑的前置能力，不应等线上出错后再补。
 - 如果后续要把调试信息做成可筛选、可复制、可导出页面，需要再确认后端是否已经提供足够结构化的数据。
