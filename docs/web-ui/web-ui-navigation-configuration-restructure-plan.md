@@ -107,6 +107,8 @@ Web UI
 +----------------------+
 ```
 
+移动端导航形态固定为顶部栏 + 抽屉菜单。
+
 ## 生成页布局示意
 
 ```text
@@ -193,6 +195,9 @@ PUT  /api/web-config
 - 本机模式保存全局默认配置，写入 `~/.ai-gen-reimbursement-docs/` 下的配置文件。
 - 远程登录用户保存个人覆盖配置，写入该用户自己的配置目录。
 - 本机全局配置不会直接覆盖已有个人配置；全局配置只作为未设置个人覆盖项时的默认值来源。
+- `/api/web-config` 权限固定为：本机模式可读写全局配置；远程登录用户可读合并视图、写个人覆盖配置；未登录不可读写。
+- 远程用户读取配置时看到的是合并后的有效值，并标记来源：个人 / 全局 / 默认。
+- 共享系统 API Key 开关只允许本机管理员查看和编辑；远程用户只看到系统是否允许共享凭据，不可修改。
 
 `GET /api/web-config` 返回脱敏后的配置视图：
 
@@ -236,6 +241,23 @@ PUT  /api/web-config
 | 预览中心扩展 | 第一期只做 FPA，COSMIC、需求清单、需求说明书先保留导航和架构余量。 |
 | 运行中任务配置 | 运行中任务继续使用启动时参数快照，不受新配置影响。 |
 
+实施细节决策：
+
+| 决策项 | 结论 |
+|---|---|
+| 第一期实施状态 | 现在开始实施第一期，只做 10 个第一期工作包，不碰第二/三期复杂配置。 |
+| 第一提交粒度 | 按第一期 10 个工作包分多次 commit，不做一次性大提交。 |
+| Windows 凭据方案 | 优先使用 DPAPI；DPAPI 不可用时退到本机密钥文件。 |
+| 本机密钥文件位置 | `~/.ai-gen-reimbursement-docs/secrets/master.key`。 |
+| 配置审计日志位置 | `~/.ai-gen-reimbursement-docs/audit/config_changes.jsonl`。 |
+| 配置备份位置 | `~/.ai-gen-reimbursement-docs/backups/config/`。 |
+| 配置备份粒度 | 按文件备份，例如 `system_config.yaml.20260607_153000.bak`。 |
+| `/api/web-config` 权限 | 本机模式可读写全局配置；远程登录用户可读合并视图、写个人覆盖配置；未登录不可读写。 |
+| 远程用户配置可见性 | 远程用户可看到合并后的有效值，并标记来源：个人 / 全局 / 默认。 |
+| 共享凭据开关可见性 | 只本机管理员可见和可编辑；远程用户只看到系统是否允许共享凭据，不可修改。 |
+| FPA AI 调试无 session | 显示空态，提示“请先从 FPA 预览或历史任务进入”，不自动跳转。 |
+| 移动端导航形态 | 顶部栏 + 抽屉菜单。 |
+
 配置文件映射建议：
 
 | Web 配置区 | 配置文件 | 建议字段 |
@@ -255,7 +277,7 @@ PUT  /api/web-config
 - API Key 不参与普通全局默认继承。远程用户只有在配置了个人 API Key，或管理员显式开启 `allow_shared_ai_credentials: true` 时，才可使用服务端共享 API Key。
 - `allow_shared_ai_credentials` 默认值为 `false`，避免远程用户未配置个人 Key 时静默消耗管理员或本机全局 Key。
 - 日志、错误信息、AI 调试页、配置预览、配置备份和配置导出都必须脱敏，不得输出 API Key 原文或可还原片段。
-- 加密密钥第一版优先使用系统凭据库；系统凭据库不可用时退到本机密钥文件。加密密钥不得和配置密文放在同一份可导出的配置包中，并应在部署文档中说明恢复和迁移方式。
+- Windows 第一版优先使用 DPAPI；DPAPI 不可用时退到本机密钥文件 `~/.ai-gen-reimbursement-docs/secrets/master.key`。加密密钥不得和配置密文放在同一份可导出的配置包中，并应在部署文档中说明恢复和迁移方式。
 
 配置合并优先级：
 
@@ -282,9 +304,9 @@ PUT /api/web-config
   -> 校验 payload
   -> 合并现有配置，保留未提交的敏感值
   -> 加密新的 API Key，仅写入密文
-  -> 生成配置文件备份，保留最近 5 个版本
+  -> 在 ~/.ai-gen-reimbursement-docs/backups/config/ 生成文件级备份，保留最近 5 个版本
   -> 原子写入 .env / system_config.yaml
-  -> 记录配置变更审计，不记录敏感值
+  -> 写入 ~/.ai-gen-reimbursement-docs/audit/config_changes.jsonl 审计记录，不记录敏感值
   -> 清理当前进程的配置读取缓存
   -> 返回脱敏后的最新 web-config
   -> 前端同步 config store
@@ -467,6 +489,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 - 第一阶段先复用现有 AI 日志/交互接口，例如会话级 AI 对话日志和 prompts/responses 文件清单，让页面先跑通。
 - 第二阶段如需筛选到某个 FPA 功能点、某次模型调用、某条解析错误，再新增结构化 FPA 调试接口。
 - 新增结构化接口前，不要求后端重写现有日志产物格式。
+- 无 `sessionId` 或 session 不可访问时，页面显示空态，提示“请先从 FPA 预览或历史任务进入”，不自动跳转。
 
 ## 实施路线
 
@@ -492,8 +515,8 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 2 | 生成页职责收敛 | 拆分 `ConfigPanel` / `AdvancedOptions`，生成页保留输入、操作模式、启动、状态、执行监控和低频任务设置。 | `AI 配置`、模板上传/下载不再出现在生成页；输出目录位于低频任务设置中项目名称后面。 |
 | 3 | 配置中心第一期 UI | 配置页新增 `ConfigCenterNav`、`AIConfigSection`、`WebRuntimeConfigSection`、`TemplateSettingsSection`。 | 配置页可编辑 AI 配置、Web/运行常用项、`out_templates` 模板映射。 |
 | 4 | Web 配置接口 | 新增 `GET/PUT /api/web-config`，返回业务化脱敏配置视图。 | 前端不再直接依赖 `_env` / `_system` / `_biz` 结构；保存成功后返回最新脱敏配置。 |
-| 5 | API Key 加密存储 | 新增 `secret_service`，优先系统凭据库，不可用时退到本机密钥文件。 | 配置文件只出现密文字段；读取接口、日志、备份、导出均不出现 API Key 原文。 |
-| 6 | 配置备份、回滚与审计 | `config_service` 保存前备份，保留最近 5 个版本；新增配置变更审计。 | 保存前生成备份；可恢复备份；审计记录操作者、时间、文件和结果，不记录敏感值。 |
+| 5 | API Key 加密存储 | 新增 `secret_service`，Windows 优先 DPAPI，不可用时退到本机密钥文件。 | 配置文件只出现密文字段；读取接口、日志、备份、导出均不出现 API Key 原文。 |
+| 6 | 配置备份、回滚与审计 | `config_service` 保存前按文件备份到 `~/.ai-gen-reimbursement-docs/backups/config/`，保留最近 5 个版本；新增配置变更审计。 | 保存前生成备份；可恢复备份；审计记录操作者、时间、文件和结果，不记录敏感值。 |
 | 7 | 任务启动配置合并 | `tasks.py` 启动时合并请求显式值、个人配置、全局配置和系统默认值。 | 新任务使用最新配置默认值；运行中任务不受后续配置修改影响。 |
 | 8 | 远程用户凭据策略 | 远程用户无个人 API Key 且未开启共享凭据时阻止 AI 任务启动。 | 返回明确错误，提示配置个人 API Key 或联系管理员开启共享凭据。 |
 | 9 | FPA 预览和调试页 | FPA 预览接入统一布局；新增或迁移 `FpaAiDebugPage`。 | `查看 AI 调试信息` 携带 `sessionId` 跳转；无 session 时入口禁用并提示。 |
@@ -506,7 +529,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 ```text
 1. layout: add app shell and side navigation
 2. frontend: split generation and config sections
-3. backend: add web-config read model
+3. backend: add web-config read model and permissions
 4. backend: add encrypted secret storage
 5. backend: add config save, backup, audit, cache refresh
 6. backend: merge config defaults into task start snapshot
@@ -580,7 +603,7 @@ session-aware FPA preview
 ### 第一期开工前检查
 
 - 确认现有 `/api/config` 继续保留，新增 `/api/web-config` 不破坏旧功能。
-- 确认系统凭据库在 Windows 打包环境中的可用性；不可用时启用本机密钥文件兜底。
+- 确认 DPAPI 在 Windows 打包环境中的可用性；不可用时启用本机密钥文件兜底。
 - 确认本机模式和远程用户模式的配置目录分别可读写。
 - 确认现有模板上传/下载接口可以迁移到配置页复用。
 - 确认现有 AI 日志/交互接口能支撑第一阶段 FPA AI 调试页。
@@ -632,14 +655,14 @@ web_app/src/views/FpaAiDebugPage.vue
 | `web_app/routes/config.py` | 增加 Web 配置读写接口。 |
 | `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、最近 5 个备份和回滚。 |
 | `web_app/services/config_audit_service.py` | 新增配置变更审计能力，记录操作者、时间、文件和结果，不记录敏感值。 |
-| `web_app/services/secret_service.py` | 新增 API Key 加密存储能力，优先系统凭据库，不可用时退到本机密钥文件。 |
+| `web_app/services/secret_service.py` | 新增 API Key 加密存储能力，Windows 优先 DPAPI，不可用时退到本机密钥文件。 |
 | `ai_gen_reimbursement_docs/config_utils.py` | 补充配置校验和缓存清理入口，确保保存后即时生效。 |
 | `web_app/routes/tasks.py` | 任务启动时合并请求参数与配置默认值，形成运行快照。 |
 | `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏和敏感值保留。 |
 | `tests/test_web_config_audit.py` | 覆盖配置变更审计不记录敏感值。 |
-| `tests/test_web_secret_service.py` | 覆盖 API Key 加密、读取脱敏、系统凭据库不可用时兜底本机密钥文件。 |
+| `tests/test_web_secret_service.py` | 覆盖 API Key 加密、读取脱敏、DPAPI 不可用时兜底本机密钥文件。 |
 | `tests/test_web_tasks.py` | 覆盖任务启动参数快照和配置默认值兜底。 |
-| `tests/test_web_config_routes.py` | 覆盖 `/api/web-config` 读取、保存、权限和脱敏响应。 |
+| `tests/test_web_config_routes.py` | 覆盖 `/api/web-config` 读取、保存、权限、来源标记和脱敏响应。 |
 | `tests/test_web_fpa_debug.py` | 覆盖 `/sessions/:sessionId/fpa/debug` 所需会话访问和日志数据读取。 |
 
 ## 验证方式
@@ -662,17 +685,20 @@ npm run build
 - AI 配置只出现在 `配置` 页。
 - 配置页保存后写入配置文件，刷新页面或重启后仍能读取。
 - API Key 不明文落盘；配置文件、备份、导出、日志、错误信息和调试页面都不出现 API Key 原文。
-- API Key 第一版优先使用系统凭据库加密；系统凭据库不可用时退到本机密钥文件。
+- API Key 在 Windows 第一版优先使用 DPAPI 加密；DPAPI 不可用时退到本机密钥文件 `~/.ai-gen-reimbursement-docs/secrets/master.key`。
 - API Key 不在读取接口中返回原文；省略 API Key 保存时保留旧的加密密文。
+- `/api/web-config` 本机模式可读写全局配置；远程登录用户可读合并视图、写个人覆盖配置；未登录不可读写。
+- 远程用户配置视图标记来源：个人 / 全局 / 默认。
+- 共享系统 API Key 开关只本机管理员可见和可编辑，远程用户不可修改。
 - 远程用户未配置个人 API Key 且 `allow_shared_ai_credentials: false` 时，不继承全局 API Key，并给出明确提示。
 - 管理员显式开启 `allow_shared_ai_credentials: true` 后，远程用户才可使用服务端共享 API Key。
 - 配置中心第一阶段可编辑基础配置和模板配置。
 - 高级 YAML/JSON 配置保存前必须校验，保存失败不得覆盖原文件。
-- 每次保存配置文件前自动生成备份，保留最近 5 个版本，并支持恢复上一版本。
-- 配置变更审计记录谁在什么时候改了哪个配置文件，但不记录敏感值。
+- 每次保存配置文件前按文件备份到 `~/.ai-gen-reimbursement-docs/backups/config/`，保留最近 5 个版本，并支持恢复上一版本。
+- 配置变更审计写入 `~/.ai-gen-reimbursement-docs/audit/config_changes.jsonl`，记录谁在什么时候改了哪个配置文件，但不记录敏感值。
 - FPA 策略和低频任务设置位于 `执行监控` 下方。
 - FPA 预览页术语符合 `docs/fpa/result-review-terminology.md`。
-- 移动端没有横向滚动，导航可以通过菜单打开。
+- 移动端没有横向滚动，使用顶部栏 + 抽屉菜单。
 - 第一期开工前检查项全部确认。
 - 第一期 10 个工作包均可独立验收和提交。
 
@@ -692,6 +718,7 @@ npm run build
 | 高级配置校验失败 | 显示具体错误，不写入目标配置文件，保留原配置。 |
 | 配置误保存 | 可从最近 5 个备份版本恢复配置，并在恢复后清理配置缓存。 |
 | 配置变更审计 | 审计记录包含操作者、时间、配置文件和结果，不包含 API Key、密文原文或其他敏感值。 |
+| FPA AI 调试无 session | 显示空态，提示“请先从 FPA 预览或历史任务进入”，不自动跳转。 |
 
 ## 风险与边界
 
@@ -701,7 +728,7 @@ npm run build
 - API Key 输入应继续沿用现有敏感输入保护逻辑。
 - 配置文件写入必须保护敏感字段：遮罩值不能覆盖真实 API Key 密文，空字符串不能误删旧 Key。
 - API Key 不得明文保存；配置文件、备份、导出、日志、错误信息和调试页面都不得泄露原文。
-- API Key 加密第一版优先使用系统凭据库；不可用时退到本机密钥文件。
+- API Key 加密第一版在 Windows 优先使用 DPAPI；不可用时退到本机密钥文件。
 - 在后端代调用 AI 服务的架构下，不能承诺拥有服务器最高权限的管理员绝对无法取得运行时凭据；默认实现只承诺配置文件、接口、日志、备份和导出中拿不到 API Key 原文。
 - 远程用户个人配置不能被本机全局配置覆盖；全局配置变化只影响未设置个人覆盖项的普通配置。
 - API Key 不能按普通配置继承全局默认值；共享系统 API Key 必须由 `allow_shared_ai_credentials` 显式开启。
