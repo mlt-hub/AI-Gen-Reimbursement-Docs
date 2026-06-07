@@ -7,6 +7,7 @@ from ai_gen_reimbursement_docs.auth import user_config_dir
 from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
     AdvancedConfigError,
+    build_fpa_strategy_settings_view,
     build_web_config_view,
     config_dir,
     list_advanced_config_files,
@@ -17,6 +18,7 @@ from web_app.services.config_service import (
     read_config_from_dir,
     redact_env_dict,
     restore_config_backup,
+    save_fpa_strategy_settings,
     save_advanced_config_file,
     save_config_to_dir,
     save_web_config_to_dir,
@@ -195,6 +197,33 @@ async def save_web_config_file(file_id: str, data: dict, request: Request, user:
         return save_advanced_config_file(
             file_id=file_id,
             content=str(data.get("content") or ""),
+            target_dir=target_dir,
+            actor=user or "local-admin",
+            audit_root=config_dir(),
+            backup_root=config_dir(),
+            backup_scope="global",
+        )
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/api/web-config/fpa-strategy")
+async def get_web_config_fpa_strategy(request: Request, _user: str = Depends(require_auth)):
+    """读取结构化 FPA 策略配置。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return build_fpa_strategy_settings_view(target_dir=target_dir)
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.put("/api/web-config/fpa-strategy")
+async def save_web_config_fpa_strategy(data: dict, request: Request, user: str = Depends(require_auth)):
+    """保存结构化 FPA 策略配置。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return save_fpa_strategy_settings(
+            payload=data,
             target_dir=target_dir,
             actor=user or "local-admin",
             audit_root=config_dir(),

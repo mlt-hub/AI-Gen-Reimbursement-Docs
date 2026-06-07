@@ -260,3 +260,72 @@ def test_web_config_files_reject_remote_user(monkeypatch):
 
     assert resp.status_code == 403
     assert "本机管理员" in resp.json()["detail"]
+
+
+def test_web_config_fpa_strategy_endpoint_reads_local_settings(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "build_fpa_strategy_settings_view", lambda *, target_dir: {
+        "default_profile": "strict_fpa",
+        "profiles": [{"name": "strict_fpa", "strategy": "ai_first", "rule_set": "strict_fpa_rs"}],
+        "rule_sets": [{"name": "strict_fpa_rs", "extends": ""}],
+    })
+
+    resp = client.get("/api/web-config/fpa-strategy")
+
+    assert resp.status_code == 200
+    assert resp.json()["default_profile"] == "strict_fpa"
+    assert resp.json()["profiles"][0]["rule_set"] == "strict_fpa_rs"
+
+
+def test_web_config_fpa_strategy_put_saves_local_settings(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_save_fpa_strategy_settings(**kwargs):
+        calls.append(kwargs)
+        return {"default_profile": "unified_ui", "profiles": [], "rule_sets": [], "backed_up": ["fpa_config.yaml"]}
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "save_fpa_strategy_settings", fake_save_fpa_strategy_settings)
+
+    payload = {
+        "default_profile": "unified_ui",
+        "profiles": [{"name": "strict_fpa", "strategy": "rules_only", "rule_set": "strict_fpa_rs"}],
+    }
+    resp = client.put("/api/web-config/fpa-strategy", json=payload)
+
+    assert resp.status_code == 200
+    assert resp.json()["backed_up"] == ["fpa_config.yaml"]
+    assert calls == [{
+        "payload": payload,
+        "target_dir": tmp_path,
+        "actor": "local-admin",
+        "audit_root": tmp_path,
+        "backup_root": tmp_path,
+        "backup_scope": "global",
+    }]
+
+
+def test_web_config_fpa_strategy_rejects_remote_user(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+
+    resp = client.put("/api/web-config/fpa-strategy", json={"profiles": []})
+
+    assert resp.status_code == 403
+    assert "本机管理员" in resp.json()["detail"]

@@ -721,6 +721,146 @@ def save_advanced_config_file(
     }
 
 
+def _read_fpa_config_from_dir(target_dir: Path) -> dict:
+    path = target_dir / "fpa_config.yaml"
+    if not path.exists():
+        raise AdvancedConfigError("未找到 FPA 配置文件：fpa_config.yaml")
+    try:
+        import yaml
+
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        raise AdvancedConfigError(f"读取 FPA 配置失败: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise AdvancedConfigError("fpa_config.yaml 必须是 YAML 映射")
+    return loaded
+
+
+def build_fpa_strategy_settings_view(*, target_dir: Path) -> dict:
+    """Build structured settings for common FPA strategy fields."""
+    cfg = _read_fpa_config_from_dir(target_dir)
+    profiles = cfg.get("profiles")
+    rule_sets = cfg.get("rule_sets")
+    if not isinstance(profiles, dict) or not isinstance(rule_sets, dict):
+        raise AdvancedConfigError("fpa_config.yaml 中的 profiles 和 rule_sets 必须是对象")
+
+    profile_items: list[dict] = []
+    for name, entry in profiles.items():
+        if not isinstance(entry, dict):
+            continue
+        profile_items.append({
+            "name": str(name),
+            "kind": str(entry.get("kind") or ""),
+            "strategy": str(entry.get("strategy") or ""),
+            "rule_set": str(entry.get("rule_set") or ""),
+            "core_rules": str(entry.get("core_rules") or ""),
+            "system_prompt": str(entry.get("system_prompt") or ""),
+            "user_prompt": str(entry.get("user_prompt") or ""),
+        })
+
+    rule_set_items = []
+    for name, entry in rule_sets.items():
+        entry_map = entry if isinstance(entry, dict) else {}
+        rule_set_items.append({
+            "name": str(name),
+            "extends": str(entry_map.get("extends") or ""),
+        })
+
+    return {
+        "default_profile": str(cfg.get("default-profile") or ""),
+        "profiles": profile_items,
+        "rule_sets": rule_set_items,
+    }
+
+
+def save_fpa_strategy_settings(
+    *,
+    payload: dict,
+    target_dir: Path,
+    actor: str,
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
+) -> dict:
+    """Save structured FPA profile strategy/rule_set settings."""
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
+    target_path = target_dir / "fpa_config.yaml"
+    cfg = _read_fpa_config_from_dir(target_dir)
+    profiles = cfg.get("profiles")
+    if not isinstance(profiles, dict):
+        raise AdvancedConfigError("fpa_config.yaml 中的 profiles 必须是对象")
+
+    default_profile = str(payload.get("default_profile") or "").strip()
+    if default_profile:
+        cfg["default-profile"] = default_profile
+
+    changed_fields: list[str] = []
+    if default_profile:
+        changed_fields.append("fpa_strategy.default_profile")
+
+    incoming_profiles = payload.get("profiles")
+    if not isinstance(incoming_profiles, list):
+        raise AdvancedConfigError("profiles 必须是列表")
+
+    for item in incoming_profiles:
+        if not isinstance(item, dict):
+            raise AdvancedConfigError("profiles 中的每一项必须是对象")
+        name = str(item.get("name") or "").strip()
+        if not name or name not in profiles or not isinstance(profiles.get(name), dict):
+            raise AdvancedConfigError(f"未知 FPA profile: {name}")
+        entry = dict(profiles[name])
+        if "strategy" in item:
+            entry["strategy"] = str(item.get("strategy") or "").strip()
+            changed_fields.append(f"fpa_strategy.profiles.{name}.strategy")
+        if "rule_set" in item:
+            entry["rule_set"] = str(item.get("rule_set") or "").strip()
+            changed_fields.append(f"fpa_strategy.profiles.{name}.rule_set")
+        profiles[name] = entry
+
+    try:
+        from ai_gen_reimbursement_docs.config_utils import validate_fpa_config
+
+        validate_fpa_config(cfg)
+    except Exception as exc:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=["fpa_config.yaml"],
+            changed_fields=changed_fields or ["fpa_strategy"],
+            result="validation_failed",
+        )
+        raise AdvancedConfigError(str(exc)) from exc
+
+    backed_up = backup_single_config_file(
+        source=target_path,
+        backup_root=backup_root,
+        scope=backup_scope,
+    )
+    import yaml
+
+    text = yaml.dump(cfg, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    _atomic_write_text(target_path, text)
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=["fpa_config.yaml"],
+        changed_fields=changed_fields or ["fpa_strategy"],
+        result="success",
+    )
+    result = build_fpa_strategy_settings_view(target_dir=target_dir)
+    result["backed_up"] = [backed_up] if backed_up else []
+    return result
+
+
 def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tuple[Path, str]:
     if "/" in backup_id or "\\" in backup_id or ".." in backup_id:
         raise ValueError("备份 ID 无效")

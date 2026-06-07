@@ -189,6 +189,78 @@
       <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中...</p>
     </section>
 
+    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">FPA 策略</p>
+          <h2 class="mt-1 text-lg font-semibold">方案与规则集</h2>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="fpaStrategyLoading || fpaStrategySaving" @click="loadFpaStrategySettings">
+          {{ fpaStrategyLoading ? '加载中...' : '刷新策略' }}
+        </button>
+      </div>
+
+      <p v-if="fpaStrategyError" class="text-sm text-[var(--color-warning)]">{{ fpaStrategyError }}</p>
+      <div v-else-if="fpaStrategyForm.profiles.length" class="space-y-4">
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+          <label for="fpa-default-profile" class="field-label text-xs">默认 FPA 方案</label>
+          <select id="fpa-default-profile" v-model="fpaStrategyForm.defaultProfile" class="field-control">
+            <option v-for="profile in fpaStrategyForm.profiles" :key="profile.name" :value="profile.name">
+              {{ profileLabel(profile.name) }}
+            </option>
+          </select>
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-[var(--color-rule)]">
+          <table class="w-full min-w-[720px] text-left text-sm">
+            <thead class="border-b border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-xs text-[var(--color-ink-soft)]">
+              <tr>
+                <th class="px-3 py-2 font-semibold">方案</th>
+                <th class="px-3 py-2 font-semibold">类型</th>
+                <th class="px-3 py-2 font-semibold">执行策略</th>
+                <th class="px-3 py-2 font-semibold">规则集</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="profile in fpaStrategyForm.profiles" :key="profile.name" class="border-b border-[var(--color-rule)] last:border-b-0">
+                <td class="px-3 py-2">
+                  <div class="font-semibold text-[var(--color-ink)]">{{ profileLabel(profile.name) }}</div>
+                  <div class="mt-0.5 font-mono text-xs text-[var(--color-ink-soft)]">{{ profile.name }}</div>
+                </td>
+                <td class="px-3 py-2 text-[var(--color-ink-muted)]">{{ profile.kind || '-' }}</td>
+                <td class="px-3 py-2">
+                  <select v-model="profile.strategy" class="field-control min-w-[10rem]">
+                    <option v-for="strategy in fpaOptions.strategies" :key="strategy.name" :value="strategy.name">
+                      {{ strategy.label }}
+                    </option>
+                  </select>
+                </td>
+                <td class="px-3 py-2">
+                  <select v-model="profile.rule_set" class="field-control min-w-[12rem]">
+                    <option v-for="ruleSet in fpaStrategyForm.ruleSets" :key="ruleSet.name" :value="ruleSet.name">
+                      {{ ruleSet.name }}{{ ruleSet.extends ? ` / extends ${ruleSet.extends}` : '' }}
+                    </option>
+                  </select>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', fpaStrategyStatusClass]">{{ fpaStrategyStatusText }}</span>
+            <p v-if="fpaStrategyMsg" :class="['mt-2 text-sm', fpaStrategyOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ fpaStrategyMsg }}</p>
+          </div>
+          <button class="btn-primary w-fit" :disabled="fpaStrategySaving || !hasFpaStrategyChanges" @click="saveFpaStrategySettings">
+            {{ fpaStrategySaving ? '保存中...' : '保存 FPA 策略' }}
+          </button>
+        </div>
+      </div>
+      <p v-else-if="fpaStrategyLoading" class="text-sm text-[var(--color-ink-soft)]">加载中...</p>
+      <p v-else class="text-sm text-[var(--color-ink-soft)]">暂无 FPA 策略配置。</p>
+    </section>
+
     <section class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">模板配置</p>
@@ -590,6 +662,27 @@ interface AdvancedConfigFileResponse extends AdvancedConfigFileItem {
   content: string
 }
 
+interface FpaStrategyProfile {
+  name: string
+  kind: string
+  strategy: string
+  rule_set: string
+  core_rules?: string
+  system_prompt?: string
+  user_prompt?: string
+}
+
+interface FpaStrategyRuleSet {
+  name: string
+  extends: string
+}
+
+interface FpaStrategySettingsResponse {
+  default_profile: string
+  profiles: FpaStrategyProfile[]
+  rule_sets: FpaStrategyRuleSet[]
+}
+
 // ── stores ────────────────────────────────────────────────
 
 const auth = useAuthStore()
@@ -660,6 +753,17 @@ const advancedConfigSaving = ref(false)
 const advancedConfigError = ref('')
 const advancedConfigMessage = ref('')
 const advancedConfigOk = ref(false)
+const fpaStrategyLoading = ref(false)
+const fpaStrategySaving = ref(false)
+const fpaStrategyError = ref('')
+const fpaStrategyMsg = ref('')
+const fpaStrategyOk = ref(false)
+const fpaStrategySnapshot = ref('')
+const fpaStrategyForm = reactive({
+  defaultProfile: '',
+  profiles: [] as FpaStrategyProfile[],
+  ruleSets: [] as FpaStrategyRuleSet[],
+})
 const webAiForm = reactive({
   apiKey: '',
   baseUrl: '',
@@ -785,6 +889,17 @@ const activeAdvancedFile = computed(() => (
 const hasAdvancedConfigChanges = computed(() => (
   activeAdvancedFileId.value !== '' && advancedConfigContent.value !== advancedConfigSnapshot.value
 ))
+const fpaStrategyFormSnapshot = computed(() => JSON.stringify({
+  defaultProfile: fpaStrategyForm.defaultProfile,
+  profiles: fpaStrategyForm.profiles.map(profile => ({
+    name: profile.name,
+    strategy: profile.strategy,
+    rule_set: profile.rule_set,
+  })),
+}))
+const hasFpaStrategyChanges = computed(() => (
+  fpaStrategySnapshot.value !== '' && fpaStrategyFormSnapshot.value !== fpaStrategySnapshot.value
+))
 
 const webConfigSaveStatusText = computed(() => {
   if (webConfigSaving.value) return '保存中'
@@ -811,6 +926,18 @@ const advancedConfigStatusClass = computed(() => {
   if (hasAdvancedConfigChanges.value) return statusClass.warn
   return statusClass.ok
 })
+const fpaStrategyStatusText = computed(() => {
+  if (fpaStrategySaving.value) return '保存中'
+  if (fpaStrategyMsg.value && !fpaStrategyOk.value) return '保存失败'
+  if (hasFpaStrategyChanges.value) return '有未保存修改'
+  return '已保存'
+})
+const fpaStrategyStatusClass = computed(() => {
+  if (fpaStrategySaving.value) return statusClass.neutral
+  if (fpaStrategyMsg.value && !fpaStrategyOk.value) return statusClass.warn
+  if (hasFpaStrategyChanges.value) return statusClass.warn
+  return statusClass.ok
+})
 
 // ── 初始化 ────────────────────────────────────────────────
 
@@ -823,6 +950,7 @@ onMounted(async () => {
     await loadUserConfig()
   } else {
     await loadLocalConfig()
+    await loadFpaStrategySettings()
     await loadAdvancedConfigFiles()
   }
 })
@@ -855,6 +983,10 @@ function statusClassFor(value: boolean | null | undefined): string {
   if (value === true) return statusClass.ok
   if (value === false) return statusClass.warn
   return statusClass.neutral
+}
+
+function profileLabel(name: string): string {
+  return fpaOptions.value.profiles.find(profile => profile.name === name)?.label || name
 }
 
 async function refreshHealth() {
@@ -897,6 +1029,67 @@ async function loadConfigBackups() {
     configBackupsError.value = normalizeApiError(e)
   } finally {
     configBackupsLoading.value = false
+  }
+}
+
+async function loadFpaStrategySettings() {
+  fpaStrategyLoading.value = true
+  fpaStrategyError.value = ''
+  try {
+    const data = await apiFetch<FpaStrategySettingsResponse>('/api/web-config/fpa-strategy')
+    applyFpaStrategySettings(data)
+  } catch (e) {
+    fpaStrategyForm.defaultProfile = ''
+    fpaStrategyForm.profiles = []
+    fpaStrategyForm.ruleSets = []
+    fpaStrategySnapshot.value = ''
+    fpaStrategyError.value = normalizeApiError(e)
+  } finally {
+    fpaStrategyLoading.value = false
+  }
+}
+
+function applyFpaStrategySettings(data: FpaStrategySettingsResponse) {
+  fpaStrategyForm.defaultProfile = data.default_profile || ''
+  fpaStrategyForm.profiles = (data.profiles || []).map(profile => ({ ...profile }))
+  fpaStrategyForm.ruleSets = (data.rule_sets || []).map(ruleSet => ({ ...ruleSet }))
+  fpaStrategyMsg.value = ''
+  fpaStrategyOk.value = true
+  fpaStrategySnapshot.value = fpaStrategyFormSnapshot.value
+}
+
+async function saveFpaStrategySettings() {
+  fpaStrategySaving.value = true
+  fpaStrategyMsg.value = ''
+  try {
+    const data = await apiFetch<FpaStrategySettingsResponse>('/api/web-config/fpa-strategy', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        default_profile: fpaStrategyForm.defaultProfile,
+        profiles: fpaStrategyForm.profiles.map(profile => ({
+          name: profile.name,
+          strategy: profile.strategy,
+          rule_set: profile.rule_set,
+        })),
+      }),
+    })
+    applyFpaStrategySettings(data)
+    fpaStrategyOk.value = true
+    fpaStrategyMsg.value = '保存成功'
+    await loadFpaOptions()
+    await loadConfigBackups()
+    await loadLocalConfig()
+    if (activeAdvancedFileId.value === 'fpa_config') {
+      await loadAdvancedConfigFile('fpa_config')
+    } else {
+      await loadAdvancedConfigFiles()
+    }
+  } catch (e) {
+    fpaStrategyOk.value = false
+    fpaStrategyMsg.value = normalizeApiError(e)
+  } finally {
+    fpaStrategySaving.value = false
   }
 }
 

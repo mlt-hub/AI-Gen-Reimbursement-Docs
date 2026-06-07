@@ -612,3 +612,123 @@ def test_save_advanced_config_file_validation_failure_does_not_overwrite_or_back
     assert record["files"] == ["fpa_judgement_rules.yaml"]
     assert record["changed_fields"] == ["advanced_config.fpa_judgement_rules"]
     assert record["result"] == "validation_failed"
+
+
+def _write_minimal_fpa_config(path: Path) -> None:
+    path.write_text(
+        """
+default-profile: strict_fpa
+judgement_rules_source: config
+adjustment_value_method_default: legacy_workload
+adjustment_value_methods:
+  legacy_workload:
+    type_weights:
+      EI: 2
+      default: 1
+profiles:
+  strict_fpa:
+    kind: strict_fpa
+    strategy: ai_first
+    rule_set: strict_fpa_rs
+    core_rules: strict_cr
+    system_prompt: strict_sp
+    user_prompt: strict_up
+  unified_ui:
+    kind: unified_ui
+    strategy: rules_first
+    rule_set: unified_rs
+    core_rules: unified_cr
+    system_prompt: unified_sp
+    user_prompt: unified_up
+core_rules:
+  strict_cr: strict core
+  unified_cr: unified core
+system_prompt_sets:
+  strict_sp: strict system
+  unified_sp: unified system
+user_prompt_sets:
+  strict_up: ${core_rules} ${judgement_rules} ${payload_json}
+  unified_up: ${core_rules} ${judgement_rules} ${payload_json}
+rule_sets:
+  strict_fpa_rs: {}
+  unified_rs:
+    extends: strict_fpa_rs
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+
+def test_build_fpa_strategy_settings_view_reads_profiles_and_rule_sets(tmp_path):
+    _write_minimal_fpa_config(tmp_path / "fpa_config.yaml")
+
+    view = config_service.build_fpa_strategy_settings_view(target_dir=tmp_path)
+
+    assert view["default_profile"] == "strict_fpa"
+    assert {item["name"] for item in view["profiles"]} == {"strict_fpa", "unified_ui"}
+    strict = next(item for item in view["profiles"] if item["name"] == "strict_fpa")
+    assert strict["strategy"] == "ai_first"
+    assert strict["rule_set"] == "strict_fpa_rs"
+    assert {item["name"] for item in view["rule_sets"]} == {"strict_fpa_rs", "unified_rs"}
+
+
+def test_save_fpa_strategy_settings_validates_backs_up_and_audits(tmp_path):
+    _write_minimal_fpa_config(tmp_path / "fpa_config.yaml")
+
+    saved = config_service.save_fpa_strategy_settings(
+        payload={
+            "default_profile": "unified_ui",
+            "profiles": [
+                {"name": "strict_fpa", "strategy": "rules_only", "rule_set": "strict_fpa_rs"},
+                {"name": "unified_ui", "strategy": "ai_first", "rule_set": "unified_rs"},
+            ],
+        },
+        target_dir=tmp_path,
+        actor="local-admin",
+        audit_root=tmp_path,
+        backup_root=tmp_path,
+        backup_scope="unit",
+    )
+
+    assert saved["default_profile"] == "unified_ui"
+    strict = next(item for item in saved["profiles"] if item["name"] == "strict_fpa")
+    assert strict["strategy"] == "rules_only"
+    backups = list((tmp_path / "backups" / "config" / "unit").glob("fpa_config.yaml.*.bak"))
+    assert len(backups) == 1
+    assert "default-profile: strict_fpa" in backups[0].read_text(encoding="utf-8")
+    audit_text = (tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8")
+    record = json.loads(audit_text.splitlines()[-1])
+    assert record["files"] == ["fpa_config.yaml"]
+    assert record["result"] == "success"
+    assert "fpa_strategy.default_profile" in record["changed_fields"]
+    assert "fpa_strategy.profiles.strict_fpa.strategy" in record["changed_fields"]
+
+
+def test_save_fpa_strategy_settings_validation_failure_does_not_overwrite(tmp_path):
+    path = tmp_path / "fpa_config.yaml"
+    _write_minimal_fpa_config(path)
+    before = path.read_text(encoding="utf-8")
+
+    try:
+        config_service.save_fpa_strategy_settings(
+            payload={
+                "default_profile": "strict_fpa",
+                "profiles": [
+                    {"name": "strict_fpa", "strategy": "ai_first", "rule_set": "missing_rs"},
+                ],
+            },
+            target_dir=tmp_path,
+            actor="local-admin",
+            audit_root=tmp_path,
+            backup_root=tmp_path,
+            backup_scope="unit",
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "rule_set 指向不存在" in str(exc)
+    else:
+        raise AssertionError("save_fpa_strategy_settings should reject missing rule_set")
+
+    assert path.read_text(encoding="utf-8") == before
+    assert not (tmp_path / "backups" / "config" / "unit").exists()
+    record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert record["files"] == ["fpa_config.yaml"]
+    assert record["result"] == "validation_failed"

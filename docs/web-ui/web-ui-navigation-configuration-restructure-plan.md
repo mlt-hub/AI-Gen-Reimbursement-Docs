@@ -641,7 +641,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 |---:|---|---|---|---|
 | 1 | 高级配置编辑器基础 | 已完成第一阶段基础闭环 | 已新增 `/api/web-config/files`、`/api/web-config/files/{file_id}`、`/api/web-config/files/{file_id}/validate`、`PUT /api/web-config/files/{file_id}`；后端支持 YAML/JSON 语法校验、保存前单文件备份、原子写入、缓存清理和审计记录；配置页已接入“高级配置”区块，支持文件列表、原文读取、校验、保存、未保存状态提示和远程用户权限提示。 | 后续可将 textarea 升级为带行号/错误定位的编辑器，并补备份 diff。 |
 | 2 | FPA 配置校验接入 | 已完成第一阶段基础闭环 | `fpa_config.yaml` 保存前复用 `validate_fpa_config()`；非法 profile、strategy、rule_set、prompt 占位符等会返回 400 且不覆盖原文件；配置页可通过高级 YAML 入口触发同一校验和保存流程。 | 后续做 FPA 策略表单时继续复用该校验。 |
-| 3 | FPA 策略表单 | 未开始 | 暂无。 | 在高级编辑器稳定后，从 `fpa_config.yaml` 提取 profile、strategy、rule_set 常用表单。 |
+| 3 | FPA 策略表单 | 已完成第一阶段基础闭环 | 已新增 `/api/web-config/fpa-strategy` 读写接口；配置页已新增“FPA 策略 / 方案与规则集”表单，可编辑 `default-profile` 以及各 profile 的 `strategy`、`rule_set`；保存时复用完整 `validate_fpa_config()`、保存前备份、审计和缓存清理。 | 后续可继续表单化 profile 新增/删除、kind、prompt/core_rules 绑定；复杂规则仍通过高级 YAML 编辑。 |
 | 4 | 业务规则编辑 | 已完成高级 YAML 基础闭环 | `business_rules.yaml` 已纳入高级配置文件清单，支持读取、YAML 语法校验、保存前备份和审计；配置页可通过高级 YAML 入口编辑。 | 结构化业务规则表单仍未开始。 |
 | 5 | FPA 判定规则编辑 | 已完成高级 YAML 基础闭环 | `fpa_judgement_rules.yaml` 保存前校验 `judgement_rules` 必须是非空字符串列表；校验失败不覆盖原文件并记录 `validation_failed` 审计；配置页可通过高级 YAML 入口编辑。 | 前端规则列表编辑器仍未开始。 |
 
@@ -730,7 +730,7 @@ web_app/src/views/FpaAiDebugPage.vue
 | `web_app/src/App.vue` | 接入左侧栏应用骨架。 |
 | `web_app/src/router/index.ts` | 调整主导航路由，新增 `/sessions/:sessionId/fpa/debug`。 |
 | `web_app/src/views/Home.vue` | 收敛为生成页，保留启动任务和执行监控。 |
-| `web_app/src/views/Config.vue` | 承接 AI 配置、模板上传、模板下载和高级 YAML/JSON 配置文件编辑。 |
+| `web_app/src/views/Config.vue` | 承接 AI 配置、FPA 策略表单、模板上传、模板下载和高级 YAML/JSON 配置文件编辑。 |
 | `web_app/src/views/FpaPreviewPage.vue` | 接入统一布局，增加 AI 调试页面跳转。 |
 | `web_app/src/views/PromptDebug.vue` | 复用或迁移为 FPA AI 调试页面。 |
 | `web_app/src/components/ConfigPanel.vue` | 移除全局配置职责，只保留生成相关输入。 |
@@ -738,17 +738,17 @@ web_app/src/views/FpaAiDebugPage.vue
 | `web_app/src/components/TemplateUpload.vue` | 迁移挂载位置，不改变模板上传能力。 |
 | `web_app/src/components/TemplateDownload.vue` | 迁移挂载位置，不改变模板下载能力。 |
 | `web_app/src/assets/main.css` | 补齐左侧栏、移动端抽屉等布局样式。 |
-| `web_app/routes/config.py` | 增加 Web 配置读写接口。 |
-| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、最近 5 个备份、回滚和高级 YAML/JSON 配置文件校验保存。 |
+| `web_app/routes/config.py` | 增加 Web 配置读写接口、高级配置文件接口和 FPA 策略结构化接口。 |
+| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、最近 5 个备份、回滚、高级 YAML/JSON 配置文件校验保存和 FPA 策略结构化保存。 |
 | `web_app/services/config_audit_service.py` | 新增配置变更审计能力，记录操作者、时间、文件和结果，不记录敏感值。 |
 | `web_app/services/secret_service.py` | 新增 API Key 加密存储能力，Windows 优先 DPAPI，不可用时退到本机密钥文件。 |
 | `ai_gen_reimbursement_docs/config_utils.py` | 补充配置校验和缓存清理入口，确保保存后即时生效。 |
 | `web_app/routes/tasks.py` | 任务启动时合并请求参数与配置默认值，形成运行快照。 |
-| `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏、敏感值保留，以及高级配置文件读取、语法校验、业务校验、保存前备份、原子写入和校验失败不覆盖。 |
+| `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏、敏感值保留，高级配置文件读取、语法校验、业务校验、保存前备份、原子写入、校验失败不覆盖，以及 FPA 策略结构化保存。 |
 | `tests/test_web_config_audit.py` | 覆盖配置变更审计不记录敏感值。 |
 | `tests/test_web_secret_service.py` | 覆盖 API Key 加密、读取脱敏、DPAPI 不可用时兜底本机密钥文件。 |
 | `tests/test_web_tasks.py` | 覆盖任务启动参数快照和配置默认值兜底。 |
-| `tests/test_web_config_routes.py` | 覆盖 `/api/web-config` 读取、保存、权限、来源标记、脱敏响应和高级配置文件接口。 |
+| `tests/test_web_config_routes.py` | 覆盖 `/api/web-config` 读取、保存、权限、来源标记、脱敏响应、高级配置文件接口和 FPA 策略接口。 |
 | `tests/test_web_fpa_debug.py` | 覆盖 `/sessions/:sessionId/fpa/debug` 所需会话访问和日志数据读取。 |
 
 ## 验证方式
