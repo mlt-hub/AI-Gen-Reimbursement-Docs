@@ -30,27 +30,98 @@
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">AI 配置</p>
           <h2 class="mt-1 text-lg font-semibold">模型与凭据</h2>
         </div>
-        <button class="btn-secondary w-fit" :disabled="webConfigLoading" @click="loadWebConfig">
+        <button class="btn-secondary w-fit" :disabled="webConfigLoading || webConfigSaving" @click="loadWebConfig">
           {{ webConfigLoading ? '加载中...' : '刷新配置' }}
         </button>
       </div>
 
       <p v-if="webConfigError" class="text-sm text-[var(--color-warning)]">{{ webConfigError }}</p>
-      <div v-else-if="webConfig" class="grid gap-3 md:grid-cols-2">
-        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2">
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-sm text-[var(--color-ink-muted)]">API Key</span>
-            <span :class="['rounded-md px-2 py-0.5 text-xs font-semibold', webConfig.ai.api_key_configured ? statusClass.ok : statusClass.warn]">
-              {{ webConfig.ai.api_key_configured ? '已配置' : '未配置' }}
-            </span>
+      <div v-else-if="webConfig" class="space-y-4">
+        <div class="grid gap-3 md:grid-cols-2">
+          <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-sm text-[var(--color-ink-muted)]">API Key</span>
+              <span :class="['rounded-md px-2 py-0.5 text-xs font-semibold', webConfig.ai.api_key_configured ? statusClass.ok : statusClass.warn]">
+                {{ webConfig.ai.api_key_configured ? '已配置' : '未配置' }}
+              </span>
+            </div>
+            <p class="mt-1 text-xs text-[var(--color-ink-soft)]">来源：{{ sourceLabel(webConfig.ai.api_key_source) }}</p>
           </div>
-          <p class="mt-1 text-xs text-[var(--color-ink-soft)]">来源：{{ sourceLabel(webConfig.ai.api_key_source) }}</p>
+
+          <ConfigValueCard label="接口地址" :field="webConfig.ai.base_url" />
+          <ConfigValueCard label="模型" :field="webConfig.ai.model" />
+          <ConfigValueCard label="最大 Token 数" :field="webConfig.ai.max_tokens" />
+          <ConfigValueCard label="共享系统 API Key" :field="webConfig.ai.allow_shared_ai_credentials" :format="formatEnabled" />
         </div>
 
-        <ConfigValueCard label="接口地址" :field="webConfig.ai.base_url" />
-        <ConfigValueCard label="模型" :field="webConfig.ai.model" />
-        <ConfigValueCard label="最大 Token 数" :field="webConfig.ai.max_tokens" />
-        <ConfigValueCard label="共享系统 API Key" :field="webConfig.ai.allow_shared_ai_credentials" :format="formatEnabled" />
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="md:col-span-2">
+              <label for="web-api-key" class="field-label text-xs">API Key</label>
+              <input
+                id="web-api-key"
+                ref="webApiKeyInput"
+                v-model.trim="webAiForm.apiKey"
+                type="password"
+                placeholder="留空保留已保存的 API Key"
+                autocomplete="new-password"
+                autocapitalize="off"
+                autocorrect="off"
+                spellcheck="false"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                :name="webApiKeyInputName"
+                :readonly="webApiKeyReadonly"
+                class="field-control"
+                :disabled="webAiForm.clearApiKey"
+                @focus="activateWebApiKeyInput"
+                @pointerdown="activateWebApiKeyInput"
+              />
+            </div>
+
+            <div>
+              <label for="web-base-url" class="field-label text-xs">接口地址</label>
+              <input id="web-base-url" v-model.trim="webAiForm.baseUrl" type="text" class="field-control" />
+            </div>
+
+            <div>
+              <label for="web-model" class="field-label text-xs">模型</label>
+              <input id="web-model" v-model.trim="webAiForm.model" type="text" class="field-control" />
+            </div>
+
+            <div>
+              <label for="web-max-tokens" class="field-label text-xs">最大 Token 数</label>
+              <input id="web-max-tokens" v-model.trim="webAiForm.maxTokens" type="text" class="field-control" />
+            </div>
+
+            <label class="flex cursor-pointer items-center gap-2 self-end text-sm text-[var(--color-ink-muted)]">
+              <input
+                v-model="webAiForm.clearApiKey"
+                type="checkbox"
+                class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+                @change="handleClearWebApiKeyChange"
+              />
+              清空已保存的 API Key
+            </label>
+
+            <label v-if="webConfig.scope.mode === 'local'" class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)] md:col-span-2">
+              <input
+                v-model="webAiForm.allowSharedAiCredentials"
+                type="checkbox"
+                class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+              />
+              允许远程用户使用共享系统 API Key
+            </label>
+          </div>
+
+          <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', webConfigSaveStatusClass]">{{ webConfigSaveStatusText }}</span>
+            <button class="btn-primary w-fit" :disabled="webConfigSaving || !hasWebConfigChanges" @click="saveWebConfig">
+              {{ webConfigSaving ? '保存中...' : '保存 AI 配置' }}
+            </button>
+          </div>
+          <p v-if="webConfigSaveMsg" :class="['mt-2 text-sm', webConfigSaveOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ webConfigSaveMsg }}</p>
+        </div>
       </div>
       <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中...</p>
     </section>
@@ -96,18 +167,6 @@
         <div class="surface mb-4 space-y-3 rounded-lg p-5">
           <div class="flex items-center justify-between gap-3">
             <h3 class="text-sm font-medium text-[var(--color-ink-muted)]">环境变量 .env</h3>
-            <button type="button" class="btn-quiet min-h-0 px-2 py-1 text-xs" @click="showApiKey = !showApiKey">
-              {{ showApiKey ? '隐藏密钥' : '显示密钥' }}
-            </button>
-          </div>
-          <div>
-            <label class="field-label text-xs">ANTHROPIC_API_KEY</label>
-            <input ref="envApiKeyInput" v-model="envFields.apiKey" :type="showApiKey ? 'text' : 'password'"
-              placeholder="留空使用全局默认配置" autocomplete="new-password" autocapitalize="off"
-              autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true"
-              :name="envApiKeyInputName" :readonly="envApiKeyReadonly"
-              @focus="activateEnvApiKeyInput" @pointerdown="activateEnvApiKeyInput"
-              class="field-control" />
           </div>
           <div>
             <label class="field-label text-xs">ANTHROPIC_BASE_URL</label>
@@ -327,17 +386,7 @@ const globalSystemConfig = ref('')
 
 // ── 可编辑字段 ────────────────────────────────────────────
 
-const envFields = reactive({ apiKey: '', baseUrl: '', model: '' })
-const envApiKeyInput = ref<HTMLInputElement | null>(null)
-const {
-  inputName: envApiKeyInputName,
-  readonly: envApiKeyReadonly,
-  activateSensitiveInput: activateEnvApiKeyInput,
-} = useSensitiveInputGuard('env-api-key', {
-  inputRef: envApiKeyInput,
-  getValue: () => envFields.apiKey,
-  setValue: value => { envFields.apiKey = value },
-})
+const envFields = reactive({ baseUrl: '', model: '' })
 const boolFields = ref<ScalarField[]>([])
 const scalarFields = ref<ScalarField[]>([])
 const nestedFields = ref<NestedField[]>([])
@@ -346,7 +395,6 @@ const saveMsg = ref('')
 const saveOk = ref(false)
 const savedSnapshot = ref('')
 const lastSavedAt = ref('')
-const showApiKey = ref(false)
 const health = ref<HealthResponse | null>(null)
 const healthLoading = ref(false)
 const healthError = ref('')
@@ -354,6 +402,28 @@ const healthCheckedAt = ref('')
 const webConfig = ref<WebConfigResponse | null>(null)
 const webConfigLoading = ref(false)
 const webConfigError = ref('')
+const webConfigSaving = ref(false)
+const webConfigSaveMsg = ref('')
+const webConfigSaveOk = ref(false)
+const webConfigSnapshot = ref('')
+const webAiForm = reactive({
+  apiKey: '',
+  baseUrl: '',
+  model: '',
+  maxTokens: '',
+  allowSharedAiCredentials: false,
+  clearApiKey: false,
+})
+const webApiKeyInput = ref<HTMLInputElement | null>(null)
+const {
+  inputName: webApiKeyInputName,
+  readonly: webApiKeyReadonly,
+  activateSensitiveInput: activateWebApiKeyInput,
+} = useSensitiveInputGuard('web-api-key', {
+  inputRef: webApiKeyInput,
+  getValue: () => webAiForm.apiKey,
+  setValue: value => { webAiForm.apiKey = value },
+})
 
 const statusClass = {
   ok: 'bg-[var(--color-success-soft)] text-[var(--color-success)]',
@@ -399,7 +469,6 @@ const diagnosticItems = computed(() => {
 
 const currentConfigSnapshot = computed(() => JSON.stringify({
   env: {
-    apiKey: envFields.apiKey,
     baseUrl: envFields.baseUrl,
     model: envFields.model,
   },
@@ -423,6 +492,33 @@ const saveStatusClass = computed(() => {
   if (saving.value) return statusClass.neutral
   if (saveMsg.value && !saveOk.value) return statusClass.warn
   if (hasUnsavedChanges.value) return statusClass.warn
+  return statusClass.ok
+})
+
+const webConfigFormSnapshot = computed(() => JSON.stringify({
+  apiKey: normalizeApiKeyInput(webAiForm.apiKey),
+  baseUrl: webAiForm.baseUrl,
+  model: webAiForm.model,
+  maxTokens: webAiForm.maxTokens,
+  allowSharedAiCredentials: webAiForm.allowSharedAiCredentials,
+  clearApiKey: webAiForm.clearApiKey,
+}))
+
+const hasWebConfigChanges = computed(() => (
+  webConfigSnapshot.value !== '' && webConfigFormSnapshot.value !== webConfigSnapshot.value
+))
+
+const webConfigSaveStatusText = computed(() => {
+  if (webConfigSaving.value) return '保存中'
+  if (webConfigSaveMsg.value && !webConfigSaveOk.value) return '保存失败'
+  if (hasWebConfigChanges.value) return '有未保存修改'
+  return '已保存'
+})
+
+const webConfigSaveStatusClass = computed(() => {
+  if (webConfigSaving.value) return statusClass.neutral
+  if (webConfigSaveMsg.value && !webConfigSaveOk.value) return statusClass.warn
+  if (hasWebConfigChanges.value) return statusClass.warn
   return statusClass.ok
 })
 
@@ -488,11 +584,71 @@ async function loadWebConfig() {
   webConfigError.value = ''
   try {
     webConfig.value = await apiFetch<WebConfigResponse>('/api/web-config')
+    applyWebConfigToForm(webConfig.value)
   } catch (e) {
     webConfig.value = null
     webConfigError.value = normalizeApiError(e)
   } finally {
     webConfigLoading.value = false
+  }
+}
+
+function applyWebConfigToForm(data: WebConfigResponse) {
+  webAiForm.apiKey = ''
+  webAiForm.baseUrl = String(data.ai.base_url.value || '')
+  webAiForm.model = String(data.ai.model.value || '')
+  webAiForm.maxTokens = String(data.ai.max_tokens.value || '')
+  webAiForm.allowSharedAiCredentials = Boolean(data.ai.allow_shared_ai_credentials.value)
+  webAiForm.clearApiKey = false
+  webConfigSaveMsg.value = ''
+  webConfigSaveOk.value = true
+  webConfigSnapshot.value = webConfigFormSnapshot.value
+}
+
+function handleClearWebApiKeyChange() {
+  if (webAiForm.clearApiKey) {
+    webAiForm.apiKey = ''
+  }
+}
+
+async function saveWebConfig() {
+  webConfigSaving.value = true
+  webConfigSaveMsg.value = ''
+
+  const ai: Record<string, unknown> = {
+    base_url: { value: webAiForm.baseUrl },
+    model: { value: webAiForm.model },
+    max_tokens: { value: webAiForm.maxTokens },
+  }
+  const apiKey = normalizeApiKeyInput(webAiForm.apiKey)
+  if (apiKey) ai.api_key = apiKey
+  if (webAiForm.clearApiKey) ai.clear_api_key = true
+  if (webConfig.value?.scope.mode === 'local') {
+    ai.allow_shared_ai_credentials = { value: webAiForm.allowSharedAiCredentials }
+  }
+
+  try {
+    const data = await apiFetch<WebConfigResponse>('/api/web-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ai }),
+    })
+    webConfig.value = data
+    configStore.baseUrl = String(data.ai.base_url.value || '')
+    configStore.model = String(data.ai.model.value || '')
+    configStore.maxTokens = String(data.ai.max_tokens.value || '')
+    applyWebConfigToForm(data)
+    webConfigSaveOk.value = true
+    webConfigSaveMsg.value = '保存成功'
+    await loadLocalConfig()
+    if (showUserConfig.value) {
+      await loadUserConfig()
+    }
+  } catch (e) {
+    webConfigSaveOk.value = false
+    webConfigSaveMsg.value = normalizeApiError(e)
+  } finally {
+    webConfigSaving.value = false
   }
 }
 
@@ -549,10 +705,7 @@ async function loadUserConfig() {
         if (m) {
           const k = m[1].trim()
           const v = m[2].trim()
-          if (k === 'ANTHROPIC_API_KEY') {
-            if (v !== '***') envFields.apiKey = normalizeApiKeyInput(v)
-          }
-          else if (k === 'ANTHROPIC_BASE_URL') envFields.baseUrl = v
+          if (k === 'ANTHROPIC_BASE_URL') envFields.baseUrl = v
           else if (k === 'ANTHROPIC_MODEL') envFields.model = v
         }
       }
@@ -659,8 +812,6 @@ async function saveUserConfig() {
 
   // 构建 _env
   const env: Record<string, string> = {}
-  const apiKey = normalizeApiKeyInput(envFields.apiKey)
-  if (apiKey) env['ANTHROPIC_API_KEY'] = apiKey
   if (envFields.baseUrl) env['ANTHROPIC_BASE_URL'] = envFields.baseUrl
   if (envFields.model) env['ANTHROPIC_MODEL'] = envFields.model
 

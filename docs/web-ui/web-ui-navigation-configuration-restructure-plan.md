@@ -273,6 +273,7 @@ PUT  /api/web-config
 - 已实现保存前备份和配置变更审计基础能力。
 - 已实现正式任务启动的配置默认值合并：请求显式值优先，其次个人配置、全局配置、系统默认值。
 - 已实现远程 AI 任务启动凭据阻断：远程用户无个人 API Key 且未开启共享系统 API Key 时拒绝启动。
+- 配置页已接入 AI 配置编辑表单，可通过 `PUT /api/web-config` 保存 API Key、接口地址、模型、最大 Token 数和本机共享凭据开关；旧高级配置中的明文 API Key 输入已移除。
 
 已确认决策：
 
@@ -580,8 +581,8 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 |---:|---|---|---|---|
 | 1 | 应用骨架与左侧栏 | 已完成 | `704816a feat: add web UI side navigation shell` | FPA AI 调试页新增后继续复用同一壳。 |
 | 2 | 生成页职责收敛 | 已完成 | `eb86b9c refactor: move generation settings to focused sections` | 无。 |
-| 3 | 配置中心第一期 UI | 部分完成 | 配置页已展示 AI 配置摘要和模板配置区。 | 还需把 AI 配置、运行默认值、`out_templates` 做成可编辑表单并接保存。 |
-| 4 | Web 配置接口 | 已完成基础闭环 | `d6961ea feat: add web config read model`、`150e6a2 feat: save web config with encrypted secrets` | 还需把前端编辑表单完整接入 `PUT /api/web-config`。 |
+| 3 | 配置中心第一期 UI | 部分完成 | 配置页已展示并可编辑 AI 配置；模板配置区已迁入配置页。 | 还需把运行默认值、`out_templates` 做成可编辑表单并接保存。 |
+| 4 | Web 配置接口 | 已完成基础闭环 | `d6961ea feat: add web config read model`、`150e6a2 feat: save web config with encrypted secrets`；AI 配置表单已接入 `PUT /api/web-config`。 | 还需把运行默认值和模板映射编辑表单继续接入。 |
 | 5 | API Key 加密存储 | 已完成基础闭环 | `web_app/services/secret_service.py`，测试覆盖 DPAPI 兜底本机密钥文件。 | 后续任务启动读取密文时需接解密。 |
 | 6 | 配置备份、回滚与审计 | 部分完成 | `ad58628 feat: add web config backup audit`；保存前备份、最近 5 个版本保留、审计 JSONL 已接入保存流程。 | 还需补恢复备份 API/UI；原子写入可继续增强。 |
 | 7 | 任务启动配置合并 | 部分完成 | `resolve_task_start_config()` 已接入 `/api/run-local` 和 `/api/run-upload`，形成启动参数快照。 | `fpa_confirmation_mode` 目前在正式生成 pipeline 中尚无承接参数；FPA 预览默认值合并还需继续接入。 |
