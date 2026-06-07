@@ -1012,6 +1012,106 @@ def save_business_rules(
     return result
 
 
+def build_ai_prompt_settings_view(*, target_dir: Path) -> dict:
+    """Read ai_system_prompts_config.yaml as structured prompt scenes."""
+    filename = "ai_system_prompts_config.yaml"
+    path = target_dir / filename
+    if not path.exists():
+        return {"prompts": [], "exists": False}
+    parsed = _parse_advanced_config_content("ai_system_prompts_config", path.read_text(encoding="utf-8"))
+    cfg = _require_mapping_config(parsed, filename)
+    _validate_ai_system_prompts_payload(cfg)
+    prompts = cfg.get("ai_prompts") if isinstance(cfg.get("ai_prompts"), dict) else {}
+    items = []
+    for name, entry in prompts.items():
+        entry_map = entry if isinstance(entry, dict) else {}
+        items.append({
+            "name": str(name),
+            "scene": str(entry_map.get("scene") or ""),
+            "system": str(entry_map.get("system") or ""),
+            "examples": str(entry_map.get("examples") or ""),
+        })
+    return {"prompts": items, "exists": True}
+
+
+def save_ai_prompt_settings(
+    *,
+    prompts: list[object],
+    target_dir: Path,
+    actor: str,
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
+) -> dict:
+    """Save structured AI prompt settings while preserving unknown YAML keys."""
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
+    filename = "ai_system_prompts_config.yaml"
+    target_path = target_dir / filename
+    if not isinstance(prompts, list):
+        raise AdvancedConfigError("prompts 必须是列表")
+
+    if target_path.exists():
+        parsed = _parse_advanced_config_content("ai_system_prompts_config", target_path.read_text(encoding="utf-8"))
+        payload = dict(_require_mapping_config(parsed, filename))
+    else:
+        payload = {}
+
+    prompt_map: dict[str, dict[str, str]] = {}
+    for item in prompts:
+        if not isinstance(item, dict):
+            raise AdvancedConfigError("prompts 中的每一项必须是对象")
+        name = str(item.get("name") or "").strip()
+        if not name:
+            raise AdvancedConfigError("Prompt 场景名称不能为空")
+        prompt_map[name] = {
+            "scene": str(item.get("scene") or "").strip(),
+            "system": str(item.get("system") or ""),
+            "examples": str(item.get("examples") or ""),
+        }
+    payload["ai_prompts"] = prompt_map
+
+    try:
+        _validate_ai_system_prompts_payload(payload)
+    except AdvancedConfigError:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=[filename],
+            changed_fields=["ai_prompts"],
+            result="validation_failed",
+        )
+        raise
+
+    backed_up = backup_single_config_file(
+        source=target_path,
+        backup_root=backup_root,
+        scope=backup_scope,
+    )
+    import yaml
+
+    text = yaml.dump(payload, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    _atomic_write_text(target_path, text)
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=[filename],
+        changed_fields=["ai_prompts"],
+        result="success",
+    )
+    result = build_ai_prompt_settings_view(target_dir=target_dir)
+    result["backed_up"] = [backed_up] if backed_up else []
+    return result
+
+
 def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tuple[Path, str]:
     if "/" in backup_id or "\\" in backup_id or ".." in backup_id:
         raise ValueError("备份 ID 无效")

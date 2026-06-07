@@ -340,6 +340,82 @@
       </div>
     </section>
 
+    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">Prompt 配置</p>
+          <h2 class="mt-1 text-lg font-semibold">AI 场景提示词</h2>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="aiPromptsLoading || aiPromptsSaving" @click="loadAiPromptSettings">
+          {{ aiPromptsLoading ? '加载中...' : '刷新 Prompt' }}
+        </button>
+      </div>
+
+      <p v-if="aiPromptsError" class="text-sm text-[var(--color-warning)]">{{ aiPromptsError }}</p>
+      <div v-else class="space-y-4">
+        <div
+          v-for="(prompt, index) in aiPrompts"
+          :key="prompt.id"
+          class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4"
+        >
+          <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-[var(--color-ink)]">场景 {{ index + 1 }}</div>
+              <div class="mt-0.5 truncate font-mono text-xs text-[var(--color-ink-soft)]">{{ prompt.name || '未命名' }}</div>
+            </div>
+            <button class="btn-danger w-fit min-h-0 px-2 py-1 text-xs" @click="removeAiPrompt(index)">删除</button>
+          </div>
+
+          <div class="grid gap-3 md:grid-cols-2">
+            <div>
+              <label :for="`ai-prompt-name-${prompt.id}`" class="field-label text-xs">场景名称</label>
+              <input :id="`ai-prompt-name-${prompt.id}`" v-model.trim="prompt.name" type="text" class="field-control font-mono text-sm" />
+            </div>
+            <div>
+              <label :for="`ai-prompt-scene-${prompt.id}`" class="field-label text-xs">显示名称</label>
+              <input :id="`ai-prompt-scene-${prompt.id}`" v-model.trim="prompt.scene" type="text" class="field-control" />
+            </div>
+            <div class="md:col-span-2">
+              <label :for="`ai-prompt-system-${prompt.id}`" class="field-label text-xs">System Prompt</label>
+              <textarea
+                :id="`ai-prompt-system-${prompt.id}`"
+                v-model="prompt.system"
+                rows="6"
+                class="field-control font-mono text-xs leading-relaxed"
+                spellcheck="false"
+              />
+            </div>
+            <div class="md:col-span-2">
+              <label :for="`ai-prompt-examples-${prompt.id}`" class="field-label text-xs">Examples</label>
+              <textarea
+                :id="`ai-prompt-examples-${prompt.id}`"
+                v-model="prompt.examples"
+                rows="4"
+                class="field-control font-mono text-xs leading-relaxed"
+                spellcheck="false"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!aiPrompts.length" class="rounded-lg border border-dashed border-[var(--color-rule-strong)] bg-[var(--color-surface)] p-4 text-sm text-[var(--color-ink-muted)]">
+          暂无 AI 场景提示词。
+        </div>
+
+        <button class="btn-secondary w-fit" @click="addAiPrompt">新增 Prompt 场景</button>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', aiPromptsStatusClass]">{{ aiPromptsStatusText }}</span>
+            <p v-if="aiPromptsMsg" :class="['mt-2 text-sm', aiPromptsOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ aiPromptsMsg }}</p>
+          </div>
+          <button class="btn-primary w-fit" :disabled="aiPromptsSaving || !hasAiPromptsChanges" @click="saveAiPromptSettings">
+            {{ aiPromptsSaving ? '保存中...' : '保存 Prompt 配置' }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">模板配置</p>
@@ -777,6 +853,19 @@ interface BusinessRulesResponse {
   exists: boolean
 }
 
+interface AiPromptItem {
+  id: number
+  name: string
+  scene: string
+  system: string
+  examples: string
+}
+
+interface AiPromptsResponse {
+  prompts: Omit<AiPromptItem, 'id'>[]
+  exists: boolean
+}
+
 // ── stores ────────────────────────────────────────────────
 
 const auth = useAuthStore()
@@ -875,6 +964,14 @@ const businessRulesSnapshot = ref('')
 const businessRulesForm = reactive({
   cfpFormula: '',
 })
+const aiPrompts = ref<AiPromptItem[]>([])
+const aiPromptNextId = ref(1)
+const aiPromptsSnapshot = ref('')
+const aiPromptsLoading = ref(false)
+const aiPromptsSaving = ref(false)
+const aiPromptsError = ref('')
+const aiPromptsMsg = ref('')
+const aiPromptsOk = ref(false)
 const webAiForm = reactive({
   apiKey: '',
   baseUrl: '',
@@ -1023,6 +1120,12 @@ const businessRulesFormSnapshot = computed(() => JSON.stringify({
 const hasBusinessRulesChanges = computed(() => (
   businessRulesSnapshot.value !== '' && businessRulesFormSnapshot.value !== businessRulesSnapshot.value
 ))
+const aiPromptsSnapshotCurrent = computed(() => JSON.stringify(
+  aiPrompts.value.map(({ name, scene, system, examples }) => ({ name, scene, system, examples })),
+))
+const hasAiPromptsChanges = computed(() => (
+  aiPromptsSnapshot.value !== '' && aiPromptsSnapshotCurrent.value !== aiPromptsSnapshot.value
+))
 
 const webConfigSaveStatusText = computed(() => {
   if (webConfigSaving.value) return '保存中'
@@ -1085,6 +1188,18 @@ const businessRulesStatusClass = computed(() => {
   if (hasBusinessRulesChanges.value) return statusClass.warn
   return statusClass.ok
 })
+const aiPromptsStatusText = computed(() => {
+  if (aiPromptsSaving.value) return '保存中'
+  if (aiPromptsMsg.value && !aiPromptsOk.value) return '保存失败'
+  if (hasAiPromptsChanges.value) return '有未保存修改'
+  return '已保存'
+})
+const aiPromptsStatusClass = computed(() => {
+  if (aiPromptsSaving.value) return statusClass.neutral
+  if (aiPromptsMsg.value && !aiPromptsOk.value) return statusClass.warn
+  if (hasAiPromptsChanges.value) return statusClass.warn
+  return statusClass.ok
+})
 
 // ── 初始化 ────────────────────────────────────────────────
 
@@ -1100,6 +1215,7 @@ onMounted(async () => {
     await loadFpaStrategySettings()
     await loadFpaJudgementRules()
     await loadBusinessRulesSettings()
+    await loadAiPromptSettings()
     await loadAdvancedConfigFiles()
   }
 })
@@ -1365,6 +1481,93 @@ async function saveBusinessRulesSettings() {
     businessRulesMsg.value = normalizeApiError(e)
   } finally {
     businessRulesSaving.value = false
+  }
+}
+
+function applyAiPromptSettings(prompts: Omit<AiPromptItem, 'id'>[]) {
+  aiPrompts.value = prompts.map(prompt => ({
+    id: aiPromptNextId.value++,
+    name: prompt.name || '',
+    scene: prompt.scene || '',
+    system: prompt.system || '',
+    examples: prompt.examples || '',
+  }))
+  aiPromptsMsg.value = ''
+  aiPromptsOk.value = true
+  aiPromptsSnapshot.value = aiPromptsSnapshotCurrent.value
+}
+
+function addAiPrompt() {
+  aiPrompts.value.push({
+    id: aiPromptNextId.value++,
+    name: '',
+    scene: '',
+    system: '',
+    examples: '',
+  })
+}
+
+function removeAiPrompt(index: number) {
+  aiPrompts.value.splice(index, 1)
+}
+
+async function loadAiPromptSettings() {
+  aiPromptsLoading.value = true
+  aiPromptsError.value = ''
+  try {
+    const data = await apiFetch<AiPromptsResponse>('/api/web-config/ai-prompts')
+    applyAiPromptSettings(data.prompts || [])
+  } catch (e) {
+    aiPrompts.value = []
+    aiPromptsSnapshot.value = ''
+    aiPromptsError.value = normalizeApiError(e)
+  } finally {
+    aiPromptsLoading.value = false
+  }
+}
+
+async function saveAiPromptSettings() {
+  const names = new Set<string>()
+  for (const prompt of aiPrompts.value) {
+    const name = prompt.name.trim()
+    if (!name) {
+      aiPromptsOk.value = false
+      aiPromptsMsg.value = '场景名称不能为空'
+      return
+    }
+    if (names.has(name)) {
+      aiPromptsOk.value = false
+      aiPromptsMsg.value = `场景名称重复：${name}`
+      return
+    }
+    names.add(name)
+  }
+
+  aiPromptsSaving.value = true
+  aiPromptsMsg.value = ''
+  try {
+    const data = await apiFetch<AiPromptsResponse>('/api/web-config/ai-prompts', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompts: aiPrompts.value.map(({ name, scene, system, examples }) => ({ name, scene, system, examples })),
+      }),
+    })
+    applyAiPromptSettings(data.prompts || [])
+    aiPromptsOk.value = true
+    aiPromptsMsg.value = '保存成功'
+    await loadConfigBackups()
+    await loadLocalConfig()
+    if (activeAdvancedFileId.value === 'ai_system_prompts_config') {
+      await loadAdvancedConfigFile('ai_system_prompts_config')
+    } else {
+      await loadAdvancedConfigFiles()
+    }
+  } catch (e) {
+    aiPromptsOk.value = false
+    aiPromptsMsg.value = normalizeApiError(e)
+  } finally {
+    aiPromptsSaving.value = false
   }
 }
 

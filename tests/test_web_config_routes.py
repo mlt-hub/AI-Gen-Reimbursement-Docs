@@ -455,3 +455,78 @@ def test_web_config_business_rules_rejects_remote_user(monkeypatch):
 
     assert resp.status_code == 403
     assert "本机管理员" in resp.json()["detail"]
+
+
+def test_web_config_ai_prompts_endpoint_reads_local_prompts(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "build_ai_prompt_settings_view", lambda *, target_dir: {
+        "prompts": [{
+            "name": "metadata_gen",
+            "scene": "元数据生成",
+            "system": "SYSTEM",
+            "examples": "EXAMPLES",
+        }],
+        "exists": True,
+    })
+
+    resp = client.get("/api/web-config/ai-prompts")
+
+    assert resp.status_code == 200
+    assert resp.json()["prompts"][0]["name"] == "metadata_gen"
+    assert resp.json()["prompts"][0]["system"] == "SYSTEM"
+
+
+def test_web_config_ai_prompts_put_saves_local_prompts(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_save_ai_prompt_settings(**kwargs):
+        calls.append(kwargs)
+        return {"prompts": kwargs["prompts"], "exists": True, "backed_up": ["ai_system_prompts_config.yaml"]}
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "save_ai_prompt_settings", fake_save_ai_prompt_settings)
+
+    prompts = [{
+        "name": "metadata_gen",
+        "scene": "元数据生成",
+        "system": "SYSTEM",
+        "examples": "EXAMPLES",
+    }]
+    resp = client.put("/api/web-config/ai-prompts", json={"prompts": prompts})
+
+    assert resp.status_code == 200
+    assert resp.json()["backed_up"] == ["ai_system_prompts_config.yaml"]
+    assert calls == [{
+        "prompts": prompts,
+        "target_dir": tmp_path,
+        "actor": "local-admin",
+        "audit_root": tmp_path,
+        "backup_root": tmp_path,
+        "backup_scope": "global",
+    }]
+
+
+def test_web_config_ai_prompts_rejects_remote_user(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+
+    resp = client.put("/api/web-config/ai-prompts", json={"prompts": []})
+
+    assert resp.status_code == 403
+    assert "本机管理员" in resp.json()["detail"]
