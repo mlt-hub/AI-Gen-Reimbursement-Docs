@@ -635,6 +635,16 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 4 | 业务规则编辑 | `business_rules.yaml` 支持表单和高级 YAML 双入口。 | 规则保存后下一次生成/预览即时生效。 |
 | 5 | FPA 判定规则编辑 | `fpa_judgement_rules.yaml` 支持规则列表编辑。 | 保存前校验规则结构，失败不写入。 |
 
+第二期实施进度：
+
+| 顺序 | 工作包 | 状态 | 已落地证据 | 后续剩余 |
+|---:|---|---|---|---|
+| 1 | 高级配置编辑器基础 | 后端基础已完成 | 已新增 `/api/web-config/files`、`/api/web-config/files/{file_id}`、`/api/web-config/files/{file_id}/validate`、`PUT /api/web-config/files/{file_id}`；后端支持 YAML/JSON 语法校验、保存前单文件备份、原子写入、缓存清理和审计记录。 | 前端配置页还需接入文件列表、编辑器、校验错误展示和保存按钮。 |
+| 2 | FPA 配置校验接入 | 后端基础已完成 | `fpa_config.yaml` 保存前复用 `validate_fpa_config()`；非法 profile、strategy、rule_set、prompt 占位符等会返回 400 且不覆盖原文件。 | 前端接入高级 YAML 编辑入口后补端到端验收。 |
+| 3 | FPA 策略表单 | 未开始 | 暂无。 | 在高级编辑器稳定后，从 `fpa_config.yaml` 提取 profile、strategy、rule_set 常用表单。 |
+| 4 | 业务规则编辑 | 后端基础已完成 | `business_rules.yaml` 已纳入高级配置文件清单，支持读取、YAML 语法校验、保存前备份和审计。 | 结构化业务规则表单仍未开始；第一版可先接高级 YAML 编辑。 |
+| 5 | FPA 判定规则编辑 | 后端基础已完成 | `fpa_judgement_rules.yaml` 保存前校验 `judgement_rules` 必须是非空字符串列表；校验失败不覆盖原文件并记录 `validation_failed` 审计。 | 前端规则列表编辑器仍未开始；第一版可先接高级 YAML 编辑。 |
+
 ### 第三期交付目标
 
 第三期聚焦 Prompt、领域上下文和配置运维能力：
@@ -729,12 +739,12 @@ web_app/src/views/FpaAiDebugPage.vue
 | `web_app/src/components/TemplateDownload.vue` | 迁移挂载位置，不改变模板下载能力。 |
 | `web_app/src/assets/main.css` | 补齐左侧栏、移动端抽屉等布局样式。 |
 | `web_app/routes/config.py` | 增加 Web 配置读写接口。 |
-| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、最近 5 个备份和回滚。 |
+| `web_app/services/config_service.py` | 增加配置视图、脱敏、合并保存、缓存刷新、最近 5 个备份、回滚和高级 YAML/JSON 配置文件校验保存。 |
 | `web_app/services/config_audit_service.py` | 新增配置变更审计能力，记录操作者、时间、文件和结果，不记录敏感值。 |
 | `web_app/services/secret_service.py` | 新增 API Key 加密存储能力，Windows 优先 DPAPI，不可用时退到本机密钥文件。 |
 | `ai_gen_reimbursement_docs/config_utils.py` | 补充配置校验和缓存清理入口，确保保存后即时生效。 |
 | `web_app/routes/tasks.py` | 任务启动时合并请求参数与配置默认值，形成运行快照。 |
-| `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏和敏感值保留。 |
+| `tests/test_web_config_service.py` | 覆盖配置文件写入、脱敏、敏感值保留，以及高级配置文件读取、语法校验、业务校验、保存前备份、原子写入和校验失败不覆盖。 |
 | `tests/test_web_config_audit.py` | 覆盖配置变更审计不记录敏感值。 |
 | `tests/test_web_secret_service.py` | 覆盖 API Key 加密、读取脱敏、DPAPI 不可用时兜底本机密钥文件。 |
 | `tests/test_web_tasks.py` | 覆盖任务启动参数快照和配置默认值兜底。 |

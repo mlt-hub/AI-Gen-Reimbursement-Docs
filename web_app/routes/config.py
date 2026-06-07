@@ -6,20 +6,31 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from ai_gen_reimbursement_docs.auth import user_config_dir
 from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
+    AdvancedConfigError,
     build_web_config_view,
     config_dir,
+    list_advanced_config_files,
     list_config_backups,
     mask_env_content,
+    read_advanced_config_file,
     read_config,
     read_config_from_dir,
     redact_env_dict,
     restore_config_backup,
+    save_advanced_config_file,
     save_config_to_dir,
     save_web_config_to_dir,
+    validate_advanced_config_content,
 )
 
 
 router = APIRouter()
+
+
+def _require_local_advanced_config(request: Request) -> Path:
+    if not is_local_mode(request):
+        raise HTTPException(403, "高级配置文件只能由本机管理员编辑")
+    return config_dir()
 
 
 @router.get("/api/default-work-mode")
@@ -141,6 +152,57 @@ async def restore_web_config_backup(data: dict, request: Request, user: str = De
         username=username,
         local_mode=local_mode,
     )
+
+
+@router.get("/api/web-config/files")
+async def get_web_config_files(request: Request, _user: str = Depends(require_auth)):
+    """列出 Web UI 可编辑的高级配置文件。"""
+    target_dir = _require_local_advanced_config(request)
+    return {
+        "scope": {"mode": "local", "username": ""},
+        "items": list_advanced_config_files(target_dir=target_dir),
+    }
+
+
+@router.get("/api/web-config/files/{file_id}")
+async def get_web_config_file(file_id: str, request: Request, _user: str = Depends(require_auth)):
+    """读取一个高级配置文件的原文。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return read_advanced_config_file(file_id=file_id, target_dir=target_dir)
+    except AdvancedConfigError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.post("/api/web-config/files/{file_id}/validate")
+async def validate_web_config_file(file_id: str, data: dict, request: Request, _user: str = Depends(require_auth)):
+    """校验一个高级配置文件，校验失败不写入。"""
+    _require_local_advanced_config(request)
+    try:
+        return validate_advanced_config_content(
+            file_id=file_id,
+            content=str(data.get("content") or ""),
+        )
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.put("/api/web-config/files/{file_id}")
+async def save_web_config_file(file_id: str, data: dict, request: Request, user: str = Depends(require_auth)):
+    """校验并保存一个高级配置文件。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return save_advanced_config_file(
+            file_id=file_id,
+            content=str(data.get("content") or ""),
+            target_dir=target_dir,
+            actor=user or "local-admin",
+            audit_root=config_dir(),
+            backup_root=config_dir(),
+            backup_scope="global",
+        )
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/api/config")

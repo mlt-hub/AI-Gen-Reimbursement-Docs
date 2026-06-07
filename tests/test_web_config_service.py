@@ -519,3 +519,96 @@ def test_restore_config_backup_rejects_invalid_backup_id(tmp_path):
         assert "备份 ID 无效" in str(exc)
     else:
         raise AssertionError("restore_config_backup should reject path traversal")
+
+
+def test_list_and_read_advanced_config_files(tmp_path):
+    (tmp_path / "business_rules.yaml").write_text("cfp:\n  enabled: true\n", encoding="utf-8")
+
+    items = config_service.list_advanced_config_files(target_dir=tmp_path)
+    read = config_service.read_advanced_config_file(file_id="business_rules", target_dir=tmp_path)
+
+    business_item = next(item for item in items if item["id"] == "business_rules")
+    assert business_item["file"] == "business_rules.yaml"
+    assert business_item["format"] == "yaml"
+    assert business_item["exists"] is True
+    assert read["content"] == "cfp:\n  enabled: true\n"
+
+
+def test_validate_advanced_config_content_rejects_yaml_syntax_error():
+    try:
+        config_service.validate_advanced_config_content(
+            file_id="business_rules",
+            content="cfp:\n  - broken: [\n",
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "YAML 语法错误" in str(exc)
+    else:
+        raise AssertionError("validate_advanced_config_content should reject invalid YAML")
+
+
+def test_validate_advanced_fpa_judgement_rules_requires_non_empty_rules():
+    try:
+        config_service.validate_advanced_config_content(
+            file_id="fpa_judgement_rules",
+            content="judgement_rules: []\n",
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "judgement_rules 必须是非空字符串列表" in str(exc)
+    else:
+        raise AssertionError("validate_advanced_config_content should reject empty judgement rules")
+
+
+def test_save_advanced_config_file_backs_up_and_audits_success(tmp_path):
+    target = tmp_path / "business_rules.yaml"
+    target.write_text("cfp:\n  enabled: false\n", encoding="utf-8")
+
+    saved = config_service.save_advanced_config_file(
+        file_id="business_rules",
+        content="cfp:\n  enabled: true\n",
+        target_dir=tmp_path,
+        actor="local-admin",
+        audit_root=tmp_path,
+        backup_root=tmp_path,
+        backup_scope="unit",
+    )
+
+    assert saved["id"] == "business_rules"
+    assert saved["backed_up"] == ["business_rules.yaml"]
+    assert target.read_text(encoding="utf-8") == "cfp:\n  enabled: true\n"
+    backups = list((tmp_path / "backups" / "config" / "unit").glob("business_rules.yaml.*.bak"))
+    assert len(backups) == 1
+    assert "enabled: false" in backups[0].read_text(encoding="utf-8")
+    audit_text = (tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8")
+    record = json.loads(audit_text.splitlines()[-1])
+    assert record["actor"] == "local-admin"
+    assert record["files"] == ["business_rules.yaml"]
+    assert record["changed_fields"] == ["advanced_config.business_rules"]
+    assert record["result"] == "success"
+
+
+def test_save_advanced_config_file_validation_failure_does_not_overwrite_or_backup(tmp_path):
+    target = tmp_path / "fpa_judgement_rules.yaml"
+    target.write_text("judgement_rules:\n  - 规则一\n", encoding="utf-8")
+
+    try:
+        config_service.save_advanced_config_file(
+            file_id="fpa_judgement_rules",
+            content="judgement_rules: []\n",
+            target_dir=tmp_path,
+            actor="local-admin",
+            audit_root=tmp_path,
+            backup_root=tmp_path,
+            backup_scope="unit",
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "judgement_rules 必须是非空字符串列表" in str(exc)
+    else:
+        raise AssertionError("save_advanced_config_file should reject invalid content")
+
+    assert target.read_text(encoding="utf-8") == "judgement_rules:\n  - 规则一\n"
+    assert not (tmp_path / "backups" / "config" / "unit").exists()
+    audit_text = (tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8")
+    record = json.loads(audit_text.splitlines()[-1])
+    assert record["files"] == ["fpa_judgement_rules.yaml"]
+    assert record["changed_fields"] == ["advanced_config.fpa_judgement_rules"]
+    assert record["result"] == "validation_failed"

@@ -186,3 +186,77 @@ def test_web_config_restore_requires_backup_id(monkeypatch):
 
     assert resp.status_code == 400
     assert "backup_id" in resp.json()["detail"]
+
+
+def test_web_config_files_endpoint_lists_local_advanced_configs(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    (tmp_path / "business_rules.yaml").write_text("cfp:\n  enabled: true\n", encoding="utf-8")
+
+    resp = client.get("/api/web-config/files")
+
+    assert resp.status_code == 200
+    assert resp.json()["scope"] == {"mode": "local", "username": ""}
+    items = {item["id"]: item for item in resp.json()["items"]}
+    assert items["business_rules"]["exists"] is True
+    assert items["fpa_config"]["file"] == "fpa_config.yaml"
+
+
+def test_web_config_file_validate_returns_400_without_saving(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+
+    resp = client.post(
+        "/api/web-config/files/fpa_judgement_rules/validate",
+        json={"content": "judgement_rules: []\n"},
+    )
+
+    assert resp.status_code == 400
+    assert "judgement_rules 必须是非空字符串列表" in resp.json()["detail"]
+    assert not (tmp_path / "fpa_judgement_rules.yaml").exists()
+
+
+def test_web_config_file_put_saves_valid_content_and_redacts_no_values(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    (tmp_path / "business_rules.yaml").write_text("cfp:\n  enabled: false\n", encoding="utf-8")
+
+    resp = client.put(
+        "/api/web-config/files/business_rules",
+        json={"content": "cfp:\n  enabled: true\n"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "business_rules"
+    assert resp.json()["backed_up"] == ["business_rules.yaml"]
+    assert (tmp_path / "business_rules.yaml").read_text(encoding="utf-8") == "cfp:\n  enabled: true\n"
+    assert "enabled: false" not in (tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8")
+
+
+def test_web_config_files_reject_remote_user(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+
+    resp = client.get("/api/web-config/files")
+
+    assert resp.status_code == 403
+    assert "本机管理员" in resp.json()["detail"]

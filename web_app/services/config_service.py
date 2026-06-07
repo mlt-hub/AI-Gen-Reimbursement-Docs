@@ -1,4 +1,5 @@
 import os
+import json
 import re
 import shutil
 from datetime import datetime
@@ -21,6 +22,39 @@ DEFAULT_WEB_CONFIG = {
     "fpa_confirmation_mode": "cautious",
 }
 
+ADVANCED_CONFIG_FILES = {
+    "business_rules": {
+        "filename": "business_rules.yaml",
+        "format": "yaml",
+        "label": "业务规则",
+        "phase": 2,
+    },
+    "fpa_config": {
+        "filename": "fpa_config.yaml",
+        "format": "yaml",
+        "label": "FPA 配置",
+        "phase": 2,
+    },
+    "fpa_judgement_rules": {
+        "filename": "fpa_judgement_rules.yaml",
+        "format": "yaml",
+        "label": "FPA 判定规则",
+        "phase": 2,
+    },
+    "ai_system_prompts_config": {
+        "filename": "ai_system_prompts_config.yaml",
+        "format": "yaml",
+        "label": "Prompt 配置",
+        "phase": 3,
+    },
+    "domain_context": {
+        "filename": "domain_context.json",
+        "format": "json",
+        "label": "领域上下文",
+        "phase": 3,
+    },
+}
+
 AI_TASK_MODES = {
     "from-excel-gen-all",
     "from-excel-gen-fpa",
@@ -28,6 +62,10 @@ AI_TASK_MODES = {
     "from-excel-gen-list",
     "from-excel-gen-spec",
 }
+
+
+class AdvancedConfigError(ValueError):
+    """Raised when an advanced config file cannot be parsed or validated."""
 
 
 def config_dir() -> Path:
@@ -407,6 +445,35 @@ def _write_backup_copy(source: Path, destination: Path) -> None:
     shutil.copy2(source, destination)
 
 
+def _prune_file_backups(*, backup_dir: Path, filename: str, keep: int) -> None:
+    backups = sorted(
+        backup_dir.glob(f"{filename}.*.bak"),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    for old_backup in backups[keep:]:
+        old_backup.unlink(missing_ok=True)
+
+
+def backup_single_config_file(
+    *,
+    source: Path,
+    backup_root: Path,
+    scope: str = "global",
+    keep: int = 5,
+) -> str | None:
+    """Back up one existing config file and keep recent versions."""
+    if not source.exists():
+        return None
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    backup_dir = backup_root / "backups" / "config" / scope
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    destination = backup_dir / _backup_file_name(source, timestamp)
+    _write_backup_copy(source, destination)
+    _prune_file_backups(backup_dir=backup_dir, filename=source.name, keep=keep)
+    return source.name
+
+
 def backup_config_files(
     *,
     target_dir: Path,
@@ -428,13 +495,7 @@ def backup_config_files(
         _write_backup_copy(source, destination)
         backed_up.append(filename)
 
-        backups = sorted(
-            backup_dir.glob(f"{source.name}.*.bak"),
-            key=lambda item: item.stat().st_mtime,
-            reverse=True,
-        )
-        for old_backup in backups[keep:]:
-            old_backup.unlink(missing_ok=True)
+        _prune_file_backups(backup_dir=backup_dir, filename=source.name, keep=keep)
 
     return backed_up
 
@@ -471,6 +532,193 @@ def list_config_backups(
         })
 
     return sorted(items, key=lambda item: item["created_at"], reverse=True)
+
+
+def _advanced_config_meta(file_id: str) -> dict:
+    meta = ADVANCED_CONFIG_FILES.get(file_id)
+    if not meta:
+        raise AdvancedConfigError(f"未知高级配置文件: {file_id}")
+    return meta
+
+
+def list_advanced_config_files(*, target_dir: Path) -> list[dict]:
+    """List advanced config files that the Web UI can edit."""
+    items: list[dict] = []
+    for file_id, meta in ADVANCED_CONFIG_FILES.items():
+        path = target_dir / str(meta["filename"])
+        stat = path.stat() if path.exists() else None
+        items.append({
+            "id": file_id,
+            "label": meta["label"],
+            "file": meta["filename"],
+            "format": meta["format"],
+            "phase": meta["phase"],
+            "exists": path.exists(),
+            "updated_at": datetime.fromtimestamp(stat.st_mtime).isoformat() if stat else "",
+            "size_bytes": stat.st_size if stat else 0,
+        })
+    return items
+
+
+def read_advanced_config_file(*, file_id: str, target_dir: Path) -> dict:
+    """Read one advanced config file as editable text."""
+    meta = _advanced_config_meta(file_id)
+    path = target_dir / str(meta["filename"])
+    return {
+        "id": file_id,
+        "label": meta["label"],
+        "file": meta["filename"],
+        "format": meta["format"],
+        "phase": meta["phase"],
+        "exists": path.exists(),
+        "content": path.read_text(encoding="utf-8") if path.exists() else "",
+    }
+
+
+def _parse_advanced_config_content(file_id: str, content: str):
+    meta = _advanced_config_meta(file_id)
+    if meta["format"] == "json":
+        try:
+            return json.loads(content or "{}")
+        except json.JSONDecodeError as exc:
+            raise AdvancedConfigError(f"JSON 语法错误: 第 {exc.lineno} 行第 {exc.colno} 列，{exc.msg}") from exc
+
+    try:
+        import yaml
+
+        return yaml.safe_load(content or "") or {}
+    except Exception as exc:
+        problem = getattr(exc, "problem", "") or str(exc)
+        mark = getattr(exc, "problem_mark", None)
+        if mark is not None:
+            raise AdvancedConfigError(f"YAML 语法错误: 第 {mark.line + 1} 行第 {mark.column + 1} 列，{problem}") from exc
+        raise AdvancedConfigError(f"YAML 语法错误: {problem}") from exc
+
+
+def _require_mapping_config(value: object, filename: str) -> dict:
+    if not isinstance(value, dict):
+        raise AdvancedConfigError(f"{filename} 必须是对象或 YAML 映射")
+    return value
+
+
+def _validate_fpa_judgement_rules_payload(value: object) -> None:
+    cfg = _require_mapping_config(value, "fpa_judgement_rules.yaml")
+    rules = cfg.get("judgement_rules")
+    if not isinstance(rules, list) or not rules:
+        raise AdvancedConfigError("fpa_judgement_rules.yaml 中的 judgement_rules 必须是非空字符串列表")
+    for index, rule in enumerate(rules):
+        if not isinstance(rule, str) or not rule.strip():
+            raise AdvancedConfigError(f"fpa_judgement_rules.yaml 中的 judgement_rules[{index}] 必须是非空字符串")
+
+
+def _validate_ai_system_prompts_payload(value: object) -> None:
+    cfg = _require_mapping_config(value, "ai_system_prompts_config.yaml")
+    prompts = cfg.get("ai_prompts", {})
+    if prompts in (None, ""):
+        return
+    if not isinstance(prompts, dict):
+        raise AdvancedConfigError("ai_system_prompts_config.yaml 中的 ai_prompts 必须是对象")
+    for name, entry in prompts.items():
+        if not isinstance(entry, dict):
+            raise AdvancedConfigError(f"ai_system_prompts_config.yaml 中的 ai_prompts.{name} 必须是对象")
+        for key in ("system", "examples"):
+            if key in entry and not isinstance(entry.get(key), str):
+                raise AdvancedConfigError(f"ai_system_prompts_config.yaml 中的 ai_prompts.{name}.{key} 必须是字符串")
+
+
+def validate_advanced_config_content(*, file_id: str, content: str) -> dict:
+    """Validate advanced YAML/JSON content and return parsed metadata."""
+    parsed = _parse_advanced_config_content(file_id, content)
+    meta = _advanced_config_meta(file_id)
+    filename = str(meta["filename"])
+
+    try:
+        if file_id == "fpa_config":
+            from ai_gen_reimbursement_docs.config_utils import validate_fpa_config
+
+            validate_fpa_config(_require_mapping_config(parsed, filename))
+        elif file_id == "fpa_judgement_rules":
+            _validate_fpa_judgement_rules_payload(parsed)
+        elif file_id == "domain_context":
+            from ai_gen_reimbursement_docs.config_utils import validate_fpa_domain_context
+
+            validate_fpa_domain_context(_require_mapping_config(parsed, filename))
+        elif file_id == "ai_system_prompts_config":
+            _validate_ai_system_prompts_payload(parsed)
+        else:
+            _require_mapping_config(parsed, filename)
+    except AdvancedConfigError:
+        raise
+    except Exception as exc:
+        raise AdvancedConfigError(str(exc)) from exc
+
+    return {
+        "ok": True,
+        "file": filename,
+        "format": meta["format"],
+    }
+
+
+def save_advanced_config_file(
+    *,
+    file_id: str,
+    content: str,
+    target_dir: Path,
+    actor: str,
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
+) -> dict:
+    """Validate and save one advanced config file with backup and audit."""
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
+    meta = _advanced_config_meta(file_id)
+    filename = str(meta["filename"])
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / filename
+
+    try:
+        validation = validate_advanced_config_content(file_id=file_id, content=content)
+    except AdvancedConfigError:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=[filename],
+            changed_fields=[f"advanced_config.{file_id}"],
+            result="validation_failed",
+        )
+        raise
+
+    backed_up = backup_single_config_file(
+        source=target_path,
+        backup_root=backup_root,
+        scope=backup_scope,
+    )
+    text = content if content.endswith("\n") else f"{content}\n"
+    _atomic_write_text(target_path, text)
+
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=[filename],
+        changed_fields=[f"advanced_config.{file_id}"],
+        result="success",
+    )
+    return {
+        **validation,
+        "id": file_id,
+        "backed_up": [backed_up] if backed_up else [],
+        "content": target_path.read_text(encoding="utf-8"),
+    }
 
 
 def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tuple[Path, str]:
