@@ -128,8 +128,87 @@
 
     <section class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
+        <p class="text-xs font-semibold text-[var(--color-ink-soft)]">Web 与运行配置</p>
+        <h2 class="mt-1 text-lg font-semibold">运行默认值</h2>
+      </div>
+
+      <p v-if="webConfigError" class="text-sm text-[var(--color-warning)]">{{ webConfigError }}</p>
+      <div v-else-if="webConfig" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+        <div class="grid gap-4 md:grid-cols-2">
+          <div>
+            <label for="web-project-name" class="field-label text-xs">项目名称（留空自动读取）</label>
+            <input id="web-project-name" v-model.trim="webRunForm.projectName" type="text" class="field-control" />
+          </div>
+
+          <div>
+            <label for="web-fpa-profile" class="field-label text-xs">FPA 方案</label>
+            <select id="web-fpa-profile" v-model="webRunForm.fpaProfile" class="field-control">
+              <option v-for="profile in fpaOptions.profiles" :key="profile.name" :value="profile.name">
+                {{ profile.label }}
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label for="web-fpa-strategy" class="field-label text-xs">FPA 执行策略</label>
+            <select id="web-fpa-strategy" v-model="webRunForm.fpaStrategy" class="field-control">
+              <option value="">跟随方案默认</option>
+              <option v-for="strategy in fpaOptions.strategies" :key="strategy.name" :value="strategy.name">
+                {{ strategy.label }}
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label for="web-fpa-rule-set" class="field-label text-xs">FPA 规则集</label>
+            <select id="web-fpa-rule-set" v-model="webRunForm.fpaRuleSet" class="field-control">
+              <option value="">跟随方案默认</option>
+              <option v-for="ruleSet in fpaOptions.rule_sets" :key="ruleSet.name" :value="ruleSet.name">
+                {{ ruleSet.label }}
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label for="web-fpa-confirmation-mode" class="field-label text-xs">FPA 生成模式</label>
+            <select id="web-fpa-confirmation-mode" v-model="webRunForm.fpaConfirmationMode" class="field-control">
+              <option v-for="mode in fpaOptions.confirmation_modes" :key="mode.name" :value="mode.name">
+                {{ mode.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', webSectionStatusClass(hasWebRunChanges)]">{{ webSectionStatusText(hasWebRunChanges) }}</span>
+          <button class="btn-primary w-fit" :disabled="webConfigSaving || !hasWebRunChanges" @click="saveRunDefaults">
+            {{ webConfigSaving ? '保存中...' : '保存运行默认值' }}
+          </button>
+        </div>
+      </div>
+      <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中...</p>
+    </section>
+
+    <section class="surface rounded-lg p-5">
+      <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">模板配置</p>
         <h2 class="mt-1 text-lg font-semibold">输出与下载模板</h2>
+      </div>
+      <div class="mb-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+        <label for="web-out-templates" class="field-label text-xs">out_templates 映射</label>
+        <textarea
+          id="web-out-templates"
+          v-model="webTemplateForm.outTemplatesJson"
+          rows="8"
+          class="field-control font-mono text-xs"
+          spellcheck="false"
+        />
+        <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', webSectionStatusClass(hasWebTemplateChanges)]">{{ webSectionStatusText(hasWebTemplateChanges) }}</span>
+          <button class="btn-primary w-fit" :disabled="webConfigSaving || !hasWebTemplateChanges" @click="saveTemplateSettings">
+            {{ webConfigSaving ? '保存中...' : '保存模板映射' }}
+          </button>
+        </div>
       </div>
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-4">
@@ -286,6 +365,7 @@ import { defineComponent, h, ref, computed, onMounted, reactive, type PropType }
 import { useAuthStore } from '@/stores/auth.ts'
 import { normalizeApiKeyInput, useConfigStore } from '@/stores/config.ts'
 import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
+import { useFpaOptions } from '@/composables/useFpaOptions.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 import TemplateDownload from '@/components/TemplateDownload.vue'
 import TemplateUpload from '@/components/TemplateUpload.vue'
@@ -357,6 +437,7 @@ interface WebConfigResponse {
 
 const auth = useAuthStore()
 const configStore = useConfigStore()
+const { fpaOptions, loadFpaOptions } = useFpaOptions()
 
 const showUserConfig = computed(() => auth.isRemote)
 type ConfigTabKey = 'personal' | 'global' | 'env' | 'system' | 'rules'
@@ -413,6 +494,16 @@ const webAiForm = reactive({
   maxTokens: '',
   allowSharedAiCredentials: false,
   clearApiKey: false,
+})
+const webRunForm = reactive({
+  projectName: '',
+  fpaProfile: '',
+  fpaStrategy: '',
+  fpaRuleSet: '',
+  fpaConfirmationMode: 'cautious',
+})
+const webTemplateForm = reactive({
+  outTemplatesJson: '{}',
 })
 const webApiKeyInput = ref<HTMLInputElement | null>(null)
 const {
@@ -503,9 +594,17 @@ const webConfigFormSnapshot = computed(() => JSON.stringify({
   allowSharedAiCredentials: webAiForm.allowSharedAiCredentials,
   clearApiKey: webAiForm.clearApiKey,
 }))
+const webRunFormSnapshot = computed(() => JSON.stringify(webRunForm))
+const webTemplateFormSnapshot = computed(() => webTemplateForm.outTemplatesJson.trim())
 
 const hasWebConfigChanges = computed(() => (
   webConfigSnapshot.value !== '' && webConfigFormSnapshot.value !== webConfigSnapshot.value
+))
+const webRunSnapshot = ref('')
+const webTemplateSnapshot = ref('')
+const hasWebRunChanges = computed(() => webRunSnapshot.value !== '' && webRunFormSnapshot.value !== webRunSnapshot.value)
+const hasWebTemplateChanges = computed(() => (
+  webTemplateSnapshot.value !== '' && webTemplateFormSnapshot.value !== webTemplateSnapshot.value
 ))
 
 const webConfigSaveStatusText = computed(() => {
@@ -526,6 +625,7 @@ const webConfigSaveStatusClass = computed(() => {
 
 onMounted(async () => {
   await refreshHealth()
+  await loadFpaOptions()
   await loadWebConfig()
   if (showUserConfig.value) {
     await loadUserConfig()
@@ -603,6 +703,14 @@ function applyWebConfigToForm(data: WebConfigResponse) {
   webConfigSaveMsg.value = ''
   webConfigSaveOk.value = true
   webConfigSnapshot.value = webConfigFormSnapshot.value
+  webRunForm.projectName = fieldValue(data.run_defaults.project_name)
+  webRunForm.fpaProfile = fieldValue(data.run_defaults.fpa_profile) || 'strict_fpa'
+  webRunForm.fpaStrategy = fieldValue(data.run_defaults.fpa_strategy)
+  webRunForm.fpaRuleSet = fieldValue(data.run_defaults.fpa_rule_set)
+  webRunForm.fpaConfirmationMode = fieldValue(data.run_defaults.fpa_confirmation_mode) || 'cautious'
+  webRunSnapshot.value = webRunFormSnapshot.value
+  webTemplateForm.outTemplatesJson = JSON.stringify(data.templates.out_templates.value || {}, null, 2)
+  webTemplateSnapshot.value = webTemplateFormSnapshot.value
 }
 
 function handleClearWebApiKeyChange() {
@@ -634,10 +742,7 @@ async function saveWebConfig() {
       body: JSON.stringify({ ai }),
     })
     webConfig.value = data
-    configStore.baseUrl = String(data.ai.base_url.value || '')
-    configStore.model = String(data.ai.model.value || '')
-    configStore.maxTokens = String(data.ai.max_tokens.value || '')
-    applyWebConfigToForm(data)
+    applySavedWebConfig(data)
     webConfigSaveOk.value = true
     webConfigSaveMsg.value = '保存成功'
     await loadLocalConfig()
@@ -650,6 +755,83 @@ async function saveWebConfig() {
   } finally {
     webConfigSaving.value = false
   }
+}
+
+async function saveRunDefaults() {
+  await saveWebConfigPayload({
+    run_defaults: {
+      project_name: { value: webRunForm.projectName },
+      fpa_profile: { value: webRunForm.fpaProfile },
+      fpa_strategy: { value: webRunForm.fpaStrategy },
+      fpa_rule_set: { value: webRunForm.fpaRuleSet },
+      fpa_confirmation_mode: { value: webRunForm.fpaConfirmationMode },
+    },
+  }, '运行默认值保存成功')
+}
+
+async function saveTemplateSettings() {
+  let outTemplates: Record<string, string>
+  try {
+    const parsed = JSON.parse(webTemplateForm.outTemplatesJson || '{}')
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      throw new Error('out_templates 必须是 JSON 对象')
+    }
+    outTemplates = Object.fromEntries(
+      Object.entries(parsed).map(([key, value]) => [key, String(value)]),
+    )
+  } catch (e) {
+    webConfigSaveOk.value = false
+    webConfigSaveMsg.value = e instanceof Error ? e.message : 'out_templates 格式错误'
+    return
+  }
+
+  await saveWebConfigPayload({
+    templates: {
+      out_templates: { value: outTemplates },
+    },
+  }, '模板映射保存成功')
+}
+
+async function saveWebConfigPayload(payload: Record<string, unknown>, successMessage: string) {
+  webConfigSaving.value = true
+  webConfigSaveMsg.value = ''
+  try {
+    const data = await apiFetch<WebConfigResponse>('/api/web-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    webConfig.value = data
+    applySavedWebConfig(data)
+    webConfigSaveOk.value = true
+    webConfigSaveMsg.value = successMessage
+    await loadLocalConfig()
+    if (showUserConfig.value) {
+      await loadUserConfig()
+    }
+  } catch (e) {
+    webConfigSaveOk.value = false
+    webConfigSaveMsg.value = normalizeApiError(e)
+  } finally {
+    webConfigSaving.value = false
+  }
+}
+
+function applySavedWebConfig(data: WebConfigResponse) {
+  configStore.baseUrl = String(data.ai.base_url.value || '')
+  configStore.model = String(data.ai.model.value || '')
+  configStore.maxTokens = String(data.ai.max_tokens.value || '')
+  configStore.projectName = fieldValue(data.run_defaults.project_name)
+  configStore.fpaProfile = fieldValue(data.run_defaults.fpa_profile) || 'strict_fpa'
+  configStore.fpaStrategy = fieldValue(data.run_defaults.fpa_strategy)
+  configStore.fpaRuleSet = fieldValue(data.run_defaults.fpa_rule_set)
+  configStore.fpaConfirmationMode = (fieldValue(data.run_defaults.fpa_confirmation_mode) || 'cautious') as any
+  applyWebConfigToForm(data)
+}
+
+function fieldValue(field: WebConfigField<unknown> | undefined): string {
+  if (!field || field.value === null || field.value === undefined) return ''
+  return String(field.value)
 }
 
 function sourceLabel(source: ConfigSource | string): string {
@@ -670,6 +852,20 @@ function formatConfigValue(value: unknown, formatter?: ((value: unknown) => stri
   if (value === null || value === undefined || value === '') return '未设置'
   if (typeof value === 'boolean') return formatEnabled(value)
   return String(value)
+}
+
+function webSectionStatusText(hasChanges: boolean): string {
+  if (webConfigSaving.value) return '保存中'
+  if (webConfigSaveMsg.value && !webConfigSaveOk.value) return '保存失败'
+  if (hasChanges) return '有未保存修改'
+  return '已保存'
+}
+
+function webSectionStatusClass(hasChanges: boolean): string {
+  if (webConfigSaving.value) return statusClass.neutral
+  if (webConfigSaveMsg.value && !webConfigSaveOk.value) return statusClass.warn
+  if (hasChanges) return statusClass.warn
+  return statusClass.ok
 }
 
 async function loadLocalConfig() {
