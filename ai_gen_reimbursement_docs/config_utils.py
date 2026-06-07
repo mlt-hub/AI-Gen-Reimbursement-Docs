@@ -1307,6 +1307,11 @@ def load_sheet_names() -> dict[str, str]:
         return DEFAULT_SHEET_NAMES.copy()
 
 
+def clear_config_caches() -> None:
+    """Clear in-process config caches after Web UI writes config files."""
+    load_sheet_names.cache_clear()
+
+
 def load_enable_ai_fill_meta() -> bool:
     """读取 enable_ai_fill_meta，控制是否对 #AI生成# 标记走 AI 填充。"""
     return _get_system_config_value('enable_ai_fill_meta', True)

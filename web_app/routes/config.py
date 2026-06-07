@@ -66,6 +66,10 @@ async def save_web_config(data: dict, request: Request, user: str = Depends(requ
         data,
         target_dir,
         allow_shared_credentials_write=local_mode,
+        actor=username or "local-admin",
+        audit_root=config_dir(),
+        backup_root=config_dir(),
+        backup_scope="global" if local_mode else f"user-{user}",
     )
 
     global_config = read_config()

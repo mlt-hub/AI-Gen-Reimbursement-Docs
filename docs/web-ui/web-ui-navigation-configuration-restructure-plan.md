@@ -6,7 +6,7 @@
 
 当前 Web UI 的生成页同时承载了任务启动、任务状态、执行监控、高级选项、AI 配置、自定义输出模板、下载模板和 FPA 预览入口。页面职责偏重，用户在开始一次生成任务时容易被低频配置项打断。
 
-本方案聚焦信息架构调整，不改变后端接口协议。目标是把高频任务路径、低频全局配置、审阅预览和诊断调试拆到更清晰的位置。
+本方案从信息架构调整开始，并逐步补齐 Web UI 配置持久化接口。目标是把高频任务路径、低频全局配置、审阅预览和诊断调试拆到更清晰的位置，同时让配置保存具备可复用、可审计和不泄露敏感值的后端基础。
 
 ## 目标行为
 
@@ -203,26 +203,74 @@ PUT  /api/web-config
 
 ```json
 {
+  "scope": {
+    "mode": "local",
+    "username": ""
+  },
   "ai": {
     "api_key_configured": true,
-    "shared_api_key_enabled": false,
-    "base_url": "https://api.example.test",
-    "model": "deepseek-v4-flash",
-    "max_tokens": "384K"
+    "api_key_source": "global",
+    "base_url": {
+      "value": "https://api.example.test",
+      "source": "global"
+    },
+    "model": {
+      "value": "deepseek-v4-flash",
+      "source": "global"
+    },
+    "max_tokens": {
+      "value": "384K",
+      "source": "global"
+    },
+    "allow_shared_ai_credentials": {
+      "value": false,
+      "source": "default"
+    }
   },
   "templates": {
-    "custom_output_template_dir": "C:/templates/out"
+    "out_templates": {
+      "value": {
+        "fpa_out_template": "data/out_templates/FPA工作量评估-输出模板.xlsx"
+      },
+      "source": "global"
+    }
   },
   "run_defaults": {
-    "fpa_profile": "default",
-    "fpa_strategy": "rule-first",
-    "fpa_rule_set": "standard",
-    "fpa_confirmation_mode": "auto"
+    "project_name": {
+      "value": "",
+      "source": "default"
+    },
+    "fpa_profile": {
+      "value": "strict_fpa",
+      "source": "default"
+    },
+    "fpa_strategy": {
+      "value": "",
+      "source": "default"
+    },
+    "fpa_rule_set": {
+      "value": "",
+      "source": "default"
+    },
+    "fpa_confirmation_mode": {
+      "value": "cautious",
+      "source": "default"
+    }
   }
 }
 ```
 
 `PUT /api/web-config` 接收同结构或等价的可编辑字段，保存成功后返回最新的脱敏配置视图，前端用返回值同步 `config` store。
+
+当前实现状态：
+
+- 已新增 `GET /api/web-config` 和 `PUT /api/web-config`。
+- 已实现本机模式写全局配置、远程模式写个人配置。
+- 已实现配置来源标记：`personal` / `global` / `default`。
+- 已实现 API Key 加密落盘：写入 `ANTHROPIC_API_KEY_ENC`，不写明文 `ANTHROPIC_API_KEY`。
+- 已实现省略 API Key 时保留旧密文，`clear_api_key: true` 时显式清空。
+- 已实现远程用户凭据策略的读取语义：远程用户无个人 Key 时，只有 `allow_shared_ai_credentials: true` 才视为可用共享 Key。
+- 已实现保存前备份和配置变更审计基础能力。
 
 已确认决策：
 
@@ -305,12 +353,14 @@ PUT /api/web-config
   -> 合并现有配置，保留未提交的敏感值
   -> 加密新的 API Key，仅写入密文
   -> 在 ~/.ai-gen-reimbursement-docs/backups/config/ 生成文件级备份，保留最近 5 个版本
-  -> 原子写入 .env / system_config.yaml
+  -> 写入 .env / system_config.yaml
   -> 写入 ~/.ai-gen-reimbursement-docs/audit/config_changes.jsonl 审计记录，不记录敏感值
   -> 清理当前进程的配置读取缓存
   -> 返回脱敏后的最新 web-config
   -> 前端同步 config store
 ```
+
+当前实现已覆盖：合并保存、API Key 加密、保存前备份、最近 5 个备份保留、审计记录脱敏、配置缓存清理入口。原子写入和备份恢复入口后续继续补齐。
 
 即时生效边界：
 
@@ -521,6 +571,21 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 8 | 远程用户凭据策略 | 远程用户无个人 API Key 且未开启共享凭据时阻止 AI 任务启动。 | 返回明确错误，提示配置个人 API Key 或联系管理员开启共享凭据。 |
 | 9 | FPA 预览和调试页 | FPA 预览接入统一布局；新增或迁移 `FpaAiDebugPage`。 | `查看 AI 调试信息` 携带 `sessionId` 跳转；无 session 时入口禁用并提示。 |
 | 10 | 回归与打磨 | 补测试、移动端检查、错误态和空态文案。 | 前后端构建和指定 pytest 通过；人工验收清单通过。 |
+
+### 第一期实施进度
+
+| 顺序 | 工作包 | 状态 | 已落地证据 | 后续剩余 |
+|---:|---|---|---|---|
+| 1 | 应用骨架与左侧栏 | 已完成 | `704816a feat: add web UI side navigation shell` | FPA AI 调试页新增后继续复用同一壳。 |
+| 2 | 生成页职责收敛 | 已完成 | `eb86b9c refactor: move generation settings to focused sections` | 无。 |
+| 3 | 配置中心第一期 UI | 部分完成 | 配置页已展示 AI 配置摘要和模板配置区。 | 还需把 AI 配置、运行默认值、`out_templates` 做成可编辑表单并接保存。 |
+| 4 | Web 配置接口 | 已完成基础闭环 | `d6961ea feat: add web config read model`、`150e6a2 feat: save web config with encrypted secrets` | 还需把前端编辑表单完整接入 `PUT /api/web-config`。 |
+| 5 | API Key 加密存储 | 已完成基础闭环 | `web_app/services/secret_service.py`，测试覆盖 DPAPI 兜底本机密钥文件。 | 后续任务启动读取密文时需接解密。 |
+| 6 | 配置备份、回滚与审计 | 部分完成 | 保存前备份、最近 5 个版本保留、审计 JSONL 已接入保存流程。 | 还需补恢复备份 API/UI；原子写入可继续增强。 |
+| 7 | 任务启动配置合并 | 未开始 | - | 需合并请求显式值、个人配置、全局配置和系统默认值，形成启动快照。 |
+| 8 | 远程用户凭据策略 | 部分完成 | `/api/web-config` 读取视图已按共享开关判断可用凭据。 | 任务启动时还需阻止无个人 Key 且未开启共享凭据的 AI 任务。 |
+| 9 | FPA 预览和调试页 | 未开始 | FPA 预览已在统一 AppShell 下。 | 需新增 `/sessions/:sessionId/fpa/debug` 页面和 session-aware 入口。 |
+| 10 | 回归与打磨 | 持续进行 | 当前每轮提交已跑相关 pytest 和 `npm run build`。 | 第一阶段收尾时跑完整指定测试和移动端人工检查。 |
 
 ### 第一期建议提交顺序
 

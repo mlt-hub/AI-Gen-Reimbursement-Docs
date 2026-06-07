@@ -1,4 +1,6 @@
 import asyncio
+import json
+import time
 
 from web_app.services import config_service
 from web_app.services import secret_service
@@ -233,3 +235,87 @@ def test_save_web_config_to_dir_can_clear_api_key(monkeypatch, tmp_path):
     assert "ANTHROPIC_API_KEY" not in saved["_env"]
     assert "ANTHROPIC_API_KEY_ENC" not in saved["_env"]
     assert "sk-existing" not in env_text
+
+
+def test_save_web_config_to_dir_backs_up_existing_files_and_writes_redacted_audit(monkeypatch, tmp_path):
+    monkeypatch.setattr(secret_service, "_encrypt_with_dpapi", lambda value: (_ for _ in ()).throw(secret_service.SecretServiceError("no dpapi")))
+    (tmp_path / ".env").write_text(
+        "ANTHROPIC_API_KEY_ENC=fernet:old-ciphertext\n"
+        "ANTHROPIC_BASE_URL=https://old.example.test\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "system_config.yaml").write_text(
+        "max_tokens: 8K\n",
+        encoding="utf-8",
+    )
+
+    asyncio.run(config_service.save_web_config_to_dir(
+        {
+            "ai": {
+                "api_key": "sk-new-secret",
+                "base_url": {"value": "https://new.example.test"},
+            },
+        },
+        tmp_path,
+        actor="alice",
+        audit_root=tmp_path,
+        backup_root=tmp_path,
+        backup_scope="unit",
+    ))
+
+    backup_dir = tmp_path / "backups" / "config" / "unit"
+    env_backups = list(backup_dir.glob(".env.*.bak"))
+    system_backups = list(backup_dir.glob("system_config.yaml.*.bak"))
+    assert len(env_backups) == 1
+    assert len(system_backups) == 1
+    assert "fernet:old-ciphertext" in env_backups[0].read_text(encoding="utf-8")
+
+    audit_path = tmp_path / "audit" / "config_changes.jsonl"
+    records = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+    assert len(records) == 1
+    assert records[0]["actor"] == "alice"
+    assert records[0]["files"] == [".env", "system_config.yaml"]
+    assert "ai.api_key" in records[0]["changed_fields"]
+    assert "ai.base_url" in records[0]["changed_fields"]
+    assert "sk-new-secret" not in audit_path.read_text(encoding="utf-8")
+    assert "fernet:" not in audit_path.read_text(encoding="utf-8")
+
+
+def test_backup_config_files_keeps_recent_five_versions(tmp_path):
+    (tmp_path / ".env").write_text("ANTHROPIC_BASE_URL=https://example.test\n", encoding="utf-8")
+
+    for index in range(6):
+        (tmp_path / ".env").write_text(f"ANTHROPIC_MODEL=model-{index}\n", encoding="utf-8")
+        config_service.backup_config_files(
+            target_dir=tmp_path,
+            backup_root=tmp_path,
+            scope="unit",
+            keep=5,
+        )
+        time.sleep(0.01)
+
+    backups = sorted((tmp_path / "backups" / "config" / "unit").glob(".env.*.bak"))
+    assert len(backups) == 5
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in backups)
+    assert "model-0" not in combined
+    assert "model-5" in combined
+
+
+def test_backup_config_files_redacts_plaintext_env_secrets(tmp_path):
+    (tmp_path / ".env").write_text(
+        "ANTHROPIC_API_KEY=sk-plaintext-secret\n"
+        "ANTHROPIC_API_KEY_ENC=fernet:ciphertext\n"
+        "ANTHROPIC_BASE_URL=https://example.test\n",
+        encoding="utf-8",
+    )
+
+    config_service.backup_config_files(
+        target_dir=tmp_path,
+        backup_root=tmp_path,
+        scope="unit",
+    )
+
+    backup_text = next((tmp_path / "backups" / "config" / "unit").glob(".env.*.bak")).read_text(encoding="utf-8")
+    assert "ANTHROPIC_API_KEY=***" in backup_text
+    assert "sk-plaintext-secret" not in backup_text
+    assert "ANTHROPIC_API_KEY_ENC=fernet:ciphertext" in backup_text

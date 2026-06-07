@@ -1,7 +1,10 @@
 import os
 import re
+import shutil
+from datetime import datetime
 from pathlib import Path
 
+from web_app.services.config_audit_service import append_config_audit_record
 from web_app.services.secret_service import encrypt_secret
 
 
@@ -251,6 +254,50 @@ def read_config_from_dir(cfg_dir: Path) -> dict:
     return result
 
 
+def _backup_file_name(path: Path, timestamp: str) -> str:
+    return f"{path.name}.{timestamp}.bak"
+
+
+def _write_backup_copy(source: Path, destination: Path) -> None:
+    if source.name == ".env":
+        destination.write_text(mask_env_content(source), encoding="utf-8")
+        shutil.copystat(source, destination)
+        return
+    shutil.copy2(source, destination)
+
+
+def backup_config_files(
+    *,
+    target_dir: Path,
+    backup_root: Path,
+    scope: str = "global",
+    keep: int = 5,
+) -> list[str]:
+    """Back up existing config files before save and keep recent versions."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    backup_dir = backup_root / "backups" / "config" / scope
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backed_up: list[str] = []
+
+    for filename in (".env", "system_config.yaml"):
+        source = target_dir / filename
+        if not source.exists():
+            continue
+        destination = backup_dir / _backup_file_name(source, timestamp)
+        _write_backup_copy(source, destination)
+        backed_up.append(filename)
+
+        backups = sorted(
+            backup_dir.glob(f"{source.name}.*.bak"),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+        for old_backup in backups[keep:]:
+            old_backup.unlink(missing_ok=True)
+
+    return backed_up
+
+
 async def save_config_to_dir(data: dict, target_dir: Path, *, preserve_existing_sensitive: bool = True):
     """保存配置到指定目录。"""
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -291,11 +338,18 @@ async def save_web_config_to_dir(
     target_dir: Path,
     *,
     allow_shared_credentials_write: bool = False,
+    actor: str = "system",
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
 ) -> dict:
     """Save the first-phase Web config payload without writing plaintext API keys."""
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
     existing = read_config_from_dir(target_dir)
     env = dict(existing.get("_env") if isinstance(existing.get("_env"), dict) else {})
     system = dict(existing.get("_system") if isinstance(existing.get("_system"), dict) else {})
+    changed_fields: list[str] = []
 
     ai = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
     api_key = ai.get("api_key")
@@ -303,27 +357,34 @@ async def save_web_config_to_dir(
     if clear_api_key:
         env.pop("ANTHROPIC_API_KEY", None)
         env.pop("ANTHROPIC_API_KEY_ENC", None)
+        changed_fields.append("ai.api_key")
     elif isinstance(api_key, str) and api_key.strip() and api_key.strip() != "***":
         env.pop("ANTHROPIC_API_KEY", None)
         env["ANTHROPIC_API_KEY_ENC"] = encrypt_secret(api_key, config_root=target_dir)
+        changed_fields.append("ai.api_key")
 
     base_url = _editable_value(payload, "ai", "base_url")
     if base_url is not None:
         env["ANTHROPIC_BASE_URL"] = str(base_url).strip()
+        changed_fields.append("ai.base_url")
     model = _editable_value(payload, "ai", "model")
     if model is not None:
         env["ANTHROPIC_MODEL"] = str(model).strip()
+        changed_fields.append("ai.model")
     max_tokens = _editable_value(payload, "ai", "max_tokens")
     if max_tokens is not None:
         system["max_tokens"] = max_tokens
+        changed_fields.append("ai.max_tokens")
     if allow_shared_credentials_write:
         shared = _editable_value(payload, "ai", "allow_shared_ai_credentials")
         if shared is not None:
             system["allow_shared_ai_credentials"] = bool(shared)
+            changed_fields.append("ai.allow_shared_ai_credentials")
 
     out_templates = _editable_value(payload, "templates", "out_templates")
     if out_templates is not None:
         system["out_templates"] = out_templates if isinstance(out_templates, dict) else {}
+        changed_fields.append("templates.out_templates")
 
     run_defaults = payload.get("run_defaults") if isinstance(payload.get("run_defaults"), dict) else {}
     for key in ("project_name", "fpa_profile", "fpa_strategy", "fpa_rule_set", "fpa_confirmation_mode"):
@@ -332,10 +393,30 @@ async def save_web_config_to_dir(
             value = value.get("value")
         if value is not None:
             system[key] = value
+            changed_fields.append(f"run_defaults.{key}")
 
+    backed_up = backup_config_files(
+        target_dir=target_dir,
+        backup_root=backup_root,
+        scope=backup_scope,
+    )
     await save_config_to_dir(
         {"_env": env, "_system": system},
         target_dir,
         preserve_existing_sensitive=False,
+    )
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=backed_up or [".env", "system_config.yaml"],
+        changed_fields=changed_fields,
+        result="success",
     )
     return read_config_from_dir(target_dir)

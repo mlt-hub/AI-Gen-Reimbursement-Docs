@@ -48,11 +48,24 @@ def test_web_config_put_saves_and_returns_redacted_view(monkeypatch, tmp_path):
 
     saved_payloads = []
 
-    async def fake_save_web_config_to_dir(payload, target_dir, *, allow_shared_credentials_write=False):
+    async def fake_save_web_config_to_dir(
+        payload,
+        target_dir,
+        *,
+        allow_shared_credentials_write=False,
+        actor="",
+        audit_root=None,
+        backup_root=None,
+        backup_scope="",
+    ):
         saved_payloads.append({
             "payload": payload,
             "target_dir": target_dir,
             "allow_shared_credentials_write": allow_shared_credentials_write,
+            "actor": actor,
+            "audit_root": audit_root,
+            "backup_root": backup_root,
+            "backup_scope": backup_scope,
         })
 
     monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
@@ -87,6 +100,10 @@ def test_web_config_put_saves_and_returns_redacted_view(monkeypatch, tmp_path):
         },
         "target_dir": tmp_path,
         "allow_shared_credentials_write": True,
+        "actor": "local-admin",
+        "audit_root": tmp_path,
+        "backup_root": tmp_path,
+        "backup_scope": "global",
     }]
     assert "sk-new-secret" not in resp.text
     assert resp.json()["ai"]["api_key_configured"] is True
