@@ -567,3 +567,79 @@ def test_web_config_ai_prompts_rejects_remote_user(monkeypatch):
 
     assert resp.status_code == 403
     assert "本机管理员" in resp.json()["detail"]
+
+
+def test_web_config_domain_context_endpoint_reads_local_context(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "build_domain_context_view", lambda *, target_dir: {
+        "system_boundary": "边界",
+        "internal_data_groups": [{"name": "报账单"}],
+        "external_data_groups": [{"name": "人员信息", "source": "人事系统"}],
+        "external_services": [],
+        "exists": True,
+    })
+
+    resp = client.get("/api/web-config/domain-context")
+
+    assert resp.status_code == 200
+    assert resp.json()["system_boundary"] == "边界"
+    assert resp.json()["external_data_groups"][0]["source"] == "人事系统"
+
+
+def test_web_config_domain_context_put_saves_local_context(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_save_domain_context_settings(**kwargs):
+        calls.append(kwargs)
+        result = dict(kwargs["payload"])
+        result["exists"] = True
+        result["backed_up"] = ["domain_context.json"]
+        return result
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "save_domain_context_settings", fake_save_domain_context_settings)
+
+    payload = {
+        "system_boundary": "边界",
+        "internal_data_groups": [{"name": "报账单"}],
+        "external_data_groups": [{"name": "人员信息", "source": "人事系统"}],
+        "external_services": [],
+    }
+    resp = client.put("/api/web-config/domain-context", json=payload)
+
+    assert resp.status_code == 200
+    assert resp.json()["backed_up"] == ["domain_context.json"]
+    assert calls == [{
+        "payload": payload,
+        "target_dir": tmp_path,
+        "actor": "local-admin",
+        "audit_root": tmp_path,
+        "backup_root": tmp_path,
+        "backup_scope": "global",
+    }]
+
+
+def test_web_config_domain_context_rejects_remote_user(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+
+    resp = client.put("/api/web-config/domain-context", json={"system_boundary": ""})
+
+    assert resp.status_code == 403
+    assert "本机管理员" in resp.json()["detail"]

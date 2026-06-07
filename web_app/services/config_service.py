@@ -1128,6 +1128,152 @@ def save_ai_prompt_settings(
     return result
 
 
+def _default_domain_context_payload() -> dict:
+    return {
+        "system_boundary": "",
+        "internal_data_groups": [],
+        "external_data_groups": [],
+        "external_services": [],
+    }
+
+
+def _domain_context_items(items: object, *, require_source: bool = False) -> list[dict]:
+    if not isinstance(items, list):
+        raise AdvancedConfigError("领域上下文数据组必须是列表")
+    normalized: list[dict] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise AdvancedConfigError(f"领域上下文第 {index + 1} 项必须是对象")
+        name = str(item.get("name") or "").strip()
+        if not name:
+            raise AdvancedConfigError(f"领域上下文第 {index + 1} 项名称不能为空")
+        normalized_item: dict[str, object] = {"name": name}
+        if require_source:
+            source = str(item.get("source") or "").strip()
+            if not source:
+                raise AdvancedConfigError(f"领域上下文第 {index + 1} 项来源不能为空")
+            normalized_item["source"] = source
+        aliases = item.get("aliases", [])
+        if aliases in (None, ""):
+            aliases = []
+        if not isinstance(aliases, list):
+            raise AdvancedConfigError(f"领域上下文第 {index + 1} 项 aliases 必须是列表")
+        clean_aliases = [str(alias).strip() for alias in aliases if str(alias).strip()]
+        if clean_aliases:
+            normalized_item["aliases"] = clean_aliases
+        description = str(item.get("description") or "")
+        if description:
+            normalized_item["description"] = description
+        normalized.append(normalized_item)
+    return normalized
+
+
+def _normalize_domain_context_payload(payload: object) -> dict:
+    cfg = _require_mapping_config(payload, "domain_context.json")
+    normalized = {
+        "system_boundary": str(cfg.get("system_boundary") or ""),
+        "internal_data_groups": _domain_context_items(cfg.get("internal_data_groups", [])),
+        "external_data_groups": _domain_context_items(cfg.get("external_data_groups", []), require_source=True),
+        "external_services": _domain_context_items(cfg.get("external_services", [])),
+    }
+    try:
+        from ai_gen_reimbursement_docs.config_utils import validate_fpa_domain_context
+
+        validate_fpa_domain_context(normalized)
+    except Exception as exc:
+        raise AdvancedConfigError(str(exc)) from exc
+    return normalized
+
+
+def build_domain_context_view(*, target_dir: Path) -> dict:
+    """Read domain_context.json as a structured Web UI form view."""
+    filename = "domain_context.json"
+    path = target_dir / filename
+    if path.exists():
+        parsed = _parse_advanced_config_content("domain_context", path.read_text(encoding="utf-8"))
+        payload = _normalize_domain_context_payload(parsed)
+        exists = True
+    else:
+        payload = _default_domain_context_payload()
+        exists = False
+    payload["exists"] = exists
+    return payload
+
+
+def save_domain_context_settings(
+    *,
+    payload: object,
+    target_dir: Path,
+    actor: str,
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
+) -> dict:
+    """Validate and save domain_context.json from the structured Web UI form."""
+    filename = "domain_context.json"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
+    target_path = target_dir / filename
+
+    if target_path.exists():
+        parsed = _parse_advanced_config_content("domain_context", target_path.read_text(encoding="utf-8"))
+        saved_payload = dict(_require_mapping_config(parsed, filename))
+    else:
+        saved_payload = {}
+
+    try:
+        normalized = _normalize_domain_context_payload(payload)
+        saved_payload.update(normalized)
+        from ai_gen_reimbursement_docs.config_utils import validate_fpa_domain_context
+
+        validate_fpa_domain_context(saved_payload)
+    except AdvancedConfigError:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=[filename],
+            changed_fields=["domain_context"],
+            result="validation_failed",
+        )
+        raise
+    except Exception as exc:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=[filename],
+            changed_fields=["domain_context"],
+            result="validation_failed",
+        )
+        raise AdvancedConfigError(str(exc)) from exc
+
+    backed_up = backup_single_config_file(
+        source=target_path,
+        backup_root=backup_root,
+        scope=backup_scope,
+    )
+    _atomic_write_text(target_path, json.dumps(saved_payload, ensure_ascii=False, indent=2) + "\n")
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=[filename],
+        changed_fields=["domain_context"],
+        result="success",
+    )
+    result = build_domain_context_view(target_dir=target_dir)
+    result["backed_up"] = [backed_up] if backed_up else []
+    return result
+
+
 def _resolve_backup_path(*, backup_root: Path, scope: str, backup_id: str) -> tuple[Path, str]:
     if "/" in backup_id or "\\" in backup_id or ".." in backup_id:
         raise ValueError("备份 ID 无效")

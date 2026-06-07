@@ -343,6 +343,99 @@
     <section v-if="!showUserConfig" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">领域上下文</p>
+          <h2 class="mt-1 text-lg font-semibold">FPA 稳定边界</h2>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="domainContextLoading || domainContextSaving" @click="loadDomainContextSettings">
+          {{ domainContextLoading ? '加载中...' : '刷新上下文' }}
+        </button>
+      </div>
+
+      <p v-if="domainContextError" class="text-sm text-[var(--color-warning)]">{{ domainContextError }}</p>
+      <div v-else class="space-y-4">
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+          <label for="domain-system-boundary" class="field-label text-xs">系统边界</label>
+          <textarea
+            id="domain-system-boundary"
+            v-model="domainContextForm.systemBoundary"
+            rows="4"
+            class="field-control text-sm leading-relaxed"
+            spellcheck="false"
+          />
+        </div>
+
+        <div
+          v-for="section in domainContextSections"
+          :key="section.key"
+          class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4"
+        >
+          <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 class="text-sm font-semibold">{{ section.title }}</h3>
+              <p class="mt-0.5 text-xs text-[var(--color-ink-soft)]">{{ section.description }}</p>
+            </div>
+            <button class="btn-secondary w-fit min-h-0 px-3 py-1.5 text-xs" @click="addDomainContextItem(section.key)">新增</button>
+          </div>
+
+          <div v-if="section.items.length" class="space-y-3">
+            <div
+              v-for="(item, index) in section.items"
+              :key="item.id"
+              class="grid gap-3 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3 md:grid-cols-2"
+            >
+              <div>
+                <label :for="`domain-${section.key}-name-${item.id}`" class="field-label text-xs">名称</label>
+                <input :id="`domain-${section.key}-name-${item.id}`" v-model.trim="item.name" type="text" class="field-control" />
+              </div>
+              <div v-if="section.requireSource">
+                <label :for="`domain-${section.key}-source-${item.id}`" class="field-label text-xs">来源系统</label>
+                <input :id="`domain-${section.key}-source-${item.id}`" v-model.trim="item.source" type="text" class="field-control" />
+              </div>
+              <div :class="section.requireSource ? 'md:col-span-2' : ''">
+                <label :for="`domain-${section.key}-aliases-${item.id}`" class="field-label text-xs">别名</label>
+                <textarea
+                  :id="`domain-${section.key}-aliases-${item.id}`"
+                  v-model="item.aliasesText"
+                  rows="2"
+                  class="field-control text-sm"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="md:col-span-2">
+                <label :for="`domain-${section.key}-description-${item.id}`" class="field-label text-xs">说明</label>
+                <textarea
+                  :id="`domain-${section.key}-description-${item.id}`"
+                  v-model="item.description"
+                  rows="2"
+                  class="field-control text-sm"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="md:col-span-2">
+                <button class="btn-danger w-fit min-h-0 px-3 py-1.5 text-xs" @click="removeDomainContextItem(section.key, index)">删除</button>
+              </div>
+            </div>
+          </div>
+          <p v-else class="rounded-lg border border-dashed border-[var(--color-rule-strong)] bg-[var(--color-surface-muted)] p-3 text-sm text-[var(--color-ink-muted)]">
+            暂无{{ section.title }}。
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', domainContextStatusClass]">{{ domainContextStatusText }}</span>
+            <p v-if="domainContextMsg" :class="['mt-2 text-sm', domainContextOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ domainContextMsg }}</p>
+          </div>
+          <button class="btn-primary w-fit" :disabled="domainContextSaving || !hasDomainContextChanges" @click="saveDomainContextSettings">
+            {{ domainContextSaving ? '保存中...' : '保存领域上下文' }}
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">Prompt 配置</p>
           <h2 class="mt-1 text-lg font-semibold">AI 场景提示词</h2>
         </div>
@@ -894,6 +987,31 @@ interface AiPromptsResponse {
   exists: boolean
 }
 
+type DomainContextSectionKey = 'internal_data_groups' | 'external_data_groups' | 'external_services'
+
+interface DomainContextItem {
+  id: number
+  name: string
+  aliasesText: string
+  description: string
+  source: string
+}
+
+interface DomainContextItemPayload {
+  name: string
+  aliases?: string[]
+  description?: string
+  source?: string
+}
+
+interface DomainContextResponse {
+  system_boundary: string
+  internal_data_groups: DomainContextItemPayload[]
+  external_data_groups: DomainContextItemPayload[]
+  external_services: DomainContextItemPayload[]
+  exists: boolean
+}
+
 // ── stores ────────────────────────────────────────────────
 
 const auth = useAuthStore()
@@ -1004,6 +1122,19 @@ const aiPromptsSaving = ref(false)
 const aiPromptsError = ref('')
 const aiPromptsMsg = ref('')
 const aiPromptsOk = ref(false)
+const domainContextForm = reactive({
+  systemBoundary: '',
+})
+const domainContextInternalDataGroups = ref<DomainContextItem[]>([])
+const domainContextExternalDataGroups = ref<DomainContextItem[]>([])
+const domainContextExternalServices = ref<DomainContextItem[]>([])
+const domainContextNextId = ref(1)
+const domainContextSnapshot = ref('')
+const domainContextLoading = ref(false)
+const domainContextSaving = ref(false)
+const domainContextError = ref('')
+const domainContextMsg = ref('')
+const domainContextOk = ref(false)
 const webAiForm = reactive({
   apiKey: '',
   baseUrl: '',
@@ -1158,6 +1289,33 @@ const aiPromptsSnapshotCurrent = computed(() => JSON.stringify(
 const hasAiPromptsChanges = computed(() => (
   aiPromptsSnapshot.value !== '' && aiPromptsSnapshotCurrent.value !== aiPromptsSnapshot.value
 ))
+const domainContextSections = computed(() => [
+  {
+    key: 'internal_data_groups' as DomainContextSectionKey,
+    title: '本系统数据组',
+    description: '本系统维护和拥有的数据组。',
+    items: domainContextInternalDataGroups.value,
+    requireSource: false,
+  },
+  {
+    key: 'external_data_groups' as DomainContextSectionKey,
+    title: '外部数据组',
+    description: '由外部系统维护、本系统引用的数据组。',
+    items: domainContextExternalDataGroups.value,
+    requireSource: true,
+  },
+  {
+    key: 'external_services' as DomainContextSectionKey,
+    title: '外部服务',
+    description: '不作为数据组计数的外部能力或平台。',
+    items: domainContextExternalServices.value,
+    requireSource: false,
+  },
+])
+const domainContextSnapshotCurrent = computed(() => JSON.stringify(buildDomainContextPayload()))
+const hasDomainContextChanges = computed(() => (
+  domainContextSnapshot.value !== '' && domainContextSnapshotCurrent.value !== domainContextSnapshot.value
+))
 
 const webConfigSaveStatusText = computed(() => {
   if (webConfigSaving.value) return '保存中'
@@ -1232,6 +1390,18 @@ const aiPromptsStatusClass = computed(() => {
   if (hasAiPromptsChanges.value) return statusClass.warn
   return statusClass.ok
 })
+const domainContextStatusText = computed(() => {
+  if (domainContextSaving.value) return '保存中'
+  if (domainContextMsg.value && !domainContextOk.value) return '保存失败'
+  if (hasDomainContextChanges.value) return '有未保存修改'
+  return '已保存'
+})
+const domainContextStatusClass = computed(() => {
+  if (domainContextSaving.value) return statusClass.neutral
+  if (domainContextMsg.value && !domainContextOk.value) return statusClass.warn
+  if (hasDomainContextChanges.value) return statusClass.warn
+  return statusClass.ok
+})
 
 // ── 初始化 ────────────────────────────────────────────────
 
@@ -1247,6 +1417,7 @@ onMounted(async () => {
     await loadFpaStrategySettings()
     await loadFpaJudgementRules()
     await loadBusinessRulesSettings()
+    await loadDomainContextSettings()
     await loadAiPromptSettings()
     await loadAdvancedConfigFiles()
   }
@@ -1533,6 +1704,136 @@ async function saveBusinessRulesSettings() {
     businessRulesMsg.value = normalizeApiError(e)
   } finally {
     businessRulesSaving.value = false
+  }
+}
+
+function splitAliases(text: string): string[] {
+  return text
+    .split(/[\n,，]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function domainContextItemFromPayload(item: DomainContextItemPayload): DomainContextItem {
+  return {
+    id: domainContextNextId.value++,
+    name: item.name || '',
+    aliasesText: (item.aliases || []).join('\n'),
+    description: item.description || '',
+    source: item.source || '',
+  }
+}
+
+function domainContextPayloadFromItems(items: DomainContextItem[], requireSource = false): DomainContextItemPayload[] {
+  return items.map(item => {
+    const payload: DomainContextItemPayload = {
+      name: item.name.trim(),
+    }
+    const aliases = splitAliases(item.aliasesText)
+    if (aliases.length) payload.aliases = aliases
+    if (item.description) payload.description = item.description
+    if (requireSource) payload.source = item.source.trim()
+    return payload
+  })
+}
+
+function domainContextItemsFor(key: DomainContextSectionKey): DomainContextItem[] {
+  if (key === 'internal_data_groups') return domainContextInternalDataGroups.value
+  if (key === 'external_data_groups') return domainContextExternalDataGroups.value
+  return domainContextExternalServices.value
+}
+
+function buildDomainContextPayload(): DomainContextResponse {
+  return {
+    system_boundary: domainContextForm.systemBoundary,
+    internal_data_groups: domainContextPayloadFromItems(domainContextInternalDataGroups.value),
+    external_data_groups: domainContextPayloadFromItems(domainContextExternalDataGroups.value, true),
+    external_services: domainContextPayloadFromItems(domainContextExternalServices.value),
+    exists: true,
+  }
+}
+
+function applyDomainContextSettings(data: DomainContextResponse) {
+  domainContextForm.systemBoundary = data.system_boundary || ''
+  domainContextInternalDataGroups.value = (data.internal_data_groups || []).map(domainContextItemFromPayload)
+  domainContextExternalDataGroups.value = (data.external_data_groups || []).map(domainContextItemFromPayload)
+  domainContextExternalServices.value = (data.external_services || []).map(domainContextItemFromPayload)
+  domainContextMsg.value = ''
+  domainContextOk.value = true
+  domainContextSnapshot.value = domainContextSnapshotCurrent.value
+}
+
+function addDomainContextItem(key: DomainContextSectionKey) {
+  domainContextItemsFor(key).push({
+    id: domainContextNextId.value++,
+    name: '',
+    aliasesText: '',
+    description: '',
+    source: '',
+  })
+}
+
+function removeDomainContextItem(key: DomainContextSectionKey, index: number) {
+  domainContextItemsFor(key).splice(index, 1)
+}
+
+async function loadDomainContextSettings() {
+  domainContextLoading.value = true
+  domainContextError.value = ''
+  try {
+    const data = await apiFetch<DomainContextResponse>('/api/web-config/domain-context')
+    applyDomainContextSettings(data)
+  } catch (e) {
+    domainContextForm.systemBoundary = ''
+    domainContextInternalDataGroups.value = []
+    domainContextExternalDataGroups.value = []
+    domainContextExternalServices.value = []
+    domainContextSnapshot.value = ''
+    domainContextError.value = normalizeApiError(e)
+  } finally {
+    domainContextLoading.value = false
+  }
+}
+
+async function saveDomainContextSettings() {
+  for (const section of domainContextSections.value) {
+    for (const item of section.items) {
+      if (!item.name.trim()) {
+        domainContextOk.value = false
+        domainContextMsg.value = `${section.title}名称不能为空`
+        return
+      }
+      if (section.requireSource && !item.source.trim()) {
+        domainContextOk.value = false
+        domainContextMsg.value = `${section.title}来源系统不能为空`
+        return
+      }
+    }
+  }
+
+  domainContextSaving.value = true
+  domainContextMsg.value = ''
+  try {
+    const data = await apiFetch<DomainContextResponse>('/api/web-config/domain-context', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildDomainContextPayload()),
+    })
+    applyDomainContextSettings(data)
+    domainContextOk.value = true
+    domainContextMsg.value = '保存成功'
+    await loadConfigBackups()
+    await loadLocalConfig()
+    if (activeAdvancedFileId.value === 'domain_context') {
+      await loadAdvancedConfigFile('domain_context')
+    } else {
+      await loadAdvancedConfigFiles()
+    }
+  } catch (e) {
+    domainContextOk.value = false
+    domainContextMsg.value = normalizeApiError(e)
+  } finally {
+    domainContextSaving.value = false
   }
 }
 
@@ -1916,6 +2217,7 @@ async function restoreConfigBackup(item: ConfigBackupItem) {
       await loadFpaStrategySettings()
       await loadFpaJudgementRules()
       await loadBusinessRulesSettings()
+      await loadDomainContextSettings()
       await loadAiPromptSettings()
       await loadAdvancedConfigFiles()
     }

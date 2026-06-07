@@ -996,3 +996,96 @@ def test_save_ai_prompt_settings_rejects_blank_prompt_name_without_overwrite(tmp
 
     assert target.read_text(encoding="utf-8") == "ai_prompts:\n  metadata_gen:\n    system: old\n"
     assert not (tmp_path / "backups" / "config" / "unit").exists()
+
+
+def test_build_domain_context_view_reads_structured_context(tmp_path):
+    (tmp_path / "domain_context.json").write_text(
+        json.dumps({
+            "system_boundary": "只覆盖报账文档生成。",
+            "internal_data_groups": [{"name": "报账单", "aliases": ["单据"], "description": "本系统维护"}],
+            "external_data_groups": [{"name": "人员信息", "source": "人事系统"}],
+            "external_services": [{"name": "审批平台"}],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    view = config_service.build_domain_context_view(target_dir=tmp_path)
+
+    assert view["exists"] is True
+    assert view["system_boundary"] == "只覆盖报账文档生成。"
+    assert view["internal_data_groups"][0]["aliases"] == ["单据"]
+    assert view["external_data_groups"][0]["source"] == "人事系统"
+
+
+def test_save_domain_context_settings_preserves_unknown_keys_backs_up_and_audits(tmp_path):
+    target = tmp_path / "domain_context.json"
+    target.write_text(
+        json.dumps({
+            "version": 1,
+            "system_boundary": "old",
+            "internal_data_groups": [],
+            "external_data_groups": [],
+            "external_services": [],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    saved = config_service.save_domain_context_settings(
+        payload={
+            "system_boundary": "new boundary",
+            "internal_data_groups": [{"name": "报账单", "aliases": ["单据"]}],
+            "external_data_groups": [{"name": "人员信息", "source": "人事系统"}],
+            "external_services": [{"name": "审批平台", "description": "外部审批"}],
+        },
+        target_dir=tmp_path,
+        actor="local-admin",
+        audit_root=tmp_path,
+        backup_root=tmp_path,
+        backup_scope="unit",
+    )
+
+    assert saved["system_boundary"] == "new boundary"
+    assert saved["backed_up"] == ["domain_context.json"]
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    assert payload["version"] == 1
+    assert payload["internal_data_groups"][0]["name"] == "报账单"
+    backups = list((tmp_path / "backups" / "config" / "unit").glob("domain_context.json.*.bak"))
+    assert len(backups) == 1
+    assert "old" in backups[0].read_text(encoding="utf-8")
+    record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert record["files"] == ["domain_context.json"]
+    assert record["changed_fields"] == ["domain_context"]
+    assert record["result"] == "success"
+
+
+def test_save_domain_context_settings_rejects_missing_external_source_without_overwrite(tmp_path):
+    target = tmp_path / "domain_context.json"
+    original = json.dumps({
+        "system_boundary": "old",
+        "internal_data_groups": [],
+        "external_data_groups": [],
+        "external_services": [],
+    }, ensure_ascii=False)
+    target.write_text(original, encoding="utf-8")
+
+    try:
+        config_service.save_domain_context_settings(
+            payload={
+                "system_boundary": "new",
+                "internal_data_groups": [],
+                "external_data_groups": [{"name": "人员信息"}],
+                "external_services": [],
+            },
+            target_dir=tmp_path,
+            actor="local-admin",
+            audit_root=tmp_path,
+            backup_root=tmp_path,
+            backup_scope="unit",
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "来源不能为空" in str(exc)
+    else:
+        raise AssertionError("save_domain_context_settings should reject missing external source")
+
+    assert target.read_text(encoding="utf-8") == original
+    assert not (tmp_path / "backups" / "config" / "unit").exists()
