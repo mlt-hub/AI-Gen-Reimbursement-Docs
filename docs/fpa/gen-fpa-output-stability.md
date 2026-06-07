@@ -674,6 +674,10 @@ Retries: 0
 
 本轮目标是让下一次 fresh real-model 标准套件的 warning 更接近真实人工复核点，而不是把可由后处理确定解释的误报继续留在报告中。
 
+2026-06-07 复测 fresh real-model 标准套件后，warning 从 6 条降至 4 条，且 `mixed_internal_external_data_functions` 已归零；剩余 warning 集中在 `sms_notification_service` 的“计算说明未明确当前 FPA 类型”和 `master_data_org_reference` 的来源场景完整路径检查。
+
+当前继续收敛第二轮 warning：`计算说明`在未直接写 `EI/EQ/EO/ILF/EIF` 时，如果已明确使用“外部输入”“外部查询”“外部输出”“内部逻辑数据”“外部逻辑数据/外部数据组”等业务术语，也视为明确当前 FPA 类型，避免将真实模型的自然中文类型说明误报为缺失。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。

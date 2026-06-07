@@ -520,6 +520,74 @@ def test_explanation_allows_classification_basis_wording_with_fpa_definition():
     )
 
 
+def test_explanation_accepts_fpa_type_business_aliases():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "消息管理",
+            "二级模块": "通知发送",
+            "三级模块": "短信通知",
+            "三级模块整体功能描述": "运营人员配置短信内容并触发短信发送。",
+            "功能过程": "编辑短信模板",
+            "功能过程类型": "新增",
+            "功能过程描述": "维护短信标题、正文和变量。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "消息管理",
+            "二级模块": "通知发送",
+            "三级模块": "短信通知",
+            "三级模块整体功能描述": "运营人员配置短信内容并触发短信发送。",
+            "功能过程": "查看发送记录",
+            "功能过程类型": "查询",
+            "功能过程描述": "查询短信发送状态和失败原因。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[
+            {
+                "name": "短信模板维护",
+                "type": "EI",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【地市后台】消息管理-通知发送-短信通知-短信模板维护，运营人员编辑短信模板并保存。"
+                    "\n业务数据：短信模板的标题、正文、变量等字段。"
+                    "\n业务规则：运营人员可新增或修改短信模板内容，系统将数据写入短信模板数据组。"
+                    "\n计算说明：该功能对 ILF 执行修改操作，属于外部输入事务，按对 ILF 的插入、修改、删除操作次数计量。"
+                ),
+                "source_process_ids": ["m1_p1"],
+                "source_processes": ["编辑短信模板"],
+            },
+            {
+                "name": "发送记录查询",
+                "type": "EQ",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【地市后台】消息管理-通知发送-短信通知-发送记录查询，运营人员通过查询界面输入条件并查看结果。"
+                    "\n业务数据：发送记录的状态、失败原因、发送时间等字段。"
+                    "\n业务规则：运营人员根据号码、时间等条件筛选并查看发送记录详情。"
+                    "\n计算说明：该功能读取发送记录数据组并展示结果，无派生计算，属于外部查询，按提供查询界面输入并展示返回结果计量。"
+                ),
+                "source_process_ids": ["m1_p2"],
+                "source_processes": ["查看发送记录"],
+            },
+        ],
+    )
+
+    assert [row["类型"] for row in rows] == ["EI", "EQ"]
+    assert not any("未明确当前 FPA 类型" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for row in rows
+        for hit in row["_规则命中详情"]
+    )
+
+
 def test_unstructured_explanation_records_quality_warning():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(
