@@ -478,6 +478,104 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
     assert calls[0]["confirmed_decisions"] == {"merge_crud_demo": {"value": "yes", "scope": "current_run"}}
 
 
+def test_fpa_preview_upload_uses_config_defaults(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    calls: list[dict] = []
+    user_dir = tmp_path / "users" / "alice"
+    user_dir.mkdir(parents=True)
+
+    def fake_preview_fpa_module(**kwargs):
+        calls.append(kwargs)
+        return {"module": {"l3": "垂直行业管理"}, "rows": [], "warnings": [], "status": "ok"}
+
+    monkeypatch.setattr(tasks, "preview_fpa_module", fake_preview_fpa_module)
+    monkeypatch.setattr(tasks, "user_config_dir", lambda user: user_dir)
+    monkeypatch.setattr(tasks, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(tasks, "read_config", lambda: {
+        "_env": {
+            "ANTHROPIC_API_KEY": "sk-global",
+            "ANTHROPIC_BASE_URL": "https://global.example.test",
+            "ANTHROPIC_MODEL": "global-model",
+        },
+        "_system": {
+            "allow_shared_ai_credentials": True,
+            "fpa_profile": "strict_fpa",
+            "fpa_strategy": "ai_first",
+            "fpa_rule_set": "strict_fpa_rs",
+            "fpa_confirmation_mode": "strict",
+        },
+    })
+    monkeypatch.setattr(tasks, "read_config_from_dir", lambda path: {
+        "_env": {
+            "ANTHROPIC_MODEL": "personal-model",
+        },
+        "_system": {
+            "fpa_strategy": "rules_first",
+        },
+    })
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        data={"module_name": "垂直行业管理"},
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 200
+    assert calls
+    assert calls[0]["api_key"] == "sk-global"
+    assert calls[0]["model"] == "personal-model"
+    assert calls[0]["base_url"] == "https://global.example.test"
+    assert calls[0]["profile_name"] == "strict_fpa"
+    assert calls[0]["strategy"] == "rules_first"
+    assert calls[0]["rule_set"] == "strict_fpa_rs"
+    assert calls[0]["fpa_confirmation_mode"] == "strict"
+
+
+def test_fpa_preview_upload_blocks_without_available_ai_key(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+    monkeypatch.setattr(tasks, "read_config", lambda: {
+        "_env": {"ANTHROPIC_API_KEY": "sk-global"},
+        "_system": {"allow_shared_ai_credentials": False},
+    })
+    monkeypatch.setattr(tasks, "read_config_from_dir", lambda path: {"_env": {}, "_system": {}})
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        data={"module_name": "垂直行业管理"},
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 400
+    assert "配置个人 API Key" in resp.json()["detail"]
+
+
+def test_fpa_preview_rules_only_allows_missing_ai_key(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+    calls: list[dict] = []
+
+    def fake_preview_fpa_module(**kwargs):
+        calls.append(kwargs)
+        return {"module": {"l3": "垂直行业管理"}, "rows": [], "warnings": [], "status": "ok"}
+
+    monkeypatch.setattr(tasks, "preview_fpa_module", fake_preview_fpa_module)
+    monkeypatch.setattr(tasks, "read_config", lambda: {
+        "_env": {},
+        "_system": {"allow_shared_ai_credentials": False},
+    })
+    monkeypatch.setattr(tasks, "read_config_from_dir", lambda path: {"_env": {}, "_system": {}})
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        data={"module_name": "垂直行业管理", "fpa_strategy": "rules_only"},
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 200
+    assert calls
+    assert calls[0]["api_key"] == ""
+    assert calls[0]["strategy"] == "rules_only"
+
+
 def test_fpa_preview_modules_upload_returns_selectable_modules(monkeypatch):
     client = _client(monkeypatch, user="alice")
     calls: list[dict] = []
