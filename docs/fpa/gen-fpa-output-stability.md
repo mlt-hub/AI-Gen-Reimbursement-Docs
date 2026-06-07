@@ -680,6 +680,30 @@ Retries: 0
 
 第二轮复测后 `sms_notification_service` 和 `master_data_org_reference` 已归零，但 `mixed_internal_external_data_functions` 暴露了新的类型冲突误报：本系统维护的“供应商准入申请数据组”说明中包含 `关联CRM客户档案ID`、`关联OA审批单ID` 时，后处理规则曾因外部数据规则优先而建议 EIF。当前已调整 strict_fpa 判断优先级：数据功能名称明确且说明有“本系统维护/内部维护/本系统保存”等内部维护证据时，优先保留 ILF；外部引用字段只作为该 ILF 的关联数据，不把本系统维护的数据组改判为 EIF。
 
+2026-06-07 已完成 warning 收敛后的 fresh real-model 标准套件复测：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset strict-real-model `
+  --output-dir tmp_fpa_stability_ci_real_standard_fresh_after_internal_data_evidence_20260607 `
+  --max-quality-issues 0 `
+  --max-retryable-issues 0 `
+  --max-retries 0
+```
+
+结果：
+
+```text
+Status: PASS
+Sources: ai=5
+Warnings: 0
+Quality Issues: 0
+Retryable Issues: 0
+Retries: 0
+```
+
+五个标准样例 `vertical_industry_management`、`mixed_internal_external_data_functions`、`sms_notification_service`、`external_user_center_reference`、`master_data_org_reference` 均为 `warning_count=0`。当前 strict-real-model standard fresh 基线已完成 warning 收敛，可进入更大范围抽样或多次采样趋势对比。
+
 ### 多次采样与择优
 
 对于模型波动较大的场景，可以同一输入生成多次，由 harness 选择通过校验最多、风险最少的一版。该方案成本较高，适合真实模型抽样验收或高风险任务，不建议作为默认生产路径。
