@@ -15,6 +15,7 @@ from web_app.services.config_service import (
     build_fpa_strategy_settings_view,
     build_web_config_view,
     config_dir,
+    build_config_export_package,
     list_advanced_config_files,
     list_config_backups,
     mask_env_content,
@@ -23,6 +24,7 @@ from web_app.services.config_service import (
     read_config_from_dir,
     redact_env_dict,
     restore_config_backup,
+    import_config_package,
     save_ai_prompt_settings,
     save_business_rules,
     save_domain_context_settings,
@@ -163,6 +165,30 @@ async def restore_web_config_backup(data: dict, request: Request, user: str = De
         username=username,
         local_mode=local_mode,
     )
+
+
+@router.get("/api/web-config/package")
+async def get_web_config_package(request: Request, _user: str = Depends(require_auth)):
+    """导出当前本机配置包，不包含 API Key 原文或加密主密钥。"""
+    target_dir = _require_local_advanced_config(request)
+    return build_config_export_package(target_dir=target_dir)
+
+
+@router.post("/api/web-config/package")
+async def import_web_config_package(data: dict, request: Request, user: str = Depends(require_auth)):
+    """导入当前本机配置包。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return import_config_package(
+            package=data,
+            target_dir=target_dir,
+            actor=user or "local-admin",
+            audit_root=config_dir(),
+            backup_root=config_dir(),
+            backup_scope="global",
+        )
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/api/web-config/backups/{backup_id}/diff")

@@ -62,6 +62,10 @@ RESTORABLE_CONFIG_FILES = (
     *tuple(str(meta["filename"]) for meta in ADVANCED_CONFIG_FILES.values()),
 )
 
+CONFIG_PACKAGE_VERSION = 1
+CONFIG_PACKAGE_FILES = RESTORABLE_CONFIG_FILES
+SENSITIVE_ENV_KEY = re.compile(r'_(?:KEY|SECRET|TOKEN|PASSWORD)(?:_ENC)?$', re.IGNORECASE)
+
 AI_TASK_MODES = {
     "from-excel-gen-all",
     "from-excel-gen-fpa",
@@ -734,6 +738,151 @@ def save_advanced_config_file(
         "id": file_id,
         "backed_up": [backed_up] if backed_up else [],
         "content": target_path.read_text(encoding="utf-8"),
+    }
+
+
+def _read_env_package_content(path: Path) -> str:
+    lines: list[str] = []
+    if not path.exists():
+        return ""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            lines.append(line)
+            continue
+        key, _value = stripped.split("=", 1)
+        if SENSITIVE_ENV_KEY.search(key.strip()):
+            continue
+        lines.append(line)
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def build_config_export_package(*, target_dir: Path) -> dict:
+    """Build a non-secret global config package for Web UI download."""
+    files: dict[str, str] = {}
+    for filename in CONFIG_PACKAGE_FILES:
+        path = target_dir / filename
+        if not path.exists():
+            continue
+        if filename == ".env":
+            content = _read_env_package_content(path)
+            if content:
+                files[filename] = content
+            continue
+        files[filename] = path.read_text(encoding="utf-8")
+    return {
+        "version": CONFIG_PACKAGE_VERSION,
+        "exported_at": datetime.now().isoformat(),
+        "files": files,
+    }
+
+
+def _validate_package_env_content(content: str) -> None:
+    for index, line in enumerate(content.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "=" not in stripped:
+            raise AdvancedConfigError(f".env 第 {index} 行必须是 KEY=VALUE")
+        key, _value = stripped.split("=", 1)
+        if SENSITIVE_ENV_KEY.search(key.strip()):
+            raise AdvancedConfigError(".env 配置包不能包含 API Key、密钥或令牌字段")
+
+
+def _validate_config_package_payload(package: object) -> dict[str, str]:
+    if not isinstance(package, dict):
+        raise AdvancedConfigError("配置包必须是 JSON 对象")
+    files = package.get("files")
+    if not isinstance(files, dict):
+        raise AdvancedConfigError("配置包缺少 files 对象")
+    unknown = sorted(set(files) - set(CONFIG_PACKAGE_FILES))
+    if unknown:
+        raise AdvancedConfigError(f"配置包包含不支持的文件: {', '.join(unknown)}")
+
+    validated: dict[str, str] = {}
+    for filename, content in files.items():
+        if not isinstance(content, str):
+            raise AdvancedConfigError(f"{filename} 内容必须是字符串")
+        if filename == ".env":
+            _validate_package_env_content(content)
+        elif filename == "system_config.yaml":
+            try:
+                import yaml
+
+                parsed = yaml.safe_load(content or "") or {}
+            except Exception as exc:
+                raise AdvancedConfigError(f"system_config.yaml 语法错误: {exc}") from exc
+            _require_mapping_config(parsed, "system_config.yaml")
+        else:
+            file_id = next(
+                (key for key, meta in ADVANCED_CONFIG_FILES.items() if meta["filename"] == filename),
+                "",
+            )
+            if not file_id:
+                raise AdvancedConfigError(f"配置包包含不支持的文件: {filename}")
+            validate_advanced_config_content(file_id=file_id, content=content)
+        validated[filename] = content if content.endswith("\n") else f"{content}\n"
+    return validated
+
+
+def import_config_package(
+    *,
+    package: object,
+    target_dir: Path,
+    actor: str,
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
+) -> dict:
+    """Validate and import a non-secret config package."""
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        files = _validate_config_package_payload(package)
+    except AdvancedConfigError:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=[],
+            changed_fields=["config_package"],
+            result="validation_failed",
+        )
+        raise
+
+    backed_up = []
+    for filename in files:
+        backed = backup_single_config_file(
+            source=target_dir / filename,
+            backup_root=backup_root,
+            scope=backup_scope,
+        )
+        if backed:
+            backed_up.append(backed)
+
+    for filename, content in files.items():
+        _atomic_write_text(target_dir / filename, content)
+
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=sorted(files),
+        changed_fields=["config_package"],
+        result="success",
+    )
+    return {
+        "ok": True,
+        "imported": sorted(files),
+        "backed_up": backed_up,
     }
 
 

@@ -574,6 +574,98 @@ def test_restore_config_backup_rejects_invalid_backup_id(tmp_path):
         raise AssertionError("restore_config_backup should reject path traversal")
 
 
+def test_build_config_export_package_excludes_secret_env_values(tmp_path):
+    (tmp_path / ".env").write_text(
+        "ANTHROPIC_API_KEY=sk-secret\n"
+        "ANTHROPIC_API_KEY_ENC=fernet:ciphertext\n"
+        "ANTHROPIC_BASE_URL=https://example.test\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "system_config.yaml").write_text("max_tokens: 16K\n", encoding="utf-8")
+    (tmp_path / "domain_context.json").write_text(
+        json.dumps({
+            "system_boundary": "",
+            "internal_data_groups": [],
+            "external_data_groups": [],
+            "external_services": [],
+        }),
+        encoding="utf-8",
+    )
+
+    package = config_service.build_config_export_package(target_dir=tmp_path)
+
+    assert package["version"] == 1
+    assert "ANTHROPIC_BASE_URL=https://example.test" in package["files"][".env"]
+    assert "ANTHROPIC_API_KEY" not in package["files"][".env"]
+    assert "sk-secret" not in json.dumps(package, ensure_ascii=False)
+    assert "fernet:ciphertext" not in json.dumps(package, ensure_ascii=False)
+    assert "domain_context.json" in package["files"]
+
+
+def test_import_config_package_validates_all_files_backs_up_and_audits(tmp_path):
+    (tmp_path / ".env").write_text("ANTHROPIC_BASE_URL=https://old.example.test\n", encoding="utf-8")
+    (tmp_path / "system_config.yaml").write_text("max_tokens: 8K\n", encoding="utf-8")
+
+    imported = config_service.import_config_package(
+        package={
+            "version": 1,
+            "files": {
+                ".env": "ANTHROPIC_BASE_URL=https://new.example.test\n",
+                "system_config.yaml": "max_tokens: 16K\n",
+                "domain_context.json": json.dumps({
+                    "system_boundary": "边界",
+                    "internal_data_groups": [],
+                    "external_data_groups": [],
+                    "external_services": [],
+                }, ensure_ascii=False),
+            },
+        },
+        target_dir=tmp_path,
+        actor="local-admin",
+        audit_root=tmp_path,
+        backup_root=tmp_path,
+        backup_scope="unit",
+    )
+
+    assert imported["ok"] is True
+    assert imported["imported"] == [".env", "domain_context.json", "system_config.yaml"]
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == "ANTHROPIC_BASE_URL=https://new.example.test\n"
+    assert (tmp_path / "system_config.yaml").read_text(encoding="utf-8") == "max_tokens: 16K\n"
+    assert (tmp_path / "domain_context.json").exists()
+    assert sorted(imported["backed_up"]) == [".env", "system_config.yaml"]
+    record = json.loads((tmp_path / "audit" / "config_changes.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert record["files"] == [".env", "domain_context.json", "system_config.yaml"]
+    assert record["changed_fields"] == ["config_package"]
+    assert record["result"] == "success"
+
+
+def test_import_config_package_rejects_secret_env_without_overwrite(tmp_path):
+    target = tmp_path / ".env"
+    target.write_text("ANTHROPIC_BASE_URL=https://old.example.test\n", encoding="utf-8")
+
+    try:
+        config_service.import_config_package(
+            package={
+                "version": 1,
+                "files": {
+                    ".env": "ANTHROPIC_API_KEY=sk-secret\n",
+                },
+            },
+            target_dir=tmp_path,
+            actor="local-admin",
+            audit_root=tmp_path,
+            backup_root=tmp_path,
+            backup_scope="unit",
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "不能包含 API Key" in str(exc)
+    else:
+        raise AssertionError("import_config_package should reject secret env values")
+
+    assert target.read_text(encoding="utf-8") == "ANTHROPIC_BASE_URL=https://old.example.test\n"
+    assert not (tmp_path / "backups" / "config" / "unit").exists()
+
+
 def test_list_and_read_advanced_config_files(tmp_path):
     (tmp_path / "business_rules.yaml").write_text("cfp:\n  enabled: true\n", encoding="utf-8")
 

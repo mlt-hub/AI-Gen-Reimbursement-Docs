@@ -225,6 +225,74 @@ def test_web_config_backup_diff_uses_current_scope(monkeypatch, tmp_path):
     }]
 
 
+def test_web_config_package_endpoint_exports_local_package(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_build_config_export_package(*, target_dir):
+        calls.append(target_dir)
+        return {"version": 1, "files": {"system_config.yaml": "max_tokens: 16K\n"}}
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "build_config_export_package", fake_build_config_export_package)
+
+    resp = client.get("/api/web-config/package")
+
+    assert resp.status_code == 200
+    assert calls == [tmp_path]
+    assert resp.json()["files"]["system_config.yaml"] == "max_tokens: 16K\n"
+
+
+def test_web_config_package_put_imports_local_package(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_import_config_package(**kwargs):
+        calls.append(kwargs)
+        return {"ok": True, "imported": ["system_config.yaml"], "backed_up": ["system_config.yaml"]}
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "import_config_package", fake_import_config_package)
+
+    payload = {"version": 1, "files": {"system_config.yaml": "max_tokens: 16K\n"}}
+    resp = client.post("/api/web-config/package", json=payload)
+
+    assert resp.status_code == 200
+    assert resp.json()["imported"] == ["system_config.yaml"]
+    assert calls == [{
+        "package": payload,
+        "target_dir": tmp_path,
+        "actor": "local-admin",
+        "audit_root": tmp_path,
+        "backup_root": tmp_path,
+        "backup_scope": "global",
+    }]
+
+
+def test_web_config_package_rejects_remote_user(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+
+    resp = client.post("/api/web-config/package", json={"files": {}})
+
+    assert resp.status_code == 403
+    assert "本机管理员" in resp.json()["detail"]
+
+
 def test_web_config_files_endpoint_lists_local_advanced_configs(monkeypatch, tmp_path):
     app = FastAPI()
     app.include_router(config_routes.router)

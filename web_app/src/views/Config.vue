@@ -686,6 +686,25 @@
       <p v-if="configRestoreMsg" :class="['mt-3 text-sm', configRestoreOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ configRestoreMsg }}</p>
     </section>
 
+    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+      <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
+        <p class="text-xs font-semibold text-[var(--color-ink-soft)]">配置导入导出</p>
+        <h2 class="mt-1 text-lg font-semibold">配置包</h2>
+      </div>
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-sm text-[var(--color-ink-muted)]">导出包不包含 API Key 原文、API Key 密文或本机加密主密钥。</p>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn-secondary w-fit" :disabled="configPackageLoading" @click="exportConfigPackage">
+            {{ configPackageLoading ? '导出中...' : '导出配置包' }}
+          </button>
+          <button class="btn-primary w-fit" :disabled="configPackageLoading" @click="importConfigPackage">
+            {{ configPackageLoading ? '导入中...' : '导入配置包' }}
+          </button>
+        </div>
+      </div>
+      <p v-if="configPackageMsg" :class="['mt-3 text-sm', configPackageOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ configPackageMsg }}</p>
+    </section>
+
     <nav class="flex flex-wrap gap-2 border-b border-[var(--color-rule)] pb-3" aria-label="配置分区">
       <button
         v-for="tab in configTabs"
@@ -919,6 +938,12 @@ interface ConfigBackupDiffResponse {
   has_changes: boolean
 }
 
+interface ConfigPackageImportResponse {
+  ok: boolean
+  imported: string[]
+  backed_up: string[]
+}
+
 interface AdvancedConfigFileItem {
   id: string
   label: string
@@ -1077,6 +1102,9 @@ const configBackupDiff = ref<ConfigBackupDiffResponse | null>(null)
 const configBackupDiffLoading = ref(false)
 const configBackupDiffError = ref('')
 const configBackupDiffId = ref('')
+const configPackageLoading = ref(false)
+const configPackageMsg = ref('')
+const configPackageOk = ref(false)
 const advancedConfigFiles = ref<AdvancedConfigFileItem[]>([])
 const activeAdvancedFileId = ref('')
 const advancedConfigContent = ref('')
@@ -1518,6 +1546,70 @@ function clearConfigBackupDiff() {
   configBackupDiff.value = null
   configBackupDiffError.value = ''
   configBackupDiffId.value = ''
+}
+
+async function refreshLocalConfigSections() {
+  await loadWebConfig()
+  await loadConfigBackups()
+  await loadLocalConfig()
+  await loadFpaStrategySettings()
+  await loadFpaJudgementRules()
+  await loadBusinessRulesSettings()
+  await loadDomainContextSettings()
+  await loadAiPromptSettings()
+  await loadAdvancedConfigFiles()
+}
+
+async function exportConfigPackage() {
+  configPackageLoading.value = true
+  configPackageMsg.value = ''
+  try {
+    const data = await apiFetch<Record<string, unknown>>('/api/web-config/package')
+    const json = JSON.stringify(data, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `ard-config-package-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    configPackageOk.value = true
+    configPackageMsg.value = '配置包已导出'
+  } catch (e) {
+    configPackageOk.value = false
+    configPackageMsg.value = normalizeApiError(e)
+  } finally {
+    configPackageLoading.value = false
+  }
+}
+
+async function importConfigPackage() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json,application/json'
+  input.onchange = async (event: Event) => {
+    const file = (event.target as HTMLInputElement)?.files?.[0]
+    if (!file) return
+    configPackageLoading.value = true
+    configPackageMsg.value = ''
+    try {
+      const payload = JSON.parse(await file.text())
+      const data = await apiFetch<ConfigPackageImportResponse>('/api/web-config/package', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      clearConfigBackupDiff()
+      await refreshLocalConfigSections()
+      configPackageOk.value = true
+      configPackageMsg.value = `导入成功：${data.imported.join(', ')}`
+    } catch (e) {
+      configPackageOk.value = false
+      configPackageMsg.value = normalizeApiError(e)
+    } finally {
+      configPackageLoading.value = false
+    }
+  }
+  input.click()
 }
 
 async function loadFpaStrategySettings() {

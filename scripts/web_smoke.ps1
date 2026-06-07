@@ -128,6 +128,8 @@ Assert-Contains -Dom $configDom -Text "Prompt 配置" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "AI 场景提示词" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "高级配置" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "YAML / JSON 配置文件" -Url $configUrl
+Assert-Contains -Dom $configDom -Text "配置导入导出" -Url $configUrl
+Assert-Contains -Dom $configDom -Text "配置包" -Url $configUrl
 
 Write-Host "Web smoke test: $promptDebugUrl"
 $promptDebugDom = Get-Dom -Url $promptDebugUrl -BrowserPath $edge
