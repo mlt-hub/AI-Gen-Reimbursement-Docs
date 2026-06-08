@@ -799,6 +799,35 @@ def test_strict_profile_prefers_full_name_tail_action_over_external_mapping():
     ) is False
 
 
+def test_strict_profile_maintenance_tail_action_does_not_require_config_keyword():
+    config = FpaRuleSetConfig(
+        name="strict_fpa_rs",
+        keyword_rules=(
+            KeywordTypeRule("EO", ("导出", "报表", "下载", "生成文件"), "事务功能产生派生或格式化输出，按 EO。"),
+            KeywordTypeRule("EQ", ("查询", "查看", "详情", "检索", "列表"), "事务功能读取数据且无派生输出，按 EQ。"),
+            KeywordTypeRule(
+                "EI",
+                ("新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "选择", "关联"),
+                "事务功能进入或改变系统边界内数据，按 EI。",
+            ),
+        ),
+        external_data_rules=(
+            ExternalDataGroupRule(("主数据平台",), "组织主数据", ("组织", "主数据")),
+        ),
+    )
+    token = set_current_fpa_rule_set_config(config)
+    try:
+        name = "【地市后台】组织管理-外部组织引用-外部组织引用-组织主数据维护"
+        desc = "从主数据平台读取组织主数据，选择后更新本系统内部业务对象的关联字段。"
+        fpa_type, _ = STRICT_FPA_PROFILE.infer_type(name, desc)
+        has_conflict = STRICT_FPA_PROFILE.has_obvious_conflict(name, desc, "EI")
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert fpa_type == "EI"
+    assert has_conflict is False
+
+
 def test_strict_profile_transaction_keyword_priority_for_mixed_actions():
     assert STRICT_FPA_PROFILE.infer_type(
         "导入并查看客户名单",
