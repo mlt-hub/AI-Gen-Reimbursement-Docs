@@ -1257,6 +1257,108 @@ def test_ai_first_internal_data_group_with_external_reference_ids_keeps_ilf():
     )
 
 
+def test_ai_first_oa_approval_reference_keeps_external_doc_and_internal_relation_types():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "审批管理",
+            "二级模块": "OA审批协同",
+            "三级模块": "OA审批单关联",
+            "三级模块整体功能描述": "系统引用 OA 系统维护的审批流程单据，本系统只保存业务对象与审批单的关联关系。",
+            "功能过程": "关联审批单",
+            "功能过程类型": "新增",
+            "功能过程描述": "从 OA 流程单据中选择审批单并关联到当前业务申请。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "审批管理",
+            "二级模块": "OA审批协同",
+            "三级模块": "OA审批单关联",
+            "三级模块整体功能描述": "系统引用 OA 系统维护的审批流程单据，本系统只保存业务对象与审批单的关联关系。",
+            "功能过程": "查看审批进度",
+            "功能过程类型": "查询",
+            "功能过程描述": "查看 OA 审批流程状态、当前审批人和审批意见。",
+        },
+    ])[0]
+
+    strict_rule_set = _strict_default_rule_set()
+    oa_rule_set = FpaRuleSetConfig(
+        name=strict_rule_set.name,
+        keyword_rules=strict_rule_set.keyword_rules,
+        external_data_rules=(
+            *strict_rule_set.external_data_rules,
+            ExternalDataGroupRule(("OA", "OA 系统", "OA系统"), "OA流程单据", ("流程单据", "审批单", "单据")),
+        ),
+    )
+    token = set_current_fpa_rule_set_config(oa_rule_set)
+    try:
+        rows, warnings = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            profile=STRICT_FPA_PROFILE,
+            strategy="ai_first",
+            ai_rows=[
+                {
+                    "name": "【地市后台】审批管理-OA审批协同-OA审批单关联-OA流程单据",
+                    "type": "EIF",
+                    "explanation": (
+                        "来源场景：【地市后台】审批管理-OA审批协同-OA审批单关联-OA流程单据。\n"
+                        "业务数据：OA 系统维护的审批流程单据。\n"
+                        "业务规则：本系统只引用审批单本体，不维护审批单内容。\n"
+                        "计算说明：外部系统维护且本系统引用的数据组，按 EIF 计量。"
+                    ),
+                },
+                {
+                    "name": "【地市后台】审批管理-OA审批协同-OA审批单关联-OA审批单关联数据组",
+                    "type": "ILF",
+                    "explanation": (
+                        "来源场景：【地市后台】审批管理-OA审批协同-OA审批单关联-OA审批单关联数据组。\n"
+                        "业务数据：业务对象ID、审批单ID、关联关系创建时间等字段。\n"
+                        "业务规则：本系统只保存关联关系数据，不包含审批单本身内容。\n"
+                        "计算说明：该关联关系数据组由本系统维护，按 ILF 计量。"
+                    ),
+                },
+                {
+                    "name": "【地市后台】审批管理-OA审批协同-OA审批单关联-OA审批单关联维护",
+                    "type": "EI",
+                    "explanation": (
+                        "来源场景：【地市后台】审批管理-OA审批协同-OA审批单关联-OA审批单关联维护。\n"
+                        "业务数据：业务对象ID、选中的审批单ID。\n"
+                        "业务规则：用户选择已有审批单并保存关联关系。\n"
+                        "计算说明：该事务维护本系统 OA 审批单关联数据组，按 EI 计量。"
+                    ),
+                    "source_process_ids": ["m1_p1"],
+                    "source_processes": ["关联审批单"],
+                },
+                {
+                    "name": "【地市后台】审批管理-OA审批协同-OA审批单关联-审批进度查询",
+                    "type": "EQ",
+                    "explanation": (
+                        "来源场景：【地市后台】审批管理-OA审批协同-OA审批单关联-审批进度查询。\n"
+                        "业务数据：审批流程状态、当前审批人和审批意见。\n"
+                        "业务规则：读取 OA 审批进度并展示，不修改本系统数据。\n"
+                        "计算说明：只读取并展示数据，按 EQ 计量。"
+                    ),
+                    "source_process_ids": ["m1_p2"],
+                    "source_processes": ["查看审批进度"],
+                },
+            ],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert [row["类型"] for row in rows] == ["EIF", "ILF", "EI", "EQ"]
+    assert not any("AI type=" in warning and "与规则存在冲突" in warning for warning in warnings)
+    assert not any("AI 数据功能需人工复核" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.ai_first_type_conflict"
+        for row in rows
+        for hit in row["_规则命中详情"]
+    )
+
+
 def test_ai_first_external_data_group_with_system_reference_text_keeps_eif():
     group = _group_rows_by_l3([
         {
@@ -1404,6 +1506,65 @@ def test_ai_first_data_function_supplement_warning_does_not_report_zero_missing_
     assert any(row["生成方式"] == "rules_fallback" and row["类型"] == "ILF" for row in combined)
     assert any("AI 结果未包含数据功能行" in warning for warning in warnings)
     assert not any("未覆盖 0 个功能过程" in warning for warning in warnings)
+
+
+def test_ai_first_supplements_missing_eif_even_when_ai_has_internal_ilf():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "审批管理",
+            "二级模块": "OA审批协同",
+            "三级模块": "OA审批单关联",
+            "三级模块整体功能描述": "系统引用 OA 系统维护的审批流程单据，本系统只保存业务对象与审批单的关联关系。",
+            "功能过程": "关联审批单",
+            "功能过程类型": "新增",
+            "功能过程描述": "从 OA 流程单据中选择审批单并关联到当前业务申请。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "审批管理",
+            "二级模块": "OA审批协同",
+            "三级模块": "OA审批单关联",
+            "三级模块整体功能描述": "系统引用 OA 系统维护的审批流程单据，本系统只保存业务对象与审批单的关联关系。",
+            "功能过程": "查看审批进度",
+            "功能过程类型": "查询",
+            "功能过程描述": "查看 OA 审批流程状态、当前审批人和审批意见。",
+        },
+    ])[0]
+
+    oa_rule_set = FpaRuleSetConfig(
+        name="strict_fpa_rs",
+        external_data_rules=(ExternalDataGroupRule(("OA", "OA 系统", "OA系统"), "OA流程单据", ("流程单据", "审批单", "单据")),),
+    )
+    token = set_current_fpa_rule_set_config(oa_rule_set)
+    try:
+        ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            profile=STRICT_FPA_PROFILE,
+            strategy="ai_first",
+            ai_rows=[{
+                "name": "OA审批单关联数据组",
+                "type": "ILF",
+                "explanation": "来源场景：【地市后台】审批管理-OA审批协同-OA审批单关联-OA审批单关联数据组\n业务数据：审批单关联关系。\n业务规则：本系统保存业务对象与审批单的关联关系。\n计算说明：本系统维护的逻辑数据组，按 ILF 计量。",
+            }],
+        )
+
+        combined, warnings = _supplement_ai_rows_with_rules(
+            group=group,
+            meta=_meta(),
+            ai_rows=ai_rows,
+            profile=STRICT_FPA_PROFILE,
+            strategy="ai_first",
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert any(row["类型"] == "ILF" and row["生成方式"] == "ai" for row in combined)
+    assert any(row["类型"] == "EIF" and row["生成方式"] == "rules_fallback" for row in combined)
+    assert any("AI 结果未包含数据功能行" in warning for warning in warnings)
 
 
 def test_ai_first_process_id_covers_near_name_difference_without_rules_fallback():

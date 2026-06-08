@@ -970,6 +970,8 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 2026-06-08 已将可确定的 `计算依据说明` 来源场景路径规范化为后处理规则命中。AI 返回结构化说明但 `来源场景` 未使用当前 FPA 行完整路径时，后处理会把该行改为 `来源场景：<完整新增/修改功能点>`，并记录 `postprocess.explanation_source_path`；缺少结构化项、类型未说明、表个数计量描述等真实说明质量问题仍保留为 warning。
 
+2026-06-08 已收口 OA 审批单关联口径：OA 系统维护的审批流程单据按 `EIF`，本系统保存的业务对象与审批单关联关系按 `ILF`，用户选择审批单并保存关联关系按 `EI`，查看审批进度按 `EQ`。`ai_first` 下如果 AI 已输出内部 `ILF` 但漏掉外部 `EIF`，规则补齐会按数据功能类型补齐缺失的 `EIF`，并继续通过 `coverage.rules_fallback` 追溯。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell

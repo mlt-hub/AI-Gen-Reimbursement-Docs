@@ -1220,7 +1220,11 @@ def _supplement_ai_rows_with_rules(
         missing_processes = {id_to_name[process_id] for process_id in missing_process_ids}
     else:
         missing_processes = expected_process_names - covered_process_names
-    has_data_function = any(str(row.get("类型", "")) in {"ILF", "EIF"} for row in ai_rows)
+    data_function_types = {
+        str(row.get("类型", "") or "").strip()
+        for row in ai_rows
+        if str(row.get("类型", "") or "").strip() in {"ILF", "EIF"}
+    }
     supplemental: list[dict[str, object]] = []
     data_function_supplements = 0
     missing_process_supplements = 0
@@ -1228,7 +1232,7 @@ def _supplement_ai_rows_with_rules(
     for row in rule_rows:
         row_type = str(row.get("类型", ""))
         row_sources = _source_process_set(row)
-        include_data_row = require_data_function and row_type in {"ILF", "EIF"} and not has_data_function
+        include_data_row = require_data_function and row_type in {"ILF", "EIF"} and row_type not in data_function_types
         include_missing_process = require_process_coverage and bool(row_sources & missing_processes)
         if not include_data_row and not include_missing_process:
             continue
