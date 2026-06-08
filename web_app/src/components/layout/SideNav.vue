@@ -66,6 +66,22 @@
           </RouterLink>
         </div>
       </div>
+
+      <div v-if="showAdminTools" class="mt-6 border-t border-[var(--color-rule)] pt-4">
+        <p class="px-2 text-xs font-semibold text-[var(--color-ink-soft)]">系统管理</p>
+        <div class="mt-2 space-y-1">
+          <RouterLink
+            v-for="item in adminItems"
+            :key="item.to"
+            :to="item.to"
+            :class="navClass(item)"
+            @click="$emit('navigate')"
+          >
+            <component :is="item.icon" class="h-4 w-4 shrink-0" />
+            <span class="min-w-0 truncate">{{ item.label }}</span>
+          </RouterLink>
+        </div>
+      </div>
     </div>
 
     <div class="border-t border-[var(--color-rule)] px-3 py-3">
@@ -96,6 +112,7 @@ import {
   ClipboardDocumentListIcon,
   DocumentMagnifyingGlassIcon,
   HomeIcon,
+  IdentificationIcon,
   KeyIcon,
   WrenchScrewdriverIcon,
 } from '@heroicons/vue/24/outline'
@@ -114,6 +131,7 @@ const props = defineProps<{
   backendStatusClass: string
   backendDotClass: string
   showPromptDebug: boolean
+  showAdminTools: boolean
 }>()
 
 defineEmits<{ navigate: [] }>()
@@ -136,6 +154,10 @@ const previewItems: NavItem[] = [
 const secondaryItems: NavItem[] = [
   { label: '授权', to: '/license', icon: KeyIcon, match: path => path.startsWith('/license') },
   { label: '提示词调试', to: '/prompt-debug', icon: WrenchScrewdriverIcon, match: path => path.startsWith('/prompt-debug') },
+]
+
+const adminItems: NavItem[] = [
+  { label: '邀请注册', to: '/admin/invites', icon: IdentificationIcon, match: path => path.startsWith('/admin/invites') },
 ]
 
 const activePath = computed(() => route.path)

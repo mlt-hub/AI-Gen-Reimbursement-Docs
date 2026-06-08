@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, Request
 
-from ai_gen_reimbursement_docs.auth import get_username_by_token, is_local_host
+from ai_gen_reimbursement_docs.auth import get_username_by_token, is_admin, is_local_host
 
 
 def get_auth_user(request: Request) -> str | None:
@@ -42,6 +42,16 @@ def require_auth(request: Request) -> str:
     username = get_auth_user(request)
     if not username:
         raise HTTPException(401, "请先登录")
+    return username
+
+
+def require_admin(request: Request) -> str:
+    """依赖：远程模式需管理员；本地模式放行。"""
+    username = require_auth(request)
+    if is_local_mode(request):
+        return username
+    if not is_admin(username):
+        raise HTTPException(403, "仅管理员可访问")
     return username
 
 

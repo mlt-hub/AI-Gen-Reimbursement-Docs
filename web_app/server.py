@@ -113,6 +113,7 @@ def cleanup_expired_sessions(max_age_seconds: int = 24 * 3600) -> int:
 @app.get("/static/dist/tasks")
 @app.get("/static/dist/history")
 @app.get("/static/dist/prompt-debug")
+@app.get("/static/dist/admin/invites")
 async def static_dist_spa_page():
     return _spa_index()
 
@@ -180,5 +181,10 @@ async def sessions_page(path: str):
 
 @app.get("/prompt-debug")
 async def prompt_debug():
+    return _spa_index()
+
+
+@app.get("/admin/invites")
+async def admin_invites_page():
     return _spa_index()
 

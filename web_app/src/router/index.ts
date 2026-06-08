@@ -71,6 +71,12 @@ const router = createRouter({
       component: () => import('@/views/PromptDebug.vue'),
       meta: { nav: 'prompt-debug' },
     },
+    {
+      path: '/admin/invites',
+      name: 'admin-invites',
+      component: () => import('@/views/AdminInvites.vue'),
+      meta: { nav: 'admin-invites' },
+    },
   ],
 })
 
