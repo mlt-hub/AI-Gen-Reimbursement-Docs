@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>gen-fpa 系统全景图</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #182026;
+      --muted: #62707c;
+      --line: #d9e0e6;
+      --paper: #f6f8fa;
+      --panel: #ffffff;
+      --accent: #0d6b63;
+      --accent-2: #a33d2d;
+      --accent-3: #5b5f97;
+      --accent-4: #b7791f;
+      --soft: #e9f5f3;
+      --soft-2: #fff1ed;
+      --soft-3: #f0f1fb;
+      --code: #111827;
+      --radius: 8px;
+      --shadow: 0 18px 50px rgba(30, 42, 56, 0.08);
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(13, 107, 99, 0.055), transparent 34%),
+        linear-gradient(180deg, #fff 0, var(--paper) 420px, #f8fafb 100%);
+      font-size: 15px;
+      line-height: 1.62;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    code, pre {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 26px 20px;
+      border-right: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.84);
+      backdrop-filter: blur(12px);
+      overflow: auto;
+    }
+
+    .brand {
+      display: grid;
+      gap: 7px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 18px;
+    }
+
+    .brand strong {
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 4px;
+    }
+
+    .nav a {
+      padding: 8px 10px;
+      border-radius: 6px;
+      color: #33414c;
+      font-size: 14px;
+    }
+
+    .nav a:hover {
+      background: var(--soft);
+      color: var(--accent);
+    }
+
+    main {
+      min-width: 0;
+      padding: 34px 42px 72px;
+    }
+
+    .hero {
+      max-width: 1180px;
+      display: grid;
+      gap: 22px;
+      margin-bottom: 30px;
+    }
+
+    .eyebrow {
+      width: fit-content;
+      padding: 5px 9px;
+      border: 1px solid rgba(13, 107, 99, 0.25);
+      border-radius: 999px;
+      color: var(--accent);
+      background: rgba(233, 245, 243, 0.8);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 42px;
+      line-height: 1.12;
+      letter-spacing: 0;
+      max-width: 840px;
+    }
+
+    .lead {
+      max-width: 850px;
+      color: #46545f;
+      font-size: 17px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      min-height: 118px;
+    }
+
+    .metric b {
+      display: block;
+      font-size: 28px;
+      line-height: 1;
+      margin-bottom: 9px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    section {
+      max-width: 1180px;
+      margin: 0 0 34px;
+      padding-top: 10px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .section-note {
+      margin: 0 0 18px;
+      color: var(--muted);
+      max-width: 900px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .panel.tight { padding: 14px; }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eef2f5;
+      color: #34424d;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .pill.green { background: var(--soft); color: var(--accent); }
+    .pill.red { background: var(--soft-2); color: var(--accent-2); }
+    .pill.indigo { background: var(--soft-3); color: var(--accent-3); }
+    .pill.gold { background: #fff7df; color: var(--accent-4); }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .step {
+      position: relative;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      min-height: 130px;
+    }
+
+    .step::after {
+      content: ">";
+      position: absolute;
+      right: -11px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #91a0ab;
+      font-weight: 800;
+    }
+
+    .step:last-child::after { content: ""; }
+
+    .step b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+
+    .step span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .profile-table,
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .profile-table th,
+    .profile-table td,
+    .matrix th,
+    .matrix td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .profile-table th,
+    .matrix th {
+      background: #f1f5f7;
+      color: #31404c;
+      font-size: 13px;
+    }
+
+    .profile-table tr:last-child td,
+    .matrix tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .code {
+      margin: 0;
+      padding: 14px;
+      border-radius: var(--radius);
+      background: var(--code);
+      color: #e5edf2;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .lane {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .lane-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+    }
+
+    .lane ol,
+    .panel ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+
+    .panel li,
+    .lane li {
+      margin: 5px 0;
+    }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: var(--soft);
+      padding: 14px 16px;
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+
+    .callout.warn {
+      border-left-color: var(--accent-4);
+      background: #fff8e6;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 140px minmax(0, 1fr);
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: #fff;
+    }
+
+    .timeline-item time {
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    footer {
+      max-width: 1180px;
+      padding-top: 20px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1100px) {
+      .shell { grid-template-columns: 1fr; }
+      aside {
+        position: relative;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      main { padding: 28px 20px 56px; }
+      .hero-grid, .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .step::after { content: ""; }
+    }
+
+    @media (max-width: 720px) {
+      h1 { font-size: 31px; }
+      .hero-grid, .grid-2, .grid-3, .flow { grid-template-columns: 1fr; }
+      .timeline-item { grid-template-columns: 1fr; }
+      .profile-table, .matrix { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <strong>gen-fpa 系统全景图</strong>
+        <span>面向开发、审阅和后续 profile 扩展的 HTML 手册</span>
+      </div>
+      <nav class="nav" aria-label="页面目录">
+        <a href="#overview">总览</a>
+        <a href="#pipeline">生成流水线</a>
+        <a href="#profiles">输出 profile</a>
+        <a href="#strategies">执行策略</a>
+        <a href="#payload">Prompt Payload</a>
+        <a href="#rules">规则系统</a>
+        <a href="#ai">AI 与后处理</a>
+        <a href="#confirmation">确认流</a>
+        <a href="#agent-review">Agent Review</a>
+        <a href="#harness">Harness</a>
+        <a href="#outputs">交付物</a>
+        <a href="#files">关键文件</a>
+        <a href="#risks">现状与缺口</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero" id="overview">
+        <div class="eyebrow">FPA generation architecture · current as of 2026-06-09</div>
+        <h1>gen-fpa 从输入、profile、规则、AI、审计到稳定性验收的完整地图</h1>
+        <p class="lead">
+          这份页面把当前 `gen-fpa` 的方方面面整理成一张工程手册：它如何选择口径，如何组织 prompt，如何让规则与 AI 协作，如何确认模糊点，如何审计结果，以及哪些 profile 的 harness 已成熟、哪些仍需要补强。
+        </p>
+        <div class="hero-grid">
+          <div class="metric">
+            <b>4</b>
+            <span>初始化配置提供的 profile：strict_fpa、unified_ui、multi_uis、ui_api_mapping。</span>
+          </div>
+          <div class="metric">
+            <b>3</b>
+            <span>底层 kind：strict_fpa、unified_ui、ui_api_mapping；multi_uis 复用 unified_ui kind。</span>
+          </div>
+          <div class="metric">
+            <b>4</b>
+            <span>生成策略：rules_first、ai_first、rules_only、ai_only。</span>
+          </div>
+          <div class="metric">
+            <b>0</b>
+            <span>strict-real-model-recommended 连续复测后 warning / quality issue / blocking retry 均归零。</span>
+          </div>
+        </div>
+      </header>
+
+      <section id="pipeline">
+        <h2>生成流水线</h2>
+        <p class="section-note">
+          gen-fpa 的核心不是单次让模型输出表格，而是把输入规范化、profile 配置、规则兜底、AI 生成、后处理、审计和稳定性检查串成一条可追踪流水线。
+        </p>
+        <div class="flow">
+          <div class="step">
+            <b>1. 输入分组</b>
+            <span>从功能清单或预览请求中取得三级模块、模块描述、功能过程 processes。</span>
+          </div>
+          <div class="step">
+            <b>2. 解析配置</b>
+            <span>确定 profile、kind、strategy、rule_set、core_rules、system/user prompt。</span>
+          </div>
+          <div class="step">
+            <b>3. 构造 Payload</b>
+            <span>加入 module、processes、domain_context、process_facts、merge_review、type_judgement、agent_review。</span>
+          </div>
+          <div class="step">
+            <b>4. 规则 / AI 生成</b>
+            <span>按 strategy 决定先跑规则还是先跑 AI；rules_only 跳过 AI，ai_only 禁止规则补行。</span>
+          </div>
+          <div class="step">
+            <b>5. 后处理与审核</b>
+            <span>规范名称、类型、来源流程、说明结构，运行 validator 和 quality_review。</span>
+          </div>
+          <div class="step">
+            <b>6. 输出与审计</b>
+            <span>生成正式 FPA、check 副本、audit trace、稳定性报告或预览 debug。</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="profiles">
+        <h2>输出 Profile</h2>
+        <p class="section-note">
+          profile 是用户看到的业务口径名称；kind 是代码行为类型；rule_set、prompt 和 strategy 决定具体执行细节。当前默认 profile 是 `strict_fpa`。
+        </p>
+        <table class="profile-table">
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>Kind</th>
+              <th>默认策略</th>
+              <th>输出形态</th>
+              <th>适用场景</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>strict_fpa</strong></td>
+              <td><span class="pill green">strict_fpa</span></td>
+              <td>ai_first</td>
+              <td>标准 FPA 数据功能和事务功能：ILF / EIF / EI / EQ / EO。</td>
+              <td>标准 FPA 复核、功能点稳定计量、需要逻辑事务合并的场景。</td>
+            </tr>
+            <tr>
+              <td><strong>unified_ui</strong></td>
+              <td><span class="pill indigo">unified_ui</span></td>
+              <td>rules_first</td>
+              <td>三级模块默认一条界面开发行，非界面业务动作补充逻辑处理、查询、导出等行。</td>
+              <td>报账模板友好的开发工作量表达，需要“一页 + 业务动作”口径。</td>
+            </tr>
+            <tr>
+              <td><strong>multi_uis</strong></td>
+              <td><span class="pill indigo">unified_ui</span></td>
+              <td>rules_first</td>
+              <td>允许同一三级模块拆成多条界面开发行，每条保留拆分理由。</td>
+              <td>确有多个独立页面、对象、流程或用户端，需要拆分界面行。</td>
+            </tr>
+            <tr>
+              <td><strong>ui_api_mapping</strong></td>
+              <td><span class="pill gold">ui_api_mapping</span></td>
+              <td>rules_first</td>
+              <td>每个功能过程默认生成界面开发 EI + 接口开发 ILF；显式接口/服务调用另生成 ILF。</td>
+              <td>需要展示“功能过程到界面与接口”的映射关系。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="strategies">
+        <h2>执行策略</h2>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>四种 strategy</h3>
+            <table class="matrix">
+              <thead>
+                <tr><th>策略</th><th>含义</th><th>典型用途</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>rules_first</td><td>规则优先，AI 只补充或复核。</td><td>unified_ui / multi_uis / ui_api_mapping 默认。</td></tr>
+                <tr><td>ai_first</td><td>AI 优先，规则补齐 AI 未覆盖的行。</td><td>strict_fpa 默认。</td></tr>
+                <tr><td>rules_only</td><td>仅规则生成，不调用 AI。</td><td>本地烟测、无 API、稳定性基线。</td></tr>
+                <tr><td>ai_only</td><td>仅 AI 生成，不做规则补行；仍做校验、后处理和 warning。</td><td>测试模型独立表现。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="panel">
+            <h3>ai_only 的边界</h3>
+            <p>
+              `ai_only` 不是完全绕过规则系统。它只禁止规则生成行和 `rules_fallback` 补行；rule_set 仍用于配置校验、AI 结果后处理、非法类型兜底、类型冲突 warning、审核追踪和 AI cache key。
+            </p>
+            <div class="callout warn">
+              合法 AI type 与规则建议冲突时，`ai_only` 保留 AI type 并记录 warning；AI 返回非法 type 时仍会用 profile/rule_set 推断出的合法类型兜底。
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="payload">
+        <h2>Prompt Payload</h2>
+        <p class="section-note">
+          prompt 模板只允许并要求 `${core_rules}`、`${judgement_rules}`、`${payload_json}` 三类占位符。domain context 已在 payload_json 中，不是独立占位符。
+        </p>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>payload_json 主要内容</h3>
+            <ul>
+              <li>`module`：client_type、l1、l2、l3、l3_desc。</li>
+              <li>`processes`：process_id、process_name、description、type。</li>
+              <li>`domain_context`：系统边界、内部数据组、外部数据组、外部服务等领域上下文。</li>
+              <li>`process_facts`：规则化业务事实抽取结果。</li>
+              <li>`merge_review`：合并边界建议。</li>
+              <li>`type_judgement`：类型建议。</li>
+              <li>`agent_review`：角色化审计契约。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>结构化输出字段</h3>
+            <pre class="code">{
+  "rows": [{
+    "name": "【客户端】一级-二级-三级-功能点",
+    "type": "EI/ILF/EQ/EO/EIF",
+    "type_reason": "类型判定原因",
+    "classification_basis_index": 1,
+    "explanation": "来源场景：...\\n业务数据：...\\n业务规则：...\\n计算说明：...",
+    "source_process_ids": ["m1_p1"],
+    "source_processes": ["查询客户"],
+    "split_reason": "",
+    "complexity": "low/medium/high",
+    "det_count": 8,
+    "ret_count": null,
+    "ftr_count": 2,
+    "complexity_reason": "复杂度依据"
+  }]
+}</pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="rules">
+        <h2>规则系统</h2>
+        <div class="grid-3">
+          <div class="panel">
+            <h3>row_planning_rules</h3>
+            <p>控制规则兜底行如何规划，例如 unified_ui 默认三级模块级界面行、每个 process 的非界面动作行、ui_api_mapping 的默认界面/接口行。</p>
+            <div class="pill-row">
+              <span class="pill">ui_row</span>
+              <span class="pill">process_rows</span>
+              <span class="pill">one_row_per_process</span>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>type_mapping_rules</h3>
+            <p>直接类型映射，支持 EI/EQ/EO/ILF/EIF，适合项目级特例、业务对象或数据组边界。strict_fpa 中优先于普通事务关键词。</p>
+            <div class="pill-row">
+              <span class="pill green">ILF</span>
+              <span class="pill green">EIF</span>
+              <span class="pill green">EI/EQ/EO</span>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>keyword_rules</h3>
+            <p>事务动作关键词规则，常用于导出/报表 -> EO，查询/查看 -> EQ，新增/提交/导入 -> EI。</p>
+            <div class="pill-row">
+              <span class="pill gold">查询</span>
+              <span class="pill gold">导出</span>
+              <span class="pill gold">新增</span>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>coverage_rules</h3>
+            <p>控制来源流程覆盖和数据功能补齐。strict_fpa 下 AI 缺少 ILF/EIF 数据功能时，可通过 rules_fallback 补齐。</p>
+          </div>
+          <div class="panel">
+            <h3>external data rules</h3>
+            <p>识别外部系统维护、本系统引用的数据组；普通外部服务调用不自动生成 EIF。</p>
+          </div>
+          <div class="panel">
+            <h3>complexity matrices</h3>
+            <p>standard_fpa 按 DET/RET/FTR 矩阵复算复杂度和功能点数；legacy_workload 则按 type weight 简化计算。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="ai">
+        <h2>AI、后处理与质量审核</h2>
+        <div class="grid-2">
+          <div class="lane">
+            <div class="lane-header">
+              <h3>AI 输出规范化</h3>
+              <span class="pill green">non destructive first</span>
+            </div>
+            <ol>
+              <li>解析 JSON rows，跳过非对象或缺名称行。</li>
+              <li>按 profile 规范化名称和类型。</li>
+              <li>补全来源流程、分类依据、说明结构和复杂度字段。</li>
+              <li>记录规则命中详情、warning、后处理警告。</li>
+              <li>ai_first 可在 AI 缺行时使用规则补齐，但会保留审计痕迹。</li>
+            </ol>
+          </div>
+          <div class="lane">
+            <div class="lane-header">
+              <h3>质量审核链</h3>
+              <span class="pill red">retryable signals</span>
+            </div>
+            <ol>
+              <li>`validator` 检查查询误判 EI、普通服务误判 EIF、来源流程越界、说明结构缺失。</li>
+              <li>`merge_review` 检查合并建议是否被最终 rows 采纳。</li>
+              <li>`type_judgement` 检查高置信类型建议是否被偏离。</li>
+              <li>`quality_review` 汇总 issue，并为 ai_first 提供一次重试反馈。</li>
+              <li>重试后仍有问题时保留结果并写入 warning/audit trace。</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section id="confirmation">
+        <h2>确认流</h2>
+        <p class="section-note">
+          确认机制把“模型猜测”变成“用户确认的项目口径”。它不是自由聊天，而是结构化争议点确认。
+        </p>
+        <div class="grid-3">
+          <div class="panel">
+            <h3>auto</h3>
+            <p>自动模式不暂停，不返回确认项。适合批量生成和无人值守路径。</p>
+          </div>
+          <div class="panel">
+            <h3>cautious</h3>
+            <p>审慎模式只在高风险 validator issue 上返回确认。当前 Web 默认使用该模式。</p>
+          </div>
+          <div class="panel">
+            <h3>strict</h3>
+            <p>严格确认模式除高风险问题外，也可返回说明结构等审阅项。适合验收或审计。</p>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:14px">
+          <h3>确认作用域</h3>
+          <p>
+            `current_run` 默认只影响本次生成；`project_profile` 会持久化为项目默认口径。正式批量生成中，模块产生确认项时会进入 waiting_input，前端提交 confirmed_decisions 后继续当前模块和后续流程。
+          </p>
+        </div>
+      </section>
+
+      <section id="agent-review">
+        <h2>Agent Review 骨架</h2>
+        <p class="section-note">
+          当前“多 Agent”不是多个 LLM 调用，而是多角色确定性契约。它已经把接口和审计形态推进到位，但 strict_fpa 外的 profile 不应直接复用 strict 的语义作为硬约束。
+        </p>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>当前角色</h3>
+            <pre class="code">agent_review
+  roles:
+    business_fact_extractor -> process_facts
+    fpa_type_judge -> type_judgement
+    merge_boundary_reviewer -> merge_review
+    quality_reviewer -> quality_review</pre>
+          </div>
+          <div class="panel">
+            <h3>下一步方向</h3>
+            <p>不建议每个 profile 复制一套 Python 流程。更好的路线是通用 Agent Review 引擎 + profile contract。</p>
+            <pre class="code">build_agent_review(profile_contract, group, rows)</pre>
+            <p class="small">profile contract 描述 categories、judgement_rules、merge_rules、quality_checks、prompt_exposure、naming_policy。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="harness">
+        <h2>Harness 成熟度</h2>
+        <p class="section-note">
+          strict_fpa 的稳定性主线已阶段收口；其它 profile 有基础测试，但还没有同等级 golden + 真实模型趋势质量门。
+        </p>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>当前 harness</th>
+              <th>成熟度</th>
+              <th>建议补强</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>strict_fpa</strong></td>
+              <td>golden fixtures、结构化断言、validator、确认流、agent_review、稳定性报告、真实模型 recommended 连续复测。</td>
+              <td><span class="pill green">维护期基线</span></td>
+              <td>仅在模型、prompt、rule_set 或 fixture 变化时重新 fresh 抽样。</td>
+            </tr>
+            <tr>
+              <td><strong>unified_ui</strong></td>
+              <td>配置校验、prompt 渲染、规则兜底、部分 acceptance 测试。</td>
+              <td><span class="pill gold">基础可用</span></td>
+              <td>补 2-3 个 profile golden fixtures，定义漏界面、漏接口、重复计数等行为断言。</td>
+            </tr>
+            <tr>
+              <td><strong>multi_uis</strong></td>
+              <td>多界面同名行保留、review 元数据测试；主要依赖 prompt/rule_set。</td>
+              <td><span class="pill gold">偏薄</span></td>
+              <td>补拆分理由、独立页面/对象/流程/用户端的 fixture 和真实模型 smoke。</td>
+            </tr>
+            <tr>
+              <td><strong>ui_api_mapping</strong></td>
+              <td>默认界面/接口行、明确后端调用行、多接口行、重复默认行测试。</td>
+              <td><span class="pill indigo">规则较清楚</span></td>
+              <td>补 AI 稳定性抽样和显式接口抽取过度/不足的断言。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="outputs">
+        <h2>交付物与审计产物</h2>
+        <div class="grid-3">
+          <div class="panel">
+            <h3>正式 FPA 结果</h3>
+            <p>用户可见的 FPA 工作量评估结果，遵循 result review terminology：新增/修改功能点、类型、计算依据归类、计算依据说明、生成方式。</p>
+          </div>
+          <div class="panel">
+            <h3>Check 副本</h3>
+            <p>`FPA工作量评估-check.xlsx` 记录 profile、kind、strategy、rule_set、来源流程、规则命中、拆分理由、warning。</p>
+          </div>
+          <div class="panel">
+            <h3>Audit Trace</h3>
+            <p>`fpa_audit_trace.json` 记录模块级生成来源、quality_review、agent_review、retry_trigger_source 和稳定性汇总。</p>
+          </div>
+          <div class="panel">
+            <h3>稳定性报告</h3>
+            <p>多 trace Markdown 对比报告和 Excel 稳定性 sheet，追踪 warning、retry、confirmation、quality issue 等趋势。</p>
+          </div>
+          <div class="panel">
+            <h3>预览 Debug</h3>
+            <p>Web FPA 预览返回 prompt、raw_response、parsed_rows、final_rows、quality_review 等调试信息。</p>
+          </div>
+          <div class="panel">
+            <h3>确认记录</h3>
+            <p>confirmed_decisions 可作为 current_run 或 project_profile 作用域进入下一轮 prompt，避免同一争议点反复摇摆。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="files">
+        <h2>关键文件地图</h2>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>配置与文档</h3>
+            <ul>
+              <li>`config/fpa_config.yaml.example`：profile、rule_set、prompt、复杂度矩阵模板。</li>
+              <li>`docs/fpa/fpa-profiles.md`：profile 方案说明。</li>
+              <li>`docs/fpa/gen-fpa-output-stability.md`：strict_fpa 输出稳定性主线。</li>
+              <li>`docs/fpa/profile-agent-review-contract.md`：profile contract 复用方案。</li>
+              <li>`docs/fpa/result-review-terminology.md`：FPA 页面与结果审阅术语。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>核心代码</h3>
+            <ul>
+              <li>`ai_gen_reimbursement_docs/gen_fpa.py`：生成主流程、AI 后处理、质量审核接入。</li>
+              <li>`ai_gen_reimbursement_docs/fpa_profiles.py`：profile 实现、规则兜底、类型推断。</li>
+              <li>`ai_gen_reimbursement_docs/fpa_facts.py`：process_facts。</li>
+              <li>`ai_gen_reimbursement_docs/fpa_type_judgement.py`：type_judgement。</li>
+              <li>`ai_gen_reimbursement_docs/fpa_merge_review.py`：merge_review。</li>
+              <li>`ai_gen_reimbursement_docs/fpa_quality_review.py`：quality_review。</li>
+              <li>`ai_gen_reimbursement_docs/fpa_agent_review.py`：agent_review。</li>
+              <li>`ai_gen_reimbursement_docs/fpa_validator.py`：结构化 validator。</li>
+              <li>`scripts/run_fpa_stability_ci.py`：稳定性抽样入口。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="risks">
+        <h2>现状与缺口</h2>
+        <div class="timeline">
+          <div class="timeline-item">
+            <time>已收口</time>
+            <div>
+              <strong>strict_fpa 输出稳定性</strong>
+              <p class="small">推荐集连续 3 轮 fresh 复测归零，当前进入维护状态。不建议继续扩大后处理降噪，除非模型、prompt、rule_set 或 fixture 变化。</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <time>可用但偏薄</time>
+            <div>
+              <strong>非 strict profile harness</strong>
+              <p class="small">unified_ui、multi_uis、ui_api_mapping 有基础规则和测试，但缺 profile 级 golden、真实模型 recommended preset 和独立质量门。</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <time>下一步</time>
+            <div>
+              <strong>Profile contract 驱动</strong>
+              <p class="small">将 agent_review 从 strict_fpa 语义扩展为通用引擎 + profile contract，避免新增 profile 时复制大量 Python 分支。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>常用命令</h2>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>完整测试</h3>
+            <pre class="code">.\.venv\Scripts\python.exe -m pytest</pre>
+          </div>
+          <div class="panel">
+            <h3>strict_fpa 真实模型稳定性</h3>
+            <pre class="code">.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset strict-real-model-recommended `
+  --output-dir .\tmp_fpa_stability_ci</pre>
+          </div>
+          <div class="panel">
+            <h3>规则基线烟测</h3>
+            <pre class="code">.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset "" `
+  --suite standard `
+  --profiles strict_fpa `
+  --strategies rules_only `
+  --rule-sets strict_fpa_rs `
+  --max-retries 0 `
+  --output-dir .\tmp_fpa_stability_ci</pre>
+          </div>
+          <div class="panel">
+            <h3>CLI 选择 profile</h3>
+            <pre class="code">ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa
+ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile unified_ui --fpa-strategy rules_only
+ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile ui_api_mapping --fpa-rule-set ui_api_mapping_rs</pre>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        本 HTML 是静态工程说明页，可直接打开阅读。它总结当前仓库中 gen-fpa 的实现、配置、测试与稳定性状态；如果后续 profile contract 落地，应同步更新本页的 Agent Review 和 Harness 部分。
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
