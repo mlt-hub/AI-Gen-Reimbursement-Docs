@@ -1031,6 +1031,58 @@ Sources: ai=11
 
 当前 recommended 集合已经完成 warning、quality issue、retryable issue、blocking retry 全部归零。下一步如果继续推进稳定性，应优先做连续多轮 fresh 抽样趋势记录，观察是否还存在偶发 AI JSON 解析失败导致的 `rules_fallback`，而不是继续扩大后处理降噪范围。
 
+2026-06-09 已完成 `strict-real-model-recommended` 连续 3 轮 fresh 趋势复测，并收口首轮暴露的 4 条计数 warning。复测均基于当前推荐集 preset，分别输出到：
+
+- `tmp_fpa_stability_ci_real_recommended_trend_fresh_r1_20260608`
+- `tmp_fpa_stability_ci_real_recommended_trend_fresh_r2_20260608`
+- `tmp_fpa_stability_ci_real_recommended_trend_fresh_r3_20260608`
+
+趋势结果：
+
+```text
+R1: Quality Gate PASS；run_count=10，module_count=11，warning_count=4，quality_issue_count=0，retryable_quality_issue_count=0，retry_count=0，blocking_retry_count=0。
+R2: Quality Gate PASS；run_count=10，module_count=11，warning_count=0，quality_issue_count=0，retryable_quality_issue_count=0，retry_count=1，blocking_retry_count=0。
+R3: Quality Gate PASS；run_count=10，module_count=11，warning_count=0，quality_issue_count=0，retryable_quality_issue_count=0，retry_count=0，blocking_retry_count=0。
+```
+
+R1 的 4 条计数 warning 来源为：
+
+- `internal_vs_external_org_reference`：`组织主数据维护` 是事务行，但在项目 keyword 配置未显式包含“维护”时，规则兜底曾被外部数据组语境牵引为 `EIF`。
+- `payment_gateway_refund`：`退款申请数据组` 的计算说明使用“本系统维护的逻辑数据集合”，未被识别为 `ILF` 类型证据。
+- `sms_notification_service`：`短信模板数据组`、`发送记录数据组` 的计算说明使用“内部逻辑文件”，未被识别为 `ILF` 类型证据。
+
+已在提交 `99f703a merge fpa trend warning aliases` 中完成收口：
+
+- `StrictFpaProfile` 增加内置事务动作兜底；当尾部包含新增、修改、维护、选择、关联、查询、导出等明确动作时，即使当前 rule_set keyword 漏配，也能按事务功能优先判定，避免 `组织主数据维护` 被 `EIF` 映射误报。
+- `FPA_TYPE_EXPLANATION_ALIASES["ILF"]` 补充“内部逻辑文件”“逻辑数据集合”“本系统维护的逻辑数据集合”等真实模型常见表述，避免正式说明已经表达内部逻辑数据但未直写 `ILF` 时产生说明质量 warning。
+- 新增 profile 和 AI 后处理回归测试，锁定上述趋势样本。
+
+收口后 targeted 复测：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --fixture tests\fixtures\fpa_golden_cases\internal_vs_external_org_reference.json `
+  --fixture tests\fixtures\fpa_golden_cases\payment_gateway_refund.json `
+  --fixture tests\fixtures\fpa_golden_cases\sms_notification_service.json `
+  --profiles strict_fpa `
+  --strategies ai_first `
+  --rule-sets strict_fpa_rs `
+  --max-retryable-issues 0 `
+  --output-dir tmp_fpa_stability_ci_main_trend_r1_warning_targets_20260608
+```
+
+结果为 `run_count=3`、`module_count=4`、`warning_count=0`、`quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=0`、Quality Gate PASS。
+
+最终完整 recommended 复测：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset strict-real-model-recommended `
+  --output-dir tmp_fpa_stability_ci_real_recommended_after_trend_r1_warning_20260608
+```
+
+最终结果为 `run_count=10`、`module_count=11`、`warning_count=0`、`quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=0`、`blocking_retry_count=0`，Quality Gate PASS。连续趋势中未发现 AI JSON 解析失败；`sms_notification_service` 的覆盖补齐仍保留在 trace 的 `coverage.rules_fallback` 规则命中详情中，但不计入稳定性 warning。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
