@@ -10,6 +10,7 @@ from ai_gen_reimbursement_docs.run_history import (
     list_runs,
     now_iso,
     service_history_path,
+    update_run_config,
     update_run_state,
     upsert_run,
     user_history_path,
@@ -30,6 +31,47 @@ def _history_path(*, base_dir: Path, mode: str) -> Path:
 def _display_mode(mode_info: dict[str, dict[str, str]], task_mode: str) -> str:
     item = mode_info.get(task_mode, {})
     return item.get("label") or task_mode
+
+
+def _infer_project_name(input_path: str) -> str:
+    if not input_path:
+        return ""
+    try:
+        from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
+
+        return _try_read_project_name(input_path)
+    except Exception as exc:
+        logger.debug("完成时推断项目名失败: %s", exc)
+        return ""
+
+
+def _backfill_finished_project_name(
+    *,
+    session_id: str,
+    history_path: Path,
+    input_path: str,
+    updated_at: str,
+) -> None:
+    record = get_run(session_id, history_path)
+    if record is None:
+        return
+    run_config = record.get("run_config")
+    if not isinstance(run_config, dict):
+        run_config = {}
+    else:
+        run_config = dict(run_config)
+    if str(run_config.get("project_name") or "").strip():
+        return
+    project_name = _infer_project_name(input_path)
+    if not project_name:
+        return
+    run_config["project_name"] = project_name
+    update_run_config(
+        session_id,
+        history_path,
+        run_config=run_config,
+        updated_at=updated_at,
+    )
 
 
 def start_web_run(
@@ -118,6 +160,12 @@ def finish_web_run(
                 "updated_at": now,
             },
             path,
+        )
+        _backfill_finished_project_name(
+            session_id=session_id,
+            history_path=path,
+            input_path=input_path,
+            updated_at=now,
         )
     except Exception as exc:
         logger.warning("运行历史写入失败: %s", exc)

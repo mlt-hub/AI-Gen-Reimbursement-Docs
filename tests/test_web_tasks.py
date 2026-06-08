@@ -9,6 +9,7 @@ TestClient = pytest.importorskip("fastapi.testclient").TestClient
 from web_app import dependencies
 from web_app import server
 from web_app.routes import tasks
+from web_app.services import run_history_service
 from web_app.services import session_access
 
 
@@ -439,6 +440,95 @@ def test_rerun_uses_original_run_config_snapshot(monkeypatch, tmp_path):
     assert args[12] == "strict_fpa_rs"
     assert args[13] == "strict"
     assert args[15] is True
+
+
+def test_finish_backfills_missing_project_name_into_history(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    monkeypatch.setattr(
+        "web_app.services.run_history_service._infer_project_name",
+        lambda path: "完成后项目名",
+    )
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+
+    run_history_service.start_web_run(
+        base_dir=tmp_path,
+        session_id="finish_project_name",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+        run_config={
+            "model": "original-model",
+            "project_name": "",
+            "fpa_profile": "strict_fpa",
+        },
+    )
+    started = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id="finish_project_name",
+        local_mode=True,
+        owner_id="",
+    )
+    assert started["run_config"]["project_name"] == ""
+
+    run_history_service.finish_web_run(
+        base_dir=tmp_path,
+        session_id="finish_project_name",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+
+    finished = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id="finish_project_name",
+        local_mode=True,
+        owner_id="",
+    )
+    assert finished["run_state"] == "done"
+    assert finished["run_config"]["project_name"] == "完成后项目名"
+    assert finished["run_config"]["model"] == "original-model"
+    assert finished["run_config"]["fpa_profile"] == "strict_fpa"
+
+
+def test_finish_keeps_explicit_project_name(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    monkeypatch.setattr(
+        "web_app.services.run_history_service._infer_project_name",
+        lambda path: "完成后项目名",
+    )
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+
+    run_history_service.start_web_run(
+        base_dir=tmp_path,
+        session_id="explicit_project_name",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+        run_config={"project_name": "显式项目名"},
+    )
+    run_history_service.finish_web_run(
+        base_dir=tmp_path,
+        session_id="explicit_project_name",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+
+    finished = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id="explicit_project_name",
+        local_mode=True,
+        owner_id="",
+    )
+    assert finished["run_config"]["project_name"] == "显式项目名"
 
 
 def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
