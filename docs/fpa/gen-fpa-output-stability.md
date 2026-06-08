@@ -984,6 +984,16 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 复测结果：Quality Gate PASS；`run_count=10`，`module_count=11`，`quality_issue_count=0`，`retryable_quality_issue_count=0`，`retry_count=1`，`blocking_retry_count=0`。剩余 `warning_count=7` 均非阻断，来源分布为 `postprocess_normalization=4`、`quality_review=1`、`other=2`。当前 recommended 集合已完成 OA 审批单关联口径、组织维护 EI 口径和真实模型质量门收口。
 
+2026-06-08 继续收敛 recommended 集合的非阻断 warning：`计算依据说明` 中 `按...表个数计量（1个表/保守按1个表）` 这类括号细节会被规范化为规则命中 `postprocess.explanation_table_count_detail`，正式说明保留 FPA 类型和计量口径，不展开数据库表个数细节；同时补充 `EO/EI` 的自然中文类型别名，例如“格式化文件输出”“输出的文件”“对ILF进行插入操作”。复测命令：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset strict-real-model-recommended `
+  --output-dir tmp_fpa_stability_ci_real_recommended_after_warning_noise_20260608
+```
+
+复测结果：Quality Gate PASS；`run_count=10`，`module_count=11`，`quality_issue_count=0`，`retryable_quality_issue_count=0`，`retry_count=1`，`blocking_retry_count=0`。稳定性报告 `warning_count` 从 7 降至 1，唯一剩余计数 warning 为一次已自愈的 `quality_review` 重试；`oa_approval_reference` 和 `sms_notification_service` 的 rules_fallback 覆盖补齐仍保留在 trace 中，但不计入稳定性 warning。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
