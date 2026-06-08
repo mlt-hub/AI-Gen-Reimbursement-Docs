@@ -1136,19 +1136,20 @@ class StrictFpaProfile(CustomRulesProfile):
         type_mapping = self._configured_type_mapping(text)
         if type_mapping:
             return type_mapping
-        if self._has_internal_data_function(text) and self._looks_like_data_group(name, desc):
+        name_is_data_group = self._looks_like_data_group(name)
+        if self._has_internal_data_function(text) and name_is_data_group:
             return "ILF", "本系统维护的逻辑数据组，按 ILF。"
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
         name_action = self._explicit_transaction_type(name)
-        if name_action:
+        if name_action and not name_is_data_group:
             return name_action
-        if self._is_external_data_group(text):
+        if name_is_data_group and self._is_external_data_group(text):
             return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
         internal_rule = self._matching_internal_data_rule(text)
-        if internal_rule is not None:
+        if internal_rule is not None and name_is_data_group:
             return "ILF", internal_rule.reason or "命中 rule_set 内部数据组规则，按 ILF。"
-        if self._looks_like_data_group(name, desc):
+        if name_is_data_group or self._looks_like_data_group(name, desc):
             return "ILF", "本系统维护的逻辑数据组，按 ILF。"
         desc_action = self._explicit_transaction_type(desc)
         if desc_action:
@@ -1217,18 +1218,19 @@ class StrictFpaProfile(CustomRulesProfile):
         type_mapping = self._configured_type_mapping(text)
         if type_mapping:
             return type_mapping[0]
-        if self._has_internal_data_function(text) and self._looks_like_data_group(name, desc):
+        name_is_data_group = self._looks_like_data_group(name)
+        if self._has_internal_data_function(text) and name_is_data_group:
             return "ILF"
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF"
-        if self._is_external_data_group(text) and self._looks_like_external_data_function_name(name):
+        if name_is_data_group and self._is_external_data_group(text) and self._looks_like_external_data_function_name(name):
             return "EIF"
         name_action = self._explicit_transaction_type(self._function_point_tail(name))
-        if name_action:
+        if name_action and not name_is_data_group:
             return name_action[0]
-        if self._matching_internal_data_rule(text) is not None:
+        if self._matching_internal_data_rule(text) is not None and name_is_data_group:
             return "ILF"
-        if self._looks_like_data_group(name, desc):
+        if name_is_data_group or self._looks_like_data_group(name, desc):
             return "ILF"
         desc_action = self._explicit_transaction_type(desc)
         if desc_action:
@@ -1480,12 +1482,12 @@ class StrictFpaProfile(CustomRulesProfile):
             or re.search(r"(?:外部应用|外部系统|第三方系统|外部|第三方)[^，。；、\s]{0,16}(?:维护|提供)", text)
         ) and not self._has_internal_data_function(text):
             return False
-        if any(k in point_name for k in ["信息", "数据组", "主数据", "名单", "关系", "配置", "记录", "模板"]):
+        if any(k in point_name for k in ["信息", "数据组", "主数据", "名单", "档案", "关系", "配置", "记录", "模板"]):
             return not any(
                 k in point_name
                 for k in ["查询", "查看", "详情", "新增", "添加", "修改", "编辑", "删除", "维护", "保存", "配置", "导入", "导出"]
             )
-        return "维护" in text and not any(k in point_name for k in ["查询", "查看", "新增", "添加", "修改", "编辑", "删除"])
+        return False
 
     def _function_point_tail(self, name: str) -> str:
         return str(name or "").rsplit("-", maxsplit=1)[-1].strip()
@@ -1551,7 +1553,9 @@ class StrictFpaProfile(CustomRulesProfile):
         name = l3.replace("管理", "").replace("维护", "").strip()
         if not name:
             name = l3
-        if any(k in name for k in ["信息", "数据组", "主数据", "名单", "关系", "配置", "记录", "模板"]):
+        if name.endswith("关联"):
+            return f"{name}关系"
+        if any(k in name for k in ["信息", "数据组", "主数据", "名单", "档案", "关系", "配置", "记录", "模板"]):
             return name
         return f"{name}信息"
 
@@ -1593,7 +1597,7 @@ class StrictFpaProfile(CustomRulesProfile):
         if re.search(r"本系统引用[^，。；、\s]{0,24}(?:维护|提供)", text):
             return False
         return any(k in text for k in [
-            "本系统维护", "本系统保存", "本系统继续维护",
+            "本系统维护", "本系统保存", "本系统只保存", "本系统继续维护",
             "维护本系统", "记录本系统",
         ])
 
