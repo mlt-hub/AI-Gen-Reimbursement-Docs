@@ -785,6 +785,20 @@ def test_strict_profile_prefers_explicit_name_action_over_description_keywords()
     ) is False
 
 
+def test_strict_profile_prefers_full_name_tail_action_over_external_mapping():
+    fpa_type, _ = STRICT_FPA_PROFILE.infer_type(
+        "【地市后台】组织管理-外部组织引用-外部组织引用-组织主数据维护",
+        "用户选择外部组织后，本系统保存关联关系，触发数据维护。系统元素：主数据平台。",
+    )
+
+    assert fpa_type == "EI"
+    assert STRICT_FPA_PROFILE.has_obvious_conflict(
+        "【地市后台】组织管理-外部组织引用-外部组织引用-组织主数据维护",
+        "用户选择外部组织后，本系统保存关联关系，触发数据维护。系统元素：主数据平台。",
+        "EI",
+    ) is False
+
+
 def test_strict_profile_transaction_keyword_priority_for_mixed_actions():
     assert STRICT_FPA_PROFILE.infer_type(
         "导入并查看客户名单",
