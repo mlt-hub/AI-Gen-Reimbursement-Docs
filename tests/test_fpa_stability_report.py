@@ -18,6 +18,7 @@ def test_stability_report_summarizes_module_quality_signals():
                 "warnings": [
                     "客户档案 AI 输出稳定性校验触发一次重试",
                     "AI 行名称末尾已按 source_process_id 规范化",
+                    "客户档案 AI 结果未覆盖 1 个功能过程，已追加 2 条 rules_fallback 行",
                     "外部数据组边界需人工复核",
                     "普通 warning",
                 ],
@@ -80,6 +81,7 @@ def test_stability_report_summarizes_module_quality_signals():
     assert any(item["area"] == "postprocess_normalization" for item in summary["recommendations"])
     assert summary["agent_role_counts"]["business_fact_extractor"] == 2
     assert summary["pending_agent_role_counts"]["fpa_type_judge"] == 2
+    assert report["modules"][0]["warning_count"] == 4
     assert report["modules"][0]["retry_count"] == 1
     assert report["modules"][0]["pending_agent_roles"] == ["fpa_type_judge"]
 
@@ -93,6 +95,15 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
         "profile": "strict_fpa",
         "strategy": "ai_first",
         "rule_set": "strict_fpa_rs",
+        "stability_report": {
+            "summary": {
+                "module_count": 99,
+                "warning_count": 99,
+                "quality_issue_count": 99,
+                "retryable_quality_issue_count": 99,
+            },
+            "modules": [],
+        },
         "modules": [{
             "module": "客户管理",
             "l3": "客户档案",
