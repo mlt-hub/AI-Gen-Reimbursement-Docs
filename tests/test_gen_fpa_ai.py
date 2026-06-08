@@ -36,6 +36,8 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     reset_current_fpa_rule_set_config,
     set_current_fpa_rule_set_config,
 )
+from ai_gen_reimbursement_docs.pipeline_callbacks import PipelineCallbacks
+from ai_gen_reimbursement_docs.runtime_context import callbacks_var
 
 
 def _meta():
@@ -2219,6 +2221,57 @@ def test_fpa_preview_confirmed_decisions_enter_prompt_and_suppress_question(monk
     assert second["confirmed_decision_count"] == 1
     assert second["status"] == "ok"
     assert second["confirmation_questions"] == []
+
+
+def test_fpa_batch_generation_pauses_for_confirmation_and_replans(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    prompts: list[str] = []
+    confirmation_payloads: list[dict] = []
+
+    def fake_call_llm(prompt, *args, **kwargs):
+        prompts.append(prompt)
+        fpa_type = "EQ" if "必须作为硬约束执行" in prompt else "EI"
+        return json.dumps({
+            "rows": [{
+                "name": "查询垂直行业",
+                "type": fpa_type,
+                "explanation": "来源场景：查询垂直行业。\n业务数据：垂直行业列表。\n业务规则：只读取并展示列表。\n计算说明：按查询类 EQ 计量。",
+                "source_process_ids": ["m1_p2"],
+                "source_processes": ["查询垂直行业"],
+            }]
+        }, ensure_ascii=False)
+
+    def fake_wait_for_fpa_confirmation(payload):
+        confirmation_payloads.append(payload)
+        question_id = payload["confirmation_questions"][0]["id"]
+        return {question_id: {"value": "eq", "scope": "current_run"}}
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+    token = callbacks_var.set(PipelineCallbacks(
+        wait_for_fpa_confirmation=fake_wait_for_fpa_confirmation,
+    ))
+    try:
+        rows = _plan_fpa_rows_with_execution(
+            _rows(),
+            _meta(),
+            ["规则一"],
+            api_key="sk-test",
+            model="test",
+            base_url="",
+            profile=STRICT_FPA_PROFILE,
+            strategy="ai_only",
+            rule_set="strict_fpa_rs",
+            fpa_confirmation_mode="cautious",
+        )
+    finally:
+        callbacks_var.reset(token)
+
+    assert confirmation_payloads
+    assert confirmation_payloads[0]["module"]["l3"] == "垂直行业管理"
+    assert confirmation_payloads[0]["confirmation_questions"][0]["topic"] == "类型判定"
+    assert len(prompts) == 2
+    assert "必须作为硬约束执行" in prompts[1]
+    assert rows[0]["类型"] == "EQ"
 
 
 def test_fpa_preview_prompt_includes_project_domain_context(monkeypatch, tmp_path):

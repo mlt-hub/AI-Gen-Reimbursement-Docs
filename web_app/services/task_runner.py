@@ -93,6 +93,9 @@ def build_web_callbacks(session_manager: SessionManager) -> PipelineCallbacks:
         wait_for_fpa_input=lambda default: pipeline_runtime.wait_for_fpa_input(
             session_manager, default
         ),
+        wait_for_fpa_confirmation=lambda payload: pipeline_runtime.wait_for_fpa_confirmation(
+            session_manager, payload
+        ),
         wait_for_list_input=lambda cfp, fpa: pipeline_runtime.wait_for_list_input(
             session_manager, cfp, fpa
         ),
@@ -112,6 +115,7 @@ def execute_mode(
     fpa_profile: str = "",
     fpa_strategy: str = "",
     fpa_rule_set: str = "",
+    fpa_confirmation_mode: str = "",
     clean: bool = False,
     *,
     mode_info: dict[str, dict[str, str]],
@@ -159,6 +163,7 @@ def execute_mode(
         fpa_profile=fpa_profile,
         fpa_strategy=fpa_strategy,
         fpa_rule_set=fpa_rule_set,
+        fpa_confirmation_mode=fpa_confirmation_mode,
         callbacks=callbacks,
     )
 
@@ -177,6 +182,7 @@ def execute_in_session(
     fpa_profile: str,
     fpa_strategy: str,
     fpa_rule_set: str,
+    fpa_confirmation_mode: str,
     clean: bool,
     mode: str,
     *,
@@ -206,6 +212,7 @@ def execute_in_session(
             fpa_profile=fpa_profile,
             fpa_strategy=fpa_strategy,
             fpa_rule_set=fpa_rule_set,
+            fpa_confirmation_mode=fpa_confirmation_mode,
             clean=clean,
             mode_info=mode_info,
             mode_map=mode_map,

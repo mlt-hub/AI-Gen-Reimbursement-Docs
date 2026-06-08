@@ -30,6 +30,9 @@ class PipelineCallbacks:
     check_cancelled: Callable[[], None] = lambda: None
     emit_event: Callable[[dict[str, Any]], None] = lambda data: None
     wait_for_fpa_input: Callable[[float], float] = lambda default: default
+    wait_for_fpa_confirmation: Callable[[dict[str, Any]], dict[str, Any]] = (
+        lambda payload: {}
+    )
     wait_for_list_input: Callable[[float, float], tuple[float, float]] = (
         lambda cfp, fpa: (cfp, fpa)
     )

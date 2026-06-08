@@ -78,6 +78,14 @@ export const useLogStore = defineStore('log', () => {
               fpaDefault: data.fpa_default || 0,
             })
             return
+          case 'fpa_confirmation_required':
+            append({ level: 'INFO', msg: '⏸ 等待确认 FPA 计量口径...', time: data.time || '' })
+            session.showFpaConfirmationPrompt({
+              confirmationMode: data.confirmation_mode || 'cautious',
+              module: data.module || {},
+              questions: data.confirmation_questions || [],
+            })
+            return
           case 'step':
             useStepsStore().handlePipelineEvent(data)
             return

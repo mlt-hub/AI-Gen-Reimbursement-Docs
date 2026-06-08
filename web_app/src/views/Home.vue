@@ -104,6 +104,59 @@
       </div>
     </Teleport>
 
+    <!-- 批量 FPA 计量口径确认弹窗 -->
+    <Teleport to="body">
+      <div v-if="session.fpaConfirmationPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div class="surface flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl">
+          <div class="border-b border-[var(--color-rule)] px-5 py-4">
+            <p class="text-xs font-semibold text-[var(--color-ink-soft)]">确认计量口径</p>
+            <h3 class="mt-1 text-lg font-semibold text-[var(--color-ink)]">{{ fpaConfirmationTitle }}</h3>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto p-5">
+            <div class="grid gap-3">
+              <article
+                v-for="question in session.fpaConfirmationPrompt.questions"
+                :key="question.id"
+                class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-raised)] p-4"
+              >
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0">
+                    <p class="text-xs font-semibold text-[var(--color-accent-strong)]">{{ question.topic }}</p>
+                    <p class="mt-1 text-sm font-semibold leading-6 text-[var(--color-ink)]">{{ question.question }}</p>
+                  </div>
+                  <span class="shrink-0 rounded-md bg-[var(--color-accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--color-accent-strong)]">
+                    推荐 {{ optionLabel(question, question.recommendation) }}
+                  </span>
+                </div>
+                <p class="mt-2 text-xs leading-5 text-[var(--color-ink-muted)]">{{ question.reason }}</p>
+                <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                  <label
+                    v-for="option in question.options"
+                    :key="option.value"
+                    class="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                    :class="fpaConfirmationSelections[question.id] === option.value ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]' : 'border-[var(--color-rule)] bg-[var(--color-surface)] text-[var(--color-ink)]'"
+                  >
+                    <input
+                      v-model="fpaConfirmationSelections[question.id]"
+                      class="h-4 w-4"
+                      type="radio"
+                      :name="question.id"
+                      :value="option.value"
+                    />
+                    <span>{{ option.label }}</span>
+                  </label>
+                </div>
+              </article>
+            </div>
+          </div>
+          <div class="flex flex-col-reverse gap-2 border-t border-[var(--color-rule)] px-5 py-4 sm:flex-row sm:justify-end sm:gap-3">
+            <button @click="cancelTask" class="btn-quiet">取消任务</button>
+            <button @click="submitFpaConfirmation" class="btn-primary" :disabled="!canSubmitFpaConfirmation">确认继续</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- AI 交互弹窗 -->
     <Teleport to="body">
       <div v-if="aiModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="closeAIModal">
@@ -150,7 +203,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useSessionStore } from '@/stores/session.ts'
-import type { DoneFile, RunState } from '@/stores/session.ts'
+import type { DoneFile, FpaConfirmationQuestion, RunState } from '@/stores/session.ts'
 import { useConfigStore } from '@/stores/config.ts'
 import { useLogStore } from '@/stores/log.ts'
 import { useStepsStore } from '@/stores/steps.ts'
@@ -249,6 +302,33 @@ watch(() => session.listPrompt, (p) => {
   }
 })
 
+// ── 批量 FPA 计量口径确认 ──
+const fpaConfirmationSelections = ref<Record<string, string>>({})
+const fpaConfirmationTitle = computed(() => {
+  const prompt = session.fpaConfirmationPrompt
+  if (!prompt) return ''
+  const moduleName = prompt.module.l3 || '当前三级模块'
+  const index = prompt.module.index && prompt.module.total
+    ? `（${prompt.module.index}/${prompt.module.total}）`
+    : ''
+  return `${moduleName}${index}`
+})
+const canSubmitFpaConfirmation = computed(() => {
+  const questions = session.fpaConfirmationPrompt?.questions ?? []
+  return questions.length > 0 && questions.every(question => Boolean(fpaConfirmationSelections.value[question.id]))
+})
+
+watch(() => session.fpaConfirmationPrompt, (prompt) => {
+  fpaConfirmationSelections.value = {}
+  for (const question of prompt?.questions ?? []) {
+    fpaConfirmationSelections.value[question.id] = question.recommendation
+  }
+})
+
+function optionLabel(question: FpaConfirmationQuestion, value: string) {
+  return question.options.find(option => option.value === value)?.label || value
+}
+
 async function submitFpaInput() {
   if (!session.sessionId) return
   const val = parseFloat(String(fpaInputValue.value)) || 0
@@ -281,6 +361,31 @@ async function submitListInput() {
     return
   }
   session.listPrompt = null
+}
+
+async function submitFpaConfirmation() {
+  if (!session.sessionId || !session.fpaConfirmationPrompt || !canSubmitFpaConfirmation.value) return
+  const confirmedDecisions: Record<string, { value: string; scope: 'current_run' }> = {}
+  for (const question of session.fpaConfirmationPrompt.questions) {
+    confirmedDecisions[question.id] = {
+      value: fpaConfirmationSelections.value[question.id],
+      scope: 'current_run',
+    }
+  }
+  try {
+    await apiFetch('/api/continue/' + session.sessionId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'fpa_confirmation',
+        confirmed_decisions: confirmedDecisions,
+      }),
+    })
+  } catch (e) {
+    toast.show('error', normalizeApiError(e))
+    return
+  }
+  session.fpaConfirmationPrompt = null
 }
 
 async function cancelTask() {
