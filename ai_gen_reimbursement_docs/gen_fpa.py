@@ -257,7 +257,7 @@ def _normalize_explanation_table_count_detail(explanation: str) -> str:
     # Keep the official classification wording in 计算依据归类, but remove
     # low-value parenthetical table-count details from the formal explanation.
     return re.sub(
-        r"（(?:保守按)?1\s*个表(?:/数据组)?）",
+        r"（(?:保守按)?1\s*(?:个|张)表(?:/数据组)?(?:对应1\s*个(?:ILF|EIF|EI|EO|EQ))?）",
         "",
         text,
     )
