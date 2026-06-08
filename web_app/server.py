@@ -110,6 +110,7 @@ def cleanup_expired_sessions(max_age_seconds: int = 24 * 3600) -> int:
 @app.get("/static/dist/login")
 @app.get("/static/dist/config")
 @app.get("/static/dist/license")
+@app.get("/static/dist/tasks")
 @app.get("/static/dist/history")
 @app.get("/static/dist/prompt-debug")
 async def static_dist_spa_page():
@@ -154,6 +155,11 @@ async def config_page():
 
 @app.get("/license")
 async def license_page():
+    return _spa_index()
+
+
+@app.get("/tasks")
+async def tasks_page():
     return _spa_index()
 
 

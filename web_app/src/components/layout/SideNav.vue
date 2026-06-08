@@ -93,6 +93,7 @@ import {
   ChevronDownIcon,
   ClockIcon,
   Cog6ToothIcon,
+  ClipboardDocumentListIcon,
   DocumentMagnifyingGlassIcon,
   HomeIcon,
   KeyIcon,
@@ -121,6 +122,7 @@ const route = useRoute()
 
 const primaryItems: NavItem[] = [
   { label: '生成', to: '/', icon: HomeIcon, match: path => path === '/' || path === '/static/dist/' },
+  { label: '任务', to: '/tasks', icon: ClipboardDocumentListIcon, match: path => path.startsWith('/tasks') },
   { label: '历史', to: '/history', icon: ClockIcon, match: path => path.startsWith('/history') },
   { label: '配置', to: '/config', icon: Cog6ToothIcon, match: path => path.startsWith('/config') },
 ]

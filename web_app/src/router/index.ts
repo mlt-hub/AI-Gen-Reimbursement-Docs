@@ -24,6 +24,12 @@ const router = createRouter({
       meta: { nav: 'config' },
     },
     {
+      path: '/tasks',
+      name: 'tasks',
+      component: () => import('@/views/Tasks.vue'),
+      meta: { nav: 'tasks' },
+    },
+    {
       path: '/license',
       name: 'license',
       component: () => import('@/views/License.vue'),

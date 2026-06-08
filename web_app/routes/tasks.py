@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 
 from ai_gen_reimbursement_docs.gen_fpa import preview_fpa_module, preview_fpa_modules
 from ai_gen_reimbursement_docs.auth import user_config_dir
-from web_app.dependencies import require_auth, require_local
+from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
     config_dir,
     mode_requires_ai,
@@ -30,7 +30,13 @@ from web_app.services.fpa_project_profile_service import (
     persist_project_profile_decisions,
     serialize_decisions,
 )
-from web_app.services.run_history_service import finish_web_run, start_web_run
+from web_app.services.run_history_service import (
+    close_history_item,
+    finish_web_run,
+    list_tasks,
+    require_rerunnable_history_item,
+    start_web_run,
+)
 from web_app.services.session_access import require_session_access
 from web_app.services.session_manager import SessionManager
 from web_app.services.task_runner import (
@@ -270,6 +276,169 @@ def create_router(
             handle.write("\n## Response\n\n")
             handle.write(response_text)
 
+    def _request_scope(request: Request, user: str) -> tuple[bool, str]:
+        local = is_local_mode(request)
+        return local, "" if local else (user or get_auth_user(request) or "")
+
+    def _start_rerun(record: dict, *, local_mode: bool, user: str) -> dict:
+        mode = str(record.get("mode") or "")
+        task_mode = str(record.get("task_mode") or "")
+        if task_mode not in mode_info:
+            raise HTTPException(400, f"未知模式: {task_mode}")
+        if mode not in {"local", "remote"}:
+            raise HTTPException(400, f"未知任务模式: {mode}")
+
+        input_path = Path(str(record.get("input_path") or ""))
+        if not input_path.exists():
+            raise HTTPException(400, "原始输入文件不存在，无法重跑")
+
+        session_id = uuid.uuid4().hex[:8]
+        task_config = _resolve_task_config_snapshot(
+            explicit={},
+            local_mode=local_mode,
+            user=user,
+            mode=task_mode,
+        )
+
+        if mode == "local":
+            output_dir = Path(str(record.get("output_dir") or input_path.parent))
+            output_dir.mkdir(parents=True, exist_ok=True)
+            profile_root = _profile_config_root(local_mode=True)
+            profile_decisions = _load_profile_decision_payload(profile_root)
+            session_manager.create(
+                session_id,
+                mode="local",
+                output_dir=output_dir,
+                config_root=profile_root,
+            )
+            start_web_run(
+                base_dir=base_dir,
+                session_id=session_id,
+                mode="local",
+                task_mode=task_mode,
+                input_path=str(input_path),
+                output_dir=str(output_dir),
+            )
+
+            def run_local_rerun():
+                pipeline_runtime.web_mode_var.set("local")
+
+                def _finish(sid: str, files: list[dict], error: str | None) -> None:
+                    finish_web_run(
+                        base_dir=base_dir,
+                        session_id=sid,
+                        mode="local",
+                        task_mode=task_mode,
+                        input_path=str(input_path),
+                        output_dir=str(output_dir),
+                        done_files=files,
+                        error=error or "",
+                    )
+
+                execute_in_session(
+                    session_manager,
+                    session_id,
+                    str(input_path),
+                    str(output_dir),
+                    "",
+                    task_config["api_key"],
+                    task_config["model"],
+                    task_config["base_url"],
+                    task_config["project_name"],
+                    task_config["max_tokens"],
+                    task_config["fpa_profile"],
+                    task_config["fpa_strategy"],
+                    task_config["fpa_rule_set"],
+                    task_config["fpa_confirmation_mode"],
+                    profile_decisions,
+                    False,
+                    task_mode,
+                    mode_info=mode_info,
+                    mode_map=mode_map,
+                    on_finish=_finish,
+                )
+
+            start_background_task(session_manager, session_id, run_local_rerun)
+            return {"session_id": session_id, "mode": "local", "output_dir": str(output_dir)}
+
+        work_dir = Path(tempfile.mkdtemp(prefix=f"ard_web_{session_id}_"))
+        input_dir = work_dir / "input"
+        output_dir = work_dir / "output"
+        custom_t_dir = work_dir / "custom_templates"
+        for directory in [input_dir, output_dir, custom_t_dir]:
+            directory.mkdir(parents=True)
+        rerun_input = input_dir / input_path.name
+        shutil.copy2(input_path, rerun_input)
+        profile_root = _profile_config_root(local_mode=False, user=user)
+        profile_decisions = _load_profile_decision_payload(profile_root)
+        session_manager.create(
+            session_id,
+            mode="remote",
+            owner=user,
+            work_dir=work_dir,
+            config_root=profile_root,
+        )
+        start_web_run(
+            base_dir=base_dir,
+            session_id=session_id,
+            mode="remote",
+            task_mode=task_mode,
+            input_path=str(rerun_input),
+            owner_id=user,
+            owner_label=user,
+        )
+
+        def run_remote_rerun():
+            pipeline_runtime.web_mode_var.set("remote")
+
+            def _pack_zip(output_dir_path: str, sid: str, result: object) -> None:
+                zip_path = work_dir / f"交付物_{sid}.zip"
+                shutil.make_archive(str(zip_path.with_suffix("")), "zip", str(output_dir_path))
+                session_manager.set_zip(sid, zip_path)
+
+            def _finish(sid: str, files: list[dict], error: str | None) -> None:
+                state = session_manager.get(sid)
+                zip_path = state.zip_path if state else None
+                finish_web_run(
+                    base_dir=base_dir,
+                    session_id=sid,
+                    mode="remote",
+                    task_mode=task_mode,
+                    input_path=str(rerun_input),
+                    owner_id=user,
+                    owner_label=user,
+                    zip_path=str(zip_path) if zip_path else "",
+                    done_files=files,
+                    error=error or "",
+                )
+
+            execute_in_session(
+                session_manager,
+                session_id,
+                str(rerun_input),
+                str(output_dir),
+                str(custom_t_dir),
+                task_config["api_key"],
+                task_config["model"],
+                task_config["base_url"],
+                task_config["project_name"],
+                task_config["max_tokens"],
+                task_config["fpa_profile"],
+                task_config["fpa_strategy"],
+                task_config["fpa_rule_set"],
+                task_config["fpa_confirmation_mode"],
+                profile_decisions,
+                False,
+                task_mode,
+                mode_info=mode_info,
+                mode_map=mode_map,
+                on_success=_pack_zip,
+                on_finish=_finish,
+            )
+
+        start_background_task(session_manager, session_id, run_remote_rerun)
+        return {"session_id": session_id, "mode": "remote", "has_download": True}
+
     @router.get("/api/fpa/options")
     async def api_fpa_options(user: str = Depends(require_auth)):
         """Return user-safe FPA option metadata for Web selectors."""
@@ -333,6 +502,70 @@ def create_router(
             }
         except Exception as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @router.get("/api/tasks")
+    async def api_tasks(
+        request: Request,
+        user: str = Depends(require_auth),
+        mode: str = "all",
+        state: str = "all",
+        limit: int = 50,
+        offset: int = 0,
+    ):
+        local, owner_id = _request_scope(request, user)
+        return list_tasks(
+            base_dir=base_dir,
+            local_mode=local,
+            owner_id=owner_id,
+            mode=mode,
+            state=state,
+            limit=limit,
+            offset=offset,
+        )
+
+    @router.post("/api/tasks/{run_id}/close")
+    async def api_close_task(
+        run_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        local, owner_id = _request_scope(request, user)
+        try:
+            item = close_history_item(
+                base_dir=base_dir,
+                run_id=run_id,
+                local_mode=local,
+                owner_id=owner_id,
+            )
+        except PermissionError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True, "item": item}
+
+    @router.post("/api/tasks/{run_id}/rerun")
+    async def api_rerun_task(
+        run_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        local, owner_id = _request_scope(request, user)
+        try:
+            record = require_rerunnable_history_item(
+                base_dir=base_dir,
+                run_id=run_id,
+                local_mode=local,
+                owner_id=owner_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return _start_rerun(record, local_mode=local, user=owner_id)
 
     @router.get("/api/sessions/{session_id}")
     async def get_session_status(

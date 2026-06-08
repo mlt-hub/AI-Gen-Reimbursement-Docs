@@ -173,6 +173,7 @@ def list_runs(
     history_path: Path,
     *,
     filters: dict[str, str] | None = None,
+    exclude_states: list[str] | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
@@ -185,6 +186,10 @@ def list_runs(
         if value and value != "all":
             where.append(f"{key} = ?")
             params.append(value)
+    if exclude_states:
+        placeholders = ", ".join("?" for _ in exclude_states)
+        where.append(f"run_state NOT IN ({placeholders})")
+        params.extend(exclude_states)
     sql = "SELECT * FROM run_history"
     if where:
         sql += " WHERE " + " AND ".join(where)
@@ -193,6 +198,29 @@ def list_runs(
     with connect(history_path) as conn:
         rows = conn.execute(sql, tuple(params)).fetchall()
     return [_row_to_record(row) for row in rows]
+
+
+def update_run_state(
+    run_id: str,
+    history_path: Path,
+    *,
+    run_state: str,
+    updated_at: str | None = None,
+) -> dict[str, Any] | None:
+    init_db(history_path)
+    updated_at = updated_at or now_iso()
+    with connect(history_path) as conn:
+        cursor = conn.execute(
+            "UPDATE run_history SET run_state = ?, updated_at = ? WHERE run_id = ?",
+            (run_state, updated_at, run_id),
+        )
+        if cursor.rowcount == 0:
+            return None
+        row = conn.execute(
+            "SELECT * FROM run_history WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+    return _row_to_record(row) if row else None
 
 
 def _row_to_record(row: sqlite3.Row) -> dict[str, Any]:
