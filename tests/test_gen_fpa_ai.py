@@ -632,6 +632,40 @@ def test_explanation_allows_classification_basis_wording_with_fpa_definition():
     )
 
 
+def test_explanation_normalizes_parenthetical_table_count_detail_without_warning():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["按后台数据库变更的表个数计量"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "垂直行业数据组",
+            "type": "ILF",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组"
+                "\n业务数据：垂直行业基础信息。"
+                "\n业务规则：本系统内部维护，支持新增、修改、删除等操作。"
+                "\n计算说明：本系统维护该逻辑数据组，符合ILF定义，按后台数据库变更的表个数计量（保守按1个表）。"
+            ),
+        }],
+    )
+
+    assert rows[0]["计算依据归类"] == "按后台数据库变更的表个数计量"
+    assert "保守按1个表" not in rows[0]["计算依据说明"]
+    assert not any("数据库表个数" in warning for warning in warnings)
+    assert any(
+        hit["rule_id"] == "postprocess.explanation_table_count_detail"
+        for hit in rows[0]["_规则命中详情"]
+    )
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
 def test_explanation_accepts_fpa_type_business_aliases():
     group = _group_rows_by_l3([
         {
@@ -698,6 +732,65 @@ def test_explanation_accepts_fpa_type_business_aliases():
         for row in rows
         for hit in row["_规则命中详情"]
     )
+
+
+def test_explanation_accepts_output_file_and_ilf_insert_type_aliases():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户运营",
+            "二级模块": "客户数据管理",
+            "三级模块": "客户名单导入",
+            "三级模块整体功能描述": "运营人员导入客户名单并下载模板。",
+            "功能过程": "下载导入模板",
+            "功能过程类型": "导出",
+            "功能过程描述": "生成并输出Excel模板文件。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户运营",
+            "二级模块": "客户数据管理",
+            "三级模块": "客户名单导入",
+            "三级模块整体功能描述": "运营人员导入客户名单并下载模板。",
+            "功能过程": "导入客户名单",
+            "功能过程类型": "新增",
+            "功能过程描述": "上传Excel文件并保存有效客户名单。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[
+            {
+                "name": "导入模板下载",
+                "type": "EO",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【地市后台】客户运营-客户数据管理-客户名单导入-导入模板下载"
+                    "\n业务数据：Excel模板文件，包含客户名单导入所需列标题。"
+                    "\n业务规则：模板为预定义格式，包含固定列结构。"
+                    "\n计算说明：输出的模板文件属于格式化文件输出，按输出的文件个数计量。"
+                ),
+            },
+            {
+                "name": "客户名单导入维护",
+                "type": "EI",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【地市后台】客户运营-客户数据管理-客户名单导入-客户名单导入维护"
+                    "\n业务数据：客户名单记录。"
+                    "\n业务规则：用户触发导入操作，系统向本系统内部数据组插入一条或多条客户名单记录。"
+                    "\n计算说明：本过程对ILF进行插入操作，按对ILF的插入、修改、删除操作次数计量。"
+                ),
+            },
+        ],
+    )
+
+    assert [row["类型"] for row in rows] == ["EO", "EI"]
+    assert not any("未明确当前 FPA 类型" in warning for warning in warnings)
 
 
 def test_unstructured_explanation_records_quality_warning():

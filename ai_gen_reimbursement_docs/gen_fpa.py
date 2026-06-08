@@ -77,9 +77,16 @@ EXPLANATION_MISSING_HINTS = ("未识别到", "未明确说明", "需求未明确
 FPA_PROJECT_DESCRIPTION_MAX_CHARS = 5000
 EXPLANATION_TABLE_COUNT_DETAIL_HINTS = ("数据库表个数=", "表个数=", "表数量", "1张表", "1 张表", "1个表", "1 个表")
 FPA_TYPE_EXPLANATION_ALIASES = {
-    "EI": ("外部输入", "输入事务", "维护类事务", "维护类EI", "维护类 EI"),
+    "EI": (
+        "外部输入", "输入事务", "维护类事务", "维护类EI", "维护类 EI",
+        "对ILF进行插入", "对 ILF 进行插入", "对ILF的插入", "对 ILF 的插入",
+        "维护内部数据", "改变本系统内部数据",
+    ),
     "EQ": ("外部查询", "查询类事务", "查询类EQ", "查询类 EQ"),
-    "EO": ("外部输出", "输出类事务", "输出类EO", "输出类 EO"),
+    "EO": (
+        "外部输出", "输出类事务", "输出类EO", "输出类 EO",
+        "文件输出", "输出文件", "输出的文件", "格式化文件输出", "生成并输出",
+    ),
     "ILF": ("内部逻辑数据", "内部数据功能", "内部数据组", "本系统维护的数据组"),
     "EIF": ("外部逻辑数据", "外部数据功能", "外部数据组", "本系统引用但不维护"),
 }
@@ -233,6 +240,19 @@ def _normalize_explanation_source_path(
         lines[index] = f"来源场景：{clean_source}"
         return "\n".join(lines)
     return text
+
+
+def _normalize_explanation_table_count_detail(explanation: str) -> str:
+    text = str(explanation or "").strip()
+    if not text:
+        return text
+    # Keep the official classification wording in 计算依据归类, but remove
+    # low-value parenthetical table-count details from the formal explanation.
+    return re.sub(
+        r"（(?:保守按)?1\s*个表(?:/数据组)?）",
+        "",
+        text,
+    )
 
 
 def _explanation_has_source_anchor(
@@ -802,6 +822,20 @@ def _normalize_ai_fpa_rows_for_l3(
                     "warnings": [detail],
                 })
                 explanation = normalized_explanation
+
+        normalized_table_detail_explanation = _normalize_explanation_table_count_detail(explanation)
+        if normalized_table_detail_explanation != explanation:
+            row_hits.append({
+                "hit_object": output_name,
+                "rule_id": "postprocess.explanation_table_count_detail",
+                "rule_desc": "正式计算依据说明保留 FPA 类型和计量口径，不展开数据库表个数细节。",
+                "suggested_type": fpa_type,
+                "adopted": "是",
+                "warnings": [
+                    f"{output_name} 计算依据说明中的数据库表个数细节已规范化"
+                ],
+            })
+            explanation = normalized_table_detail_explanation
 
         explanation_warnings = _explanation_quality_warnings(
             group=group,
