@@ -1021,10 +1021,10 @@ style(ui): tighten web ui spacing and states
 
 ## 下一步建议
 
-当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成本机与远程服务模式冒烟。后续继续推进时，建议从真实业务样例留档和发布配置核对开始，而不是继续扩大视觉微调：
+当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成本机与远程服务模式冒烟，并已落地远程 FPA 运行配置预检。后续继续推进时，建议从真实业务样例留档开始，而不是继续扩大视觉微调：
 
 1. 用业务非空功能清单再跑一次完整生成，并留存输出清单。
-2. 发布前确认远程服务的全局配置目录包含 `fpa_config.yaml`、`fpa_judgement_rules.yaml` 和 `domain_context.json`。
+2. 发布前执行 `.\scripts\check_release.ps1 -ConfigDir <全局配置目录>`，确认远程服务的全局配置目录包含 `fpa_config.yaml`、`fpa_judgement_rules.yaml` 和 `domain_context.json`。
 3. 若上线范围只包含 FPA，发布口径继续保持：COSMIC / SPEC 预览入口已预留，能力建设中。
 
 这一步以真实后端联调和发布取舍为主，避免在 UI 结构已经稳定后继续扩大纯视觉改动。
@@ -1154,3 +1154,32 @@ remote_download_retention_days: 1
 | 远程侧边栏 | 通过 | 登录后不显示 `提示词调试`，符合 D7。 |
 
 本轮所有远程测试均使用临时 HOME / USERPROFILE 和临时 work_dir。验证结束后已停止服务并清理临时目录。
+
+### 第四轮远程 FPA 发布配置预检落地
+
+执行日期：2026-06-08
+
+目标：把第三轮远程冒烟发现的“全局 FPA 配置缺失”风险前移到发布检查和环境诊断。
+
+实现范围：
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| FPA 运行配置检查 | 已落地 | `inspect_fpa_runtime_config_files()` 返回配置目录、逐文件存在状态、缺失清单和整体状态。 |
+| 发布前检查 | 已落地 | `scripts/check_release.ps1` 新增 Runtime config preflight，并支持 `-ConfigDir` 指定待发布全局配置目录。 |
+| 健康检查 | 已落地 | `/api/health` 返回 `paths.fpa_runtime_config_present` 和 `config.fpa_runtime.missing`。 |
+| 配置页环境诊断 | 已落地 | `/config` 增加 `FPA 运行配置` 状态卡，缺失时显示具体文件名。 |
+| 单元测试 | 已落地 | 覆盖缺失文件、默认模板补齐、health 缺失清单三类场景。 |
+
+验证命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_system.py
+npm run build
+.\scripts\check_release.ps1 -ConfigDir <临时完整配置目录> -SkipArtifactCheck -PythonTestTargets tests/test_web_system.py
+```
+
+补充验证：
+
+- 使用补齐 `fpa_config.yaml`、`fpa_judgement_rules.yaml`、`domain_context.json` 的临时配置目录运行 preflight，结果通过。
+- 使用空临时配置目录运行 preflight，按预期返回 `FPA 运行配置缺失`。

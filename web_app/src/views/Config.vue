@@ -21,6 +21,9 @@
       </div>
 
       <p v-if="healthError" class="mt-3 text-sm text-[var(--color-warning)]">{{ healthError }}</p>
+      <p v-else-if="fpaRuntimeConfigMissingText" class="mt-3 text-sm text-[var(--color-warning)]">
+        {{ fpaRuntimeConfigMissingText }}
+      </p>
       <p v-else-if="healthCheckedAt" class="mt-3 text-xs text-[var(--color-ink-soft)]">最近检查：{{ healthCheckedAt }}</p>
     </section>
 
@@ -913,6 +916,14 @@ interface HealthResponse {
   api?: Record<string, boolean | null>
   paths?: Record<string, boolean | null>
   features?: Record<string, boolean | null>
+  config?: {
+    fpa_runtime?: {
+      config_dir?: string
+      files?: Record<string, boolean>
+      missing?: string[]
+      present?: boolean
+    }
+  }
 }
 
 type ConfigSource = 'personal' | 'global' | 'default'
@@ -1255,6 +1266,11 @@ const diagnosticItems = computed(() => {
       className: statusClassFor(data?.paths?.templates_readable),
     },
     {
+      label: 'FPA 运行配置',
+      value: formatStatus(data?.paths?.fpa_runtime_config_present),
+      className: statusClassFor(data?.paths?.fpa_runtime_config_present),
+    },
+    {
       label: '配置接口',
       value: formatStatus(data?.api?.config),
       className: statusClassFor(data?.api?.config),
@@ -1265,6 +1281,12 @@ const diagnosticItems = computed(() => {
       className: statusClassFor(data?.features?.prompt_debug),
     },
   ]
+})
+
+const fpaRuntimeConfigMissingText = computed(() => {
+  const missing = health.value?.config?.fpa_runtime?.missing || []
+  if (!missing.length) return ''
+  return `缺少 FPA 运行配置：${missing.join('、')}`
 })
 
 const currentConfigSnapshot = computed(() => JSON.stringify({

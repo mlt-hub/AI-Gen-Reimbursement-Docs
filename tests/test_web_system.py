@@ -25,8 +25,29 @@ def test_health_endpoint_returns_core_status():
     }
     assert data["paths"]["templates_readable"] is True
     assert data["paths"]["output_writable"] is None
+    assert isinstance(data["paths"]["fpa_runtime_config_present"], bool)
     assert data["features"]["prompt_debug"] is True
     assert data["features"]["ai_interactions"] is True
+    assert data["config"]["fpa_runtime"]["present"] == data["paths"]["fpa_runtime_config_present"]
+    assert isinstance(data["config"]["fpa_runtime"]["missing"], list)
+
+
+def test_health_endpoint_reports_missing_fpa_runtime_config(monkeypatch, tmp_path):
+    monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: tmp_path)
+    app = FastAPI()
+    app.include_router(create_router(base_dir=tmp_path, mode_info=server.MODE_INFO))
+    client = TestClient(app)
+
+    resp = client.get("/api/health")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["paths"]["fpa_runtime_config_present"] is False
+    assert data["config"]["fpa_runtime"]["missing"] == [
+        "fpa_config.yaml",
+        "fpa_judgement_rules.yaml",
+        "domain_context.json",
+    ]
 
 
 def test_license_status_endpoint_is_available_without_data_package(tmp_path):

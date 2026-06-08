@@ -1,6 +1,8 @@
 param(
     [string]$ArtifactDir = "dist\ard",
+    [string]$ConfigDir = "",
     [switch]$RequireProtectedData,
+    [switch]$SkipRuntimeConfigCheck,
     [switch]$SkipArtifactCheck,
     [string[]]$PythonTestTargets = @(
         "tests/test_web_system.py",
@@ -16,6 +18,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $webRoot = Join-Path $repoRoot "web_app"
 $testScript = Join-Path $repoRoot "scripts\test.ps1"
 $dataProtectionCheck = Join-Path $repoRoot "scripts\check_release_data_protection.ps1"
+$runtimeConfigCheck = Join-Path $repoRoot "scripts\check_release_runtime_config.py"
+$venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 
 function Step($Message) {
     Write-Host ""
@@ -51,6 +55,18 @@ foreach ($script in $scriptFiles) {
         exit 1
     }
     Write-Host "[通过] $script"
+}
+
+if (-not $SkipRuntimeConfigCheck) {
+    Step "Runtime config preflight"
+    $pythonExe = if (Test-Path -LiteralPath $venvPython) { $venvPython } else { "python" }
+    $configCheckArgs = @($runtimeConfigCheck)
+    if ($ConfigDir) {
+        $configCheckArgs += "--config-dir"
+        $configCheckArgs += $ConfigDir
+    }
+    & $pythonExe @configCheckArgs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
 if (-not $SkipArtifactCheck) {

@@ -10,6 +10,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     _get_system_config_value,
     copy_default_config_files,
     api_key_fingerprint,
+    inspect_fpa_runtime_config_files,
     load_fpa_excel_recalc_check,
     load_fpa_domain_context,
     load_max_tokens,
@@ -32,6 +33,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_model_name,
     log_api_key_resolution,
     resolve_api_key,
+    validate_fpa_runtime_config_files,
     _read_env_value,
 )
 from ai_gen_reimbursement_docs.fpa_profiles import adjust_value_for_type, calculate_fpa_adjustment_for_row
@@ -65,6 +67,36 @@ def test_copy_default_config_files_copies_all_templates_without_overwrite(tmp_pa
     assert (target / "fpa_config.yaml").exists()
     assert (target / "fpa_judgement_rules.yaml").exists()
     assert (target / "domain_context.json").exists()
+
+
+def test_inspect_fpa_runtime_config_files_reports_missing_files(tmp_path):
+    (tmp_path / "fpa_config.yaml").write_text("profiles: {}\n", encoding="utf-8")
+
+    status = inspect_fpa_runtime_config_files(tmp_path)
+
+    assert status["config_dir"] == str(tmp_path)
+    assert status["files"] == {
+        "fpa_config.yaml": True,
+        "fpa_judgement_rules.yaml": False,
+        "domain_context.json": False,
+    }
+    assert status["missing"] == ["fpa_judgement_rules.yaml", "domain_context.json"]
+    assert status["present"] is False
+
+
+def test_validate_fpa_runtime_config_files_accepts_copied_defaults(tmp_path):
+    source = Path(__file__).resolve().parents[1] / "config"
+    copy_default_config_files(tmp_path, source)
+
+    status = validate_fpa_runtime_config_files(tmp_path)
+
+    assert status["present"] is True
+    assert status["missing"] == []
+
+
+def test_validate_fpa_runtime_config_files_rejects_missing_files(tmp_path):
+    with pytest.raises(FpaConfigError, match="FPA 运行配置缺失"):
+        validate_fpa_runtime_config_files(tmp_path)
 
 
 def _write_fpa_config(tmp_path):

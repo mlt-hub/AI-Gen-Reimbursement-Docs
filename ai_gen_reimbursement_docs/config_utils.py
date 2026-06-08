@@ -398,6 +398,11 @@ def load_fpa_excel_recalc_check() -> bool:
 FPA_CONFIG_FILENAME = "fpa_config.yaml"
 FPA_DOMAIN_CONTEXT_FILENAME = "domain_context.json"
 FPA_JUDGEMENT_RULES_FILENAME = "fpa_judgement_rules.yaml"
+FPA_RUNTIME_CONFIG_FILES = (
+    FPA_CONFIG_FILENAME,
+    FPA_JUDGEMENT_RULES_FILENAME,
+    FPA_DOMAIN_CONTEXT_FILENAME,
+)
 VALID_FPA_PROFILE_KINDS = {"strict_fpa", "unified_ui", "ui_api_mapping"}
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_FPA_JUDGEMENT_RULES_SOURCES = {"config", "template"}
@@ -408,6 +413,32 @@ VALID_FPA_COMPLEXITY_SOURCES = {"ai", "default"}
 VALID_FPA_COMPLEXITIES = {"low", "medium", "high"}
 VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
 FPA_USER_PROMPT_PLACEHOLDERS = frozenset({"core_rules", "judgement_rules", "payload_json"})
+
+
+def inspect_fpa_runtime_config_files(target_dir: Path | None = None) -> dict[str, object]:
+    """Return presence information for FPA files required by Web runtime tasks."""
+    base_dir = target_dir or config_dir()
+    files = {name: (base_dir / name).is_file() for name in FPA_RUNTIME_CONFIG_FILES}
+    missing = [name for name, present in files.items() if not present]
+    return {
+        "config_dir": str(base_dir),
+        "files": files,
+        "missing": missing,
+        "present": not missing,
+    }
+
+
+def validate_fpa_runtime_config_files(target_dir: Path | None = None) -> dict[str, object]:
+    """Raise a user-facing FPA config error if any runtime config file is missing."""
+    status = inspect_fpa_runtime_config_files(target_dir)
+    missing = status["missing"]
+    if missing:
+        raise FpaConfigError(
+            "FPA 运行配置缺失：配置目录缺少 "
+            + "、".join(str(name) for name in missing)
+            + "。请先运行 ard --init-config 或从 config/*.example 补齐。"
+        )
+    return status
 
 
 def _validate_domain_context_string_list(value: object, key_path: str) -> None:

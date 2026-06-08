@@ -45,6 +45,12 @@ def _readable_directory(path: Path) -> bool:
     return path.exists() and path.is_dir()
 
 
+def _fpa_runtime_config_status() -> dict[str, object]:
+    from ai_gen_reimbursement_docs.config_utils import inspect_fpa_runtime_config_files
+
+    return inspect_fpa_runtime_config_files()
+
+
 def _license_paths(base_dir: Path, payload: LicenseActivationRequest | None = None) -> dict[str, Path]:
     return {
         "data_enc": Path(payload.data_enc).expanduser() if payload and payload.data_enc else base_dir / "data.enc",
@@ -86,6 +92,7 @@ def create_router(*, base_dir: Path, mode_info: dict[str, dict[str, str]]) -> AP
         input_templates = base_dir / "data" / "in_templates"
         output_templates = base_dir / "data" / "out_templates"
         templates_readable = _readable_directory(input_templates) and _readable_directory(output_templates)
+        fpa_runtime_config = _fpa_runtime_config_status()
 
         return {
             "ok": templates_readable,
@@ -100,10 +107,14 @@ def create_router(*, base_dir: Path, mode_info: dict[str, dict[str, str]]) -> AP
             "paths": {
                 "templates_readable": templates_readable,
                 "output_writable": None,
+                "fpa_runtime_config_present": fpa_runtime_config["present"],
             },
             "features": {
                 "prompt_debug": True,
                 "ai_interactions": True,
+            },
+            "config": {
+                "fpa_runtime": fpa_runtime_config,
             },
         }
 
