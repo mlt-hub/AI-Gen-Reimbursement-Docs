@@ -2,7 +2,12 @@ from pathlib import Path
 
 from fastapi import HTTPException, Request
 
-from ai_gen_reimbursement_docs.auth import get_username_by_token, is_admin, is_local_host
+from ai_gen_reimbursement_docs.auth import (
+    get_username_by_token,
+    is_admin,
+    is_local_host,
+    user_must_change_password,
+)
 
 
 def get_auth_user(request: Request) -> str | None:
@@ -52,6 +57,8 @@ def require_admin(request: Request) -> str:
         return username
     if not is_admin(username):
         raise HTTPException(403, "仅管理员可访问")
+    if user_must_change_password(username):
+        raise HTTPException(403, "请先修改初始密码")
     return username
 
 

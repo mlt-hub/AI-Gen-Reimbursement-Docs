@@ -148,9 +148,11 @@ def _init_db() -> None:
                 salt        TEXT NOT NULL,
                 role        TEXT NOT NULL DEFAULT 'user',
                 disabled    INTEGER NOT NULL DEFAULT 0,
+                must_change_password INTEGER NOT NULL DEFAULT 0,
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        _ensure_user_schema(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS auth_sessions (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,10 +184,41 @@ def _init_db() -> None:
                 """,
                 (ADMIN_USERNAME, pw_hash, salt),
             )
+            conn.execute(
+                "UPDATE users SET must_change_password = 1 WHERE username = ?",
+                (ADMIN_USERNAME,),
+            )
             admin_created = True
+        else:
+            conn.execute(
+                "UPDATE users SET role = 'admin' WHERE username = ? AND role != 'admin'",
+                (ADMIN_USERNAME,),
+            )
+            row = conn.execute(
+                "SELECT password, salt, must_change_password FROM users WHERE username = ?",
+                (ADMIN_USERNAME,),
+            ).fetchone()
+            if row:
+                computed, _ = _hash_password(ADMIN_INITIAL_PASSWORD, row[1])
+                if row[0] == computed and not row[2]:
+                    conn.execute(
+                        "UPDATE users SET must_change_password = 1 WHERE username = ?",
+                        (ADMIN_USERNAME,),
+                    )
         conn.commit()
     if admin_created:
         init_user_dir(ADMIN_USERNAME)
+
+
+def _ensure_user_schema(conn: sqlite3.Connection) -> None:
+    """补齐开发期旧 users 表缺失的轻量字段。"""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "role" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+    if "disabled" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+    if "must_change_password" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
 
 
 def register_user(username: str, password: str, *, role: str = "user") -> bool:
@@ -206,6 +239,55 @@ def register_user(username: str, password: str, *, role: str = "user") -> bool:
                 (username, pw_hash, salt, role),
             )
             conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def register_user_with_invite(username: str, password: str, invite_code: str) -> bool:
+    """使用邀请码注册用户，用户写入和邀请码计数更新保持同一数据库事务。"""
+    username = username.strip().lower()
+    if not username or len(password) < 6:
+        return False
+
+    code = invite_code.strip()
+    if not code:
+        raise InviteError("邀请码无效")
+
+    _init_db()
+    now = _dt_text(_utc_now())
+    pw_hash, salt = _hash_password(password)
+    code_hash = _hash_token(code)
+
+    try:
+        with sqlite3.connect(str(_db_path())) as conn:
+            row = conn.execute(
+                """
+                SELECT id, expires_at, max_uses, used_count, disabled
+                FROM registration_invites
+                WHERE code_hash = ?
+                """,
+                (code_hash,),
+            ).fetchone()
+            if not row:
+                raise InviteError("邀请码无效")
+            if row[4]:
+                raise InviteError("邀请码已停用")
+            if row[1] and row[1] <= now:
+                raise InviteError("邀请码已过期")
+            if row[3] >= row[2]:
+                raise InviteError("邀请码使用次数已耗尽")
+
+            conn.execute(
+                "INSERT INTO users (username, password, salt, role) VALUES (?, ?, ?, 'user')",
+                (username, pw_hash, salt),
+            )
+            conn.execute(
+                "UPDATE registration_invites SET used_count = used_count + 1 WHERE id = ?",
+                (row[0],),
+            )
+            conn.commit()
+        init_user_dir(username)
         return True
     except sqlite3.IntegrityError:
         return False
@@ -258,6 +340,42 @@ def get_user_role(username: str) -> str | None:
 def is_admin(username: str) -> bool:
     """判断用户是否为管理员。"""
     return get_user_role(username) == "admin"
+
+
+def user_must_change_password(username: str) -> bool:
+    """判断用户是否必须修改初始密码。"""
+    username = username.strip().lower()
+    if not username:
+        return False
+    _init_db()
+    with sqlite3.connect(str(_db_path())) as conn:
+        row = conn.execute(
+            "SELECT must_change_password FROM users WHERE username = ? AND disabled = 0",
+            (username,),
+        ).fetchone()
+    return bool(row and row[0])
+
+
+def change_password(username: str, current_password: str, new_password: str) -> bool:
+    """修改密码，成功后清除 must_change_password 标记。"""
+    username = username.strip().lower()
+    if not username or len(new_password) < 6:
+        return False
+    if not verify_user(username, current_password):
+        return False
+
+    pw_hash, salt = _hash_password(new_password)
+    with sqlite3.connect(str(_db_path())) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE users
+            SET password = ?, salt = ?, must_change_password = 0
+            WHERE username = ? AND disabled = 0
+            """,
+            (pw_hash, salt, username),
+        )
+        conn.commit()
+    return cursor.rowcount > 0
 
 
 def allow_register() -> bool:

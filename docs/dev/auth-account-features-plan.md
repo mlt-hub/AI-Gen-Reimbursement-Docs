@@ -48,6 +48,7 @@
 - 用户表增加 `role` 字段，支持 `admin` 与 `user`。
 - 内置管理员账号固定为 `admin / mlt123`。
 - 系统启动或认证库初始化时，如果管理员账号不存在，则创建 `admin` 用户并写入 PBKDF2 密码哈希。
+- 内置管理员首次登录后必须修改初始密码；未修改前不能访问管理员接口。
 - 系统尚未上线，不需要兼容旧版本用户库或旧账号结构。
 - 管理员账号创建后应复用现有用户目录初始化流程。
 
@@ -65,6 +66,7 @@
 - 管理 UI 生成邀请码时，默认有效期 7 天、最大使用次数 1 次。
 - 普通用户不能创建、查看或停用邀请码。
 - 邀请码使用成功后扣减次数；一次性邀请码使用后失效。
+- 邀请码校验、用户创建和邀请码使用次数更新在同一 SQLite 事务中完成，避免注册失败但邀请码被消耗。
 - 邀请码管理页放在“系统管理”下，提供完整管理 UI。
 
 ### 管理员邀请码管理 UI
@@ -85,9 +87,12 @@
   - 扩展用户表结构。
   - 新增角色、管理员初始化、持久会话、邀请码相关函数。
   - 将 token 校验从纯内存字典扩展为“内存优先、数据库兜底”。
+  - 补齐开发期旧 `users` 表缺失的 `role`、`disabled`、`must_change_password` 字段。
+  - 新增改密函数，管理员默认密码会标记为必须修改。
 
 - `web_app/dependencies.py`
   - 新增 `require_admin` 依赖。
+  - 管理员默认密码未修改时拒绝访问管理员接口。
   - 保留现有 `require_auth` 行为。
 
 - `web_app/server.py`
@@ -95,19 +100,24 @@
 
 - `web_app/routes/auth.py`
   - 扩展 `/api/auth/login`，支持 `remember_me`。
-  - 扩展 `/api/auth/register`，支持邀请码校验。
-  - 扩展 `/api/auth/me`，返回用户角色。
+  - 扩展 `/api/auth/register`，支持事务化邀请码注册。
+  - 扩展 `/api/auth/me`，返回用户角色和是否必须改密。
+  - 新增 `/api/auth/change-password`。
+  - HTTPS 请求下为 `ard_token` cookie 设置 `Secure`。
   - 新增管理员邀请码管理接口。
 
 - `web_app/src/stores/auth.ts`
   - 登录请求增加 `remember_me`。
   - 当前用户状态增加 `role`。
+  - 当前用户状态增加 `must_change_password`。
   - 支持保存和恢复上次登录用户名。
+  - 支持调用改密接口。
 
 - `web_app/src/views/Login.vue`
   - 增加“记住我”控件。
   - 注册模式增加邀请码输入。
   - 登录页初始化时填充上次保存的用户名。
+  - 管理员初始密码未修改时停留在登录页完成改密。
 
 - 系统管理相关前端文件
   - 在系统管理下新增邀请注册管理页面。
@@ -136,6 +146,7 @@
 - `salt TEXT NOT NULL`
 - `role TEXT NOT NULL DEFAULT 'user'`
 - `disabled INTEGER NOT NULL DEFAULT 0`
+- `must_change_password INTEGER NOT NULL DEFAULT 0`
 - `created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
 
 ### auth_sessions
@@ -181,7 +192,8 @@
 ```json
 {
   "username": "admin",
-  "role": "admin"
+  "role": "admin",
+  "must_change_password": true
 }
 ```
 
@@ -208,8 +220,33 @@
 {
   "username": "admin",
   "role": "admin",
+  "must_change_password": true,
   "is_local": false,
   "allow_register": false
+}
+```
+
+### POST /api/auth/change-password
+
+当前登录用户修改密码。管理员不能把新密码继续设为内置初始密码。
+
+请求：
+
+```json
+{
+  "current_password": "mlt123",
+  "new_password": "changed-secret"
+}
+```
+
+响应：
+
+```json
+{
+  "ok": true,
+  "username": "admin",
+  "role": "admin",
+  "must_change_password": false
 }
 ```
 
@@ -269,6 +306,8 @@ npm run build
 
 - 首次初始化认证库后，自动存在 `admin / mlt123` 管理员账号。
 - `admin` 登录后 `GET /api/auth/me` 返回 `role: "admin"`。
+- `admin` 首次登录后 `must_change_password: true`，修改初始密码前不能访问管理员接口。
+- 修改密码后 `must_change_password: false`，管理员接口恢复可用。
 - 普通用户或未登录用户无法访问管理员邀请码接口。
 - 管理员可以生成邀请码，响应中返回一次明文邀请码。
 - 邀请码列表不返回明文邀请码。
@@ -278,6 +317,7 @@ npm run build
 - 管理 UI 生成邀请码时，默认有效期为 7 天、最大使用次数为 1 次。
 - 普通用户注册密码少于 6 位时注册失败。
 - 勾选“记住我”登录后，服务重启仍可通过 cookie 恢复登录态。
+- HTTPS 登录响应中的 `ard_token` cookie 包含 `Secure`。
 - 登出后，原自动登录 token 立即失效。
 - 登录、登出、`/api/auth/me` 校验会清理已过期会话。
 - 登录页勾选“记住我”后，下次打开自动填充上次用户名，但不填充密码。
@@ -287,6 +327,6 @@ npm run build
 
 - 不实现明文密码落盘。
 - 自动登录 token 必须有过期时间，登出后必须立即失效。
-- 当前阶段管理员初始密码固定为 `mlt123`；上线前应增加修改密码或首次登录强制改密能力。
+- 当前阶段管理员初始密码固定为 `mlt123`，但首次登录后必须修改；后续仍建议增加完整账号管理能力。
 - `allow_register` 建议重新定义为“是否允许公开注册”；管理员邀请注册不受公开注册开关影响。
-- 系统尚未上线，不做旧版数据库迁移兼容。
+- 系统尚未上线，不做完整旧版数据库迁移兼容；当前仅补齐开发期旧 `users` 表所需轻量字段。

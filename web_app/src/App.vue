@@ -8,7 +8,7 @@
     :backend-dot-class="backendDotClass"
     :backend-offline="config.backendStatus === 'offline'"
     :show-prompt-debug="auth.isLocal"
-    :show-admin-tools="auth.isAdmin"
+    :show-admin-tools="auth.isAdmin && !auth.mustChangePassword"
     :show-user-actions="auth.isRemote && auth.isLoggedIn"
     :username="auth.username"
     @logout="doLogout"
@@ -132,12 +132,16 @@ onMounted(async () => {
   // 路由守卫：远程模式未登录 → 跳转登录页
   if (auth.isRemote && !auth.isLoggedIn && route.path !== '/login') {
     router.replace('/login')
+  } else if (auth.isRemote && auth.mustChangePassword && route.path !== '/login') {
+    router.replace('/login')
   }
 })
 
 // 监听路由变化，保护需要登录的页面
 watch(() => route.path, (path) => {
   if (path !== '/login' && auth.isRemote && !auth.isLoggedIn) {
+    router.replace('/login')
+  } else if (path !== '/login' && auth.isRemote && auth.mustChangePassword) {
     router.replace('/login')
   }
 })
