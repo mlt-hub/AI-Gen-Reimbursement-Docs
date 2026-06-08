@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 生成项目报账文档 - 系统总览</title>
+  <style>
+    /* Hallmark · macrostructure: Long Document · tone: workbench · anchor hue: teal */
+    :root {
+      --color-paper: oklch(98% 0.01 88);
+      --color-paper-raised: oklch(100% 0.004 88);
+      --color-paper-muted: oklch(94% 0.018 92);
+      --color-ink: oklch(22% 0.026 230);
+      --color-ink-muted: oklch(44% 0.035 230);
+      --color-ink-soft: oklch(58% 0.032 230);
+      --color-rule: oklch(82% 0.022 96);
+      --color-accent: oklch(51% 0.11 184);
+      --color-accent-ink: oklch(26% 0.07 184);
+      --color-accent-soft: oklch(91% 0.045 184);
+      --color-warning: oklch(55% 0.12 52);
+      --color-warning-soft: oklch(92% 0.05 58);
+      --color-danger: oklch(49% 0.14 24);
+      --color-danger-soft: oklch(93% 0.04 24);
+      --color-blue: oklch(46% 0.12 250);
+      --color-blue-soft: oklch(92% 0.04 250);
+      --font-body: "Inter", "Segoe UI", "Microsoft YaHei", sans-serif;
+      --font-display: "Georgia", "Noto Serif SC", "SimSun", serif;
+      --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --space-8: 32px;
+      --space-10: 40px;
+      --space-12: 48px;
+      --space-16: 64px;
+      --text-xs: 12px;
+      --text-sm: 14px;
+      --text-md: 16px;
+      --text-lg: 20px;
+      --text-xl: 26px;
+      --text-2xl: 34px;
+      --text-display: 54px;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --shadow-line: 0 1px 0 var(--color-rule);
+      --ease-out: cubic-bezier(.16, 1, .3, 1);
+      --dur-fast: 140ms;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      overflow-x: clip;
+      background: var(--color-paper);
+      color: var(--color-ink);
+      font-family: var(--font-body);
+      font-size: var(--text-md);
+      line-height: 1.65;
+    }
+
+    body {
+      min-width: 320px;
+    }
+
+    a {
+      color: var(--color-accent-ink);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid var(--color-accent);
+      outline-offset: 3px;
+    }
+
+    .page {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: var(--space-8) var(--space-5);
+      border-right: 1px solid var(--color-rule);
+      background: var(--color-paper-raised);
+      overflow: auto;
+    }
+
+    .nav h2 {
+      margin: 0 0 var(--space-4);
+      font-size: var(--text-sm);
+      color: var(--color-ink-muted);
+      font-weight: 700;
+    }
+
+    .nav a {
+      display: block;
+      padding: var(--space-2) 0;
+      color: var(--color-ink);
+      font-size: var(--text-sm);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    .nav a:hover {
+      border-bottom-color: var(--color-rule);
+      color: var(--color-accent-ink);
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    .hero,
+    .section {
+      padding: var(--space-12) clamp(var(--space-5), 5vw, var(--space-16));
+      border-bottom: 1px solid var(--color-rule);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
+      gap: var(--space-10);
+      align-items: end;
+      min-height: 72vh;
+      background:
+        linear-gradient(90deg, var(--color-paper) 0%, var(--color-paper) 58%, var(--color-paper-muted) 58%, var(--color-paper-muted) 100%);
+    }
+
+    .eyebrow {
+      margin: 0 0 var(--space-4);
+      color: var(--color-accent-ink);
+      font-size: var(--text-sm);
+      font-weight: 700;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.12;
+      overflow-wrap: anywhere;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 920px;
+      font-family: var(--font-display);
+      font-size: clamp(38px, 8vw, var(--text-display));
+      font-weight: 700;
+    }
+
+    h2 {
+      font-family: var(--font-display);
+      font-size: var(--text-2xl);
+    }
+
+    h3 {
+      font-size: var(--text-lg);
+    }
+
+    p {
+      margin: var(--space-4) 0 0;
+      max-width: 760px;
+      color: var(--color-ink-muted);
+    }
+
+    code,
+    pre {
+      font-family: var(--font-mono);
+    }
+
+    code {
+      padding: 1px var(--space-1);
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-sm);
+      background: var(--color-paper-raised);
+      color: var(--color-accent-ink);
+      font-size: .92em;
+    }
+
+    .hero-panel {
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-md);
+      background: var(--color-paper-raised);
+      box-shadow: var(--shadow-line);
+    }
+
+    .hero-panel .row {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border-bottom: 1px solid var(--color-rule);
+      min-width: 0;
+    }
+
+    .hero-panel .row:last-child {
+      border-bottom: 0;
+    }
+
+    .label {
+      color: var(--color-ink-soft);
+      font-size: var(--text-sm);
+    }
+
+    .value {
+      min-width: 0;
+      color: var(--color-ink);
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+      gap: var(--space-8);
+      align-items: start;
+      margin-bottom: var(--space-8);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-4);
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card,
+    .flow-step,
+    details {
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-md);
+      background: var(--color-paper-raised);
+      min-width: 0;
+    }
+
+    .card {
+      padding: var(--space-5);
+    }
+
+    .card h3,
+    details h3 {
+      margin-bottom: var(--space-3);
+    }
+
+    .card p,
+    details p {
+      margin-top: var(--space-2);
+    }
+
+    .metric {
+      display: block;
+      margin-bottom: var(--space-2);
+      color: var(--color-accent-ink);
+      font-family: var(--font-display);
+      font-size: var(--text-xl);
+      font-weight: 700;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-top: var(--space-4);
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 var(--space-3);
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-sm);
+      background: var(--color-paper-muted);
+      color: var(--color-ink);
+      font-size: var(--text-sm);
+      white-space: nowrap;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+
+    .flow-step {
+      padding: var(--space-4);
+      position: relative;
+    }
+
+    .flow-step strong {
+      display: block;
+      margin-bottom: var(--space-2);
+      color: var(--color-ink);
+      font-size: var(--text-sm);
+    }
+
+    .flow-step span {
+      display: block;
+      color: var(--color-ink-muted);
+      font-size: var(--text-sm);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-md);
+      background: var(--color-paper-raised);
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--color-rule);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--color-paper-muted);
+      color: var(--color-ink);
+      font-size: var(--text-sm);
+    }
+
+    td {
+      color: var(--color-ink-muted);
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 var(--space-2);
+      border-radius: var(--radius-sm);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .tag.green {
+      background: var(--color-accent-soft);
+      color: var(--color-accent-ink);
+    }
+
+    .tag.blue {
+      background: var(--color-blue-soft);
+      color: var(--color-blue);
+    }
+
+    .tag.warn {
+      background: var(--color-warning-soft);
+      color: var(--color-warning);
+    }
+
+    .tag.danger {
+      background: var(--color-danger-soft);
+      color: var(--color-danger);
+    }
+
+    details {
+      padding: 0;
+    }
+
+    summary {
+      cursor: pointer;
+      padding: var(--space-4) var(--space-5);
+      color: var(--color-ink);
+      font-weight: 700;
+    }
+
+    details .details-body {
+      padding: 0 var(--space-5) var(--space-5);
+    }
+
+    .stack {
+      display: grid;
+      gap: var(--space-4);
+    }
+
+    .callout {
+      padding: var(--space-5);
+      border-left: 4px solid var(--color-accent);
+      background: var(--color-accent-soft);
+      border-radius: var(--radius-sm);
+    }
+
+    .callout p {
+      color: var(--color-accent-ink);
+    }
+
+    .mono-list {
+      display: grid;
+      gap: var(--space-2);
+      margin: var(--space-4) 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .mono-list li {
+      padding: var(--space-3);
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-sm);
+      background: var(--color-paper-raised);
+      color: var(--color-ink-muted);
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      overflow-wrap: anywhere;
+    }
+
+    .footer {
+      padding: var(--space-8) clamp(var(--space-5), 5vw, var(--space-16));
+      color: var(--color-ink-soft);
+      font-size: var(--text-sm);
+    }
+
+    @media (max-width: 1100px) {
+      .page {
+        grid-template-columns: 1fr;
+      }
+
+      .nav {
+        position: static;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--color-rule);
+      }
+
+      .nav div {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0 var(--space-4);
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        background: var(--color-paper);
+      }
+
+      .flow {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .nav div,
+      .section-head,
+      .grid,
+      .grid.two,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      .hero,
+      .section {
+        padding: var(--space-8) var(--space-5);
+      }
+
+      .hero-panel .row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .card,
+      .flow-step,
+      details {
+        transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+      }
+
+      .card:hover,
+      .flow-step:hover,
+      details:hover {
+        transform: translateY(-1px);
+        border-color: var(--color-accent);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <aside class="nav" aria-label="页面导航">
+      <h2>系统总览</h2>
+      <div>
+        <a href="#summary">定位</a>
+        <a href="#flow">生成链路</a>
+        <a href="#architecture">工程结构</a>
+        <a href="#backend">后端与 API</a>
+        <a href="#frontend">Web 工作台</a>
+        <a href="#fpa">FPA</a>
+        <a href="#cosmic">COSMIC</a>
+        <a href="#data">数据与配置</a>
+        <a href="#security">授权与运行模式</a>
+        <a href="#quality">质量保障</a>
+        <a href="#risks">维护关注点</a>
+        <a href="#sources">来源</a>
+      </div>
+    </aside>
+
+    <main>
+      <section class="hero" id="summary">
+        <div>
+          <p class="eyebrow">AI-Gen-Reimbursement-docs / ard</p>
+          <h1>从功能清单到报账交付物的生成系统地图</h1>
+          <p>
+            本页整理当前仓库的业务目标、主要生成链路、后端 API、Web 工作台、配置边界、
+            FPA 与 COSMIC 现状、测试覆盖和维护风险。它是系统理解入口，不替代各专题文档。
+          </p>
+          <div class="chips" aria-label="系统关键词">
+            <span class="chip">Excel 功能清单</span>
+            <span class="chip">FPA 工作量评估</span>
+            <span class="chip">COSMIC 功能点拆分</span>
+            <span class="chip">需求清单</span>
+            <span class="chip">需求说明书</span>
+            <span class="chip">CLI + Web UI</span>
+          </div>
+        </div>
+
+        <div class="hero-panel" aria-label="仓库快照">
+          <div class="row">
+            <span class="label">生成日期</span>
+            <span class="value">2026-06-09</span>
+          </div>
+          <div class="row">
+            <span class="label">Python 包</span>
+            <span class="value">ai_gen_reimbursement_docs</span>
+          </div>
+          <div class="row">
+            <span class="label">命令入口</span>
+            <span class="value">ard</span>
+          </div>
+          <div class="row">
+            <span class="label">Web 栈</span>
+            <span class="value">FastAPI + Vue 3 + Vite + Pinia</span>
+          </div>
+          <div class="row">
+            <span class="label">索引规模</span>
+            <span class="value">166 个 CodeGraph 文件，3065 个符号</span>
+          </div>
+          <div class="row">
+            <span class="label">测试文件</span>
+            <span class="value">49 个 test_*.py</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="flow">
+        <div class="section-head">
+          <h2>生成链路</h2>
+          <p>全流程围绕一份符合规范的 Excel 功能清单展开。CLI 和 Web 最终都把请求落到同一条 Python 管线，由中间 Markdown、Excel 模板、AI 调用和结构化校验共同产出交付物。</p>
+        </div>
+
+        <div class="flow" aria-label="生成顺序">
+          <div class="flow-step">
+            <strong>0. 基础数据</strong>
+            <span>读取功能清单，生成模块树与录入文档元数据。</span>
+          </div>
+          <div class="flow-step">
+            <strong>1. FPA</strong>
+            <span>按 profile / strategy / rule_set 生成 FPA 工作量评估和审核副本。</span>
+          </div>
+          <div class="flow-step">
+            <strong>2. COSMIC</strong>
+            <span>生成 COSMIC 模板、AI 填充稿、项目功能点拆分表和 CFP 汇总。</span>
+          </div>
+          <div class="flow-step">
+            <strong>3. 需求清单</strong>
+            <span>基于功能清单与 CFP 等中间结果写出需求清单 Excel。</span>
+          </div>
+          <div class="flow-step">
+            <strong>4. 需求说明书</strong>
+            <span>基于元数据和功能需求章节写出 DOCX 交付物。</span>
+          </div>
+          <div class="flow-step">
+            <strong>5. 日志与下载</strong>
+            <span>记录运行日志、AI prompt / response、源数据快照和 Web 会话产物。</span>
+          </div>
+        </div>
+
+        <div class="callout" style="margin-top: var(--space-6);">
+          <p>
+            管线入口是 <code>ai_gen_reimbursement_docs.pipeline.run_pipeline</code>，
+            支持 <code>gen-all</code>、<code>gen-basedata</code>、<code>gen-fpa</code>、
+            <code>gen-cosmic</code>、<code>gen-list</code>、<code>gen-spec</code>。
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <div class="section-head">
+          <h2>工程结构</h2>
+          <p>仓库按生成核心、Web 后端、Vue 前端、配置模板、测试、文档和发布脚本分层。核心生成逻辑仍在 Python 包中，Web 主要负责会话、任务、配置和人工预览体验。</p>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <span class="metric">核心包</span>
+            <h3><code>ai_gen_reimbursement_docs/</code></h3>
+            <p>CLI、管线、Excel 解析、FPA、COSMIC、需求清单、需求说明书、配置加载、LLM 客户端、运行历史和授权相关逻辑。</p>
+          </article>
+          <article class="card">
+            <span class="metric">Web 后端</span>
+            <h3><code>web_app/routes</code> 与 <code>web_app/services</code></h3>
+            <p>FastAPI 路由拆分为任务、配置、历史、授权、系统状态、日志、模板、产物下载和 prompt 调试。</p>
+          </article>
+          <article class="card">
+            <span class="metric">Web 前端</span>
+            <h3><code>web_app/src</code></h3>
+            <p>Vue 3 页面包括生成首页、配置、任务、授权、历史、FPA/COSMIC/SPEC 预览、FPA AI 调试和管理员邀请。</p>
+          </article>
+          <article class="card">
+            <span class="metric">配置模板</span>
+            <h3><code>config/*.example</code></h3>
+            <p>提供系统配置、FPA profile、FPA 判定规则、领域上下文和 AI system prompt 的初始化样例。</p>
+          </article>
+          <article class="card">
+            <span class="metric">交付模板</span>
+            <h3><code>data/in_templates</code> 与 <code>data/out_templates</code></h3>
+            <p>包含功能清单录入模板，以及 FPA、COSMIC、需求清单、需求说明书输出模板。</p>
+          </article>
+          <article class="card">
+            <span class="metric">工程文档</span>
+            <h3><code>docs/</code></h3>
+            <p>当前有 56 份 Markdown 文档，覆盖 FPA、COSMIC、Web UI、开发计划、已完成事项和发布跟踪。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="backend">
+        <div class="section-head">
+          <h2>后端与 API</h2>
+          <p>Web 后端由 <code>web_app.server:app</code> 装配静态前端和各类 API 路由。任务执行层复用核心生成管线，按本机模式或远程服务模式处理文件路径、上传文件和下载包。</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>路由组</th>
+                <th>代表接口</th>
+                <th>职责</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>tasks.py</code></td>
+                <td><code>/api/run-local</code>、<code>/api/run-upload</code>、<code>/api/tasks</code>、<code>/api/fpa/options</code></td>
+                <td>启动生成任务、上传运行、任务列表、关闭/重跑/取消/继续，以及 FPA 预览模块。</td>
+              </tr>
+              <tr>
+                <td><code>config.py</code></td>
+                <td><code>/api/web-config</code>、<code>/api/user/config</code>、<code>/api/web-config/files/*</code></td>
+                <td>配置读取、编辑、备份、恢复、校验、包导入导出和用户级密钥保存。</td>
+              </tr>
+              <tr>
+                <td><code>auth.py</code></td>
+                <td><code>/api/auth/login</code>、<code>/api/auth/me</code>、<code>/api/admin/invites</code></td>
+                <td>远程模式账户注册、登录、退出、改密和管理员邀请管理。</td>
+              </tr>
+              <tr>
+                <td><code>artifacts.py</code></td>
+                <td><code>/api/download/{session_id}</code>、<code>/api/ai-log/{session_id}</code>、<code>/api/sessions/{session_id}/fpa/debug-records</code></td>
+                <td>下载交付物、打开本地输出目录、查看 AI 调用日志和 FPA 调试记录。</td>
+              </tr>
+              <tr>
+                <td><code>history.py</code></td>
+                <td><code>/api/history</code>、<code>/api/history/{run_id}/download</code></td>
+                <td>运行历史查询、单次记录详情、历史产物打开和下载。</td>
+              </tr>
+              <tr>
+                <td><code>system.py</code></td>
+                <td><code>/api/health</code>、<code>/api/version</code>、<code>/api/license/status</code>、<code>/api/license/activate</code></td>
+                <td>系统健康、版本、运行模式、许可证状态、激活和提示音。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="frontend">
+        <div class="section-head">
+          <h2>Web 工作台</h2>
+          <p>前端是 Vue 3 单页应用。<code>App.vue</code> 根据后端健康状态、工作模式和登录状态装配工作台外壳，并在远程模式下保护需要登录的页面。</p>
+        </div>
+
+        <div class="grid two">
+          <article class="card">
+            <h3>主要页面</h3>
+            <ul class="mono-list">
+              <li>/ - 生成首页</li>
+              <li>/config - 配置中心</li>
+              <li>/tasks - 任务列表</li>
+              <li>/history - 运行历史</li>
+              <li>/license - 授权状态</li>
+              <li>/preview/fpa - FPA 预览</li>
+              <li>/preview/cosmic - COSMIC 预览</li>
+              <li>/preview/spec - 需求说明书预览</li>
+              <li>/sessions/:sessionId/fpa/debug - FPA AI 调试</li>
+              <li>/prompt-debug - Prompt 调试</li>
+              <li>/admin/invites - 管理员邀请</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <h3>前端状态边界</h3>
+            <p><code>stores/config.ts</code> 管理工作模式和后端状态；<code>stores/auth.ts</code> 管理登录态、管理员状态和强制改密；<code>stores/steps.ts</code>、<code>stores/log.ts</code>、<code>stores/toast.ts</code> 分别承载生成步骤、日志和提示。</p>
+            <p>统一 API 封装在 <code>src/lib/api.ts</code>，将非 2xx 响应转换为 <code>ApiError</code>，并对后端不可用消息做归一化。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="fpa">
+        <div class="section-head">
+          <h2>FPA 体系</h2>
+          <p>FPA 是当前成熟度最高的生成域：支持多 profile、多执行策略、规则集继承、领域上下文、AI 与规则混合、审核副本和预览 audit。</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Profile</th>
+                <th>底层 kind</th>
+                <th>默认策略</th>
+                <th>适用场景</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="tag green">strict_fpa</span></td>
+                <td><code>strict_fpa</code></td>
+                <td><code>ai_first + strict_fpa_rs</code></td>
+                <td>标准 FPA 复核，按数据功能和事务功能拆分，不生成界面开发/接口开发等开发工作项表达。</td>
+              </tr>
+              <tr>
+                <td><span class="tag blue">unified_ui</span></td>
+                <td><code>unified_ui</code></td>
+                <td><code>rules_first + unified_ui_rs</code></td>
+                <td>报账模板友好口径，同一三级模块默认合并一条界面开发行。</td>
+              </tr>
+              <tr>
+                <td><span class="tag warn">multi_uis</span></td>
+                <td><code>unified_ui</code></td>
+                <td><code>rules_first + multi_uis_rs</code></td>
+                <td>按独立页面、业务对象、业务流程或用户端拆分多条界面开发行。</td>
+              </tr>
+              <tr>
+                <td><span class="tag blue">ui_api_mapping</span></td>
+                <td><code>ui_api_mapping</code></td>
+                <td><code>ai_first + ui_api_mapping_rs</code></td>
+                <td>展示功能过程到界面开发和接口开发的映射关系。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid two" style="margin-top: var(--space-6);">
+          <article class="card">
+            <h3>审核副本</h3>
+            <p>正式生成 FPA 时额外输出 <code>FPA工作量评估-check.xlsx</code>，包含 FPA 结果、覆盖审核、Warnings、规则命中详情和 AI 原始返回。正式 Excel 保持模板结构，审核字段进入副本。</p>
+          </article>
+          <article class="card">
+            <h3>术语约束</h3>
+            <p>FPA 相关页面固定使用 <code>新增/修改功能点</code>、<code>类型</code>、<code>计算依据归类</code>、<code>计算依据说明</code>、<code>生成方式</code>。不得替换为功能点类型、类型判定依据、说明详情等同义词。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="cosmic">
+        <div class="section-head">
+          <h2>COSMIC 体系</h2>
+          <p>COSMIC 当前仍是批处理生成链路，主要用于从模块树和元数据生成项目功能点拆分表。相关文档已明确：后续应优先稳定结构化草稿、校验器和正式输出状态，再扩展人工审阅页。</p>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <span class="metric">数据模型</span>
+            <h3><code>DataMovement</code> 与 <code>CosmicItem</code></h3>
+            <p>数据移动包含序号、子过程描述、移动类型、数据组、数据属性和复用度；功能过程包含模块路径、功能用户、触发事件、过程名和数据移动列表。</p>
+          </article>
+          <article class="card">
+            <span class="metric">生成模块</span>
+            <h3><code>cosmic_ai</code>、<code>cosmic_md</code>、<code>cosmic_writer</code></h3>
+            <p>AI 生成数据移动链，Markdown 承载空白模板和填充稿，Excel writer 将扁平化行写入模板并处理合并、公式、下拉和批注。</p>
+          </article>
+          <article class="card">
+            <span class="metric">当前风险</span>
+            <h3>草稿与正式输出边界</h3>
+            <p>现有逻辑对部分质量问题以 warning 处理，Markdown 解析格式敏感，CFP 口径依赖模板公式和 Excel 重算。文档建议后续引入 <code>passed/review_required/blocked</code> 状态。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="data">
+        <div class="section-head">
+          <h2>数据与配置</h2>
+          <p>系统的数据契约来自功能清单 Excel、输出模板、用户配置和运行中间文件。模板路径优先级为 CLI 参数、Excel Sheet 8 配置、默认模板目录。</p>
+        </div>
+
+        <div class="grid two">
+          <article class="card">
+            <h3>输入 Excel Sheet</h3>
+            <p>功能清单录入模板包含模板说明、工单需求元数据、功能清单内容、FPA 元数据、需求说明书元数据、预估工作量元数据、COSMIC 元数据、需求清单元数据、模板路径录入和自动统计 Sheet。</p>
+          </article>
+          <article class="card">
+            <h3>用户配置目录</h3>
+            <p><code>ard --init-config</code> 会在 <code>~/.ai-gen-reimbursement-docs/</code> 初始化 <code>.env</code>、<code>system_config.yaml</code>、<code>business_rules.yaml</code>、<code>fpa_config.yaml</code> 等配置。</p>
+          </article>
+        </div>
+
+        <div class="stack" style="margin-top: var(--space-6);">
+          <details open>
+            <summary>关键配置文件</summary>
+            <div class="details-body">
+              <ul class="mono-list">
+                <li>config/system_config.yaml.example - Sheet 名称、模板路径、AI 限制等系统配置</li>
+                <li>config/fpa_config.yaml.example - FPA profiles、rules、prompts、继承关系</li>
+                <li>config/fpa_judgement_rules.yaml.example - FPA 判定规则样例</li>
+                <li>config/domain_context.json.example - 系统边界、本系统数据组、外部数据组和外部服务</li>
+                <li>config/ai_system_prompts_config.yaml.example - AI system prompt 配置</li>
+              </ul>
+            </div>
+          </details>
+
+          <details>
+            <summary>运行产物目录</summary>
+            <div class="details-body">
+              <ul class="mono-list">
+                <li>md/ - 模块树、元数据、FPA/COSMIC 模板和 AI 填充稿</li>
+                <li>cosmic文档/ - COSMIC 项目功能点拆分表</li>
+                <li>日志/ - 运行日志、AI prompt、AI response、Excel 源数据快照</li>
+                <li>FPA工作量评估-check.xlsx - FPA 审核副本</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="section" id="security">
+        <div class="section-head">
+          <h2>授权与运行模式</h2>
+          <p>系统支持本机模式和远程服务模式。授权体系和远程账户体系并行存在：授权控制产品使用，账户控制远程 Web 访问。</p>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <h3>本机模式</h3>
+            <p>浏览器操作本机服务，后端直接读取本地 xlsx，交付物写入本地目录，并支持打开输出文件夹。</p>
+          </article>
+          <article class="card">
+            <h3>远程服务模式</h3>
+            <p>浏览器上传文件，后端在会话目录中执行任务，交付物通过 ZIP 下载。远程模式需要登录，并支持管理员邀请。</p>
+          </article>
+          <article class="card">
+            <h3>许可证</h3>
+            <p><code>ai_gen_reimbursement_docs/licensing</code> 负责激活、许可证文件、数据包和加密工具。Web 系统路由提供状态查询和激活接口。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="quality">
+        <div class="section-head">
+          <h2>质量保障</h2>
+          <p>测试覆盖从底层模型、配置解析、生成管线、FPA 行为、COSMIC Markdown、授权、Web 路由和服务，到发布检查脚本。当前仓库有 49 个 Python 测试文件。</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>测试域</th>
+                <th>代表文件</th>
+                <th>覆盖重点</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>生成管线</td>
+                <td><code>tests/test_pipeline.py</code>、<code>tests/test_pipeline_units.py</code></td>
+                <td>模式校验、基础数据、FPA、COSMIC、需求清单、需求说明书和回调。</td>
+              </tr>
+              <tr>
+                <td>FPA</td>
+                <td><code>tests/test_gen_fpa_ai.py</code>、<code>tests/test_fpa_profiles.py</code>、<code>tests/test_fpa_acceptance.py</code></td>
+                <td>AI 输出、profile 行为、规则集、审核、稳定性和 golden cases。</td>
+              </tr>
+              <tr>
+                <td>COSMIC</td>
+                <td><code>tests/test_cosmic_ai.py</code>、<code>tests/test_cosmic_md.py</code></td>
+                <td>AI 解析、Markdown 模板、填充和数据模型。</td>
+              </tr>
+              <tr>
+                <td>Web</td>
+                <td><code>tests/test_web_tasks.py</code>、<code>tests/test_web_config_routes.py</code>、<code>tests/test_web_session_auth.py</code></td>
+                <td>任务、配置、会话、授权、历史、日志、系统状态和管理员邀请。</td>
+              </tr>
+              <tr>
+                <td>发布与真实模型</td>
+                <td><code>scripts/run_fpa_real_model_validation.py</code>、<code>scripts/check_release.ps1</code></td>
+                <td>真实模型复测、稳定性 CI、发布运行时配置和数据保护检查。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout" style="margin-top: var(--space-6);">
+          <p>仓库规则要求 Python 测试默认使用项目虚拟环境：<code>.\.venv\Scripts\python.exe -m pytest</code>。</p>
+        </div>
+      </section>
+
+      <section class="section" id="risks">
+        <div class="section-head">
+          <h2>维护关注点</h2>
+          <p>以下不是缺陷清单，而是后续改造和验收时应保持显式的系统边界。</p>
+        </div>
+
+        <div class="stack">
+          <details open>
+            <summary>FPA 组合必须带指纹</summary>
+            <div class="details-body">
+              <p>FPA 结果质量由 <code>profile × kind × strategy × rule_set × prompt × model</code> 共同决定。稳定性报告和 audit trace 必须记录组合指纹，否则 warning 上升时无法判断是模型退化、规则集变更还是 profile 混搭问题。</p>
+            </div>
+          </details>
+          <details open>
+            <summary>COSMIC 需要区分草稿和正式交付</summary>
+            <div class="details-body">
+              <p>COSMIC 文档已指出：无 API Key、AI 失败、空数据移动、缺少触发事件或缺少 CFP 公式时，不应把目标 Excel 路径当成成功。后续宜用结构化校验报告和 <code>passed/review_required/blocked</code> 状态表达结果。</p>
+            </div>
+          </details>
+          <details>
+            <summary>配置编辑需要保留审计和回滚</summary>
+            <div class="details-body">
+              <p>Web 配置中心已经提供备份、恢复、diff、文件级校验和配置包能力。后续新增配置项时，应同步更新配置服务、前端编辑页面、校验逻辑和测试。</p>
+            </div>
+          </details>
+          <details>
+            <summary>预览页术语不能自由发挥</summary>
+            <div class="details-body">
+              <p>FPA 预览、审阅、修改页面必须遵循 <code>docs/fpa/result-review-terminology.md</code>。新增 COSMIC 或其他生成器审阅页前，应先确认业务域术语映射。</p>
+            </div>
+          </details>
+          <details>
+            <summary>旧兼容路径可清理，但测试和文档必须同步</summary>
+            <div class="details-body">
+              <p>项目尚未上线，仓库规则允许优先采用清晰一致的实现并移除旧逻辑。每次调整已有行为时，应同步更新文档和测试，让当前目标行为可验收。</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="section" id="sources">
+        <div class="section-head">
+          <h2>整理来源</h2>
+          <p>本页来自当前仓库文件和 CodeGraph 结构索引，没有引入外部资料。</p>
+        </div>
+
+        <div class="grid two">
+          <article class="card">
+            <h3>读取的核心文件</h3>
+            <ul class="mono-list">
+              <li>README.md</li>
+              <li>pyproject.toml</li>
+              <li>web_app/package.json</li>
+              <li>web_app/src/router/index.ts</li>
+              <li>docs/fpa/result-review-terminology.md</li>
+              <li>docs/fpa/fpa-profiles.md</li>
+              <li>docs/fpa/fpa-refactor-summary.md</li>
+              <li>docs/cosmic/gen-cosmic-current-logic.md</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <h3>结构索引</h3>
+            <p>CodeGraph 状态：166 个索引文件，3065 个符号，4447 条边。重点查看了 <code>run_pipeline</code>、CLI <code>main</code>、FastAPI 路由、Vue 路由、API 封装和 App shell。</p>
+            <p>本页应随系统结构变更更新，尤其是 COSMIC 第一阶段改造、FPA profile 新增、Web 配置结构变化和预览页术语调整。</p>
+          </article>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span>静态文件：docs/system-overview.html。可直接用浏览器打开。</span>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
