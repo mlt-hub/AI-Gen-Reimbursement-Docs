@@ -42,6 +42,18 @@ const router = createRouter({
       meta: { nav: 'preview' },
     },
     {
+      path: '/preview/cosmic',
+      name: 'preview-cosmic',
+      component: () => import('@/views/CosmicPreviewPage.vue'),
+      meta: { nav: 'preview' },
+    },
+    {
+      path: '/preview/spec',
+      name: 'preview-spec',
+      component: () => import('@/views/SpecPreviewPage.vue'),
+      meta: { nav: 'preview' },
+    },
+    {
       path: '/sessions/:sessionId/fpa/debug',
       name: 'fpa-ai-debug',
       component: () => import('@/views/FpaAiDebugPage.vue'),
