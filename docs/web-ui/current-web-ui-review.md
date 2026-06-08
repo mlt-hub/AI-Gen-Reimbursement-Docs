@@ -975,7 +975,7 @@ style(ui): tighten web ui spacing and states
 | 阶段 3：配置页分区化 | 已完成：`6c8cb1e` | D5 | `Config.vue` | `npm run build` + tabs 切换 + 多视口无横向溢出 |
 | 阶段 4：FPA 预览审阅优化 | 已完成：`bb8dbcf` | D2、D3 | `FpaPreview.vue`、`FpaPreviewPage.vue` | `npm run build` + 术语检查 + 预览页多视口检查 |
 | 阶段 5：导航与高级工具 | 已完成：`229f25a` | D6、D7 | `router/index.ts`、`AppShell.vue`、`SideNav.vue`、`PreviewLayout.vue` | `npm run build` + 侧边栏展开 + COSMIC/SPEC 路由检查 |
-| 阶段 6：视觉密度收尾 | 进行中：`09dd5cc`、`3aee215` | 前 5 阶段完成 | `PromptDebug.vue`、`PreviewLayout.vue`、`main.css`、`History.vue`、`License.vue`、`Config.vue` | `npm run build` + 多路由多视口无横向溢出 |
+| 阶段 6：视觉密度收尾 | 已完成：`09dd5cc`、`3aee215`、`d3d2c96` | 前 5 阶段完成 | `PromptDebug.vue`、`PreviewLayout.vue`、`main.css`、`History.vue`、`License.vue`、`Config.vue` | `npm run build` + 8 个主路由 x 4 个视口无横向溢出 |
 
 ### 已完成提交摘要
 
@@ -988,6 +988,22 @@ style(ui): tighten web ui spacing and states
 | `229f25a` | 阶段 5 | 侧边栏增加 `预览` 父级与 FPA/COSMIC/SPEC 子入口，提示词调试进入高级工具。 |
 | `09dd5cc` | 阶段 6 | 提示词调试页改为移动端上下堆叠，预览中心页内 COSMIC/SPEC 链接可跳转。 |
 | `3aee215` | 阶段 6 | 增加统一 `status-badge` 和 `empty-state` 样式，收口历史、授权、配置页状态呈现。 |
+| `d3d2c96` | 阶段 6 | 将提示词调试快捷测试动作降为次按钮，保留“发送给 AI”为唯一主动作。 |
+
+### 阶段 6 最终验收记录
+
+阶段 6 已完成最终验收。验收范围覆盖：
+
+- 主路由：`/`、`/history`、`/license`、`/config`、`/preview/fpa`、`/preview/cosmic`、`/preview/spec`、`/prompt-debug`
+- 视口：`390`、`768`、`1280`、`1440`
+- 检查项：横向滚动、前端页面错误、主按钮数量
+
+验收结果：
+
+- `npm run build` 通过。
+- 32 个路由/视口组合均无横向滚动。
+- 32 个路由/视口组合均无页面错误。
+- 常规主路由最多只保留一个 `.btn-primary` 主动作。
 
 ## 每阶段通用完成定义
 
@@ -1005,10 +1021,10 @@ style(ui): tighten web ui spacing and states
 
 ## 下一步建议
 
-当前 D1-D7 已按推荐方案完成到阶段 5，阶段 6 已完成调试页响应式收口、预览壳层链接、历史/授权/配置页状态 badge 与空状态统一。后续继续推进时，建议优先做阶段 6 的最终验收与收尾：
+当前 D1-D7 和阶段 1-6 已全部完成。后续继续推进时，建议从“阶段 7：上线前联调验收”开始，而不是继续扩大视觉微调：
 
-1. 复查所有主路由的按钮主次，确认每页只保留一个最强主动作。
-2. 再跑一轮 `390 x 844`、`768 x 1024`、`1280 x 720`、`1440 x 1000` 的多路由检查。
-3. 若无新增问题，把阶段 6 标记为完成，并形成最终 Web UI 收口记录。
+1. 启动 FastAPI 后端与 Vite/静态前端，检查 `/config` 的保存链路和 `/preview/fpa` 的真实方案加载。
+2. 用真实或样例功能清单跑一次 `生成任务 -> 历史记录 -> 交付物操作` 的端到端路径。
+3. 决定 COSMIC / SPEC 预览壳层是否保持占位，或在上线前隐藏到能力完成后再开放。
 
-这一步以验收和记录为主，避免在结构已经稳定后继续扩大视觉改动。
+这一步以真实后端联调和发布取舍为主，避免在 UI 结构已经稳定后继续扩大纯视觉改动。
