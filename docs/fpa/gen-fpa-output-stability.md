@@ -1107,6 +1107,25 @@ R3: Quality Gate PASS；run_count=10，module_count=11，warning_count=0，quali
 
 至此，`strict-real-model-recommended` 推荐集可作为当前 FPA 真实模型稳定基线。后续除非更换模型、prompt、rule_set 或新增 fixture，否则 FPA 输出稳定性主线可阶段收口。
 
+### 阶段收口与后续触发条件
+
+当前 FPA 输出稳定性主线已进入维护状态，不建议继续扩大后处理降噪范围。继续推进的重点不再是增加规则去消除自然语言表达差异，而是保持稳定基线可复测、可追踪、可在变化时快速发现回退。
+
+后续只在以下条件出现时重新启动专项推进：
+
+- 更换真实模型、模型参数、prompt 或 `strict_fpa_rs` rule_set。
+- 新增或调整 FPA golden fixture，尤其是覆盖新的业务对象、外部系统引用、EO 边界或合并/拆分争议。
+- 线上或人工审阅发现新的高置信误判，例如查询被判 EI、普通服务被判 EIF、同一管理场景 CRUD 被拆分。
+- 稳定性 CI 或 fresh 趋势复测出现 `warning_count`、`quality_issue_count`、`retryable_quality_issue_count`、`blocking_retry_count` 非预期上升。
+- 出现 AI JSON 解析失败、`rules_fallback` 成为生成源、确认项异常重复等流程稳定性问题。
+
+维护期推荐动作：
+
+- 发布前或关键配置变更后运行 `strict-real-model-recommended` fresh 抽样。
+- 日常开发可用规则基线模式做本地烟测，避免没有真实模型 API 时完全跳过稳定性检查。
+- 遇到新增误判时优先沉淀为 fixture 行为断言，再决定是否补 prompt、validator、type judgement 或后处理规则。
+- 如果 recommended 集合连续多轮保持归零，不再为少量已被质量审核自愈的重试继续增加降噪规则。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
@@ -1150,7 +1169,7 @@ P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试、FPA 预览页确认卡片、批量正式生成中的暂停/继续流程，以及 `scope=project_profile` 项目口径持久化。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
 两阶段生成：已完成第一版规则化 `process_facts`、`type_judgement`、`merge_review` 和 `quality_review` 中间结构，并已新增统一 `agent_review` 分工契约；当前仍未引入额外 AI Agent 调用。
-P4：已完成第一版指标沉淀、多 trace Markdown 对比报告、fixture 批量抽样执行器、稳定性质量门、真实模型推荐样例集和 warning 来源分类。后续可用真实 API Key 跑 `strict-real-model-recommended` 做 fresh 抽样。
+P4：已完成第一版指标沉淀、多 trace Markdown 对比报告、fixture 批量抽样执行器、稳定性质量门、真实模型推荐样例集和 warning 来源分类；`strict-real-model-recommended` 已完成连续 3 轮 fresh 复测归零，当前作为维护期稳定基线使用。
 ```
 
 ## Agent 工作流方案
