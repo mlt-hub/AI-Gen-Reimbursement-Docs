@@ -51,6 +51,15 @@ def test_resolve_standard_suite_returns_existing_fixtures():
     assert all(open(path, encoding="utf-8").read(1) == "{" for path in paths)
 
 
+def test_resolve_recommended_suite_returns_extended_existing_fixtures():
+    paths = resolve_fpa_stability_suite_fixtures("real-model-recommended")
+
+    assert len(paths) == 10
+    assert any(path.endswith("payment_gateway_refund.json") for path in paths)
+    assert any(path.endswith("crm_customer_archive_reference.json") for path in paths)
+    assert all(open(path, encoding="utf-8").read(1) == "{" for path in paths)
+
+
 def test_resolve_strict_real_model_preset():
     preset = resolve_fpa_stability_sample_preset("strict-real-model")
 
@@ -62,6 +71,15 @@ def test_resolve_strict_real_model_preset():
         "retryable_quality_issue_count": 0,
         "retry_count": 0,
     }
+
+
+def test_resolve_strict_real_model_recommended_preset():
+    preset = resolve_fpa_stability_sample_preset("strict-real-model-recommended")
+
+    assert preset["suite"] == "real-model-recommended"
+    assert preset["profiles"] == "strict_fpa"
+    assert preset["strategies"] == "ai_first"
+    assert preset["rule_sets"] == "strict_fpa_rs"
 
 
 def test_run_fpa_stability_sampling_writes_traces_manifest_and_report(tmp_path):

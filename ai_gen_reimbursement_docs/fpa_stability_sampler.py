@@ -20,9 +20,32 @@ STANDARD_FPA_STABILITY_SUITE = (
     "master_data_org_reference.json",
 )
 
+RECOMMENDED_REAL_MODEL_FPA_STABILITY_SUITE = (
+    "vertical_industry_management.json",
+    "mixed_internal_external_data_functions.json",
+    "sms_notification_service.json",
+    "external_user_center_reference.json",
+    "master_data_org_reference.json",
+    "internal_vs_external_org_reference.json",
+    "oa_approval_reference.json",
+    "payment_gateway_refund.json",
+    "crm_customer_archive_reference.json",
+    "customer_list_import.json",
+)
+
 FPA_STABILITY_SAMPLE_PRESETS = {
     "strict-real-model": {
         "suite": "standard",
+        "profiles": "strict_fpa",
+        "strategies": "ai_first",
+        "rule_sets": "strict_fpa_rs",
+        "thresholds": {
+            "retryable_quality_issue_count": 0,
+            "retry_count": 0,
+        },
+    },
+    "strict-real-model-recommended": {
+        "suite": "real-model-recommended",
         "profiles": "strict_fpa",
         "strategies": "ai_first",
         "rule_sets": "strict_fpa_rs",
@@ -135,10 +158,15 @@ def resolve_fpa_stability_suite_fixtures(suite: str) -> list[str]:
     suite_name = suite.strip().lower()
     if not suite_name:
         return []
-    if suite_name != "standard":
+    suite_map = {
+        "standard": STANDARD_FPA_STABILITY_SUITE,
+        "recommended": RECOMMENDED_REAL_MODEL_FPA_STABILITY_SUITE,
+        "real-model-recommended": RECOMMENDED_REAL_MODEL_FPA_STABILITY_SUITE,
+    }
+    if suite_name not in suite_map:
         raise ValueError(f"未知 FPA 稳定性样例集: {suite}")
     fixture_dir = _repo_root() / "tests" / "fixtures" / "fpa_golden_cases"
-    return [str(fixture_dir / name) for name in STANDARD_FPA_STABILITY_SUITE]
+    return [str(fixture_dir / name) for name in suite_map[suite_name]]
 
 
 def resolve_fpa_stability_sample_preset(preset: str) -> dict[str, object]:

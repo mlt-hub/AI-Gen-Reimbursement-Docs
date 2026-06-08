@@ -21,6 +21,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
     retry_count = 0
     confirmed_decision_count = 0
     retry_trigger_source_counts: Counter[str] = Counter()
+    warning_source_counts: Counter[str] = Counter()
     agent_role_counts: Counter[str] = Counter()
     pending_agent_role_counts: Counter[str] = Counter()
 
@@ -32,7 +33,12 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             source_counts[source] += 1
         warnings = _string_list(module.get("warnings", []))
         module_warning_count = len(warnings)
+        module_warning_sources = Counter(
+            _classify_warning_source(warning, module)
+            for warning in warnings
+        )
         warning_count += module_warning_count
+        warning_source_counts.update(module_warning_sources)
         module_retry_count = sum(1 for warning in warnings if "稳定性校验触发一次重试" in warning)
         retry_count += module_retry_count
         retry_trigger_source = str(module.get("retry_trigger_source", "") or "").strip()
@@ -76,6 +82,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             "l3": str(module.get("l3", "") or ""),
             "source": source,
             "warning_count": module_warning_count,
+            "warning_source_counts": dict(module_warning_sources),
             "quality_issue_count": module_issue_count,
             "retryable_quality_issue_count": module_retryable_count,
             "confirmed_decision_count": module_confirmed_count,
@@ -102,6 +109,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         "confirmed_decision_count": confirmed_decision_count,
         "retry_count": retry_count,
         "retry_trigger_source_counts": dict(retry_trigger_source_counts),
+        "warning_source_counts": dict(warning_source_counts),
         "source_counts": dict(source_counts),
         "issue_code_counts": dict(issue_code_counts),
         "agent_role_counts": dict(agent_role_counts),
@@ -151,6 +159,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
     source_counts: Counter[str] = Counter()
     issue_code_counts: Counter[str] = Counter()
     retry_trigger_source_counts: Counter[str] = Counter()
+    warning_source_counts: Counter[str] = Counter()
 
     for index, path in enumerate(trace_paths, 1):
         trace = load_fpa_stability_trace(path)
@@ -170,6 +179,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         run_source_counts = _counter_from_dict(summary.get("source_counts", {}))
         run_issue_counts = _counter_from_dict(summary.get("issue_code_counts", {}))
         run_retry_trigger_counts = _counter_from_dict(summary.get("retry_trigger_source_counts", {}))
+        run_warning_source_counts = _counter_from_dict(summary.get("warning_source_counts", {}))
 
         total_modules += module_count
         total_warnings += warning_count
@@ -180,6 +190,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         source_counts.update(run_source_counts)
         issue_code_counts.update(run_issue_counts)
         retry_trigger_source_counts.update(run_retry_trigger_counts)
+        warning_source_counts.update(run_warning_source_counts)
         issue_details.extend(_issue_details_for_trace(index, trace, case_id, run_id))
         runs.append({
             "run_index": index,
@@ -200,6 +211,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
             "source_counts": dict(run_source_counts),
             "issue_code_counts": dict(run_issue_counts),
             "retry_trigger_source_counts": dict(run_retry_trigger_counts),
+            "warning_source_counts": dict(run_warning_source_counts),
         })
 
     summary = {
@@ -211,6 +223,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         "confirmed_decision_count": total_confirmed_decisions,
         "retry_count": total_retries,
         "retry_trigger_source_counts": dict(retry_trigger_source_counts),
+        "warning_source_counts": dict(warning_source_counts),
         "source_counts": dict(source_counts),
         "issue_code_counts": dict(issue_code_counts),
     }
@@ -371,6 +384,7 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
     for code, count in sorted(_counter_from_dict(summary.get("issue_code_counts", {})).items()):
         lines.append(f"| {_escape_md(code)} | {count} |")
     retry_trigger_counts = _counter_from_dict(summary.get("retry_trigger_source_counts", {}))
+    warning_source_counts = _counter_from_dict(summary.get("warning_source_counts", {}))
     if retry_trigger_counts:
         lines.extend([
             "",
@@ -380,6 +394,16 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
             "|---|---:|",
         ])
         for source, count in sorted(retry_trigger_counts.items()):
+            lines.append(f"| {_escape_md(source)} | {count} |")
+    if warning_source_counts:
+        lines.extend([
+            "",
+            "## Warning Sources",
+            "",
+            "| Source | Count |",
+            "|---|---:|",
+        ])
+        for source, count in sorted(warning_source_counts.items()):
             lines.append(f"| {_escape_md(source)} | {count} |")
     lines.extend([
         "",
@@ -402,10 +426,45 @@ def _quality_parts(value: object) -> tuple[list[dict[str, Any]], dict[str, objec
     return issues, summary if isinstance(summary, dict) else {}
 
 
+def _classify_warning_source(warning: str, module: dict[str, object]) -> str:
+    text = str(warning or "")
+    source = str(module.get("source", "") or "")
+    retry_trigger_source = str(module.get("retry_trigger_source", "") or "")
+    if "FPA 配置 warning" in text or "config." in text:
+        return "config"
+    if (
+        source == "rules_fallback"
+        or "规则兜底" in text
+        or "兜底" in text
+        or "解析失败" in text
+        or "AI 调用或解析失败" in text
+        or "未配置 API Key" in text
+    ):
+        return "fallback"
+    if "稳定性校验触发一次重试" in text and retry_trigger_source in {"validator", "quality_review"}:
+        return retry_trigger_source
+    if "validator." in text or "查询流程不应判为 EI" in text or "普通校验" in text:
+        return "validator"
+    if "quality." in text or "type_judgement" in text or "merge_review" in text or "类型建议" in text or "合并建议" in text:
+        return "quality_review"
+    if "人工复核" in text or "需人工" in text or "外部数据组边界" in text:
+        return "manual_review"
+    if (
+        "已规范化" in text
+        or "规范化" in text
+        or "classification_basis_index" in text
+        or "source_process_id" in text
+        or "计算依据归类" in text
+    ):
+        return "postprocess_normalization"
+    return "other"
+
+
 def _recommendations(summary: dict[str, object]) -> list[dict[str, object]]:
     issue_counts = _counter_from_dict(summary.get("issue_code_counts", {}))
     retry_triggers = _counter_from_dict(summary.get("retry_trigger_source_counts", {}))
     source_counts = _counter_from_dict(summary.get("source_counts", {}))
+    warning_sources = _counter_from_dict(summary.get("warning_source_counts", {}))
     recommendations: list[dict[str, object]] = []
     _add_recommendation(
         recommendations,
@@ -463,6 +522,30 @@ def _recommendations(summary: dict[str, object]) -> list[dict[str, object]]:
         area="rules_only_baseline",
         message="rules/rules_only 基线仍有质量问题时，先修确定性规则，再评估真实模型波动。",
         evidence=f"rule_sources={deterministic_rule_count}, quality_issues={_int_or_default(summary.get('quality_issue_count'), 0)}",
+    )
+    _add_recommendation(
+        recommendations,
+        condition=warning_sources.get("manual_review", 0) > 0,
+        priority="P2",
+        area="manual_review",
+        message="保留人工复核类 warning，并优先沉淀为 project_profile 或领域上下文规则。",
+        evidence=f"manual_review_warnings={warning_sources.get('manual_review', 0)}",
+    )
+    _add_recommendation(
+        recommendations,
+        condition=warning_sources.get("postprocess_normalization", 0) > 0,
+        priority="P2",
+        area="postprocess_normalization",
+        message="确定性规范化 warning 可评估降级为 rule hit，避免干扰真实模型质量判断。",
+        evidence=f"postprocess_normalization_warnings={warning_sources.get('postprocess_normalization', 0)}",
+    )
+    _add_recommendation(
+        recommendations,
+        condition=warning_sources.get("fallback", 0) > 0,
+        priority="P1",
+        area="fallback",
+        message="规则兜底 warning 需要区分 AI 解析失败、缺少 API Key 和规则结果待复核。",
+        evidence=f"fallback_warnings={warning_sources.get('fallback', 0)}",
     )
     _add_recommendation(
         recommendations,
