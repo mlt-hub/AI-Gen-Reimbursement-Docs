@@ -252,6 +252,35 @@ def update_run_state(
     return _row_to_record(row) if row else None
 
 
+def update_run_config(
+    run_id: str,
+    history_path: Path,
+    *,
+    run_config: dict[str, Any],
+    updated_at: str | None = None,
+) -> dict[str, Any] | None:
+    init_db(history_path)
+    updated_at = updated_at or now_iso()
+    sanitized = dict(run_config) if isinstance(run_config, dict) else {}
+    sanitized.pop("api_key", None)
+    with connect(history_path) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE run_history
+            SET run_config_json = ?, updated_at = ?
+            WHERE run_id = ?
+            """,
+            (json.dumps(sanitized, ensure_ascii=False), updated_at, run_id),
+        )
+        if cursor.rowcount == 0:
+            return None
+        row = conn.execute(
+            "SELECT * FROM run_history WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+    return _row_to_record(row) if row else None
+
+
 def _row_to_record(row: sqlite3.Row) -> dict[str, Any]:
     record = dict(row)
     try:
