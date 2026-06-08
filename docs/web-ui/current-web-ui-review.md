@@ -1021,11 +1021,11 @@ style(ui): tighten web ui spacing and states
 
 ## 下一步建议
 
-当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成本机与远程服务模式冒烟、远程 FPA 运行配置预检和真实业务样例完整生成留档。后续继续推进时，建议进入发布包与真实 AI 联调取舍，而不是继续扩大视觉微调：
+当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成本机与远程服务模式冒烟、远程 FPA 运行配置预检、真实业务样例完整生成留档和发布前最终闸门验收。后续继续推进时，建议只围绕真实 AI/COSMIC 交付取舍或正式发布执行，不再扩大视觉微调：
 
-1. 发布前执行 `.\scripts\check_release.ps1 -ConfigDir <全局配置目录>`，确认远程服务的全局配置目录包含 `fpa_config.yaml`、`fpa_judgement_rules.yaml` 和 `domain_context.json`。
-2. 若需要宣称 COSMIC 交付能力完成，应使用真实 API Key 单独补跑 `from-excel-gen-cosmic` 或 `from-excel-gen-all`，确认 COSMIC Excel 产物。
-3. 若上线范围只包含 FPA，发布口径继续保持：COSMIC / SPEC 预览入口已预留，能力建设中。
+1. 若需要宣称 COSMIC 交付能力完成，应使用真实 API Key 单独补跑 `from-excel-gen-cosmic` 或 `from-excel-gen-all`，确认 COSMIC Excel 产物。
+2. 若上线范围只包含 FPA，发布口径继续保持：COSMIC / SPEC 预览入口已预留，能力建设中。
+3. 正式发布时复用本轮命令执行 `.\scripts\check_release.ps1 -ConfigDir <全局配置目录> -RequireProtectedData`。
 
 这一步以真实后端联调和发布取舍为主，避免在 UI 结构已经稳定后继续扩大纯视觉改动。
 
@@ -1263,3 +1263,82 @@ F:\mlt\mlt-tests\AI-Gen-Reimbursement-Docs\6\功能清单-录入模板.xlsx
 | 日志 | `日志\AI生成项目报账文档_run_1_web-local_20260608_162232.log` |
 
 验证结束后已停止临时 Web 服务并清理临时 HOME / USERPROFILE。业务样例输出目录保留在测试目录下，便于人工打开复核。
+
+### 第六轮发布前最终闸门验收
+
+执行日期：2026-06-08
+
+目标：在不依赖当前用户配置的前提下，复核源码级发布检查、发布包数据保护、远程服务启动和远程页面基础可用性。
+
+#### 发布检查
+
+临时配置目录包含：
+
+```text
+system_config.yaml
+fpa_config.yaml
+fpa_judgement_rules.yaml
+domain_context.json
+```
+
+执行命令：
+
+```powershell
+.\scripts\check_release.ps1 -ConfigDir <临时完整配置目录> -RequireProtectedData
+```
+
+验收结果：
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| Python 测试 | 通过 | `tests/test_web_system.py`、`tests/test_config_utils.py`、`tests/test_licensing.py`、`tests/test_logging_handler.py`，共 102 项通过。 |
+| Web build | 通过 | `npm run build` 完成，Vite 正常产出 `static/dist`。 |
+| PowerShell 语法 | 通过 | `build_exe.ps1`、`check_release_data_protection.ps1`、`check_release.ps1` 解析通过。 |
+| Runtime config preflight | 通过 | FPA 运行配置完整，包含 `fpa_config.yaml`、`fpa_judgement_rules.yaml`、`domain_context.json`。 |
+| Release artifact data protection | 通过 | `dist\ard` 发布包检查通过，`data.enc` 和公钥存在，未发现明文 data 或敏感文件。 |
+
+#### 远程模式干净环境复核
+
+启动方式：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn web_app.server:app --host 127.0.0.1 --port 8096
+```
+
+临时 HOME / USERPROFILE 中的 `system_config.yaml`：
+
+```yaml
+web_work_mode: remote
+allow_register: true
+allow_shared_ai_credentials: false
+remote_session_retention_days: 1
+remote_download_retention_days: 1
+spec_auto_update_toc: false
+spec_remind_update_toc: true
+```
+
+API 验收：
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| `/api/health` | 通过 | `ok=true`、`work_mode=remote`、`fpa_runtime_config_present=true`。 |
+| `/api/auth/register` | 通过 | 临时用户 `finalgate` 注册成功。 |
+| `/api/auth/login` | 通过 | 登录成功并写入 cookie。 |
+| `/api/auth/me` | 通过 | 返回 `username=finalgate`、`is_local=false`。 |
+| `/api/web-config` | 通过 | 返回 `scope.mode=remote`、`scope.username=finalgate`。 |
+| `/api/fpa/options` | 通过 | 返回默认方案 `strict_fpa`，共 4 个 FPA profile。 |
+| `/api/history` | 通过 | 新临时环境历史为空，保留期字段可读取。 |
+
+页面验收：
+
+| 路由 | 视口 | 结果 |
+|---|---|---|
+| `/config` | `1440 x 1000`、`390 x 844` | 登录后可见远程服务模式、`FPA 运行配置` 状态，页面无横向溢出。 |
+| `/history` | `1440 x 1000`、`390 x 844` | 登录后页面可访问，页面无横向溢出。 |
+| 远程侧边栏 | `1440 x 1000`、`390 x 844` | 不存在 `/prompt-debug` 导航链接；高级工具只显示授权入口。 |
+
+补充说明：
+
+- 登录前直接访问 `/config` 会触发若干 `401 Unauthorized` 静态页面数据请求，这是远程鉴权保护的预期行为；登录后页面和 API 均正常。
+- `/config` 页面环境诊断中有 `提示词调试` 能力状态文案，但远程侧边栏没有 `提示词调试` 导航入口，符合 D7。
+- 验证结束后已停止临时远程服务并清理临时 HOME / USERPROFILE。
