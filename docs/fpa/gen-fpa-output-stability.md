@@ -998,6 +998,39 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 2026-06-08 多轮趋势抽样继续暴露少数自然语言表达差异：EIF 说明使用“外部接口文件/外部系统数据/评估范围外相关的表”，EQ 说明使用“提供查询界面输入并展示返回结果”，以及高置信 `type_judgement` 的 `candidate_name` 与 AI 行名匹配但未被冲突抑制识别。当前已补齐这些表达和匹配口径。针对 `mixed_internal_external_data_functions`、`internal_vs_external_org_reference`、`oa_approval_reference` 三个波动样例复测后，`run_count=3`、`module_count=4`、`warning_count=0`、`quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=0`、`blocking_retry_count=0`，Quality Gate PASS。
 
+2026-06-08 已完成 `strict-real-model-recommended` 推荐集最终 warning 收口。本轮继续修复真实模型趋势抽样暴露的确定性误报和自然语言波动：
+
+- `StrictFpaProfile` 的冲突矩阵和 `infer_type` 统一优先识别功能点尾部的显式事务动作，避免 `组织主数据维护`、`外部组织维护` 这类事务行被外部数据组映射误判为 `EIF`；同时保留 `本地报表快照` 等明确 type mapping 对数据功能的优先级。
+- 内部数据组证据补充“本系统创建并维护”“本系统唯一维护”“本系统后台数据库新增或变更”“本系统内创建关联记录”等真实模型常见表述，避免 `营销活动数据组`、`OA审批单关联数据组` 在包含 CRM/OA/主数据平台语境时被误判为外部数据功能冲突。
+- `计算依据说明` 中可确定的表个数细节继续规范化为规则命中，例如 `（1张表对应1个ILF）`、`对应后台数据库变更的1个表`；正式说明保留 FPA 类型和计量口径，不把低价值表数量细节计入 warning。
+- 说明质量检查接受官方计量口径作为类型证据，例如“修改或增加界面的个数”可支撑 `EI`，“输出的票据、报表、统计、文件”可支撑 `EO`，避免真实模型未直接写 `EI/EO` 字母时产生误报。
+- AI 名称前缀规范化修复三段模块路径重复拼接问题，例如 `【地市后台】组织管理-内部组织-内部组织查询` 会规范化为当前三级模块下的 `...-内部组织维护-内部组织查询`，不再生成 `...-内部组织维护-【地市后台】...` 这类重复前缀。
+
+最终复测命令：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset strict-real-model-recommended `
+  --output-dir tmp_fpa_stability_ci_real_recommended_final_after_name_prefix_20260608
+```
+
+最终复测结果：
+
+```text
+Status: PASS
+Runs: 10
+Modules: 11
+Warnings: 0
+Quality Issues: 0
+Retryable Issues: 0
+Confirmations: 0
+Retries: 0
+Blocking Retries: 0
+Sources: ai=11
+```
+
+当前 recommended 集合已经完成 warning、quality issue、retryable issue、blocking retry 全部归零。下一步如果继续推进稳定性，应优先做连续多轮 fresh 抽样趋势记录，观察是否还存在偶发 AI JSON 解析失败导致的 `rules_fallback`，而不是继续扩大后处理降噪范围。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
