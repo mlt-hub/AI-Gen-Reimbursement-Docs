@@ -80,7 +80,7 @@ FPA_TYPE_EXPLANATION_ALIASES = {
     "EI": (
         "外部输入", "输入事务", "维护类事务", "维护类EI", "维护类 EI",
         "对ILF进行插入", "对 ILF 进行插入", "对ILF的插入", "对 ILF 的插入",
-        "维护内部数据", "改变本系统内部数据",
+        "维护内部数据", "改变本系统内部数据", "修改或增加界面",
     ),
     "EQ": (
         "外部查询", "查询类事务", "查询类EQ", "查询类 EQ",
@@ -90,6 +90,7 @@ FPA_TYPE_EXPLANATION_ALIASES = {
     "EO": (
         "外部输出", "输出类事务", "输出类EO", "输出类 EO",
         "文件输出", "输出文件", "输出的文件", "格式化文件输出", "生成并输出",
+        "输出的票据、报表、统计、文件",
     ),
     "ILF": ("内部逻辑数据", "内部数据功能", "内部数据组", "本系统维护的数据组"),
     "EIF": (
@@ -256,8 +257,13 @@ def _normalize_explanation_table_count_detail(explanation: str) -> str:
         return text
     # Keep the official classification wording in 计算依据归类, but remove
     # low-value parenthetical table-count details from the formal explanation.
-    return re.sub(
+    text = re.sub(
         r"（(?:保守按)?1\s*(?:个|张)表(?:/数据组)?(?:对应1\s*个(?:ILF|EIF|EI|EO|EQ))?）",
+        "",
+        text,
+    )
+    return re.sub(
+        r"[，,]\s*对应后台数据库变更的1\s*个表",
         "",
         text,
     )

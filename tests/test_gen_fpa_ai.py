@@ -648,13 +648,13 @@ def test_explanation_normalizes_parenthetical_table_count_detail_without_warning
                 "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组"
                 "\n业务数据：垂直行业基础信息。"
                 "\n业务规则：本系统内部维护，支持新增、修改、删除等操作。"
-                "\n计算说明：本系统维护该逻辑数据组，符合ILF定义，按后台数据库变更的表个数计量（1张表对应1个ILF）。"
+                "\n计算说明：本系统维护该逻辑数据组，符合ILF定义，按ILF计量，对应后台数据库变更的1个表。"
             ),
         }],
     )
 
     assert rows[0]["计算依据归类"] == "按后台数据库变更的表个数计量"
-    assert "1张表对应1个ILF" not in rows[0]["计算依据说明"]
+    assert "对应后台数据库变更的1个表" not in rows[0]["计算依据说明"]
     assert not any("数据库表个数" in warning for warning in warnings)
     assert any(
         hit["rule_id"] == "postprocess.explanation_table_count_detail"
@@ -663,6 +663,48 @@ def test_explanation_normalizes_parenthetical_table_count_detail_without_warning
     assert not any(
         hit["rule_id"] == "postprocess.explanation_quality"
         for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_explanation_accepts_official_measurement_wording_as_type_evidence():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["按修改或增加界面的个数计量", "按输出的票据、报表、统计、文件个数计量"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[
+            {
+                "name": "导入客户名单",
+                "type": "EI",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-导入客户名单"
+                    "\n业务数据：客户名单记录。"
+                    "\n业务规则：上传文件后校验数据格式，保存有效记录。"
+                    "\n计算说明：该过程通过界面操作向ILF插入数据，属于修改或增加界面的个数。"
+                ),
+            },
+            {
+                "name": "下载导入模板",
+                "type": "EO",
+                "classification_basis_index": 5,
+                "explanation": (
+                    "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-下载导入模板"
+                    "\n业务数据：客户名单导入模板文件。"
+                    "\n业务规则：系统根据预设模板生成文件并提供下载。"
+                    "\n计算说明：输出格式化文件，属于输出的票据、报表、统计、文件。"
+                ),
+            },
+        ],
+    )
+
+    assert not any("未明确当前 FPA 类型" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for row in rows
+        for hit in row["_规则命中详情"]
     )
 
 
