@@ -72,6 +72,7 @@ def test_stability_report_summarizes_module_quality_signals():
     assert summary["retryable_quality_issue_count"] == 2
     assert summary["confirmed_decision_count"] == 1
     assert summary["retry_count"] == 1
+    assert summary["blocking_retry_count"] == 1
     assert summary["retry_trigger_source_counts"] == {"quality_review": 1}
     assert summary["source_counts"] == {"ai": 1, "rules_fallback": 1}
     assert summary["issue_code_counts"]["validator.query_as_ei"] == 1
@@ -83,6 +84,7 @@ def test_stability_report_summarizes_module_quality_signals():
     assert summary["pending_agent_role_counts"]["fpa_type_judge"] == 2
     assert report["modules"][0]["warning_count"] == 4
     assert report["modules"][0]["retry_count"] == 1
+    assert report["modules"][0]["blocking_retry_count"] == 1
     assert report["modules"][0]["pending_agent_roles"] == ["fpa_type_judge"]
 
 
@@ -148,6 +150,7 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert comparison["summary"]["module_count"] == 3
     assert comparison["summary"]["warning_count"] == 1
     assert comparison["summary"]["retry_count"] == 1
+    assert comparison["summary"]["blocking_retry_count"] == 1
     assert comparison["summary"]["retry_trigger_source_counts"] == {"validator": 1}
     assert comparison["summary"]["warning_source_counts"] == {
         "postprocess_normalization": 2,
@@ -168,6 +171,43 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert "| customer_query | customer_query__strict_fpa__ai_first__strict_fpa_rs | model-a.json |" in markdown
     assert "## Issue Details" in markdown
     assert "| 1 | customer_query | 客户管理 | validator.query_as_ei | yes | 查询流程不应判为 EI |" in markdown
+
+
+def test_stability_report_keeps_non_blocking_retry_visible_without_failing_gate(tmp_path):
+    trace = tmp_path / "trace.json"
+    trace.write_text(json.dumps({
+        "case_id": "external_user_center_reference",
+        "run_id": "external_user_center_reference__strict_fpa__ai_first__strict_fpa_rs",
+        "profile": "strict_fpa",
+        "strategy": "ai_first",
+        "rule_set": "strict_fpa_rs",
+        "modules": [{
+            "module": "用户中心账号引用",
+            "l3": "用户中心账号引用",
+            "source": "ai",
+            "warnings": ["用户中心账号引用 AI 输出稳定性校验触发一次重试"],
+            "retry_trigger_source": "quality_review",
+            "quality_review": {
+                "issues": [],
+                "summary": {"issue_count": 0, "retryable_count": 0},
+            },
+        }],
+    }, ensure_ascii=False), encoding="utf-8")
+    comparison = build_fpa_stability_comparison([str(trace)])
+
+    summary = comparison["summary"]
+    assert summary["retry_count"] == 1
+    assert summary["blocking_retry_count"] == 0
+    comparison["evaluation"] = evaluate_fpa_stability_comparison(
+        comparison,
+        {"blocking_retry_count": 0, "retryable_quality_issue_count": 0},
+    )
+    markdown = render_fpa_stability_comparison_markdown(comparison)
+
+    assert comparison["evaluation"]["status"] == "pass"
+    assert "Status: **PASS**" in markdown
+    assert "| blocking_retry_count | 0 | 0 | yes |" in markdown
+    assert "Blocking Retries" in markdown
 
 
 def test_stability_comparison_quality_gate_renders_failure():

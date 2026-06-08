@@ -79,7 +79,7 @@ def test_fpa_stability_ci_script_dry_run_shows_real_model_preset(capsys, tmp_pat
     }]
     assert payload["thresholds"] == {
         "retryable_quality_issue_count": 0,
-        "retry_count": 0,
+        "blocking_retry_count": 0,
     }
     assert payload["will_call_model"] is True
 
@@ -99,4 +99,8 @@ def test_fpa_stability_ci_script_dry_run_shows_recommended_real_model_preset(cap
     assert payload["suite"] == "real-model-recommended"
     assert len(payload["fixture_paths"]) == 10
     assert any(path.endswith("payment_gateway_refund.json") for path in payload["fixture_paths"])
+    assert payload["thresholds"] == {
+        "retryable_quality_issue_count": 0,
+        "blocking_retry_count": 0,
+    }
     assert payload["will_call_model"] is True
