@@ -15,7 +15,7 @@
         <div v-for="item in diagnosticItems" :key="item.label" class="min-w-0 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2">
           <div class="flex min-w-0 items-center justify-between gap-3">
             <span class="min-w-0 text-sm text-[var(--color-ink-muted)]">{{ item.label }}</span>
-            <span :class="['shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold', item.className]">{{ item.value }}</span>
+            <span :class="['status-badge shrink-0', item.className]">{{ item.value }}</span>
           </div>
         </div>
       </div>
@@ -63,7 +63,7 @@
           <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2">
             <div class="flex items-center justify-between gap-3">
               <span class="text-sm text-[var(--color-ink-muted)]">API Key</span>
-              <span :class="['rounded-md px-2 py-0.5 text-xs font-semibold', webConfig.ai.api_key_configured ? statusClass.ok : statusClass.warn]">
+              <span :class="['status-badge', webConfig.ai.api_key_configured ? statusClass.ok : statusClass.warn]">
                 {{ webConfig.ai.api_key_configured ? '已配置' : '未配置' }}
               </span>
             </div>
@@ -601,7 +601,7 @@
               <span class="block truncate font-semibold">{{ item.label }}</span>
               <span class="mt-0.5 block truncate text-xs">{{ item.file }}</span>
             </span>
-            <span :class="['shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold', item.exists ? statusClass.ok : statusClass.neutral]">
+            <span :class="['status-badge shrink-0', item.exists ? statusClass.ok : statusClass.neutral]">
               {{ item.exists ? item.format.toUpperCase() : '未创建' }}
             </span>
           </button>
@@ -1226,9 +1226,9 @@ const {
 })
 
 const statusClass = {
-  ok: 'bg-[var(--color-success-soft)] text-[var(--color-success)]',
-  warn: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-  neutral: 'bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]',
+  ok: 'status-badge--success',
+  warn: 'status-badge--warning',
+  neutral: 'status-badge--neutral',
 }
 
 const diagnosticItems = computed(() => {

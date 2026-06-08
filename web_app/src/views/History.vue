@@ -37,8 +37,9 @@
     </section>
 
     <section class="surface rounded-lg p-0">
-      <div v-if="!loading && items.length === 0" class="p-8 text-center text-sm text-[var(--color-ink-muted)]">
-        暂无运行历史
+      <div v-if="!loading && items.length === 0" class="empty-state m-4">
+        <div class="text-sm font-semibold text-[var(--color-ink)]">暂无运行历史</div>
+        <p class="mt-1 text-xs">生成任务完成后，会在这里显示交付物、状态和后续操作。</p>
       </div>
       <div v-else class="overflow-x-auto">
         <table class="w-full min-w-[920px] border-collapse text-left text-sm">
@@ -65,7 +66,7 @@
                 <div class="text-xs font-mono text-[var(--color-ink-soft)]">{{ item.run_id }}</div>
               </td>
               <td class="px-4 py-3 align-top">
-                <span :class="['rounded-md px-2 py-0.5 text-xs font-semibold', stateClass(item.run_state)]">{{ stateLabel(item.run_state) }}</span>
+                <span :class="['status-badge', stateClass(item.run_state)]">{{ stateLabel(item.run_state) }}</span>
               </td>
               <td class="max-w-[15rem] px-4 py-3 align-top">
                 <div class="truncate" :title="item.input_name">{{ item.input_name || '-' }}</div>
@@ -91,7 +92,7 @@
                   </RouterLink>
                   <span
                     v-if="!item.download_available && !item.open_folder_available && !canOpenFpaDebug(item)"
-                    class="rounded-md bg-[var(--color-surface-muted)] px-2 py-1 text-xs text-[var(--color-ink-muted)]"
+                    class="status-badge status-badge--neutral"
                   >
                     {{ unavailableLabel(item) }}
                   </span>
@@ -187,9 +188,11 @@ function stateLabel(state: string) {
 }
 
 function stateClass(state: string) {
-  if (state === 'done') return 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
-  if (state === 'running') return 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]'
-  return 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]'
+  if (state === 'done') return 'status-badge--success'
+  if (state === 'running') return 'status-badge--info'
+  if (state === 'error') return 'status-badge--danger'
+  if (state === 'cancelled') return 'status-badge--neutral'
+  return 'status-badge--warning'
 }
 
 function artifactLabel(item: HistoryItem) {

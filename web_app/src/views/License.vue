@@ -15,7 +15,7 @@
         <div v-for="item in statusItems" :key="item.label" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2">
           <div class="flex min-w-0 items-center justify-between gap-3">
             <span class="min-w-0 text-sm text-[var(--color-ink-muted)]">{{ item.label }}</span>
-            <span :class="['shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold', item.className]">{{ item.value }}</span>
+            <span :class="['status-badge shrink-0', item.className]">{{ item.value }}</span>
           </div>
         </div>
       </div>
@@ -197,8 +197,8 @@ function statusItem(label: string, ok: boolean) {
     label,
     value: ok ? '正常' : '未就绪',
     className: ok
-      ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
-      : 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+      ? 'status-badge--success'
+      : 'status-badge--warning',
   }
 }
 
