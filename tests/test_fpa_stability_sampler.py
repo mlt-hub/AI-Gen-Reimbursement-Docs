@@ -69,7 +69,7 @@ def test_resolve_strict_real_model_preset():
     assert preset["rule_sets"] == "strict_fpa_rs"
     assert preset["thresholds"] == {
         "retryable_quality_issue_count": 0,
-        "retry_count": 0,
+        "blocking_retry_count": 0,
     }
 
 
@@ -80,6 +80,10 @@ def test_resolve_strict_real_model_recommended_preset():
     assert preset["profiles"] == "strict_fpa"
     assert preset["strategies"] == "ai_first"
     assert preset["rule_sets"] == "strict_fpa_rs"
+    assert preset["thresholds"] == {
+        "retryable_quality_issue_count": 0,
+        "blocking_retry_count": 0,
+    }
 
 
 def test_run_fpa_stability_sampling_writes_traces_manifest_and_report(tmp_path):

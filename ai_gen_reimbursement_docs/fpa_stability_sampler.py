@@ -41,7 +41,7 @@ FPA_STABILITY_SAMPLE_PRESETS = {
         "rule_sets": "strict_fpa_rs",
         "thresholds": {
             "retryable_quality_issue_count": 0,
-            "retry_count": 0,
+            "blocking_retry_count": 0,
         },
     },
     "strict-real-model-recommended": {
@@ -51,7 +51,7 @@ FPA_STABILITY_SAMPLE_PRESETS = {
         "rule_sets": "strict_fpa_rs",
         "thresholds": {
             "retryable_quality_issue_count": 0,
-            "retry_count": 0,
+            "blocking_retry_count": 0,
         },
     },
 }

@@ -19,6 +19,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
     quality_issue_count = 0
     retryable_quality_issue_count = 0
     retry_count = 0
+    blocking_retry_count = 0
     confirmed_decision_count = 0
     retry_trigger_source_counts: Counter[str] = Counter()
     warning_source_counts: Counter[str] = Counter()
@@ -41,14 +42,6 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             _classify_warning_source(warning, module)
             for warning in stability_warnings
         )
-        warning_count += module_warning_count
-        warning_source_counts.update(module_warning_sources)
-        module_retry_count = sum(1 for warning in stability_warnings if "稳定性校验触发一次重试" in warning)
-        retry_count += module_retry_count
-        retry_trigger_source = str(module.get("retry_trigger_source", "") or "").strip()
-        if retry_trigger_source:
-            retry_trigger_source_counts[retry_trigger_source] += 1
-
         quality_review = module.get("quality_review", {})
         issues, summary = _quality_parts(quality_review)
         module_issue_count = _int_or_default(summary.get("issue_count"), len(issues))
@@ -57,6 +50,16 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             sum(1 for issue in issues if bool(issue.get("retryable"))),
         )
         module_confirmed_count = _int_or_default(summary.get("confirmed_decision_count"), 0)
+        warning_count += module_warning_count
+        warning_source_counts.update(module_warning_sources)
+        module_retry_count = sum(1 for warning in stability_warnings if "稳定性校验触发一次重试" in warning)
+        module_blocking_retry_count = module_retry_count if module_issue_count > 0 or module_retryable_count > 0 else 0
+        retry_count += module_retry_count
+        blocking_retry_count += module_blocking_retry_count
+        retry_trigger_source = str(module.get("retry_trigger_source", "") or "").strip()
+        if retry_trigger_source:
+            retry_trigger_source_counts[retry_trigger_source] += 1
+
         quality_issue_count += module_issue_count
         retryable_quality_issue_count += module_retryable_count
         confirmed_decision_count += module_confirmed_count
@@ -91,6 +94,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             "retryable_quality_issue_count": module_retryable_count,
             "confirmed_decision_count": module_confirmed_count,
             "retry_count": module_retry_count,
+            "blocking_retry_count": module_blocking_retry_count,
             "retry_trigger_source": retry_trigger_source,
             "issue_code_counts": dict(Counter(module_issue_codes)),
             "agent_role_counts": dict(Counter(
@@ -112,6 +116,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         "retryable_quality_issue_count": retryable_quality_issue_count,
         "confirmed_decision_count": confirmed_decision_count,
         "retry_count": retry_count,
+        "blocking_retry_count": blocking_retry_count,
         "retry_trigger_source_counts": dict(retry_trigger_source_counts),
         "warning_source_counts": dict(warning_source_counts),
         "source_counts": dict(source_counts),
@@ -163,6 +168,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
     total_quality_issues = 0
     total_retryable_issues = 0
     total_retries = 0
+    total_blocking_retries = 0
     total_confirmed_decisions = 0
     source_counts: Counter[str] = Counter()
     issue_code_counts: Counter[str] = Counter()
@@ -183,6 +189,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         quality_issue_count = _int_or_default(summary.get("quality_issue_count"), 0)
         retryable_count = _int_or_default(summary.get("retryable_quality_issue_count"), 0)
         retry_count = _int_or_default(summary.get("retry_count"), 0)
+        blocking_retry_count = _int_or_default(summary.get("blocking_retry_count"), 0)
         confirmed_count = _int_or_default(summary.get("confirmed_decision_count"), 0)
         run_source_counts = _counter_from_dict(summary.get("source_counts", {}))
         run_issue_counts = _counter_from_dict(summary.get("issue_code_counts", {}))
@@ -194,6 +201,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         total_quality_issues += quality_issue_count
         total_retryable_issues += retryable_count
         total_retries += retry_count
+        total_blocking_retries += blocking_retry_count
         total_confirmed_decisions += confirmed_count
         source_counts.update(run_source_counts)
         issue_code_counts.update(run_issue_counts)
@@ -216,6 +224,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
             "retryable_quality_issue_count": retryable_count,
             "confirmed_decision_count": confirmed_count,
             "retry_count": retry_count,
+            "blocking_retry_count": blocking_retry_count,
             "source_counts": dict(run_source_counts),
             "issue_code_counts": dict(run_issue_counts),
             "retry_trigger_source_counts": dict(run_retry_trigger_counts),
@@ -230,6 +239,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         "retryable_quality_issue_count": total_retryable_issues,
         "confirmed_decision_count": total_confirmed_decisions,
         "retry_count": total_retries,
+        "blocking_retry_count": total_blocking_retries,
         "retry_trigger_source_counts": dict(retry_trigger_source_counts),
         "warning_source_counts": dict(warning_source_counts),
         "source_counts": dict(source_counts),
@@ -286,8 +296,8 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
         "",
         "## Summary",
         "",
-        "| Runs | Modules | Warnings | Quality Issues | Retryable Issues | Confirmations | Retries |",
-        "|---:|---:|---:|---:|---:|---:|---:|",
+        "| Runs | Modules | Warnings | Quality Issues | Retryable Issues | Confirmations | Retries | Blocking Retries |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|",
         (
             f"| {_int_or_default(summary.get('run_count'), 0)} "
             f"| {_int_or_default(summary.get('module_count'), 0)} "
@@ -295,7 +305,8 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
             f"| {_int_or_default(summary.get('quality_issue_count'), 0)} "
             f"| {_int_or_default(summary.get('retryable_quality_issue_count'), 0)} "
             f"| {_int_or_default(summary.get('confirmed_decision_count'), 0)} "
-            f"| {_int_or_default(summary.get('retry_count'), 0)} |"
+            f"| {_int_or_default(summary.get('retry_count'), 0)} "
+            f"| {_int_or_default(summary.get('blocking_retry_count'), 0)} |"
         ),
         "",
     ]
@@ -342,8 +353,8 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
     lines.extend([
         "## Runs",
         "",
-        "| # | Case ID | Run ID | Trace | Profile | Strategy | Rule Set | Modules | Warnings | Quality Issues | Retryable | Confirmations | Retries |",
-        "|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|",
+        "| # | Case ID | Run ID | Trace | Profile | Strategy | Rule Set | Modules | Warnings | Quality Issues | Retryable | Confirmations | Retries | Blocking Retries |",
+        "|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ])
     for run in runs:
         if not isinstance(run, dict):
@@ -361,7 +372,8 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
             f"| {_int_or_default(run.get('quality_issue_count'), 0)} "
             f"| {_int_or_default(run.get('retryable_quality_issue_count'), 0)} "
             f"| {_int_or_default(run.get('confirmed_decision_count'), 0)} "
-            f"| {_int_or_default(run.get('retry_count'), 0)} |"
+            f"| {_int_or_default(run.get('retry_count'), 0)} "
+            f"| {_int_or_default(run.get('blocking_retry_count'), 0)} |"
         )
     if issue_details:
         lines.extend([
