@@ -15,7 +15,12 @@ def test_stability_report_summarizes_module_quality_signals():
                 "module": "客户管理",
                 "l3": "客户档案",
                 "source": "ai",
-                "warnings": ["客户档案 AI 输出稳定性校验触发一次重试", "普通 warning"],
+                "warnings": [
+                    "客户档案 AI 输出稳定性校验触发一次重试",
+                    "AI 行名称末尾已按 source_process_id 规范化",
+                    "外部数据组边界需人工复核",
+                    "普通 warning",
+                ],
                 "retry_trigger_source": "quality_review",
                 "quality_review": {
                     "issues": [
@@ -55,7 +60,13 @@ def test_stability_report_summarizes_module_quality_signals():
 
     summary = report["summary"]
     assert summary["module_count"] == 2
-    assert summary["warning_count"] == 2
+    assert summary["warning_count"] == 4
+    assert summary["warning_source_counts"] == {
+        "manual_review": 1,
+        "other": 1,
+        "postprocess_normalization": 1,
+        "quality_review": 1,
+    }
     assert summary["quality_issue_count"] == 3
     assert summary["retryable_quality_issue_count"] == 2
     assert summary["confirmed_decision_count"] == 1
@@ -65,6 +76,8 @@ def test_stability_report_summarizes_module_quality_signals():
     assert summary["issue_code_counts"]["validator.query_as_ei"] == 1
     assert summary["recommendations"][0]["area"] == "explanation"
     assert any(item["area"] == "rules_only_baseline" for item in summary["recommendations"])
+    assert any(item["area"] == "manual_review" for item in summary["recommendations"])
+    assert any(item["area"] == "postprocess_normalization" for item in summary["recommendations"])
     assert summary["agent_role_counts"]["business_fact_extractor"] == 2
     assert summary["pending_agent_role_counts"]["fpa_type_judge"] == 2
     assert report["modules"][0]["retry_count"] == 1
@@ -109,6 +122,7 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
                 "confirmed_decision_count": 0,
                 "retry_count": 0,
                 "retry_trigger_source_counts": {},
+                "warning_source_counts": {"postprocess_normalization": 2},
                 "source_counts": {"ai_cache": 2},
                 "issue_code_counts": {},
             },
@@ -124,6 +138,10 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert comparison["summary"]["warning_count"] == 1
     assert comparison["summary"]["retry_count"] == 1
     assert comparison["summary"]["retry_trigger_source_counts"] == {"validator": 1}
+    assert comparison["summary"]["warning_source_counts"] == {
+        "postprocess_normalization": 2,
+        "validator": 1,
+    }
     assert comparison["summary"]["source_counts"] == {"ai": 1, "ai_cache": 2}
     assert comparison["runs"][0]["case_id"] == "customer_query"
     assert comparison["runs"][0]["run_id"] == "customer_query__strict_fpa__ai_first__strict_fpa_rs"
@@ -134,6 +152,8 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert "validator_retries=1" in markdown
     assert "## Retry Triggers" in markdown
     assert "| validator | 1 |" in markdown
+    assert "## Warning Sources" in markdown
+    assert "| postprocess_normalization | 2 |" in markdown
     assert "| customer_query | customer_query__strict_fpa__ai_first__strict_fpa_rs | model-a.json |" in markdown
     assert "## Issue Details" in markdown
     assert "| 1 | customer_query | 客户管理 | validator.query_as_ei | yes | 查询流程不应判为 EI |" in markdown

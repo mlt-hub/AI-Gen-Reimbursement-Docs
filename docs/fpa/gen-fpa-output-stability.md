@@ -840,6 +840,7 @@ ard --fpa-stability-report .\run-a\fpa_audit_trace.json .\run-b\fpa_audit_trace.
 - 每次运行的 case_id、run_id、profile、strategy、rule_set 和稳定性指标。
 - `Issue Details` 明细，按 run/case/module 展示 issue code、是否可重试和问题说明，便于直接定位到触发样例。
 - issue code 分布。
+- warning 来源分布，例如 `validator`、`quality_review`、`postprocess_normalization`、`fallback`、`manual_review`、`config`。
 - `ai`、`ai_cache`、`rules`、`rules_fallback` 等生成来源分布。
 
 当前还已完成第一版自动批量抽样执行器。可以直接基于现有 FPA golden fixture 生成多组 trace 和汇总报告：
@@ -870,6 +871,29 @@ ard --fpa-stability-sample-suite standard `
 - 外部用户中心引用：明确外部维护数据组可生成 EIF。
 - 主数据组织引用：组织主数据 EIF 识别。
 
+当前还提供 `real-model-recommended` 扩展推荐样例集，面向真实模型抽样，覆盖 10 个已有 golden fixture：
+
+- `vertical_industry_management.json`
+- `mixed_internal_external_data_functions.json`
+- `sms_notification_service.json`
+- `external_user_center_reference.json`
+- `master_data_org_reference.json`
+- `internal_vs_external_org_reference.json`
+- `oa_approval_reference.json`
+- `payment_gateway_refund.json`
+- `crm_customer_archive_reference.json`
+- `customer_list_import.json`
+
+该扩展集用于区分真实复核点、AI 解析失败后的规则兜底、确定性后处理规范化和可继续收敛的 prompt/validator 问题。报告中的 `Warning Sources` 分类口径如下：
+
+- `validator`：高置信规则校验或 validator 重试来源。
+- `quality_review`：AI 与 `type_judgement`、`merge_review` 等中间判断不一致。
+- `postprocess_normalization`：名称、归类、`source_process_id` 等确定性规范化提示。
+- `fallback`：AI 调用/解析失败、缺少 API Key 或规则兜底相关提示。
+- `manual_review`：外部数据组边界等需要人工确认的复核点。
+- `config`：FPA 配置 warning。
+- `other`：暂未归入上述类别的普通 warning。
+
 真实模型抽样可使用预设命令：
 
 ```powershell
@@ -889,6 +913,34 @@ ard --fpa-stability-sample-preset strict-real-model `
 - `max_retries=0`
 
 如果同时传入 `--fpa-stability-sample-profiles`、`--fpa-stability-sample-strategies`、`--fpa-stability-sample-rule-sets` 或质量门参数，显式参数会覆盖 preset 中的默认值。
+
+扩展推荐样例集可使用：
+
+```powershell
+ard --fpa-stability-sample-preset strict-real-model-recommended `
+  --api-key <API_KEY> `
+  --model <MODEL_NAME> `
+  --output-dir .\fpa-stability-real-model-recommended-samples
+```
+
+`strict-real-model-recommended` 会展开为：
+
+- `suite=real-model-recommended`
+- `profile=strict_fpa`
+- `strategy=ai_first`
+- `rule_set=strict_fpa_rs`
+- `max_retryable_issues=0`
+- `max_retries=0`
+
+如果只是本地确认抽样计划、不调用模型，可以使用：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --dry-run `
+  --preset strict-real-model-recommended
+```
+
+阅读扩展集报告时，建议先看 `Quality Gate`，再看 `Warning Sources`。如果 warning 主要集中在 `postprocess_normalization`，优先考虑是否降级为 rule hit；如果集中在 `manual_review`，优先沉淀为 `project_profile`、领域上下文或明确的外部数据组规则；如果集中在 `fallback`，优先定位模型响应解析、API 可用性和规则兜底路径。
 
 当前还已补充第一版稳定性质量门。多 trace 对比或 fixture 采样时，可以增加阈值参数：
 
@@ -955,7 +1007,7 @@ P1：已完成第一版。validator 已进入 AI 后处理和预览路径。
 P2：已完成后端契约、预览测试、FPA 预览页确认卡片、批量正式生成中的暂停/继续流程，以及 `scope=project_profile` 项目口径持久化。
 P3：已完成第一版。fixture 支持固定期望 + 行为断言，垂直行业样例已落地。
 两阶段生成：已完成第一版规则化 `process_facts`、`type_judgement`、`merge_review` 和 `quality_review` 中间结构，并已新增统一 `agent_review` 分工契约；当前仍未引入额外 AI Agent 调用。
-P4：已完成第一版指标沉淀、多 trace Markdown 对比报告、fixture 批量抽样执行器和稳定性质量门。后续仍需补真实模型批量抽样的推荐样例集。
+P4：已完成第一版指标沉淀、多 trace Markdown 对比报告、fixture 批量抽样执行器、稳定性质量门、真实模型推荐样例集和 warning 来源分类。后续可用真实 API Key 跑 `strict-real-model-recommended` 做 fresh 抽样。
 ```
 
 ## Agent 工作流方案

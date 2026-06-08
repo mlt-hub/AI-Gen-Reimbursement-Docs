@@ -82,3 +82,21 @@ def test_fpa_stability_ci_script_dry_run_shows_real_model_preset(capsys, tmp_pat
         "retry_count": 0,
     }
     assert payload["will_call_model"] is True
+
+
+def test_fpa_stability_ci_script_dry_run_shows_recommended_real_model_preset(capsys, tmp_path):
+    script = _load_script()
+    exit_code = script.main([
+        "--dry-run",
+        "--preset",
+        "strict-real-model-recommended",
+        "--output-dir",
+        str(tmp_path),
+    ])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["suite"] == "real-model-recommended"
+    assert len(payload["fixture_paths"]) == 10
+    assert any(path.endswith("payment_gateway_refund.json") for path in payload["fixture_paths"])
+    assert payload["will_call_model"] is True
