@@ -1025,6 +1025,50 @@ def _normalize_ai_fpa_rows_for_l3(
     return normalized, warnings
 
 
+STRICT_FPA_FALLBACK_BASIS_KEYWORDS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "ILF": (("内部", "逻辑数据组"), ("后台数据库", "变更"), ("维护", "数据组")),
+    "EIF": (("外部", "维护", "数据组"), ("外部", "接口文件"), ("外部", "逻辑数据组")),
+    "EI": (("进入", "系统边界"), ("改变", "系统边界"), ("修改", "增加", "界面")),
+    "EQ": (("查询", "输入", "返回"), ("查询界面", "展示"), ("查询", "展示")),
+    "EO": (("票据",), ("报表",), ("统计",), ("文件", "输出"), ("导出",)),
+}
+
+
+def _basis_for_fpa_type(fpa_type: str, judgement_rules: list[str]) -> str:
+    keywords_by_priority = STRICT_FPA_FALLBACK_BASIS_KEYWORDS.get(fpa_type.upper(), ())
+    for keywords in keywords_by_priority:
+        for rule in judgement_rules:
+            if all(keyword in rule for keyword in keywords):
+                return rule
+    return ""
+
+
+def _fill_strict_fpa_fallback_classification_basis(
+    rows: list[dict[str, object]],
+    judgement_rules: list[str],
+    profile: CustomRulesProfile,
+) -> None:
+    if profile.name != "strict_fpa" or not judgement_rules:
+        return
+    for row in rows:
+        generation = str(row.get("生成方式", "") or "")
+        if generation not in {"fallback", "rules_fallback"}:
+            continue
+        if str(row.get("计算依据归类", "") or "").strip():
+            continue
+        basis = _basis_for_fpa_type(str(row.get("类型", "") or ""), judgement_rules)
+        if basis:
+            row["计算依据归类"] = basis
+            _add_rule_hit(
+                row,
+                hit_object=str(row.get("新增/修改功能点", "") or ""),
+                rule_id="strict_fpa.fallback_classification_basis",
+                rule_desc="strict_fpa 规则兜底行按 FPA 类型匹配模板判定原则，补齐计算依据归类。",
+                suggested_type=str(row.get("类型", "") or ""),
+                adopted=True,
+            )
+
+
 def _process_names_for_group(group: dict[str, object]) -> list[str]:
     processes = group.get("processes", [])
     if not isinstance(processes, list):
@@ -1518,6 +1562,22 @@ class FpaAiDebugError(ValueError):
         self.debug = debug
 
 
+FPA_JSON_ONLY_RESPONSE_CONSTRAINT = """\
+输出约束：
+1. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本。
+2. 只输出 JSON 对象。
+3. 所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
+4. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略。
+5. rows 必须完整，不得为了输出 debug_summary 牺牲 rows。"""
+
+
+def _append_fpa_json_only_response_constraint(system_prompt: str) -> str:
+    prompt = str(system_prompt or "").rstrip()
+    if "不要输出 reasoning" in prompt and "debug_summary" in prompt:
+        return prompt
+    return f"{prompt}\n\n{FPA_JSON_ONLY_RESPONSE_CONSTRAINT}".strip()
+
+
 def _build_fpa_ai_prompt_context(
     group: dict[str, object],
     judgement_rules: list[str],
@@ -1535,7 +1595,7 @@ def _build_fpa_ai_prompt_context(
     user_config = load_fpa_user_prompt_config(profile.name)
     prompt = profile.build_prompt(group, judgement_rules, domain_context)
     return FpaPromptContext(
-        system_prompt=system_config.text,
+        system_prompt=_append_fpa_json_only_response_constraint(system_config.text),
         user_prompt=prompt,
         core_rules=core_rules_config.text,
         core_rules_source=core_rules_config.source_label,
@@ -2047,6 +2107,7 @@ def _plan_fpa_rows_with_execution(
         for group in groups:
             group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
             _attach_profile_rule_hits(group_rows, profile=profile, generation="fallback")
+            _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
             quality_review = _build_quality_review_for_l3(
                 group=group,
                 rows=group_rows,
@@ -2103,6 +2164,7 @@ def _plan_fpa_rows_with_execution(
         if strategy == "rules_first":
             rules_first_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
             _attach_profile_rule_hits(rules_first_rows, profile=profile, generation="fallback")
+            _fill_strict_fpa_fallback_classification_basis(rules_first_rows, judgement_rules, profile)
             rules_first_reasons = _rules_first_ai_reasons(group, rules_first_rows)
             if not rules_first_reasons:
                 quality_review = _build_quality_review_for_l3(
@@ -2164,6 +2226,7 @@ def _plan_fpa_rows_with_execution(
             group_rows = rules_first_rows or profile.fallback_rows_for_l3(group, meta, start_seq=seq)
             generation = "fallback" if strategy == "rules_first" else "rules_fallback"
             _attach_profile_rule_hits(group_rows, profile=profile, generation=generation)
+            _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
             fallback += len(group_rows)
             all_rows.extend(group_rows)
             seq += len(group_rows)
@@ -2230,6 +2293,7 @@ def _plan_fpa_rows_with_execution(
                 )
                 _renumber_rows(group_rows, seq)
                 warnings.extend(supplement_warnings)
+                _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
                 validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                     group=group,
                     rows=group_rows,
@@ -2309,6 +2373,7 @@ def _plan_fpa_rows_with_execution(
             )
             _renumber_rows(group_rows, seq)
             warnings.extend(supplement_warnings)
+            _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
             validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                 group=group,
                 rows=group_rows,
@@ -2328,49 +2393,57 @@ def _plan_fpa_rows_with_execution(
                     retry_trigger_source = "quality_review"
             if retry_feedback and strategy == "ai_first":
                 logger.warning("FPA AI 输出触发稳定性重试 [%s]", _group_tag(group))
-                retry_raw_rows = _ai_plan_fpa_rows_for_l3(
-                    group,
-                    judgement_rules,
-                    domain_context,
-                    api_key,
-                    model,
-                    base_url,
-                    profile=profile,
-                    validation_retry_feedback=retry_feedback,
-                    confirmed_decisions=confirmed_decisions,
-                )
-                retry_group_rows, retry_warnings = _normalize_ai_fpa_rows_for_l3(
-                    group=group,
-                    meta=meta,
-                    ai_rows=retry_raw_rows,
-                    judgement_rules=judgement_rules,
-                    start_seq=seq,
-                    profile=profile,
-                    strategy=strategy,
-                )
-                if rules_first_reasons:
-                    retry_warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
-                retry_group_rows, retry_supplement_warnings = _supplement_ai_rows_with_rules(
-                    group=group,
-                    meta=meta,
-                    ai_rows=retry_group_rows,
-                    profile=profile,
-                    strategy=strategy,
-                    rule_set_config=rule_set_config,
-                )
-                _renumber_rows(retry_group_rows, seq)
-                retry_warnings.extend(retry_supplement_warnings)
-                retry_issues, retry_validation_warnings = _validate_fpa_rows_for_l3(
-                    group=group,
-                    rows=retry_group_rows,
-                )
-                retry_warnings.extend(retry_validation_warnings)
-                retry_quality_review = _build_quality_review_for_l3(
-                    group=group,
-                    rows=retry_group_rows,
-                    confirmed_decisions=confirmed_decisions,
-                )
                 retry_notice = f"{_group_tag(group)} AI 输出稳定性校验触发一次重试"
+                retry_group_rows: list[dict[str, object]] = []
+                retry_warnings: list[str] = []
+                retry_issues: list[FpaValidationIssue] = []
+                retry_quality_review: dict[str, object] = {}
+                try:
+                    retry_raw_rows = _ai_plan_fpa_rows_for_l3(
+                        group,
+                        judgement_rules,
+                        domain_context,
+                        api_key,
+                        model,
+                        base_url,
+                        profile=profile,
+                        validation_retry_feedback=retry_feedback,
+                        confirmed_decisions=confirmed_decisions,
+                    )
+                    retry_group_rows, retry_warnings = _normalize_ai_fpa_rows_for_l3(
+                        group=group,
+                        meta=meta,
+                        ai_rows=retry_raw_rows,
+                        judgement_rules=judgement_rules,
+                        start_seq=seq,
+                        profile=profile,
+                        strategy=strategy,
+                    )
+                    if rules_first_reasons:
+                        retry_warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
+                    retry_group_rows, retry_supplement_warnings = _supplement_ai_rows_with_rules(
+                        group=group,
+                        meta=meta,
+                        ai_rows=retry_group_rows,
+                        profile=profile,
+                        strategy=strategy,
+                        rule_set_config=rule_set_config,
+                    )
+                    _renumber_rows(retry_group_rows, seq)
+                    retry_warnings.extend(retry_supplement_warnings)
+                    _fill_strict_fpa_fallback_classification_basis(retry_group_rows, judgement_rules, profile)
+                    retry_issues, retry_validation_warnings = _validate_fpa_rows_for_l3(
+                        group=group,
+                        rows=retry_group_rows,
+                    )
+                    retry_warnings.extend(retry_validation_warnings)
+                    retry_quality_review = _build_quality_review_for_l3(
+                        group=group,
+                        rows=retry_group_rows,
+                        confirmed_decisions=confirmed_decisions,
+                    )
+                except Exception as retry_exc:
+                    retry_warnings.append(f"{retry_notice}，但重试调用或解析失败，已保留首次可解析 AI 输出: {retry_exc}")
                 if retry_group_rows:
                     raw_rows = retry_raw_rows
                     group_rows = retry_group_rows
@@ -2391,6 +2464,7 @@ def _plan_fpa_rows_with_execution(
                             + "；".join(str(issue.get("message", "") or "") for issue in retry_quality_issues)
                         )
                 else:
+                    warnings.extend(retry_warnings)
                     warnings.append(f"{retry_notice}，但重试未生成有效 FPA 行，保留首次结果")
             if not group_rows:
                 raise ValueError("AI 规划未生成有效 FPA 行")
@@ -2460,6 +2534,7 @@ def _plan_fpa_rows_with_execution(
                     )
                     _renumber_rows(group_rows, seq)
                     confirmation_warnings.extend(confirmation_supplement_warnings)
+                    _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
                     validation_issues, confirmation_validation_warnings = _validate_fpa_rows_for_l3(
                         group=group,
                         rows=group_rows,
@@ -2520,6 +2595,7 @@ def _plan_fpa_rows_with_execution(
             logger.warning("FPA AI 响应解析失败 [%s]: %s", _group_tag(group), exc)
             group_rows = rules_first_rows or profile.fallback_rows_for_l3(group, meta, start_seq=seq)
             _attach_profile_rule_hits(group_rows, profile=profile, generation="fallback")
+            _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
             fallback += len(group_rows)
             fallback_warning = f"AI 调用或解析失败: {exc}"
             if rules_first_reasons:
@@ -3478,6 +3554,7 @@ def preview_fpa_module(
                 debug["reason"] = execution.strategy
                 fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
                 _attach_profile_rule_hits(fpa_rows, profile=profile, generation="fallback")
+                _fill_strict_fpa_fallback_classification_basis(fpa_rows, judgement_rules, profile)
                 if execution.strategy == "rules_first":
                     rules_first_reasons = _rules_first_ai_reasons(group, fpa_rows)
                     if rules_first_reasons and api_key:
@@ -3506,6 +3583,7 @@ def preview_fpa_module(
                             rule_set_config=execution.rule_set_config,
                         )
                         warnings.extend(supplement_warnings)
+                        _fill_strict_fpa_fallback_classification_basis(fpa_rows, judgement_rules, profile)
                         validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                             group=group,
                             rows=fpa_rows,
@@ -3549,6 +3627,7 @@ def preview_fpa_module(
                     rule_set_config=execution.rule_set_config,
                 )
                 warnings.extend(supplement_warnings)
+                _fill_strict_fpa_fallback_classification_basis(fpa_rows, judgement_rules, profile)
                 validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                     group=group,
                     rows=fpa_rows,
@@ -3572,6 +3651,8 @@ def preview_fpa_module(
             warnings.append(f"AI 调用或解析失败，已使用兜底生成: {exc}")
             logger.warning("FPA 预览 AI 失败 [%s]: %s", _group_tag(group), exc)
             fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+            _attach_profile_rule_hits(fpa_rows, profile=profile, generation="fallback")
+            _fill_strict_fpa_fallback_classification_basis(fpa_rows, judgement_rules, profile)
         finally:
             reset_current_fpa_rule_set_config(rule_set_token)
         warnings = _with_config_warnings(warnings, execution.rule_set_config)

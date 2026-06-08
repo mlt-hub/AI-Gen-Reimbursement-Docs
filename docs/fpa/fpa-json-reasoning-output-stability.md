@@ -1,5 +1,13 @@
 # FPA JSON 输出与推理调试稳定性方案
 
+## 实施记录
+
+2026-06-09 已落地 P0-P2：
+
+- 重试调用或解析失败时，保留上一版可解析 AI rows，并写入 warning。
+- FPA 主响应在代码侧追加 JSON-only 输出约束，禁止外显长 reasoning，允许短 `debug_summary`。
+- `strict_fpa` 的 `fallback` / `rules_fallback` 行会按模板判定原则补齐 `计算依据归类`。
+
 ## 背景
 
 在测试目录 `F:\mlt\mlt-tests\AI-Gen-Reimbursement-Docs\5` 的“关于构建垂直行业场景化营销的需求”生成结果中，正式 FPA 工作簿出现 `F29:F32` 的 `计算依据归类` 为空。

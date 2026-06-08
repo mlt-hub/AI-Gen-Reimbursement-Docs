@@ -8,6 +8,7 @@ from ai_gen_reimbursement_docs.config_utils import FpaConfigError, FpaPromptConf
 from ai_gen_reimbursement_docs.gen_fpa import (
     FPA_PROJECT_DESCRIPTION_MAX_CHARS,
     _build_domain_context,
+    _build_fpa_ai_prompt_context,
     _build_fpa_audit_reports_for_groups,
     _extract_json_obj,
     _fpa_ai_cache_key,
@@ -2201,6 +2202,139 @@ def test_ai_first_retries_once_when_quality_review_finds_high_confidence_issue(m
     assert any("AI 输出稳定性校验触发一次重试" in warning for warning in warnings)
 
 
+def test_ai_first_keeps_first_parseable_rows_when_retry_parse_fails(monkeypatch, tmp_path):
+    source_rows = [{
+        "客户端类型": "地市后台",
+        "一级模块": "客户管理",
+        "二级模块": "客户查询",
+        "三级模块": "客户查询",
+        "三级模块整体功能描述": "查询客户。",
+        "功能过程": "查询客户",
+        "功能过程类型": "新增",
+        "功能过程描述": "按客户名称查询客户列表。",
+    }]
+    calls = []
+    responses = [
+        json.dumps({
+            "rows": [{
+                "name": "查询客户",
+                "type": "EO",
+                "explanation": "来源场景：查询客户。\n业务数据：客户列表。\n业务规则：只读取并展示列表。\n计算说明：误判为 EO。",
+                "source_process_ids": ["m1_p1"],
+                "source_processes": ["查询客户"],
+            }]
+        }, ensure_ascii=False),
+        '{"rows":[{"name":"查询客户","type":"EQ"',
+    ]
+
+    def fake_call_llm(prompt, *args, **kwargs):
+        calls.append(prompt)
+        return responses[len(calls) - 1]
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+    audit_trace = tmp_path / "trace.json"
+
+    result = _plan_fpa_rows_with_execution(
+        source_rows,
+        _meta(),
+        [],
+        api_key="sk-test",
+        model="mock-model",
+        base_url="",
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        rule_set="strict_fpa_rs",
+        rule_set_config=FpaRuleSetConfig(
+            name="process_only",
+            coverage_rules=FpaCoverageRules(require_data_function=False),
+        ),
+        audit_trace_path=str(audit_trace),
+    )
+
+    assert len(calls) == 2
+    assert [row["生成方式"] for row in result] == ["ai"]
+    assert result[0]["类型"] == "EO"
+    trace = json.loads(audit_trace.read_text(encoding="utf-8"))
+    assert trace["modules"][0]["source"] == "ai"
+    warnings = trace["modules"][0]["warnings"]
+    assert any("重试调用或解析失败，已保留首次可解析 AI 输出" in warning for warning in warnings)
+    assert not any("AI 调用或解析失败" in warning for warning in warnings)
+
+
+def test_strict_fpa_fallback_rows_fill_classification_basis_from_judgement_rules(tmp_path):
+    source_rows = [
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "营销管理",
+            "二级模块": "签到管理",
+            "三级模块": "签到奖品配置",
+            "三级模块整体功能描述": "配置签到奖品并查询奖品列表。",
+            "功能过程": "添加签到奖品数据",
+            "功能过程类型": "新增",
+            "功能过程描述": "录入签到奖品名称和数量并保存。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "营销管理",
+            "二级模块": "签到管理",
+            "三级模块": "签到奖品配置",
+            "三级模块整体功能描述": "配置签到奖品并查询奖品列表。",
+            "功能过程": "查询奖品数据",
+            "功能过程类型": "新增",
+            "功能过程描述": "按奖品名称查询奖品列表并展示结果。",
+        },
+    ]
+    judgement_rules = [
+        "后台数据库变更/内部逻辑数据组相关原则",
+        "修改或增加界面的个数，或进入/改变系统边界数据的事务原则",
+        "提供查询界面输入并展示返回结果",
+        "输出票据、报表、统计、文件等",
+        "外部应用维护数据组/外部接口文件相关原则",
+    ]
+
+    result = _plan_fpa_rows_with_execution(
+        source_rows,
+        _meta(),
+        judgement_rules,
+        api_key="",
+        model="mock-model",
+        base_url="",
+        profile=STRICT_FPA_PROFILE,
+        strategy="rules_only",
+        rule_set="strict_fpa_rs",
+        rule_set_config=FpaRuleSetConfig(name="strict_fpa_rs"),
+        audit_trace_path=str(tmp_path / "trace.json"),
+    )
+
+    fallback_rows = [row for row in result if row["生成方式"] == "fallback"]
+    assert fallback_rows
+    assert all(row["计算依据归类"] in judgement_rules for row in fallback_rows)
+    assert any(row["类型"] == "ILF" and row["计算依据归类"] == judgement_rules[0] for row in fallback_rows)
+    assert any(row["类型"] == "EI" and row["计算依据归类"] == judgement_rules[1] for row in fallback_rows)
+    assert any(row["类型"] == "EQ" and row["计算依据归类"] == judgement_rules[2] for row in fallback_rows)
+    assert any(
+        hit["rule_id"] == "strict_fpa.fallback_classification_basis"
+        for row in fallback_rows
+        for hit in row.get("_规则命中详情", [])
+    )
+
+
+def test_fpa_prompt_context_appends_json_only_reasoning_constraint(monkeypatch, tmp_path):
+    _write_fpa_prompt_config(tmp_path, monkeypatch)
+    group = _group_rows_by_l3(_rows())[0]
+
+    context = _build_fpa_ai_prompt_context(
+        group=group,
+        judgement_rules=["提供查询界面输入并展示返回结果"],
+        domain_context={},
+        profile=STRICT_FPA_PROFILE,
+    )
+
+    assert "不要输出 reasoning" in context.system_prompt
+    assert "debug_summary" in context.system_prompt
+    assert "rows 必须完整" in context.system_prompt
+
+
 def test_coverage_rules_can_disable_data_function_supplement():
     group = _group_rows_by_l3([
         {
@@ -2660,7 +2794,9 @@ def test_fpa_preview_returns_ai_debug(monkeypatch, tmp_path):
     debug = result["debug"]
     assert debug["ai_called"] is True
     assert debug["model"] == "test-model"
-    assert debug["system_prompt"] == "系统提示词"
+    assert debug["system_prompt"].startswith("系统提示词")
+    assert "不要输出 reasoning" in debug["system_prompt"]
+    assert "debug_summary" in debug["system_prompt"]
     assert debug["core_rules_source"] == "用户配置（配置目录/fpa_config.yaml: core_rules.unified_ui_cr）"
     assert debug["system_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: system_prompt_sets.unified_ui_sp）"
     assert debug["user_prompt_source"] == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.unified_ui_up）"
