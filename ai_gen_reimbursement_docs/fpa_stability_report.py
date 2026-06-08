@@ -32,14 +32,18 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         if source:
             source_counts[source] += 1
         warnings = _string_list(module.get("warnings", []))
-        module_warning_count = len(warnings)
+        stability_warnings = [
+            warning for warning in warnings
+            if _counts_as_stability_warning(warning)
+        ]
+        module_warning_count = len(stability_warnings)
         module_warning_sources = Counter(
             _classify_warning_source(warning, module)
-            for warning in warnings
+            for warning in stability_warnings
         )
         warning_count += module_warning_count
         warning_source_counts.update(module_warning_sources)
-        module_retry_count = sum(1 for warning in warnings if "稳定性校验触发一次重试" in warning)
+        module_retry_count = sum(1 for warning in stability_warnings if "稳定性校验触发一次重试" in warning)
         retry_count += module_retry_count
         retry_trigger_source = str(module.get("retry_trigger_source", "") or "").strip()
         if retry_trigger_source:
@@ -139,8 +143,12 @@ def load_fpa_stability_trace(path: str) -> dict[str, object]:
         trace = json.load(f)
     if not isinstance(trace, dict):
         raise ValueError(f"FPA audit trace must be a JSON object: {path}")
+    modules = trace.get("modules", [])
     report = trace.get("stability_report", {})
-    if not isinstance(report, dict) or not report:
+    if isinstance(modules, list) and modules:
+        report = build_fpa_stability_report(trace)
+        trace["stability_report"] = report
+    elif not isinstance(report, dict) or not report:
         report = build_fpa_stability_report(trace)
         trace["stability_report"] = report
     return trace
@@ -458,6 +466,23 @@ def _classify_warning_source(warning: str, module: dict[str, object]) -> str:
     ):
         return "postprocess_normalization"
     return "other"
+
+
+def _counts_as_stability_warning(warning: str) -> bool:
+    text = str(warning or "")
+    if (
+        "AI 结果未覆盖" in text
+        and "已追加" in text
+        and "rules_fallback 行" in text
+    ):
+        return False
+    if (
+        "AI 结果未包含数据功能行" in text
+        and "已追加" in text
+        and "rules_fallback 行" in text
+    ):
+        return False
+    return True
 
 
 def _recommendations(summary: dict[str, object]) -> list[dict[str, object]]:

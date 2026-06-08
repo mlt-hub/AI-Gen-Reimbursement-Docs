@@ -966,6 +966,8 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 2026-06-08 已将 `AI 行名称末尾已按 source_process_id 规范化` 从模块级 warning 降级为 `postprocess.ai_name_process_suffix` 规则命中。该类信息仍会进入 audit trace 和 check Excel 的规则命中详情，用于追溯 AI 原始名称与源功能过程名称的差异，但不再计入稳定性报告的 `warning_count`。`AI 行名称前缀已按源功能清单规范化` 仍保留为 warning，因为它代表 AI 输出跨模块或路径前缀不一致，仍需要显式暴露。
 
+2026-06-08 已将 `ai_first` 下确定性追加的 `rules_fallback` 覆盖补齐从稳定性报告 warning 统计中排除。`AI 结果未覆盖...已追加 rules_fallback 行` 和 `AI 结果未包含数据功能行...已追加 rules_fallback 行` 仍保留在 audit trace、check Excel 和 `coverage.rules_fallback` 规则命中详情中，用于审阅 AI 覆盖缺口；但真实模型趋势报告不再把已被规则集补齐且质量审核通过的补齐动作计为模型 warning。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
