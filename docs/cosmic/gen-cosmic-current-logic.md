@@ -1,5 +1,14 @@
 # gen-cosmic 当前逻辑
 
+## 文档定位
+
+本文同时承担两类用途：
+
+1. 说明当前 `gen-cosmic` 的真实实现逻辑、产物和风险。
+2. 明确第一阶段可实施范围，作为后续修改代码、文档和测试的验收依据。
+
+更完整的中长期改造路线见 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md)。本文中的“第一阶段实施规格”优先约束下一轮实现；未纳入第一阶段的内容只作为风险和后续方向，不应在实现时隐含扩大范围。
+
 ## 目标
 
 `gen-cosmic` 用于根据功能清单模块树生成 COSMIC 项目功能点拆分表。当前实现是批处理生成链路：
@@ -246,3 +255,193 @@ AI 调用限制：
 7. 送审规则未工程化：软评填报参考手册中的硬性口径尚未完整进入 prompt、结构化校验和结果状态。
 
 后续如果要实现 COSMIC 预览或审阅页，应先稳定核心输入/输出模型，再决定是否复用 FPA 的审阅抽象。
+
+## 第一阶段实施规格
+
+第一阶段目标是把当前“生成草稿后直接写 Excel”的链路，改造成“先生成结构化草稿，再执行确定性规则校验，再决定是否允许正式输出”的链路。
+
+本阶段不实现 `/preview/cosmic` 审阅页，不重写整套 AI 生成策略，不一次性覆盖所有《软评填报参考手册2024》启发式规则。页面审阅、人工编辑、内部接口边界识别、非功能内容自动剔除、控制命令语义过滤等内容进入后续阶段。
+
+### 目标行为
+
+生成 COSMIC 结果后，系统必须为每个功能过程给出校验状态：
+
+| 状态 | 含义 | 行为 |
+| --- | --- | --- |
+| `passed` | 没有 `error` 和 `warning`。 | 可进入正式 Excel 写入。 |
+| `review_required` | 没有 `error`，但存在 `warning`。 | 可写草稿和校验报告，正式输出需明确允许。 |
+| `blocked` | 存在至少一个 `error`。 | 默认不写正式 Excel，输出校验报告。 |
+
+本阶段必须保持当前批处理入口可运行。没有 API Key、AI 失败或超过 AI 限制时，不能静默产出看似正式的 COSMIC Excel；应在结构化校验结果中体现空占位、缺少数据移动或缺少触发事件等问题。
+
+### 修改范围
+
+第一阶段建议修改以下文件：
+
+| 文件 | 修改内容 |
+| --- | --- |
+| `ai_gen_reimbursement_docs/cosmic_models.py` | 补充结构化校验相关模型，或为现有模型增加可承载校验结果的字段。 |
+| `ai_gen_reimbursement_docs/cosmic_validator.py` | 新增 COSMIC 确定性规则校验器。 |
+| `ai_gen_reimbursement_docs/gen_cosmic.py` | 在 Markdown 解析为 `CosmicItem` 后调用校验器，生成 JSON 草稿和校验报告。 |
+| `ai_gen_reimbursement_docs/pipeline.py` | 根据校验状态决定是否写正式 Excel、草稿 Excel 或仅输出报告。 |
+| `ai_gen_reimbursement_docs/cosmic_writer.py` | 接收结构化校验结果，继续把 warning/error 写入批注或标记。 |
+| `tests/test_cosmic_validator.py` | 覆盖确定性规则和状态归并。 |
+| 既有 COSMIC 生成测试 | 调整期望产物，验证 JSON 草稿和校验报告。 |
+
+如果实现时发现 `cosmic_models.py` 与现有调用耦合过重，可以新增独立模型模块；但最终对外数据契约必须稳定，不应继续让 Markdown 成为唯一结构化来源。
+
+### 数据契约
+
+新增结构化 issue：
+
+```python
+CosmicIssue(
+    severity="error|warning|info",
+    code="FIRST_MOVE_NOT_ENTRY",
+    message="第一个子过程必须为输入 E",
+    field="movements[0].move_type",
+)
+```
+
+新增校验结果：
+
+```python
+CosmicValidationResult(
+    item=cosmic_item,
+    status="passed|review_required|blocked",
+    issues=[...],
+)
+```
+
+新增 JSON 草稿产物，路径为：
+
+```text
+md/3.3.gen-cosmic-AI填充-COSMIC.json
+```
+
+建议顶层结构：
+
+```json
+{
+  "project": "...",
+  "items": [
+    {
+      "module_l1": "...",
+      "module_l2": "...",
+      "module_l3": "...",
+      "user": "...",
+      "trigger": "...",
+      "process": "...",
+      "movements": [],
+      "status": "blocked",
+      "issues": []
+    }
+  ],
+  "summary": {
+    "passed": 0,
+    "review_required": 0,
+    "blocked": 0,
+    "errors": 0,
+    "warnings": 0
+  }
+}
+```
+
+本阶段可以继续生成 Markdown 审阅稿，但 Excel 写入和 CFP 汇总应优先使用结构化对象和校验结果，不应依赖人工可读 Markdown 作为唯一事实源。
+
+### 确定性校验规则
+
+第一阶段必须实现以下规则：
+
+| code | 级别 | 条件 | 说明 |
+| --- | --- | --- | --- |
+| `MISSING_TRIGGER` | `error` | `trigger` 为空。 | 功能过程必须由触发事件启动。 |
+| `FIRST_MOVE_NOT_ENTRY` | `error` | 存在数据移动，但第一步不是 `E`。 | 首个子过程必须为输入。 |
+| `LAST_MOVE_NOT_WRITE_OR_EXIT` | `error` | 存在数据移动，但最后一步不是 `W` 或 `X`。 | 末个子过程必须写入或输出。 |
+| `TOO_FEW_MOVEMENTS` | `error` | 数据移动少于 2 个。 | 一个功能过程至少包含两个子过程及相应数据移动。 |
+| `MISSING_MODULE_PATH` | `error` | 一级、二级或三级模块任一为空。 | 功能过程必须完全归属到单一模块路径。 |
+| `MISSING_PROCESS_NAME` | `error` | 功能过程名称为空。 | 功能过程必须可识别。 |
+| `EMPTY_DATA_GROUP` | `warning` | 任一数据移动的数据组为空。 | 需要人工补充或确认兴趣对象数据组。 |
+| `EMPTY_DATA_ATTRS` | `warning` | 任一数据移动的数据属性为空。 | 需要人工补充或确认数据属性。 |
+| `NON_STANDARD_MOVE_TYPE` | `warning` | 移动类型不是 `E/X/R/W`。 | 可以复用现有模糊匹配逻辑，但必须保留提示。 |
+
+状态归并规则：
+
+1. 任一 issue 为 `error` 时，功能过程状态为 `blocked`。
+2. 没有 `error` 但有 `warning` 时，状态为 `review_required`。
+3. 没有 `error` 和 `warning` 时，状态为 `passed`。
+
+### 输出策略
+
+第一阶段输出策略如下：
+
+| 场景 | 输出行为 |
+| --- | --- |
+| 全部 `passed` | 生成 JSON 草稿、Markdown 审阅稿、正式 COSMIC Excel 和 CFP 总和。 |
+| 存在 `review_required`，无 `blocked` | 生成 JSON 草稿、Markdown 审阅稿和校验报告；是否写 Excel 由显式配置控制。 |
+| 存在 `blocked` | 生成 JSON 草稿和校验报告；默认不写正式 COSMIC Excel，不更新可被下游误用的 CFP 总和。 |
+| 无 API Key 或 AI 全部失败 | 生成模板、JSON 草稿或校验报告，状态应反映缺少可送审数据；不得伪装为成功正式输出。 |
+
+如需兼容当前批处理产物，可新增配置项，例如：
+
+```yaml
+gen_cosmic:
+  allow_draft_excel_output: false
+```
+
+当 `allow_draft_excel_output=true` 时，可以写入带批注和黄色标记的草稿 Excel；但日志、报告和返回结果必须明确标识其不是正式送审结果。
+
+### 校验报告
+
+新增人工可读校验报告，路径为：
+
+```text
+md/3.4.gen-cosmic-校验报告.md
+```
+
+报告至少包含：
+
+1. 项目名称。
+2. 总体状态汇总。
+3. 按模块路径和功能过程列出的 issue。
+4. 每个 issue 的 `severity`、`code`、字段位置和说明。
+5. 对 Excel 输出策略的说明，例如“存在阻断问题，未写正式 Excel”。
+
+### CFP 处理
+
+第一阶段不重新定义全部 CFP 业务口径，但必须消除静默不一致：
+
+1. 如果存在 `blocked`，不得更新供 `gen-list` 使用的正式 CFP 总和。
+2. 如果模板未配置 `CFP计算公式`，必须记录 `warning` 或 `error`，不能静默留空后继续汇总。
+3. `CosmicItem.total_cfp()` 中 `复用 = 1/3` 的逻辑不得继续扩散到新链路；新链路应记录 CFP 来源为模板公式、人工覆盖或未确认。
+4. 正式 Excel 中的 CFP 仍以模板公式为准，Python 侧只负责结构化记录和异常提示。
+
+### 验收标准
+
+第一阶段完成后，应满足以下验收标准：
+
+1. 对首步非 `E`、末步非 `W/X`、少于两个数据移动、缺少触发事件、缺少模块路径、缺少功能过程名称的样例，校验器能产生 `error`。
+2. 对缺少数据组、缺少数据属性、非标准移动类型的样例，校验器能产生 `warning`。
+3. 状态归并结果符合 `passed/review_required/blocked` 规则。
+4. 生成链路会产出 `md/3.3.gen-cosmic-AI填充-COSMIC.json`。
+5. 存在 `blocked` 时默认不写正式 COSMIC Excel，且不更新正式 CFP 总和。
+6. 校验报告能说明阻断原因和对应字段。
+7. 既有无阻断样例仍能生成 COSMIC Excel。
+8. Python 测试使用项目虚拟环境运行：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_cosmic_validator.py
+.\.venv\Scripts\python.exe -m pytest
+```
+
+### 后续阶段边界
+
+以下内容不属于第一阶段验收范围：
+
+1. `/preview/cosmic` 页面实现。
+2. 人工编辑和确认状态流转。
+3. 控制命令、数据运算、内部技术步骤、非功能事项的自动过滤。
+4. 功能用户和三级模块的一对一强绑定自动修复。
+5. `复用`、`利旧`、优化未改子过程 CFP 为 `0` 的完整配置化。
+
+这些内容应在结构化草稿和校验器稳定后，再按 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md) 分阶段实施。
