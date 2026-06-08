@@ -996,6 +996,8 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 2026-06-08 已将非阻断稳定性重试从 `warning_count` 中排除。`retry_count` 继续记录真实发生过的重试，`Retry Triggers` 继续保留来源分布；只有重试后最终仍存在质量审核问题的 `blocking_retry_count` 才会同时计入 warning。基于 `tmp_fpa_stability_ci_real_recommended_after_warning_noise_20260608` 的 trace 重新汇总后，recommended 集合为 `warning_count=0`、`quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=1`、`blocking_retry_count=0`，Quality Gate PASS。
 
+2026-06-08 多轮趋势抽样继续暴露少数自然语言表达差异：EIF 说明使用“外部接口文件/外部系统数据/评估范围外相关的表”，EQ 说明使用“提供查询界面输入并展示返回结果”，以及高置信 `type_judgement` 的 `candidate_name` 与 AI 行名匹配但未被冲突抑制识别。当前已补齐这些表达和匹配口径。针对 `mixed_internal_external_data_functions`、`internal_vs_external_org_reference`、`oa_approval_reference` 三个波动样例复测后，`run_count=3`、`module_count=4`、`warning_count=0`、`quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=0`、`blocking_retry_count=0`，Quality Gate PASS。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
