@@ -42,6 +42,7 @@ def start_web_run(
     owner_id: str = "",
     owner_label: str = "",
     output_dir: str = "",
+    run_config: dict[str, Any] | None = None,
 ) -> None:
     now = now_iso()
     path = _history_path(base_dir=base_dir, mode=mode)
@@ -64,6 +65,7 @@ def start_web_run(
                 "created_at": now,
                 "started_at": now,
                 "updated_at": now,
+                "run_config": run_config or {},
             },
             path,
         )

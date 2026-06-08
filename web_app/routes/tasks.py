@@ -45,7 +45,11 @@ from web_app.services.task_runner import (
     execute_in_session,
     start_background_task,
 )
-from web_app.services.template_service import save_custom_templates, save_custom_templates_into
+from web_app.services.template_service import (
+    build_templates_dict,
+    save_custom_templates,
+    save_custom_templates_into,
+)
 
 
 def _session_run_state(state) -> Literal["running", "done", "error", "cancelled"]:
@@ -96,6 +100,17 @@ FPA_CONFIRMATION_MODE_LABELS = {
     "cautious": "审慎模式",
     "strict": "严格确认模式",
 }
+
+RUN_CONFIG_KEYS = (
+    "model",
+    "base_url",
+    "max_tokens",
+    "project_name",
+    "fpa_profile",
+    "fpa_strategy",
+    "fpa_rule_set",
+    "fpa_confirmation_mode",
+)
 
 
 def create_router(
@@ -166,6 +181,55 @@ def create_router(
 
     def _load_profile_decision_payload(config_root: Path) -> dict[str, dict[str, str]]:
         return serialize_decisions(load_project_profile_decisions(config_root))
+
+    def _run_config_snapshot(
+        *,
+        task_config: dict,
+        clean: bool,
+        custom_t_dir: str,
+    ) -> dict:
+        templates = build_templates_dict(custom_t_dir) if custom_t_dir else {}
+        return {
+            **{key: str(task_config.get(key) or "") for key in RUN_CONFIG_KEYS},
+            "clean": clean,
+            "custom_templates_dir": custom_t_dir,
+            "custom_templates": {
+                key: Path(path).name
+                for key, path in templates.items()
+            },
+        }
+
+    def _rerun_explicit_config(record: dict) -> dict[str, str]:
+        run_config = record.get("run_config")
+        if not isinstance(run_config, dict):
+            return {}
+        return {
+            key: str(run_config.get(key) or "")
+            for key in RUN_CONFIG_KEYS
+            if str(run_config.get(key) or "").strip()
+        }
+
+    def _rerun_clean(record: dict) -> bool:
+        run_config = record.get("run_config")
+        return bool(isinstance(run_config, dict) and run_config.get("clean"))
+
+    def _resolve_rerun_custom_templates(record: dict) -> str:
+        run_config = record.get("run_config")
+        if not isinstance(run_config, dict):
+            return ""
+        custom_templates = run_config.get("custom_templates")
+        if not isinstance(custom_templates, dict) or not custom_templates:
+            return ""
+        custom_t_dir = Path(str(run_config.get("custom_templates_dir") or ""))
+        if not custom_t_dir.exists():
+            raise HTTPException(400, "原任务自定义模板目录不存在，无法重跑")
+        missing = [
+            name for name in custom_templates.values()
+            if not (custom_t_dir / str(name)).exists()
+        ]
+        if missing:
+            raise HTTPException(400, "原任务自定义模板不存在，无法重跑")
+        return str(custom_t_dir)
 
     def _persist_and_merge_profile_decisions(
         *,
@@ -295,11 +359,13 @@ def create_router(
 
         session_id = uuid.uuid4().hex[:8]
         task_config = _resolve_task_config_snapshot(
-            explicit={},
+            explicit=_rerun_explicit_config(record),
             local_mode=local_mode,
             user=user,
             mode=task_mode,
         )
+        custom_templates_dir = _resolve_rerun_custom_templates(record)
+        clean = _rerun_clean(record)
 
         if mode == "local":
             output_dir = Path(str(record.get("output_dir") or input_path.parent))
@@ -319,6 +385,11 @@ def create_router(
                 task_mode=task_mode,
                 input_path=str(input_path),
                 output_dir=str(output_dir),
+                run_config=_run_config_snapshot(
+                    task_config=task_config,
+                    clean=clean,
+                    custom_t_dir=custom_templates_dir,
+                ),
             )
 
             def run_local_rerun():
@@ -341,7 +412,7 @@ def create_router(
                     session_id,
                     str(input_path),
                     str(output_dir),
-                    "",
+                    custom_templates_dir,
                     task_config["api_key"],
                     task_config["model"],
                     task_config["base_url"],
@@ -352,7 +423,7 @@ def create_router(
                     task_config["fpa_rule_set"],
                     task_config["fpa_confirmation_mode"],
                     profile_decisions,
-                    False,
+                    clean,
                     task_mode,
                     mode_info=mode_info,
                     mode_map=mode_map,
@@ -368,6 +439,10 @@ def create_router(
         custom_t_dir = work_dir / "custom_templates"
         for directory in [input_dir, output_dir, custom_t_dir]:
             directory.mkdir(parents=True)
+        if custom_templates_dir:
+            for source in Path(custom_templates_dir).iterdir():
+                if source.is_file():
+                    shutil.copy2(source, custom_t_dir / source.name)
         rerun_input = input_dir / input_path.name
         shutil.copy2(input_path, rerun_input)
         profile_root = _profile_config_root(local_mode=False, user=user)
@@ -387,6 +462,11 @@ def create_router(
             input_path=str(rerun_input),
             owner_id=user,
             owner_label=user,
+            run_config=_run_config_snapshot(
+                task_config=task_config,
+                clean=clean,
+                custom_t_dir=str(custom_t_dir),
+            ),
         )
 
         def run_remote_rerun():
@@ -429,7 +509,7 @@ def create_router(
                 task_config["fpa_rule_set"],
                 task_config["fpa_confirmation_mode"],
                 profile_decisions,
-                False,
+                clean,
                 task_mode,
                 mode_info=mode_info,
                 mode_map=mode_map,
@@ -777,6 +857,11 @@ def create_router(
             task_mode=mode,
             input_path=str(xlsx),
             output_dir=str(out),
+            run_config=_run_config_snapshot(
+                task_config=task_config,
+                clean=bool(clean),
+                custom_t_dir=custom_t_dir,
+            ),
         )
 
         def run():
@@ -902,6 +987,11 @@ def create_router(
             input_path=str(file_path),
             owner_id=user,
             owner_label=user,
+            run_config=_run_config_snapshot(
+                task_config=task_config,
+                clean=bool(clean),
+                custom_t_dir=str(custom_t_dir),
+            ),
         )
 
         def run():
