@@ -290,6 +290,183 @@ AI 调用限制：
 
 如果实现时发现 `cosmic_models.py` 与现有调用耦合过重，可以新增独立模型模块；但最终对外数据契约必须稳定，不应继续让 Markdown 成为唯一结构化来源。
 
+### 具体实现方案
+
+第一阶段采用兼容式改造，不直接破坏现有 `generate_cosmic_xlsx_from_md(...) -> str` 入口。新增结构化生成入口，旧入口保留为薄包装，降低对现有测试和外部调用的影响。
+
+新增模块 `ai_gen_reimbursement_docs/cosmic_validator.py`：
+
+```python
+from dataclasses import dataclass, field
+from typing import Literal
+
+from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
+
+IssueSeverity = Literal["error", "warning", "info"]
+ValidationStatus = Literal["passed", "review_required", "blocked"]
+
+
+@dataclass
+class CosmicIssue:
+    severity: IssueSeverity
+    code: str
+    message: str
+    field: str = ""
+    module_path: str = ""
+    process: str = ""
+    movement_order: int | None = None
+
+
+@dataclass
+class CosmicValidationResult:
+    item: CosmicItem
+    status: ValidationStatus
+    issues: list[CosmicIssue] = field(default_factory=list)
+
+
+@dataclass
+class CosmicValidationReport:
+    project: str
+    status: ValidationStatus
+    results: list[CosmicValidationResult]
+    summary: dict[str, int]
+```
+
+新增函数：
+
+```python
+def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult: ...
+
+def validate_cosmic_items(
+    items: list[CosmicItem],
+    *,
+    project_name: str = "",
+) -> CosmicValidationReport: ...
+
+def cosmic_report_to_dict(report: CosmicValidationReport) -> dict: ...
+
+def write_cosmic_validation_json(
+    report: CosmicValidationReport,
+    output_path: str,
+) -> str: ...
+
+def write_cosmic_validation_report_md(
+    report: CosmicValidationReport,
+    output_path: str,
+    *,
+    excel_written: bool,
+    excel_reason: str,
+) -> str: ...
+```
+
+`gen_cosmic.py` 新增结果对象和主入口：
+
+```python
+@dataclass
+class CosmicGenerationResult:
+    output_path: str
+    excel_written: bool
+    validation_json_path: str
+    validation_report_path: str
+    status: str
+    cfp_total: float | None
+    item_count: int
+    blocked_count: int
+    warning_count: int
+
+
+def generate_cosmic_artifacts_from_md(
+    md_path: str,
+    template_path: str,
+    output_path: str,
+    meta_md_path: str = "",
+    *,
+    md_dir: str = "",
+    project_name: str = "",
+    cfp_formula: str = "",
+    allow_draft_excel_output: bool = False,
+) -> CosmicGenerationResult: ...
+```
+
+旧函数保留：
+
+```python
+def generate_cosmic_xlsx_from_md(...) -> str:
+    result = generate_cosmic_artifacts_from_md(...)
+    return result.output_path
+```
+
+旧函数的兼容行为只用于已有调用方；`pipeline._generate_cosmic` 应切换到 `generate_cosmic_artifacts_from_md`，因为管线需要知道是否真的写入了 Excel、是否允许读取 CFP 总和。
+
+`PipelineResult` 建议新增字段：
+
+```python
+cosmic_validation_json: str = ""
+cosmic_validation_report: str = ""
+cosmic_status: str = ""
+cosmic_excel_written: bool = False
+```
+
+这些字段用于区分“阶段执行完成”和“正式 COSMIC Excel 已生成”。`result.cosmic_xlsx` 可以继续保存目标路径，但只有 `cosmic_excel_written=True` 且文件存在时，才登记为正式 artifact。
+
+### 兼容策略
+
+本阶段必须遵守以下兼容策略：
+
+1. `DataMovement` 和 `CosmicItem` 的现有字段不改名、不删除，避免破坏 Markdown 解析、AI 生成和 Excel 写入。
+2. `CosmicItem.warnings` 暂时保留；结构化 issue 是新事实源，旧 warnings 可在写 Excel 批注时合并展示。
+3. `write_cosmic_xlsx(template_path, output_path, items, ...)` 第一阶段可以继续接收 `list[CosmicItem]`，不强制改为接收 `CosmicValidationReport`。
+4. 如果需要在 Excel 批注中展示结构化 issue，可新增可选参数：
+
+```python
+def write_cosmic_xlsx(
+    template_path: str,
+    output_path: str,
+    items: list[CosmicItem],
+    *,
+    meta: dict[str, str] | None = None,
+    cfp_formula: str = "",
+    validation_results: list[CosmicValidationResult] | None = None,
+) -> str: ...
+```
+
+5. 旧的 `generate_cosmic_xlsx_from_md` 返回值仍为 `str`，但新管线不得通过它判断是否成功写入正式 Excel。
+6. 如果 `blocked` 且目标 `cosmic_xlsx` 文件在上一轮运行中已经存在，本阶段不负责删除旧文件；但不得登记为本轮正式 artifact，报告中必须写明“本轮未写入正式 Excel”。
+
+### 调用流程
+
+`pipeline._generate_cosmic` 第一阶段应调整为以下顺序：
+
+```text
+1. 检查 COSMIC Excel 模板。
+2. 读取项目名称、FPA 核减后工作量，并写 3.1 MD。
+3. 生成 3.2 空白 COSMIC Markdown 模板。
+4. 如果有 API Key：
+   4.1 复制模板为 3.3 Markdown。
+   4.2 调用 AI 填充 3.3 Markdown。
+   4.3 调用 generate_cosmic_artifacts_from_md。
+   4.4 写入 result.cosmic_validation_json / result.cosmic_validation_report / result.cosmic_status。
+   4.5 仅当 excel_written=True 时登记 cosmic_xlsx artifact，并读取 3.5 CFP 总和。
+5. 如果没有 API Key：
+   5.1 不调用 AI。
+   5.2 基于空模板或空 items 生成校验报告。
+   5.3 result.cosmic_status=blocked。
+   5.4 不登记正式 cosmic_xlsx artifact，不更新 result.cfp_total。
+```
+
+`generate_cosmic_artifacts_from_md` 内部顺序：
+
+```text
+1. parse_md_to_items(md_path)。
+2. validate_cosmic_items(items, project_name=project_name)。
+3. 写 3.3 JSON 草稿。
+4. 根据 report.status 和 allow_draft_excel_output 决定是否调用 write_cosmic_xlsx。
+5. 如果写 Excel，再按现有逻辑写环境图 sheet。
+6. 只有正式写 Excel 且可计算 CFP 时，写 3.5 CFP 总和。
+7. 写 3.4 校验报告，说明 Excel 是否写入和原因。
+8. 返回 CosmicGenerationResult。
+```
+
 ### 数据契约
 
 新增结构化 issue：
@@ -347,6 +524,36 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 }
 ```
 
+字段约束：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `project` | `string` | 是 | 项目名称。 |
+| `items` | `array` | 是 | COSMIC 功能过程列表。 |
+| `items[].module_l1` | `string` | 是 | 一级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
+| `items[].module_l2` | `string` | 是 | 二级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
+| `items[].module_l3` | `string` | 是 | 三级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
+| `items[].user` | `string` | 是 | 当前仍使用 `发起者：xxx|接收者：xxx` 兼容格式。 |
+| `items[].trigger` | `string` | 是 | 触发事件，允许为空但会触发 `MISSING_TRIGGER`。 |
+| `items[].process` | `string` | 是 | 功能过程名称，允许为空但会触发 `MISSING_PROCESS_NAME`。 |
+| `items[].movements` | `array` | 是 | 数据移动列表。 |
+| `items[].movements[].order` | `number` | 是 | 数据移动序号。 |
+| `items[].movements[].sub_process` | `string` | 是 | 子过程描述。 |
+| `items[].movements[].move_type` | `string` | 是 | 数据移动类型，标准值为 `E/X/R/W`。 |
+| `items[].movements[].data_group` | `string` | 是 | 数据组。 |
+| `items[].movements[].data_attrs` | `string` | 是 | 数据属性。 |
+| `items[].movements[].reuse` | `string` | 是 | 复用度，继续兼容 `新增/复用/利旧`。 |
+| `items[].status` | `string` | 是 | `passed/review_required/blocked`。 |
+| `items[].issues` | `array` | 是 | 当前功能过程的结构化问题列表。 |
+| `items[].issues[].severity` | `string` | 是 | `error/warning/info`。 |
+| `items[].issues[].code` | `string` | 是 | 稳定问题编码。 |
+| `items[].issues[].message` | `string` | 是 | 面向人的说明。 |
+| `items[].issues[].field` | `string` | 否 | 字段路径，例如 `movements[0].move_type`。 |
+| `items[].issues[].movement_order` | `number|null` | 否 | 问题关联的数据移动序号。 |
+| `summary` | `object` | 是 | 汇总数量。 |
+
+JSON 写入必须使用 `ensure_ascii=False` 和稳定缩进，便于人工排查和测试断言。
+
 本阶段可以继续生成 Markdown 审阅稿，但 Excel 写入和 CFP 汇总应优先使用结构化对象和校验结果，不应依赖人工可读 Markdown 作为唯一事实源。
 
 ### 确定性校验规则
@@ -371,6 +578,48 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 2. 没有 `error` 但有 `warning` 时，状态为 `review_required`。
 3. 没有 `error` 和 `warning` 时，状态为 `passed`。
 
+校验器实现顺序应保持确定性，便于测试和报告阅读：
+
+```python
+def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
+    issues = []
+    module_path = " > ".join(
+        part for part in [item.module_l1, item.module_l2, item.module_l3] if part
+    )
+
+    if not item.module_l1 or not item.module_l2 or not item.module_l3:
+        issues.append(error("MISSING_MODULE_PATH", "功能过程必须归属到完整的一、二、三级模块路径", "module_path"))
+
+    if not item.process:
+        issues.append(error("MISSING_PROCESS_NAME", "功能过程名称不能为空", "process"))
+
+    if not item.trigger:
+        issues.append(error("MISSING_TRIGGER", "功能过程必须由触发事件启动", "trigger"))
+
+    if len(item.movements) < 2:
+        issues.append(error("TOO_FEW_MOVEMENTS", "一个功能过程至少包含两个子过程及相应数据移动", "movements"))
+
+    if item.movements:
+        first = item.movements[0]
+        last = item.movements[-1]
+        if first.move_type != "E":
+            issues.append(error("FIRST_MOVE_NOT_ENTRY", "第一个子过程必须为输入 E", "movements[0].move_type", first.order))
+        if last.move_type not in {"W", "X"}:
+            issues.append(error("LAST_MOVE_NOT_WRITE_OR_EXIT", "最后一个子过程必须为写 W 或输出 X", f"movements[{len(item.movements)-1}].move_type", last.order))
+
+    for index, movement in enumerate(item.movements):
+        if movement.move_type not in {"E", "X", "R", "W"}:
+            issues.append(warning("NON_STANDARD_MOVE_TYPE", "移动类型不是标准 E/X/R/W", f"movements[{index}].move_type", movement.order))
+        if not movement.data_group:
+            issues.append(warning("EMPTY_DATA_GROUP", "数据组不能为空", f"movements[{index}].data_group", movement.order))
+        if not movement.data_attrs:
+            issues.append(warning("EMPTY_DATA_ATTRS", "数据属性不能为空", f"movements[{index}].data_attrs", movement.order))
+
+    return CosmicValidationResult(item=item, status=merge_status(issues), issues=issues)
+```
+
+实现时可以不逐字复制该伪代码，但必须保持 issue code、severity 和状态归并规则一致。
+
 ### 输出策略
 
 第一阶段输出策略如下：
@@ -391,6 +640,25 @@ gen_cosmic:
 
 当 `allow_draft_excel_output=true` 时，可以写入带批注和黄色标记的草稿 Excel；但日志、报告和返回结果必须明确标识其不是正式送审结果。
 
+配置读取规则：
+
+1. 默认值必须为 `false`。
+2. 配置缺失时按 `false` 处理，不应改变当前生产安全策略。
+3. 如果项目现有配置工具已经按扁平 key 读取，可以先实现为 `load_gen_cosmic_allow_draft_excel_output() -> bool`，内部兼容以下 key：
+
+```yaml
+gen_cosmic:
+  allow_draft_excel_output: false
+```
+
+或：
+
+```yaml
+gen_cosmic_allow_draft_excel_output: false
+```
+
+4. 文档、日志和校验报告中应统一称为“草稿 Excel 输出”，不要称为“正式 Excel”。
+
 ### 校验报告
 
 新增人工可读校验报告，路径为：
@@ -406,6 +674,35 @@ md/3.4.gen-cosmic-校验报告.md
 3. 按模块路径和功能过程列出的 issue。
 4. 每个 issue 的 `severity`、`code`、字段位置和说明。
 5. 对 Excel 输出策略的说明，例如“存在阻断问题，未写正式 Excel”。
+
+建议报告格式：
+
+```markdown
+# gen-cosmic 校验报告
+
+## 汇总
+
+- 项目：xxx
+- 总状态：blocked
+- 功能过程数：10
+- 通过：6
+- 待审：2
+- 阻断：2
+- error：3
+- warning：5
+- Excel 输出：未写入正式 Excel
+- 原因：存在阻断问题
+
+## 问题明细
+
+### 系统管理 > 用户管理 > 用户新增 / 新增用户
+
+| 级别 | code | 字段 | 数据移动序号 | 说明 |
+| --- | --- | --- | --- | --- |
+| error | `FIRST_MOVE_NOT_ENTRY` | `movements[0].move_type` | 1 | 第一个子过程必须为输入 E |
+```
+
+报告中不使用“功能点类型”“说明详情”等 FPA 禁用同义词。COSMIC 审阅页尚未实现，本阶段报告里的业务对象统一称为“功能过程”“数据移动”“数据移动类型”“计算依据说明”。
 
 ### CFP 处理
 
@@ -433,6 +730,80 @@ md/3.4.gen-cosmic-校验报告.md
 .\.venv\Scripts\python.exe -m pytest tests/test_cosmic_validator.py
 .\.venv\Scripts\python.exe -m pytest
 ```
+
+### 测试矩阵
+
+新增 `tests/test_cosmic_validator.py`，建议至少包含以下用例：
+
+| 测试名 | 输入构造 | 断言 |
+| --- | --- | --- |
+| `test_passed_item_has_no_issues` | 完整模块路径、触发事件、两步数据移动 `E -> X`，数据组和属性齐全。 | 状态为 `passed`，issues 为空。 |
+| `test_missing_trigger_is_error` | `trigger=""`。 | 包含 `MISSING_TRIGGER`，状态为 `blocked`。 |
+| `test_first_move_must_be_entry` | 第一条 movement 为 `R`。 | 包含 `FIRST_MOVE_NOT_ENTRY`，字段为 `movements[0].move_type`。 |
+| `test_last_move_must_be_write_or_exit` | 最后一条 movement 为 `R`。 | 包含 `LAST_MOVE_NOT_WRITE_OR_EXIT`。 |
+| `test_too_few_movements_is_error` | movement 数量为 0 或 1。 | 包含 `TOO_FEW_MOVEMENTS`。 |
+| `test_missing_module_path_is_error` | `module_l3=""`。 | 包含 `MISSING_MODULE_PATH`。 |
+| `test_missing_process_name_is_error` | `process=""`。 | 包含 `MISSING_PROCESS_NAME`。 |
+| `test_empty_data_group_is_warning` | 任一 movement 的 `data_group=""`。 | 包含 `EMPTY_DATA_GROUP`，状态为 `review_required`。 |
+| `test_empty_data_attrs_is_warning` | 任一 movement 的 `data_attrs=""`。 | 包含 `EMPTY_DATA_ATTRS`，状态为 `review_required`。 |
+| `test_non_standard_move_type_is_warning` | movement 的 `move_type="输入"`。 | 包含 `NON_STANDARD_MOVE_TYPE`。 |
+| `test_error_wins_over_warning` | 同时缺触发事件和缺数据属性。 | 状态为 `blocked`。 |
+| `test_report_summary_counts_status_and_severity` | 三个 item 分别为 passed/review_required/blocked。 | summary 数量正确。 |
+| `test_report_json_is_stable_and_chinese_readable` | 写 JSON 到临时目录。 | 文件为 UTF-8，包含未转义中文和 `summary`。 |
+
+调整或新增集成测试：
+
+| 文件 | 用例 | 断言 |
+| --- | --- | --- |
+| `tests/test_pipeline.py` | `gen-cosmic` 在 AI 返回有效数据时。 | 生成 JSON 草稿、校验报告、Excel，`result.cosmic_excel_written is True`。 |
+| `tests/test_pipeline.py` | `gen-cosmic` 无 API Key 时。 | `result.cosmic_status == "blocked"`，不登记正式 cosmic artifact，不更新 `cfp_total`。 |
+| `tests/test_pipeline.py` | AI 返回空 movement 时。 | 写校验报告，默认不写正式 Excel。 |
+| `tests/test_cosmic_md.py` | Markdown 解析后接校验器。 | 解析出的 item 可被校验器识别问题。 |
+| `tests/test_models.py` | 保持 `CosmicItem.to_rows()` 兼容。 | 既有测试不因新增校验模型失败。 |
+
+如现有 `mock_ai` 无法稳定构造 COSMIC 数据，应新增专用 fixture，直接 mock `generate_cosmic_items` 或 `parse_md_to_items`，避免集成测试依赖大模型文本格式。
+
+### 实施步骤拆分
+
+建议按以下顺序提交代码，任一步失败都能单独回滚：
+
+1. 新增 `cosmic_validator.py` 和 `tests/test_cosmic_validator.py`，只依赖现有 `CosmicItem/DataMovement`，不接入管线。
+2. 新增 JSON 和 Markdown 报告写出函数，补充文件写入测试。
+3. 在 `gen_cosmic.py` 新增 `CosmicGenerationResult` 和 `generate_cosmic_artifacts_from_md`，旧 `generate_cosmic_xlsx_from_md` 保持兼容。
+4. 修改 `pipeline._generate_cosmic` 使用新入口，补充 `PipelineResult` 字段。
+5. 调整 Excel 写入策略：`blocked` 默认不写正式 Excel，`review_required` 受 `allow_draft_excel_output` 控制。
+6. 调整 CFP 写入策略：只有正式 Excel 写入成功时才写 `3.5.gen-cosmic-CFP-总和.md`。
+7. 更新集成测试和相关文档。
+
+每一步完成后至少运行：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_cosmic_validator.py
+```
+
+第 4 步之后还应运行：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_pipeline.py
+```
+
+最终运行：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+### 完成定义
+
+第一阶段只有同时满足以下条件，才视为实施完成：
+
+1. 校验器、JSON 草稿、Markdown 校验报告均已落地。
+2. 管线能区分 `passed/review_required/blocked`，并把状态写入 `PipelineResult`。
+3. `blocked` 默认不会写正式 Excel，也不会更新正式 CFP 总和。
+4. `review_required` 默认不会写正式 Excel；开启 `allow_draft_excel_output` 后才写草稿 Excel。
+5. 既有可通过样例仍能生成正式 Excel。
+6. 单元测试和集成测试覆盖主要状态分支。
+7. 本文档和 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md) 未出现互相矛盾的目标行为。
 
 ### 后续阶段边界
 
