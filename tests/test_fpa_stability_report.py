@@ -196,8 +196,10 @@ def test_stability_report_keeps_non_blocking_retry_visible_without_failing_gate(
     comparison = build_fpa_stability_comparison([str(trace)])
 
     summary = comparison["summary"]
+    assert summary["warning_count"] == 0
     assert summary["retry_count"] == 1
     assert summary["blocking_retry_count"] == 0
+    assert summary["warning_source_counts"] == {}
     comparison["evaluation"] = evaluate_fpa_stability_comparison(
         comparison,
         {"blocking_retry_count": 0, "retryable_quality_issue_count": 0},
@@ -206,6 +208,7 @@ def test_stability_report_keeps_non_blocking_retry_visible_without_failing_gate(
 
     assert comparison["evaluation"]["status"] == "pass"
     assert "Status: **PASS**" in markdown
+    assert "| 1 | external_user_center_reference | external_user_center_reference__strict_fpa__ai_first__strict_fpa_rs | trace.json | strict_fpa | ai_first | strict_fpa_rs | 1 | 0 | 0 | 0 | 0 | 1 | 0 |" in markdown
     assert "| blocking_retry_count | 0 | 0 | yes |" in markdown
     assert "Blocking Retries" in markdown
 
