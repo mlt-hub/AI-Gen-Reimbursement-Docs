@@ -812,16 +812,14 @@ def _normalize_ai_fpa_rows_for_l3(
                 fpa_type,
             )
             if suffixed_name != output_name:
-                warning = f"{_group_tag(group)} AI 行名称末尾已按 source_process_id 规范化: {output_name} -> {suffixed_name}"
-                warnings.append(warning)
-                row_warnings.append(warning)
+                detail = f"{_group_tag(group)} AI 行名称末尾已按 source_process_id 规范化: {output_name} -> {suffixed_name}"
                 row_hits.append({
                     "hit_object": output_name,
                     "rule_id": "postprocess.ai_name_process_suffix",
                     "rule_desc": "AI 行保留完整功能点结构，但末尾功能过程名优先使用 source_process_id 对应的源功能过程名称。",
                     "suggested_type": "",
                     "adopted": "是",
-                    "warnings": [warning],
+                    "warnings": [detail],
                 })
                 output_name = suffixed_name
         if prefix_changed:

@@ -84,6 +84,7 @@ AI 负责：
 - AI 原始返回仍保留在调试和审计信息中，便于追溯。
 - 类型判断不依赖强制补齐后的前缀，避免前缀文字干扰 FPA 类型推断。
 - 若后处理修改了 `name`，必须记录 `postprocess.ai_name_prefix` 规则命中。
+- 若后处理只按 `source_process_id` 修正功能点名称末尾，必须记录 `postprocess.ai_name_process_suffix` 规则命中，但不计入模块级 warning。
 
 ## 当前能力边界
 

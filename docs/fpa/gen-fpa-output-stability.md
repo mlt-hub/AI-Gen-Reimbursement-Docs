@@ -964,6 +964,8 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 阅读报告时建议先看 `Quality Gate` 是否失败，再看 `Issue Details`。例如规则基线只配置 `max_retries=0` 时，报告可能因为未发生重试而 PASS，但仍会列出 `validator.explanation_structure` 等非阻断质量提示；如果出现 `retryable=yes` 的 `validator.split_crud_ei`、`validator.query_as_ei` 或 `validator.ordinary_service_as_eif`，应优先回到对应 `case_id/run_id` 检查输入和生成结果。
 
+2026-06-08 已将 `AI 行名称末尾已按 source_process_id 规范化` 从模块级 warning 降级为 `postprocess.ai_name_process_suffix` 规则命中。该类信息仍会进入 audit trace 和 check Excel 的规则命中详情，用于追溯 AI 原始名称与源功能过程名称的差异，但不再计入稳定性报告的 `warning_count`。`AI 行名称前缀已按源功能清单规范化` 仍保留为 warning，因为它代表 AI 输出跨模块或路径前缀不一致，仍需要显式暴露。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell

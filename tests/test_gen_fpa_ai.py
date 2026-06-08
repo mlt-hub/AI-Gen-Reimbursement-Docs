@@ -859,8 +859,13 @@ def test_ai_name_process_suffix_normalization_does_not_duplicate_prefix_warning(
     )
 
     assert rows[0]["新增/修改功能点"] == "【地市后台】采购管理-供应商协同-ERP订单引用-查看ERP订单信息"
-    assert len([w for w in warnings if "AI 行名称末尾已按 source_process_id 规范化" in w]) == 1
+    assert not any("AI 行名称末尾已按 source_process_id 规范化" in w for w in warnings)
     assert not any("AI 行名称前缀已按源功能清单规范化" in w for w in warnings)
+    suffix_hit = next(
+        hit for hit in rows[0]["_规则命中详情"]
+        if hit["rule_id"] == "postprocess.ai_name_process_suffix"
+    )
+    assert "AI 行名称末尾已按 source_process_id 规范化" in suffix_hit["warnings"][0]
 
 
 def test_strict_profile_corrects_external_service_eif_misclassification():
