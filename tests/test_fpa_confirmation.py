@@ -84,3 +84,11 @@ def test_confirmed_decision_suppresses_same_question_and_renders_prompt_feedback
     feedback = confirmation_feedback(decisions)
     assert decision_id in feedback
     assert "必须作为硬约束执行" in feedback
+
+
+def test_unknown_confirmation_scope_falls_back_to_current_run():
+    decisions = normalize_confirmed_decisions({
+        "query_type_demo": {"value": "eq", "scope": "unknown_scope"}
+    })
+
+    assert decisions["query_type_demo"].scope == "current_run"

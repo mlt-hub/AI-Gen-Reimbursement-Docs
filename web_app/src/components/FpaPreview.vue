@@ -188,7 +188,23 @@
             </article>
           </div>
 
-          <div v-if="confirmationQuestions.length" class="flex flex-col gap-2 border-t border-[var(--color-rule)] px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
+          <div v-if="confirmationQuestions.length" class="flex flex-col gap-3 border-t border-[var(--color-rule)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="inline-flex w-fit rounded-md border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-1 text-xs font-semibold">
+              <button
+                type="button"
+                :class="['rounded px-3 py-1.5', confirmationScope === 'current_run' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-sm' : 'text-[var(--color-ink-muted)]']"
+                @click="confirmationScope = 'current_run'"
+              >
+                仅本次使用
+              </button>
+              <button
+                type="button"
+                :class="['rounded px-3 py-1.5', confirmationScope === 'project_profile' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-sm' : 'text-[var(--color-ink-muted)]']"
+                @click="confirmationScope = 'project_profile'"
+              >
+                保存为项目默认口径
+              </button>
+            </div>
             <button
               type="button"
               class="btn-primary inline-flex items-center justify-center gap-2 px-5"
@@ -455,6 +471,8 @@ interface PreviewErrorMessage {
   nextStep?: string
 }
 
+type FpaConfirmationScope = 'current_run' | 'project_profile'
+
 const config = useConfigStore()
 const session = useSessionStore()
 const toast = useToastStore()
@@ -469,7 +487,8 @@ const previewLoading = ref(false)
 const error = ref<PreviewErrorMessage | null>(null)
 const result = ref<FpaPreviewResult | null>(null)
 const confirmationSelections = ref<Record<string, string>>({})
-const confirmedDecisions = ref<Record<string, { value: string; scope: 'current_run' }>>({})
+const confirmationScope = ref<FpaConfirmationScope>('current_run')
+const confirmedDecisions = ref<Record<string, { value: string; scope: FpaConfirmationScope }>>({})
 
 const previewWarnings = computed(() => result.value?.warnings ?? [])
 const confirmationQuestions = computed(() => result.value?.confirmation_questions ?? [])
@@ -598,10 +617,10 @@ async function runPreview() {
 }
 
 async function continuePreviewWithConfirmations() {
-  const decisions: Record<string, { value: string; scope: 'current_run' }> = {}
+  const decisions: Record<string, { value: string; scope: FpaConfirmationScope }> = {}
   for (const question of confirmationQuestions.value) {
     const value = confirmationSelections.value[question.id]
-    if (value) decisions[question.id] = { value, scope: 'current_run' }
+    if (value) decisions[question.id] = { value, scope: confirmationScope.value }
   }
   confirmedDecisions.value = { ...confirmedDecisions.value, ...decisions }
   await requestPreview(true)
@@ -647,6 +666,7 @@ async function requestPreview(useConfirmedDecisions: boolean) {
 function resetConfirmations() {
   confirmationSelections.value = {}
   confirmedDecisions.value = {}
+  confirmationScope.value = 'current_run'
 }
 
 function hydrateConfirmationSelections(questions: FpaConfirmationQuestion[]) {

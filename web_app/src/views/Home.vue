@@ -149,9 +149,27 @@
               </article>
             </div>
           </div>
-          <div class="flex flex-col-reverse gap-2 border-t border-[var(--color-rule)] px-5 py-4 sm:flex-row sm:justify-end sm:gap-3">
-            <button @click="cancelTask" class="btn-quiet">取消任务</button>
-            <button @click="submitFpaConfirmation" class="btn-primary" :disabled="!canSubmitFpaConfirmation">确认继续</button>
+          <div class="flex flex-col gap-3 border-t border-[var(--color-rule)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="inline-flex w-fit rounded-md border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-1 text-xs font-semibold">
+              <button
+                type="button"
+                :class="['rounded px-3 py-1.5', fpaConfirmationScope === 'current_run' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-sm' : 'text-[var(--color-ink-muted)]']"
+                @click="fpaConfirmationScope = 'current_run'"
+              >
+                仅本次使用
+              </button>
+              <button
+                type="button"
+                :class="['rounded px-3 py-1.5', fpaConfirmationScope === 'project_profile' ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-sm' : 'text-[var(--color-ink-muted)]']"
+                @click="fpaConfirmationScope = 'project_profile'"
+              >
+                保存为项目默认口径
+              </button>
+            </div>
+            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              <button @click="cancelTask" class="btn-quiet">取消任务</button>
+              <button @click="submitFpaConfirmation" class="btn-primary" :disabled="!canSubmitFpaConfirmation">确认继续</button>
+            </div>
           </div>
         </div>
       </div>
@@ -245,6 +263,8 @@ interface AiLogResponse {
   content?: string
 }
 
+type FpaConfirmationScope = 'current_run' | 'project_profile'
+
 const session = useSessionStore()
 const config = useConfigStore()
 const log = useLogStore()
@@ -304,6 +324,7 @@ watch(() => session.listPrompt, (p) => {
 
 // ── 批量 FPA 计量口径确认 ──
 const fpaConfirmationSelections = ref<Record<string, string>>({})
+const fpaConfirmationScope = ref<FpaConfirmationScope>('current_run')
 const fpaConfirmationTitle = computed(() => {
   const prompt = session.fpaConfirmationPrompt
   if (!prompt) return ''
@@ -320,6 +341,7 @@ const canSubmitFpaConfirmation = computed(() => {
 
 watch(() => session.fpaConfirmationPrompt, (prompt) => {
   fpaConfirmationSelections.value = {}
+  fpaConfirmationScope.value = 'current_run'
   for (const question of prompt?.questions ?? []) {
     fpaConfirmationSelections.value[question.id] = question.recommendation
   }
@@ -365,11 +387,11 @@ async function submitListInput() {
 
 async function submitFpaConfirmation() {
   if (!session.sessionId || !session.fpaConfirmationPrompt || !canSubmitFpaConfirmation.value) return
-  const confirmedDecisions: Record<string, { value: string; scope: 'current_run' }> = {}
+  const confirmedDecisions: Record<string, { value: string; scope: FpaConfirmationScope }> = {}
   for (const question of session.fpaConfirmationPrompt.questions) {
     confirmedDecisions[question.id] = {
       value: fpaConfirmationSelections.value[question.id],
-      scope: 'current_run',
+      scope: fpaConfirmationScope.value,
     }
   }
   try {
