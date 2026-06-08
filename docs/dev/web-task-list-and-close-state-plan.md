@@ -35,6 +35,7 @@ npm run build
 
 后续关注：
 
+- 任务列表中的 `running` 任务还需要补充“继续”入口，用于回到仍在运行的 session。
 - 远程重跑依赖历史记录中的原始输入文件路径；如果远程临时目录已被清理，接口会返回“原始输入文件不存在，无法重跑”。
 - 当前方案暂不支持关闭后恢复。
 
@@ -76,6 +77,7 @@ npm run build
 
 - 筛选条件默认排除 `closed`。
 - 展示状态、任务模式、来源、输入文件、开始时间、更新时间、交付物状态。
+- `running` 状态展示“继续”入口，用于回到当前运行 session 的执行监控。
 - `done`、`error`、`cancelled` 状态展示“重跑”入口。
 - 非 `closed` 状态展示“关闭”入口。
 - `running` 状态不展示“重跑”入口。
@@ -94,6 +96,34 @@ npm run build
 - 支持按状态筛选 `closed`。
 - `closed` 状态不展示重跑入口。
 - 可继续提供下载、打开目录、查看调试记录等历史能力。
+
+### 继续执行语义
+
+任务列表中的“继续”与“重跑”语义不同：
+
+- “继续”只针对当前仍在运行的 `running` 任务。
+- “继续”应回到原 `session_id` 对应的生成页执行监控，而不是创建新任务。
+- “重跑”会创建新的 `session_id` 和新的运行历史记录。
+
+服务未重启时：
+
+- `SessionManager` 内存中仍保存运行中的 session。
+- `/api/sessions/{session_id}` 可以返回实时状态。
+- 前端可以继续查看进度、监听日志流、响应人工输入、取消任务，并在任务完成后下载或打开交付物。
+
+服务已重启或 session 已被清理时：
+
+- `run_history` 中的历史记录仍保留，但 `SessionManager` 中不再有实时 session。
+- `/api/sessions/{session_id}` 会返回 404。
+- 此时不能真正继续当前执行，应提示“会话已结束或服务已重启，无法继续当前执行”。
+- UI 应保留历史入口，并根据任务状态提供重跑能力；不得假装仍可继续执行。
+
+任务列表建议展示规则：
+
+- `running` 且 session 存在：展示“继续”。
+- `running` 但 session 不存在：展示“会话不可恢复”提示，不展示“继续”。
+- `done`、`error`、`cancelled`：展示“重跑”。
+- `closed`：不在任务列表展示，历史页也不展示“继续”或“重跑”。
 
 ## 后端接口设计
 
@@ -165,6 +195,22 @@ POST /api/tasks/{run_id}/rerun
 - 重跑应创建新的 `session_id` 和新的运行历史记录，不覆盖原历史。
 - 原任务保留原状态。
 
+### 查询运行 session
+
+现有接口继续用于“继续执行”入口：
+
+```http
+GET /api/sessions/{session_id}
+```
+
+行为：
+
+- session 存在且当前用户有权访问时，返回实时运行状态。
+- session 不存在时返回 404。
+- 远程模式下继续按 owner 校验访问权限。
+
+前端点击“继续”时应先调用该接口确认 session 可恢复，再进入生成页执行监控。
+
 ## 数据模型
 
 现有运行历史表已有 `run_state` 字段，因此可以直接扩展状态值为 `closed`。
@@ -193,7 +239,14 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - `web_app/src/views/Tasks.vue`
   - 新增任务列表页。
   - 默认调用 `/api/tasks`。
-  - 提供刷新、重跑、关闭、进入历史等操作。
+  - 提供刷新、继续、重跑、关闭、进入历史等操作。
+  - `running` 任务点击“继续”时携带 `session_id` 回到生成页。
+- `web_app/src/views/Home.vue`
+  - 支持从路由参数或 query 中读取 `session_id`。
+  - 调用 `/api/sessions/{session_id}` 恢复执行监控状态。
+  - session 不存在时展示“会话已结束或服务已重启，无法继续当前执行”。
+- `web_app/src/stores/session.ts`
+  - 如现有 store 无恢复入口，补充从 session 状态 payload 恢复当前执行监控的方法。
 - `web_app/src/views/History.vue`
   - 状态筛选增加 `closed`。
   - 状态文案增加“关闭”。
@@ -218,6 +271,9 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 ## 验收标准
 
 - 创建运行中任务后，任务列表页可以看到该任务。
+- 服务未重启且 session 仍存在时，运行中任务可以从任务列表点击“继续”回到执行监控。
+- 点击“继续”后能查看当前进度、继续监听日志流，并可响应后续人工输入。
+- 服务已重启或 session 已清理时，运行中历史记录不能继续执行，页面应明确提示会话不可恢复。
 - 任务完成后，任务列表页仍可以看到该任务。
 - 完成任务可以重跑，重跑后生成新的运行记录。
 - 关闭任务后，任务列表页不再展示该任务。
@@ -232,6 +288,8 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 后端测试：
 
 - `/api/tasks` 默认排除 `closed`。
+- `/api/sessions/{session_id}` 对存在且可访问的 session 返回实时状态。
+- `/api/sessions/{session_id}` 对不存在或无权访问的 session 返回 404。
 - `/api/history?state=closed` 返回关闭任务。
 - `POST /api/tasks/{run_id}/close` 能关闭 `done` 任务。
 - 关闭 `running` 任务返回 400。
@@ -242,12 +300,17 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 前端测试：
 
 - 任务列表页不展示关闭任务。
+- 运行中任务展示“继续”按钮，不展示“重跑”按钮。
+- 点击“继续”能回到生成页并恢复对应 session 的执行监控。
+- session 不存在时展示“会话已结束或服务已重启，无法继续当前执行”。
 - 完成任务展示重跑按钮。
 - 关闭任务在历史页展示，且无重跑按钮。
 - 点击关闭有二次确认。
 
 ## 风险与待确认
 
+- “继续执行”依赖服务进程内存中的 `SessionManager`，服务重启后无法恢复实时后台线程。
+- 历史记录中的 `running` 不等价于当前还有可继续执行的 session；UI 需要区分“运行中且可继续”和“运行记录显示运行中但会话不可恢复”。
 - 重跑需要复用原始输入与启动参数；远程上传文件如果已被清理，可能无法重跑。
 - 本机任务可以依赖 `input_path` 重跑；远程任务需要确认是否长期保存输入文件。
 - 如果远程交付物过期，重跑不应依赖旧交付物。
