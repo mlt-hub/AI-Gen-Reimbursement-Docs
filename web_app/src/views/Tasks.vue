@@ -90,6 +90,14 @@
                     会话不可恢复
                   </span>
                   <button
+                    v-if="isUnrecoverableRunning(item)"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                    :disabled="actionId === item.run_id"
+                    @click="markUnrecoverable(item)"
+                  >
+                    标记已取消
+                  </button>
+                  <button
                     v-if="canRerun(item)"
                     class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
                     :disabled="actionId === item.run_id"
@@ -251,6 +259,22 @@ async function rerun(item: TaskItem) {
   try {
     const data = await apiFetch<{ session_id: string }>(`/api/tasks/${item.run_id}/rerun`, { method: 'POST' })
     notice.value = `已创建重跑任务 ${data.session_id}`
+    await loadTasks()
+  } catch (err) {
+    error.value = normalizeApiError(err)
+  } finally {
+    actionId.value = ''
+  }
+}
+
+async function markUnrecoverable(item: TaskItem) {
+  if (!window.confirm('确认将该任务标记为已取消？')) return
+  actionId.value = item.run_id
+  error.value = ''
+  notice.value = ''
+  try {
+    await apiFetch(`/api/tasks/${item.run_id}/mark-unrecoverable`, { method: 'POST' })
+    notice.value = '任务已标记为已取消，可以重新执行'
     await loadTasks()
   } catch (err) {
     error.value = normalizeApiError(err)

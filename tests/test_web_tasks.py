@@ -109,6 +109,89 @@ def test_task_list_marks_running_session_availability(monkeypatch, tmp_path):
     server.session_manager.cleanup_download("recoverable1")
 
 
+def test_mark_unrecoverable_running_task_cancels_history(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="orphan_mark1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+
+    resp = client.post("/api/tasks/orphan_mark1/mark-unrecoverable")
+
+    assert resp.status_code == 200
+    item = resp.json()["item"]
+    assert item["run_state"] == "cancelled"
+    assert item["finished_at"]
+    assert "会话已结束" in item["error"]
+
+
+def test_mark_unrecoverable_running_task_rejects_recoverable_session(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    server.session_manager.create("recoverable_mark1", mode="local", output_dir=tmp_path)
+    server.session_manager.mark_task_started("recoverable_mark1")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="recoverable_mark1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+
+    resp = client.post("/api/tasks/recoverable_mark1/mark-unrecoverable")
+
+    assert resp.status_code == 400
+    assert "仍可继续执行" in resp.json()["detail"]
+    server.session_manager.cleanup_download("recoverable_mark1")
+
+
+def test_mark_unrecoverable_task_can_be_rerun(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="orphan_rerun1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    mark_resp = client.post("/api/tasks/orphan_rerun1/mark-unrecoverable")
+    assert mark_resp.status_code == 200
+
+    def fake_start_background_task(session_manager, session_id, target):
+        session_manager.mark_task_started(session_id)
+        target()
+        session_manager.mark_task_finished(session_id)
+        return None
+
+    def fake_execute_in_session(*args, **kwargs):
+        kwargs["on_finish"](args[1], [], None)
+
+    monkeypatch.setattr(tasks, "start_background_task", fake_start_background_task)
+    monkeypatch.setattr(tasks, "execute_in_session", fake_execute_in_session)
+
+    resp = client.post("/api/tasks/orphan_rerun1/rerun")
+
+    assert resp.status_code == 200
+    assert resp.json()["session_id"] != "orphan_rerun1"
+
+
 def test_close_running_task_returns_400(monkeypatch, tmp_path):
     db = tmp_path / "history.sqlite3"
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
