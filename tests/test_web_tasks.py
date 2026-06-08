@@ -75,6 +75,40 @@ def test_task_list_excludes_closed_items(monkeypatch, tmp_path):
     assert ids == ["visible1"]
 
 
+def test_task_list_marks_running_session_availability(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    server.session_manager.create("recoverable1", mode="local", output_dir=tmp_path)
+    server.session_manager.mark_task_started("recoverable1")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="recoverable1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="orphan_running1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+
+    resp = client.get("/api/tasks")
+
+    assert resp.status_code == 200
+    by_id = {item["run_id"]: item for item in resp.json()["items"]}
+    assert by_id["recoverable1"]["session_available"] is True
+    assert by_id["orphan_running1"]["session_available"] is False
+    server.session_manager.cleanup_download("recoverable1")
+
+
 def test_close_running_task_returns_400(monkeypatch, tmp_path):
     db = tmp_path / "history.sqlite3"
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)

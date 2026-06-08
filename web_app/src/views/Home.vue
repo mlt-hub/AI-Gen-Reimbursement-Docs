@@ -220,6 +220,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useSessionStore } from '@/stores/session.ts'
 import type { DoneFile, FpaConfirmationQuestion, RunState } from '@/stores/session.ts'
 import { useConfigStore } from '@/stores/config.ts'
@@ -270,7 +271,9 @@ const config = useConfigStore()
 const log = useLogStore()
 const toast = useToastStore()
 const steps = useStepsStore()
+const route = useRoute()
 const LAST_SESSION_KEY = 'ard:lastSessionId'
+const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无法继续当前执行'
 
 const runStateLabels = { idle: '就绪', running: '运行中', done: '已完成', error: '出错', cancelled: '已停止' }
 const runTitle = computed(() => {
@@ -468,11 +471,14 @@ async function startTask() {
   }
 }
 
-async function restoreLastSession() {
-  if (session.sessionId) return
-  const sid = localStorage.getItem(LAST_SESSION_KEY)
-  if (!sid) return
-
+async function restoreSessionById(sid: string, options: { explicit?: boolean } = {}) {
+  const explicit = Boolean(options.explicit)
+  if (session.sessionId) {
+    if (!explicit || session.sessionId === sid) return
+    log.close()
+    session.reset()
+    steps.reset()
+  }
   try {
     const data = await apiFetch<SessionStatusResponse>('/api/sessions/' + sid)
     config.workMode = data.mode
@@ -484,6 +490,7 @@ async function restoreLastSession() {
     })
     steps.applySnapshot(data.progress_steps)
     log.clear()
+    localStorage.setItem(LAST_SESSION_KEY, data.session_id)
     if (data.run_state === 'running') {
       log.append({ level: 'INFO', msg: '已恢复正在运行的任务，继续接收后续日志', time: '' })
       log.connect()
@@ -496,8 +503,23 @@ async function restoreLastSession() {
       log.append({ level: 'ERROR', msg: '已恢复出错的任务', time: '' })
     }
   } catch {
-    localStorage.removeItem(LAST_SESSION_KEY)
+    if (explicit) {
+      session.reset()
+      steps.reset()
+      log.clear()
+      log.append({ level: 'WARNING', msg: UNRECOVERABLE_SESSION_MESSAGE, time: '' })
+      toast.show('warning', UNRECOVERABLE_SESSION_MESSAGE, 10000)
+    }
+    if (localStorage.getItem(LAST_SESSION_KEY) === sid) {
+      localStorage.removeItem(LAST_SESSION_KEY)
+    }
   }
+}
+
+async function restoreLastSession() {
+  const sid = localStorage.getItem(LAST_SESSION_KEY)
+  if (!sid) return
+  await restoreSessionById(sid)
 }
 
 // ── AI 交互弹窗 ──
@@ -555,6 +577,12 @@ function resetTask() {
 }
 
 onMounted(() => {
+  const requestedSession = route.query.session
+  const sid = Array.isArray(requestedSession) ? requestedSession[0] : requestedSession
+  if (sid) {
+    restoreSessionById(sid, { explicit: true })
+    return
+  }
   restoreLastSession()
 })
 </script>

@@ -513,7 +513,7 @@ def create_router(
         offset: int = 0,
     ):
         local, owner_id = _request_scope(request, user)
-        return list_tasks(
+        result = list_tasks(
             base_dir=base_dir,
             local_mode=local,
             owner_id=owner_id,
@@ -522,6 +522,17 @@ def create_router(
             limit=limit,
             offset=offset,
         )
+        for item in result["items"]:
+            session_id = str(item.get("session_id") or item.get("run_id") or "")
+            item["session_available"] = bool(
+                item.get("run_state") == "running"
+                and session_manager.can_access(
+                    session_id,
+                    owner_id,
+                    local_mode=local,
+                )
+            )
+        return result
 
     @router.post("/api/tasks/{run_id}/close")
     async def api_close_task(

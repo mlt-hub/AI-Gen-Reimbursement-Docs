@@ -76,6 +76,20 @@
               <td class="px-4 py-3 align-top">
                 <div class="flex flex-wrap gap-2">
                   <button
+                    v-if="canContinue(item)"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                    :disabled="actionId === item.run_id"
+                    @click="continueTask(item)"
+                  >
+                    继续
+                  </button>
+                  <span
+                    v-else-if="isUnrecoverableRunning(item)"
+                    class="status-badge status-badge--neutral"
+                  >
+                    会话不可恢复
+                  </span>
+                  <button
                     v-if="canRerun(item)"
                     class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
                     :disabled="actionId === item.run_id"
@@ -105,8 +119,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { RouterLink } from 'vue-router'
-import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import { RouterLink, useRouter } from 'vue-router'
+import { ApiError, apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 interface DoneFile {
   name?: string
@@ -133,6 +147,7 @@ interface TaskItem {
   started_at: string
   updated_at: string
   done_files: DoneFile[]
+  session_available?: boolean
 }
 
 interface TasksResponse {
@@ -145,6 +160,8 @@ const error = ref('')
 const notice = ref('')
 const items = ref<TaskItem[]>([])
 const filters = reactive({ mode: 'all', state: 'all' })
+const router = useRouter()
+const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无法继续当前执行'
 
 const query = computed(() => new URLSearchParams({
   mode: filters.mode,
@@ -197,9 +214,34 @@ function canRerun(item: TaskItem) {
   return ['done', 'error', 'cancelled'].includes(item.run_state)
 }
 
+function canContinue(item: TaskItem) {
+  return item.run_state === 'running' && item.session_available
+}
+
+function isUnrecoverableRunning(item: TaskItem) {
+  return item.run_state === 'running' && !item.session_available
+}
+
 function formatTime(value: string) {
   if (!value) return '-'
   return new Date(value).toLocaleString()
+}
+
+async function continueTask(item: TaskItem) {
+  actionId.value = item.run_id
+  error.value = ''
+  notice.value = ''
+  try {
+    await apiFetch(`/api/sessions/${item.session_id || item.run_id}`)
+    await router.push({ path: '/', query: { session: item.session_id || item.run_id } })
+  } catch (err) {
+    await loadTasks()
+    error.value = err instanceof ApiError && err.status === 404
+      ? UNRECOVERABLE_SESSION_MESSAGE
+      : normalizeApiError(err)
+  } finally {
+    actionId.value = ''
+  }
 }
 
 async function rerun(item: TaskItem) {
