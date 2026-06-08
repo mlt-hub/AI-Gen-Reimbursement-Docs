@@ -19,6 +19,16 @@
     </aside>
 
     <div class="flex min-w-0 flex-1 flex-col">
+      <div v-if="backendOffline" class="border-b border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-sm text-[var(--color-warning)]" role="status" aria-live="polite">
+        <div class="flex min-w-0 items-start gap-2">
+          <span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--color-warning)]" />
+          <div class="min-w-0">
+            <div class="font-semibold">后端未连接</div>
+            <div class="mt-0.5 text-xs leading-5">当前只能查看界面。启动后端服务后可运行任务、读取配置和生成预览。</div>
+          </div>
+        </div>
+      </div>
+
       <header class="topbar shrink-0 px-3 py-2 lg:hidden">
         <div class="flex min-w-0 items-center justify-between gap-3">
           <button class="btn-secondary min-h-0 shrink-0 px-2.5 py-2" type="button" aria-label="打开导航" @click="mobileOpen = true">
@@ -90,6 +100,7 @@ defineProps<{
   backendStatusText: string
   backendStatusClass: string
   backendDotClass: string
+  backendOffline: boolean
   showUserActions: boolean
   username: string
 }>()

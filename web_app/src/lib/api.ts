@@ -48,3 +48,10 @@ export function normalizeApiError(error: unknown): string {
 
   return '请求失败'
 }
+
+export function isBackendUnavailableMessage(message: string): boolean {
+  const text = message.trim()
+  return text.includes('无法连接服务')
+    || text.includes('Failed to fetch')
+    || /^请求失败 \((?:5\d\d|0)\)$/.test(text)
+}

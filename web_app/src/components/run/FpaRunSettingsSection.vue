@@ -61,7 +61,7 @@
               {{ ruleSet.label }}
             </option>
           </select>
-          <div v-if="fpaOptionsError" class="mt-1 text-xs text-[var(--color-warning)]">{{ fpaOptionsError }}</div>
+          <div v-if="fpaOptionsError" class="mt-1 text-xs text-[var(--color-ink-soft)]">{{ friendlyFpaOptionsError }}</div>
         </div>
 
         <div>
@@ -93,6 +93,7 @@
 import { computed, onMounted, watch } from 'vue'
 import { useConfigStore } from '@/stores/config.ts'
 import { useFpaOptions } from '@/composables/useFpaOptions.ts'
+import { isBackendUnavailableMessage } from '@/lib/api.ts'
 
 const config = useConfigStore()
 const { fpaOptions, fpaOptionsError, loadFpaOptions } = useFpaOptions()
@@ -129,6 +130,11 @@ const settingsSummary = computed(() => [
   selectedRuleSetLabel.value,
   selectedConfirmationLabel.value,
 ].filter(Boolean).join(' / '))
+const friendlyFpaOptionsError = computed(() => (
+  config.backendStatus === 'offline' || isBackendUnavailableMessage(fpaOptionsError.value)
+    ? '等待后端连接后加载'
+    : fpaOptionsError.value
+))
 
 watch(
   fpaOptions,

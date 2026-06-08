@@ -6,6 +6,7 @@
     :backend-status-text="backendStatusText"
     :backend-status-class="backendStatusClass"
     :backend-dot-class="backendDotClass"
+    :backend-offline="config.backendStatus === 'offline'"
     :show-user-actions="auth.isRemote && auth.isLoggedIn"
     :username="auth.username"
     @logout="doLogout"

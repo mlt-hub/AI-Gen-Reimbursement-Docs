@@ -851,7 +851,7 @@ import { useAuthStore } from '@/stores/auth.ts'
 import { normalizeApiKeyInput, useConfigStore } from '@/stores/config.ts'
 import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
 import { useFpaOptions } from '@/composables/useFpaOptions.ts'
-import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import { apiFetch, isBackendUnavailableMessage, normalizeApiError } from '@/lib/api.ts'
 import TemplateDownload from '@/components/TemplateDownload.vue'
 import TemplateUpload from '@/components/TemplateUpload.vue'
 
@@ -1044,6 +1044,7 @@ const configStore = useConfigStore()
 const { fpaOptions, loadFpaOptions } = useFpaOptions()
 
 const showUserConfig = computed(() => auth.isRemote)
+const backendOffline = computed(() => configStore.backendStatus === 'offline')
 type ConfigTabKey = 'personal' | 'global' | 'env' | 'system' | 'rules'
 const activeTab = ref<ConfigTabKey>(showUserConfig.value ? 'personal' : 'env')
 const configTabs = computed<{ key: ConfigTabKey; label: string }[]>(() => {
@@ -1485,6 +1486,14 @@ function profileLabel(name: string): string {
   return fpaOptions.value.profiles.find(profile => profile.name === name)?.label || name
 }
 
+function presentConfigError(error: unknown): string {
+  const message = normalizeApiError(error)
+  if (backendOffline.value || isBackendUnavailableMessage(message)) {
+    return '等待后端连接后加载'
+  }
+  return message
+}
+
 async function refreshHealth() {
   healthLoading.value = true
   healthError.value = ''
@@ -1493,7 +1502,7 @@ async function refreshHealth() {
     healthCheckedAt.value = new Date().toLocaleTimeString()
   } catch (e) {
     health.value = null
-    healthError.value = `后端服务未连接：${normalizeApiError(e)}`
+    healthError.value = '后端未连接'
     healthCheckedAt.value = new Date().toLocaleTimeString()
   } finally {
     healthLoading.value = false
@@ -1508,7 +1517,7 @@ async function loadWebConfig() {
     applyWebConfigToForm(webConfig.value)
   } catch (e) {
     webConfig.value = null
-    webConfigError.value = normalizeApiError(e)
+    webConfigError.value = presentConfigError(e)
   } finally {
     webConfigLoading.value = false
   }
@@ -1522,7 +1531,7 @@ async function loadConfigBackups() {
     configBackups.value = data.items || []
   } catch (e) {
     configBackups.value = []
-    configBackupsError.value = normalizeApiError(e)
+    configBackupsError.value = presentConfigError(e)
   } finally {
     configBackupsLoading.value = false
   }
@@ -1536,7 +1545,7 @@ async function loadConfigBackupDiff(item: ConfigBackupItem) {
     configBackupDiff.value = await apiFetch<ConfigBackupDiffResponse>(`/api/web-config/backups/${encodeURIComponent(item.id)}/diff`)
   } catch (e) {
     configBackupDiff.value = null
-    configBackupDiffError.value = normalizeApiError(e)
+    configBackupDiffError.value = presentConfigError(e)
   } finally {
     configBackupDiffLoading.value = false
   }
@@ -1576,7 +1585,7 @@ async function exportConfigPackage() {
     configPackageMsg.value = '配置包已导出'
   } catch (e) {
     configPackageOk.value = false
-    configPackageMsg.value = normalizeApiError(e)
+    configPackageMsg.value = presentConfigError(e)
   } finally {
     configPackageLoading.value = false
   }
@@ -1604,7 +1613,7 @@ async function importConfigPackage() {
       configPackageMsg.value = `导入成功：${data.imported.join(', ')}`
     } catch (e) {
       configPackageOk.value = false
-      configPackageMsg.value = normalizeApiError(e)
+      configPackageMsg.value = presentConfigError(e)
     } finally {
       configPackageLoading.value = false
     }
@@ -1623,7 +1632,7 @@ async function loadFpaStrategySettings() {
     fpaStrategyForm.profiles = []
     fpaStrategyForm.ruleSets = []
     fpaStrategySnapshot.value = ''
-    fpaStrategyError.value = normalizeApiError(e)
+    fpaStrategyError.value = presentConfigError(e)
   } finally {
     fpaStrategyLoading.value = false
   }
@@ -1667,7 +1676,7 @@ async function saveFpaStrategySettings() {
     }
   } catch (e) {
     fpaStrategyOk.value = false
-    fpaStrategyMsg.value = normalizeApiError(e)
+    fpaStrategyMsg.value = presentConfigError(e)
   } finally {
     fpaStrategySaving.value = false
   }
@@ -1682,7 +1691,7 @@ async function loadFpaJudgementRules() {
   } catch (e) {
     fpaJudgementRules.value = []
     fpaJudgementRulesSnapshot.value = ''
-    fpaJudgementRulesError.value = normalizeApiError(e)
+    fpaJudgementRulesError.value = presentConfigError(e)
   } finally {
     fpaJudgementRulesLoading.value = false
   }
@@ -1741,7 +1750,7 @@ async function saveFpaJudgementRules() {
     }
   } catch (e) {
     fpaJudgementRulesOk.value = false
-    fpaJudgementRulesMsg.value = normalizeApiError(e)
+    fpaJudgementRulesMsg.value = presentConfigError(e)
   } finally {
     fpaJudgementRulesSaving.value = false
   }
@@ -1759,7 +1768,7 @@ async function loadBusinessRulesSettings() {
   } catch (e) {
     businessRulesForm.cfpFormula = ''
     businessRulesSnapshot.value = ''
-    businessRulesError.value = normalizeApiError(e)
+    businessRulesError.value = presentConfigError(e)
   } finally {
     businessRulesLoading.value = false
   }
@@ -1793,7 +1802,7 @@ async function saveBusinessRulesSettings() {
     }
   } catch (e) {
     businessRulesOk.value = false
-    businessRulesMsg.value = normalizeApiError(e)
+    businessRulesMsg.value = presentConfigError(e)
   } finally {
     businessRulesSaving.value = false
   }
@@ -1881,7 +1890,7 @@ async function loadDomainContextSettings() {
     domainContextExternalDataGroups.value = []
     domainContextExternalServices.value = []
     domainContextSnapshot.value = ''
-    domainContextError.value = normalizeApiError(e)
+    domainContextError.value = presentConfigError(e)
   } finally {
     domainContextLoading.value = false
   }
@@ -1923,7 +1932,7 @@ async function saveDomainContextSettings() {
     }
   } catch (e) {
     domainContextOk.value = false
-    domainContextMsg.value = normalizeApiError(e)
+    domainContextMsg.value = presentConfigError(e)
   } finally {
     domainContextSaving.value = false
   }
@@ -1965,7 +1974,7 @@ async function loadAiPromptSettings() {
   } catch (e) {
     aiPrompts.value = []
     aiPromptsSnapshot.value = ''
-    aiPromptsError.value = normalizeApiError(e)
+    aiPromptsError.value = presentConfigError(e)
   } finally {
     aiPromptsLoading.value = false
   }
@@ -2010,7 +2019,7 @@ async function saveAiPromptSettings() {
     }
   } catch (e) {
     aiPromptsOk.value = false
-    aiPromptsMsg.value = normalizeApiError(e)
+    aiPromptsMsg.value = presentConfigError(e)
   } finally {
     aiPromptsSaving.value = false
   }
@@ -2030,7 +2039,7 @@ async function loadAdvancedConfigFiles() {
     activeAdvancedFileId.value = ''
     advancedConfigContent.value = ''
     advancedConfigSnapshot.value = ''
-    advancedConfigError.value = normalizeApiError(e)
+    advancedConfigError.value = presentConfigError(e)
   } finally {
     advancedConfigLoading.value = false
   }
@@ -2057,7 +2066,7 @@ async function loadAdvancedConfigFile(fileId: string) {
     advancedConfigContent.value = data.content || ''
     advancedConfigSnapshot.value = advancedConfigContent.value
   } catch (e) {
-    advancedConfigError.value = normalizeApiError(e)
+    advancedConfigError.value = presentConfigError(e)
   } finally {
     advancedConfigLoading.value = false
   }
@@ -2077,7 +2086,7 @@ async function validateAdvancedConfig() {
     advancedConfigMessage.value = '校验通过'
   } catch (e) {
     advancedConfigOk.value = false
-    advancedConfigMessage.value = normalizeApiError(e)
+    advancedConfigMessage.value = presentConfigError(e)
   } finally {
     advancedConfigSaving.value = false
   }
@@ -2102,7 +2111,7 @@ async function saveAdvancedConfig() {
     await loadLocalConfig()
   } catch (e) {
     advancedConfigOk.value = false
-    advancedConfigMessage.value = normalizeApiError(e)
+    advancedConfigMessage.value = presentConfigError(e)
   } finally {
     advancedConfigSaving.value = false
   }
@@ -2167,7 +2176,7 @@ async function saveWebConfig() {
     }
   } catch (e) {
     webConfigSaveOk.value = false
-    webConfigSaveMsg.value = normalizeApiError(e)
+    webConfigSaveMsg.value = presentConfigError(e)
   } finally {
     webConfigSaving.value = false
   }
@@ -2228,7 +2237,7 @@ async function saveWebConfigPayload(payload: Record<string, unknown>, successMes
     }
   } catch (e) {
     webConfigSaveOk.value = false
-    webConfigSaveMsg.value = normalizeApiError(e)
+    webConfigSaveMsg.value = presentConfigError(e)
   } finally {
     webConfigSaving.value = false
   }
@@ -2315,7 +2324,7 @@ async function restoreConfigBackup(item: ConfigBackupItem) {
     }
   } catch (e) {
     configRestoreOk.value = false
-    configRestoreMsg.value = normalizeApiError(e)
+    configRestoreMsg.value = presentConfigError(e)
   } finally {
     configRestoreLoading.value = false
     restoringBackupId.value = ''
@@ -2343,7 +2352,7 @@ async function loadLocalConfig() {
     systemConfig.value = data.system_config || ''
     businessRules.value = data.business_rules || ''
   } catch (e) {
-    const msg = normalizeApiError(e)
+    const msg = presentConfigError(e)
     envContent.value = '读取失败'
     systemConfig.value = msg
     businessRules.value = msg
@@ -2515,7 +2524,7 @@ async function saveUserConfig() {
     lastSavedAt.value = new Date().toLocaleTimeString()
   } catch (e) {
     saveOk.value = false
-    saveMsg.value = normalizeApiError(e)
+    saveMsg.value = presentConfigError(e)
   }
   saving.value = false
 }

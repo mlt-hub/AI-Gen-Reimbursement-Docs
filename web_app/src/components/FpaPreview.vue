@@ -44,7 +44,7 @@
             </select>
           </div>
         </div>
-        <div v-if="fpaOptionsError" class="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-xs text-[var(--color-warning)]">
+        <div v-if="fpaOptionsError" :class="['rounded-md px-3 py-2 text-xs', backendOffline ? 'border border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]' : 'border border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]']">
           <div class="font-semibold">无法加载 FPA 方案配置</div>
           <div class="mt-1 leading-5">{{ friendlyFpaOptionsError }}</div>
         </div>
@@ -333,7 +333,7 @@ import { ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
 import { useConfigStore } from '@/stores/config.ts'
 import { useSessionStore } from '@/stores/session.ts'
 import { useToastStore } from '@/stores/toast.ts'
-import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import { apiFetch, isBackendUnavailableMessage, normalizeApiError } from '@/lib/api.ts'
 import { useFpaOptions } from '@/composables/useFpaOptions.ts'
 
 interface FpaPreviewRow {
@@ -445,6 +445,7 @@ const config = useConfigStore()
 const session = useSessionStore()
 const toast = useToastStore()
 const { fpaOptions, fpaOptionsError, loadFpaOptions } = useFpaOptions()
+const backendOffline = computed(() => config.backendStatus === 'offline')
 
 const modules = ref<FpaPreviewModule[]>([])
 const moduleWarnings = ref<string[]>([])
@@ -641,14 +642,14 @@ function optionLabel(question: FpaConfirmationQuestion, value: string) {
 
 function toFriendlyError(context: 'options' | 'modules' | 'preview', message: string): PreviewErrorMessage {
   const text = message.trim() || '请求失败'
-  const isConnectionError = text.includes('无法连接服务') || text.includes('Failed to fetch')
+  const isConnectionError = backendOffline.value || isBackendUnavailableMessage(text)
   const isGenericHttpError = /^请求失败 \(\d+\)$/.test(text)
 
   if (context === 'options') {
     return {
       title: '无法加载 FPA 方案配置',
       detail: isConnectionError || isGenericHttpError
-        ? '请确认后端服务已启动，并检查 FPA 配置接口是否可用。页面会先使用内置默认方案。'
+        ? '等待后端连接后加载 FPA 方案。当前页面会先使用内置默认方案。'
         : text,
       nextStep: '如果刚修改过 FPA 配置，请重启后端服务后刷新页面。',
     }
@@ -658,7 +659,7 @@ function toFriendlyError(context: 'options' | 'modules' | 'preview', message: st
     return {
       title: '无法生成基础数据',
       detail: isConnectionError || isGenericHttpError
-        ? '系统暂时无法解析功能清单。请确认后端服务已启动，且功能清单路径或上传文件可读取。'
+        ? '等待后端连接后加载基础数据。请确认功能清单路径或上传文件可读取。'
         : text,
       nextStep: '请检查输入设置中的功能清单来源，然后重新点击“生成基础数据”。',
     }
@@ -667,7 +668,7 @@ function toFriendlyError(context: 'options' | 'modules' | 'preview', message: st
   return {
     title: '无法生成 FPA 预览',
     detail: isConnectionError || isGenericHttpError
-      ? '系统暂时无法生成当前三级模块的 FPA 预览。请确认后端服务、FPA 方案和规则集配置正常。'
+      ? '等待后端连接后生成当前三级模块的 FPA 预览。'
       : text,
     nextStep: '可以先更换执行策略或规则集，或重新生成基础数据后再试。',
   }
