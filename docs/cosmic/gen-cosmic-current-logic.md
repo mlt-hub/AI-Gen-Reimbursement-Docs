@@ -292,7 +292,7 @@ AI 调用限制：
 
 ### 具体实现方案
 
-第一阶段采用兼容式改造，不直接破坏现有 `generate_cosmic_xlsx_from_md(...) -> str` 入口。新增结构化生成入口，旧入口保留为薄包装，降低对现有测试和外部调用的影响。
+第一阶段采用直接替换式改造。本系统尚未上线，不需要保留旧版本路径；可以删除旧函数、修改函数签名、重写调用方和测试。目标是让结构化校验结果成为唯一事实源，不再用“返回 Excel 路径”表示 COSMIC 阶段成功。
 
 新增模块 `ai_gen_reimbursement_docs/cosmic_validator.py`：
 
@@ -359,7 +359,7 @@ def write_cosmic_validation_report_md(
 ) -> str: ...
 ```
 
-`gen_cosmic.py` 新增结果对象和主入口：
+`gen_cosmic.py` 用新的结果对象和主入口替换旧 Excel 生成入口：
 
 ```python
 @dataclass
@@ -388,15 +388,7 @@ def generate_cosmic_artifacts_from_md(
 ) -> CosmicGenerationResult: ...
 ```
 
-旧函数保留：
-
-```python
-def generate_cosmic_xlsx_from_md(...) -> str:
-    result = generate_cosmic_artifacts_from_md(...)
-    return result.output_path
-```
-
-旧函数的兼容行为只用于已有调用方；`pipeline._generate_cosmic` 应切换到 `generate_cosmic_artifacts_from_md`，因为管线需要知道是否真的写入了 Excel、是否允许读取 CFP 总和。
+`generate_cosmic_xlsx_from_md(...) -> str` 应删除，或直接改为上述新签名和返回对象。所有调用方必须改为读取 `CosmicGenerationResult.excel_written/status/cfp_total`，不得再通过目标 Excel 路径判断成功。
 
 `PipelineResult` 建议新增字段：
 
@@ -409,29 +401,28 @@ cosmic_excel_written: bool = False
 
 这些字段用于区分“阶段执行完成”和“正式 COSMIC Excel 已生成”。`result.cosmic_xlsx` 可以继续保存目标路径，但只有 `cosmic_excel_written=True` 且文件存在时，才登记为正式 artifact。
 
-### 兼容策略
+### 替换策略
 
-本阶段必须遵守以下兼容策略：
+本阶段必须遵守以下替换策略：
 
-1. `DataMovement` 和 `CosmicItem` 的现有字段不改名、不删除，避免破坏 Markdown 解析、AI 生成和 Excel 写入。
-2. `CosmicItem.warnings` 暂时保留；结构化 issue 是新事实源，旧 warnings 可在写 Excel 批注时合并展示。
-3. `write_cosmic_xlsx(template_path, output_path, items, ...)` 第一阶段可以继续接收 `list[CosmicItem]`，不强制改为接收 `CosmicValidationReport`。
-4. 如果需要在 Excel 批注中展示结构化 issue，可新增可选参数：
+1. 可以重命名、移动或删除旧函数，只要同步更新调用方、测试和文档。
+2. `CosmicItem.warnings` 应删除或停止写入；结构化 `CosmicIssue` 是唯一问题事实源。
+3. `write_cosmic_xlsx` 应直接接收校验后的结构化报告或结果列表，避免 Excel 写入绕过校验状态。
+4. 推荐签名：
 
 ```python
 def write_cosmic_xlsx(
     template_path: str,
     output_path: str,
-    items: list[CosmicItem],
+    report: CosmicValidationReport,
     *,
     meta: dict[str, str] | None = None,
     cfp_formula: str = "",
-    validation_results: list[CosmicValidationResult] | None = None,
 ) -> str: ...
 ```
 
-5. 旧的 `generate_cosmic_xlsx_from_md` 返回值仍为 `str`，但新管线不得通过它判断是否成功写入正式 Excel。
-6. 如果 `blocked` 且目标 `cosmic_xlsx` 文件在上一轮运行中已经存在，本阶段不负责删除旧文件；但不得登记为本轮正式 artifact，报告中必须写明“本轮未写入正式 Excel”。
+5. `pipeline._generate_cosmic` 必须使用新入口，不能再调用旧的 `generate_cosmic_xlsx_from_md`。
+6. 如果 `blocked`，本轮不得登记正式 artifact；若目标目录存在上一轮残留文件，可以覆盖为草稿、移动到草稿路径，或在报告中明确“本轮未写入正式 Excel”。实现时选择一种清晰策略并补测试。
 
 ### 调用流程
 
@@ -533,7 +524,7 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `items[].module_l1` | `string` | 是 | 一级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
 | `items[].module_l2` | `string` | 是 | 二级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
 | `items[].module_l3` | `string` | 是 | 三级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
-| `items[].user` | `string` | 是 | 当前仍使用 `发起者：xxx|接收者：xxx` 兼容格式。 |
+| `items[].user` | `string` | 是 | 当前阶段使用 `发起者：xxx|接收者：xxx` 格式。 |
 | `items[].trigger` | `string` | 是 | 触发事件，允许为空但会触发 `MISSING_TRIGGER`。 |
 | `items[].process` | `string` | 是 | 功能过程名称，允许为空但会触发 `MISSING_PROCESS_NAME`。 |
 | `items[].movements` | `array` | 是 | 数据移动列表。 |
@@ -542,7 +533,7 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `items[].movements[].move_type` | `string` | 是 | 数据移动类型，标准值为 `E/X/R/W`。 |
 | `items[].movements[].data_group` | `string` | 是 | 数据组。 |
 | `items[].movements[].data_attrs` | `string` | 是 | 数据属性。 |
-| `items[].movements[].reuse` | `string` | 是 | 复用度，继续兼容 `新增/复用/利旧`。 |
+| `items[].movements[].reuse` | `string` | 是 | 复用度，标准值先限定为 `新增/复用/利旧`。 |
 | `items[].status` | `string` | 是 | `passed/review_required/blocked`。 |
 | `items[].issues` | `array` | 是 | 当前功能过程的结构化问题列表。 |
 | `items[].issues[].severity` | `string` | 是 | `error/warning/info`。 |
@@ -631,7 +622,7 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
 | 存在 `blocked` | 生成 JSON 草稿和校验报告；默认不写正式 COSMIC Excel，不更新可被下游误用的 CFP 总和。 |
 | 无 API Key 或 AI 全部失败 | 生成模板、JSON 草稿或校验报告，状态应反映缺少可送审数据；不得伪装为成功正式输出。 |
 
-如需兼容当前批处理产物，可新增配置项，例如：
+如需允许存在待审问题时写出草稿 Excel，可新增配置项，例如：
 
 ```yaml
 gen_cosmic:
@@ -644,20 +635,15 @@ gen_cosmic:
 
 1. 默认值必须为 `false`。
 2. 配置缺失时按 `false` 处理，不应改变当前生产安全策略。
-3. 如果项目现有配置工具已经按扁平 key 读取，可以先实现为 `load_gen_cosmic_allow_draft_excel_output() -> bool`，内部兼容以下 key：
+3. 配置读取只保留一种标准结构，建议实现为 `load_gen_cosmic_allow_draft_excel_output() -> bool`：
 
 ```yaml
 gen_cosmic:
   allow_draft_excel_output: false
 ```
 
-或：
-
-```yaml
-gen_cosmic_allow_draft_excel_output: false
-```
-
-4. 文档、日志和校验报告中应统一称为“草稿 Excel 输出”，不要称为“正式 Excel”。
+4. 不再新增扁平 key 兜底。
+5. 文档、日志和校验报告中应统一称为“草稿 Excel 输出”，不要称为“正式 Excel”。
 
 ### 校验报告
 
@@ -759,7 +745,7 @@ md/3.4.gen-cosmic-校验报告.md
 | `tests/test_pipeline.py` | `gen-cosmic` 无 API Key 时。 | `result.cosmic_status == "blocked"`，不登记正式 cosmic artifact，不更新 `cfp_total`。 |
 | `tests/test_pipeline.py` | AI 返回空 movement 时。 | 写校验报告，默认不写正式 Excel。 |
 | `tests/test_cosmic_md.py` | Markdown 解析后接校验器。 | 解析出的 item 可被校验器识别问题。 |
-| `tests/test_models.py` | 保持 `CosmicItem.to_rows()` 兼容。 | 既有测试不因新增校验模型失败。 |
+| `tests/test_models.py` | 按新模型调整 `CosmicItem.to_rows()` 或移除已失效断言。 | 模型测试表达当前目标行为。 |
 
 如现有 `mock_ai` 无法稳定构造 COSMIC 数据，应新增专用 fixture，直接 mock `generate_cosmic_items` 或 `parse_md_to_items`，避免集成测试依赖大模型文本格式。
 
@@ -769,7 +755,7 @@ md/3.4.gen-cosmic-校验报告.md
 
 1. 新增 `cosmic_validator.py` 和 `tests/test_cosmic_validator.py`，只依赖现有 `CosmicItem/DataMovement`，不接入管线。
 2. 新增 JSON 和 Markdown 报告写出函数，补充文件写入测试。
-3. 在 `gen_cosmic.py` 新增 `CosmicGenerationResult` 和 `generate_cosmic_artifacts_from_md`，旧 `generate_cosmic_xlsx_from_md` 保持兼容。
+3. 在 `gen_cosmic.py` 新增 `CosmicGenerationResult` 和 `generate_cosmic_artifacts_from_md`，删除或改造旧 `generate_cosmic_xlsx_from_md`。
 4. 修改 `pipeline._generate_cosmic` 使用新入口，补充 `PipelineResult` 字段。
 5. 调整 Excel 写入策略：`blocked` 默认不写正式 Excel，`review_required` 受 `allow_draft_excel_output` 控制。
 6. 调整 CFP 写入策略：只有正式 Excel 写入成功时才写 `3.5.gen-cosmic-CFP-总和.md`。
