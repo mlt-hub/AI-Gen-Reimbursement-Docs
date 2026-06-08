@@ -793,6 +793,88 @@ def test_explanation_accepts_output_file_and_ilf_insert_type_aliases():
     assert not any("未明确当前 FPA 类型" in warning for warning in warnings)
 
 
+def test_explanation_accepts_eif_and_eq_natural_type_aliases_from_trend_samples():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "供应商管理",
+            "二级模块": "准入协同",
+            "三级模块": "供应商准入协同",
+            "三级模块整体功能描述": "维护供应商准入申请，并引用 CRM 客户档案和 OA 审批流程单据。",
+            "功能过程": "选择CRM客户档案",
+            "功能过程类型": "新增",
+            "功能过程描述": "从 CRM 客户档案中选择客户并关联到供应商准入申请。",
+        },
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "供应商管理",
+            "二级模块": "准入协同",
+            "三级模块": "供应商准入协同",
+            "三级模块整体功能描述": "维护供应商准入申请，并引用 CRM 客户档案和 OA 审批流程单据。",
+            "功能过程": "查看准入申请",
+            "功能过程类型": "查询",
+            "功能过程描述": "查询供应商准入申请、关联客户档案和审批状态。",
+        },
+    ])[0]
+    rule_set = FpaRuleSetConfig(
+        name="strict_fpa_rs",
+        external_data_rules=(
+            ExternalDataGroupRule(("CRM",), "CRM客户档案", ("档案", "数据组")),
+            ExternalDataGroupRule(("OA",), "OA审批流程单据", ("流程单据", "数据组")),
+        ),
+    )
+    token = set_current_fpa_rule_set_config(rule_set)
+    try:
+        rows, warnings = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=["规则一"],
+            start_seq=1,
+            profile=STRICT_FPA_PROFILE,
+            strategy="ai_first",
+            ai_rows=[
+                {
+                    "name": "CRM客户档案数据组",
+                    "type": "EIF",
+                    "classification_basis_index": 1,
+                    "explanation": (
+                        "来源场景：【地市后台】供应商管理-准入协同-供应商准入协同-CRM客户档案数据组"
+                        "\n业务数据：CRM客户档案。"
+                        "\n业务规则：本系统引用外部系统数据，不进行维护。"
+                        "\n计算说明：按评估范围外相关的表个数计量，外部系统CRM有1个客户档案数据组，纳入FPA数据功能计量。"
+                    ),
+                },
+                {
+                    "name": "OA审批流程单据数据组",
+                    "type": "EIF",
+                    "classification_basis_index": 1,
+                    "explanation": (
+                        "来源场景：【地市后台】供应商管理-准入协同-供应商准入协同-OA审批流程单据数据组"
+                        "\n业务数据：OA审批流程单据。"
+                        "\n业务规则：本系统引用外部系统数据，不进行维护。"
+                        "\n计算说明：OA系统维护的审批流程单据属于外部接口文件，纳入FPA数据功能计量。"
+                    ),
+                },
+                {
+                    "name": "准入申请查询",
+                    "type": "EQ",
+                    "classification_basis_index": 1,
+                    "explanation": (
+                        "来源场景：【地市后台】供应商管理-准入协同-供应商准入协同-准入申请查询"
+                        "\n业务数据：供应商准入申请、关联客户档案和审批状态。"
+                        "\n业务规则：用户输入查询条件后展示结果，不进行数据修改或派生计算。"
+                        "\n计算说明：按提供查询界面输入并展示返回结果计量，该查询涉及一个查询界面。"
+                    ),
+                },
+            ],
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert [row["类型"] for row in rows] == ["EIF", "EIF", "EQ"]
+    assert not any("未明确当前 FPA 类型" in warning for warning in warnings)
+
+
 def test_unstructured_explanation_records_quality_warning():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(

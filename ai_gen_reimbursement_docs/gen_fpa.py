@@ -82,13 +82,21 @@ FPA_TYPE_EXPLANATION_ALIASES = {
         "对ILF进行插入", "对 ILF 进行插入", "对ILF的插入", "对 ILF 的插入",
         "维护内部数据", "改变本系统内部数据",
     ),
-    "EQ": ("外部查询", "查询类事务", "查询类EQ", "查询类 EQ"),
+    "EQ": (
+        "外部查询", "查询类事务", "查询类EQ", "查询类 EQ",
+        "提供查询界面输入并展示返回结果", "查询界面输入并展示返回结果",
+        "查询界面", "展示返回结果",
+    ),
     "EO": (
         "外部输出", "输出类事务", "输出类EO", "输出类 EO",
         "文件输出", "输出文件", "输出的文件", "格式化文件输出", "生成并输出",
     ),
     "ILF": ("内部逻辑数据", "内部数据功能", "内部数据组", "本系统维护的数据组"),
-    "EIF": ("外部逻辑数据", "外部数据功能", "外部数据组", "本系统引用但不维护"),
+    "EIF": (
+        "外部逻辑数据", "外部数据功能", "外部数据组", "本系统引用但不维护",
+        "外部接口文件", "外部引用数据组", "外部系统数据", "外部系统维护",
+        "评估范围外相关的表", "外部引用数据",
+    ),
 }
 
 
@@ -1089,10 +1097,12 @@ def _ai_row_matches_type_judgement(
             if str(item).strip()
         } if isinstance(judgement.get("source_process_names", []), list) else set()
         target = str(judgement.get("target_data_group", "") or "").strip()
+        candidate_name = str(judgement.get("candidate_name", "") or "").strip()
         source_matches = bool(
             (row_ids and row_ids & judgement_ids)
             or (row_names and row_names & judgement_names)
             or (target and target in row_text)
+            or (candidate_name and candidate_name in row_text)
         )
         suggested_type = str(judgement.get("suggested_type", "") or "").upper()
         judgement_kind = str(judgement.get("judgement_kind", "") or "")
