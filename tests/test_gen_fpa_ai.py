@@ -1128,6 +1128,42 @@ def test_ai_name_prefix_overlap_keeps_only_business_suffix():
     )
 
 
+def test_ai_name_prefix_rewrites_three_part_module_path_without_duplicate_prefix():
+    group = _group_rows_by_l3([{
+        "客户端类型": "地市后台",
+        "一级模块": "组织管理",
+        "二级模块": "内部组织",
+        "三级模块": "内部组织维护",
+        "三级模块整体功能描述": "维护内部组织。",
+        "功能过程": "查询内部组织",
+        "功能过程类型": "查询",
+        "功能过程描述": "查询内部组织列表。",
+    }])[0]
+
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": "【地市后台】组织管理-内部组织-内部组织查询",
+            "type": "EQ",
+            "explanation": (
+                "来源场景：【地市后台】组织管理-内部组织-内部组织维护-内部组织查询"
+                "\n业务数据：内部组织信息。"
+                "\n业务规则：查询内部组织列表。"
+                "\n计算说明：提供查询界面输入并展示返回结果，符合EQ定义。"
+            ),
+        }],
+    )
+
+    assert rows[0]["新增/修改功能点"] == "【地市后台】组织管理-内部组织-内部组织维护-内部组织查询"
+    assert "内部组织维护-【地市后台】" not in rows[0]["新增/修改功能点"]
+    assert len([w for w in warnings if "AI 行名称前缀已按源功能清单规范化" in w]) == 1
+
+
 def test_ai_name_process_suffix_normalization_does_not_duplicate_prefix_warning():
     group = _group_rows_by_l3([{
         "客户端类型": "地市后台",

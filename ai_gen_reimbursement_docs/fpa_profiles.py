@@ -1131,19 +1131,27 @@ class StrictFpaProfile(CustomRulesProfile):
     description: str = "严格 FPA 口径：按数据功能和事务功能拆分，不按界面/接口开发工作项拆分。"
     core_rules: str = STRICT_FPA_CORE_RULES
 
+    def _has_explicit_transaction_action(self, text: str) -> bool:
+        return any(k in text for k in [
+            "新增", "添加", "修改", "编辑", "删除", "维护", "保存", "提交", "审批",
+            "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联",
+            "查询", "查看", "详情", "检索", "列表", "导出", "下载", "生成文件", "打印",
+        ])
+
     def infer_type(self, name: str, desc: str = "") -> tuple[str, str]:
         text = f"{name} {desc}"
+        name_is_data_group = self._looks_like_data_group(name)
+        point_tail = self._function_point_tail(name)
+        name_action = self._explicit_transaction_type(point_tail)
+        if name_action and self._has_explicit_transaction_action(point_tail) and not name_is_data_group:
+            return name_action
         type_mapping = self._configured_type_mapping(text)
         if type_mapping:
             return type_mapping
-        name_is_data_group = self._looks_like_data_group(name)
         if self._has_internal_data_function(text) and name_is_data_group:
             return "ILF", "本系统维护的逻辑数据组，按 ILF。"
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
-        name_action = self._explicit_transaction_type(name)
-        if name_action and not name_is_data_group:
-            return name_action
         if name_is_data_group and self._is_external_data_group(text):
             return "EIF", "明确引用外部系统维护的数据组，按 EIF。"
         internal_rule = self._matching_internal_data_rule(text)
@@ -1216,8 +1224,9 @@ class StrictFpaProfile(CustomRulesProfile):
     def _conflict_matrix_expected_type(self, name: str, desc: str) -> str | None:
         text = f"{name} {desc}"
         name_is_data_group = self._looks_like_data_group(name)
-        name_action = self._explicit_transaction_type(self._function_point_tail(name))
-        if name_action and not name_is_data_group:
+        point_tail = self._function_point_tail(name)
+        name_action = self._explicit_transaction_type(point_tail)
+        if name_action and self._has_explicit_transaction_action(point_tail) and not name_is_data_group:
             return name_action[0]
         type_mapping = self._configured_type_mapping(text)
         if type_mapping:

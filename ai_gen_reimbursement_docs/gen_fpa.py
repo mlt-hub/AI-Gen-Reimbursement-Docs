@@ -597,6 +597,8 @@ def _normalize_ai_fpa_name_prefix(name: str, group: dict[str, object]) -> str:
             parts = [part.strip() for part in path_candidate.split("-") if part.strip()]
             if len(parts) >= 4:
                 suffix = "-".join(parts[3:]).strip()
+            elif len(parts) == 3:
+                suffix = parts[2].strip()
 
     return f"{prefix}-{suffix}" if suffix else prefix
 
