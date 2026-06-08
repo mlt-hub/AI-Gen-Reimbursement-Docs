@@ -197,6 +197,44 @@ def _explanation_quality_warnings(
     return warnings
 
 
+def _explanation_needs_full_source_path(
+    *,
+    group: dict[str, object],
+    name: str,
+    explanation: str,
+) -> bool:
+    text = str(explanation or "").strip()
+    if not text:
+        return False
+    source_prefix = (
+        f"【{group.get('client_type', '')}】"
+        f"{group.get('l1', '')}-{group.get('l2', '')}-{group.get('l3', '')}-"
+    )
+    return (
+        bool(source_prefix.strip("-"))
+        and source_prefix not in text
+        and not _explanation_has_source_anchor(group=group, explanation=text, name=name)
+    )
+
+
+def _normalize_explanation_source_path(
+    *,
+    explanation: str,
+    source_name: str,
+) -> str:
+    text = str(explanation or "").strip()
+    clean_source = str(source_name or "").strip()
+    if not text or not clean_source or "来源场景：" not in text:
+        return text
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("来源场景："):
+            continue
+        lines[index] = f"来源场景：{clean_source}"
+        return "\n".join(lines)
+    return text
+
+
 def _explanation_has_source_anchor(
     *,
     group: dict[str, object],
@@ -741,9 +779,33 @@ def _normalize_ai_fpa_rows_for_l3(
                 "warnings": [review_warning],
             })
 
+        output_name = _normalize_ai_fpa_name_prefix(name, group)
+        prefixed_name = output_name
+        prefix_changed = prefixed_name != name
+        if _explanation_needs_full_source_path(
+            group=group,
+            name=output_name,
+            explanation=explanation,
+        ):
+            normalized_explanation = _normalize_explanation_source_path(
+                explanation=explanation,
+                source_name=output_name,
+            )
+            if normalized_explanation != explanation:
+                detail = f"{output_name} 计算依据说明来源场景已按完整功能点路径规范化"
+                row_hits.append({
+                    "hit_object": output_name,
+                    "rule_id": "postprocess.explanation_source_path",
+                    "rule_desc": "计算依据说明的来源场景优先使用当前 FPA 行完整功能点路径。",
+                    "suggested_type": fpa_type,
+                    "adopted": "是",
+                    "warnings": [detail],
+                })
+                explanation = normalized_explanation
+
         explanation_warnings = _explanation_quality_warnings(
             group=group,
-            name=name,
+            name=output_name,
             fpa_type=fpa_type,
             explanation=explanation,
         )
@@ -808,9 +870,6 @@ def _normalize_ai_fpa_rows_for_l3(
         source_names_from_ids = [id_to_name[source_id] for source_id in valid_source_ids]
         source_text = "、".join(source_names_from_ids or raw_source_names)
 
-        output_name = _normalize_ai_fpa_name_prefix(name, group)
-        prefixed_name = output_name
-        prefix_changed = prefixed_name != name
         if len(valid_source_ids) == 1:
             suffixed_name = _normalize_ai_name_process_suffix(
                 output_name,

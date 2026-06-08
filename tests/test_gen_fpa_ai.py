@@ -430,7 +430,7 @@ def test_data_function_explanation_accepts_data_group_source_path():
     )
 
 
-def test_data_function_source_path_warning_mentions_data_group_name():
+def test_data_function_source_path_is_normalized_to_full_row_name():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(
         group=group,
@@ -451,14 +451,48 @@ def test_data_function_source_path_warning_mentions_data_group_name():
         }],
     )
 
-    assert any("<数据组名称>" in warning for warning in warnings)
+    assert rows[0]["计算依据说明"].startswith(
+        "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组"
+    )
+    assert not any("来源场景未使用完整路径格式" in warning for warning in warnings)
     assert not any("<功能过程>" in warning for warning in warnings)
     assert not any("<功能点名称>" in warning for warning in warnings)
     quality_hit = next(
         hit for hit in rows[0]["_规则命中详情"]
-        if hit["rule_id"] == "postprocess.explanation_quality"
+        if hit["rule_id"] == "postprocess.explanation_source_path"
     )
-    assert any("<数据组名称>" in warning for warning in quality_hit["warnings"])
+    assert any("来源场景已按完整功能点路径规范化" in warning for warning in quality_hit["warnings"])
+
+
+def test_transaction_source_path_is_normalized_to_full_row_name():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "垂直行业维护",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：垂直行业维护"
+                "\n业务数据：垂直行业基础信息。"
+                "\n业务规则：系统保存并持续维护垂直行业信息。"
+                "\n计算说明：该事务维护内部逻辑数据组，按 EI 计量。"
+            ),
+        }],
+    )
+
+    assert rows[0]["计算依据说明"].startswith(
+        "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业维护"
+    )
+    assert not any("来源场景未使用完整路径格式" in warning for warning in warnings)
+    assert any(
+        hit["rule_id"] == "postprocess.explanation_source_path"
+        for hit in rows[0]["_规则命中详情"]
+    )
 
 
 def test_explanation_quality_accepts_module_or_business_scene_source_text():

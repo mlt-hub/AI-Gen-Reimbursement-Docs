@@ -968,6 +968,8 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 2026-06-08 已将 `ai_first` 下确定性追加的 `rules_fallback` 覆盖补齐从稳定性报告 warning 统计中排除。`AI 结果未覆盖...已追加 rules_fallback 行` 和 `AI 结果未包含数据功能行...已追加 rules_fallback 行` 仍保留在 audit trace、check Excel 和 `coverage.rules_fallback` 规则命中详情中，用于审阅 AI 覆盖缺口；但真实模型趋势报告不再把已被规则集补齐且质量审核通过的补齐动作计为模型 warning。
 
+2026-06-08 已将可确定的 `计算依据说明` 来源场景路径规范化为后处理规则命中。AI 返回结构化说明但 `来源场景` 未使用当前 FPA 行完整路径时，后处理会把该行改为 `来源场景：<完整新增/修改功能点>`，并记录 `postprocess.explanation_source_path`；缺少结构化项、类型未说明、表个数计量描述等真实说明质量问题仍保留为 warning。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
