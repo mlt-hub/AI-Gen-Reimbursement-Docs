@@ -1021,11 +1021,11 @@ style(ui): tighten web ui spacing and states
 
 ## 下一步建议
 
-当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成第一轮本机联调冒烟。后续继续推进时，建议从“阶段 7：上线前联调验收”的剩余发布取舍开始，而不是继续扩大视觉微调：
+当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成两轮本机联调冒烟。后续继续推进时，建议从远程服务模式和发布取舍开始，而不是继续扩大视觉微调：
 
-1. 决定 COSMIC / SPEC 预览壳层是否保持占位，或在上线前隐藏到能力完成后再开放。
-2. 使用真实非空功能清单跑一次完整 `生成任务 -> 历史记录 -> 交付物操作`，确认交付物下载或打开目录。
-3. 若要进入远程服务模式，补一轮远程登录、上传文件、下载 ZIP 的端到端验收。
+1. 若要进入远程服务模式，补一轮远程登录、上传文件、下载 ZIP 的端到端验收。
+2. 若上线范围只包含 FPA，确认 COSMIC / SPEC 预览壳层保持“建设中”占位，不把它们描述为已完成能力。
+3. 若上线前需要真实业务样例验收，用业务非空功能清单再跑一次完整生成，并留存输出清单。
 
 这一步以真实后端联调和发布取舍为主，避免在 UI 结构已经稳定后继续扩大纯视觉改动。
 
@@ -1055,3 +1055,49 @@ style(ui): tighten web ui spacing and states
 | `/api/run-local` + `/api/sessions/{session_id}` + `/api/history` | 通过 | 使用 `from-excel-gen-basedata` 启动任务，session 状态为 `done`，历史记录可查到同一 session。 |
 
 本轮使用的是测试夹具 `tests/fixtures/功能清单-录入模板.xlsx`。它适合验证接口、页面和任务链路，但不是完整业务样例；本轮 `gen-basedata` 任务完成后没有产生交付物文件，后续仍需要用真实非空功能清单验证交付物操作。
+
+### 第二轮本机 FPA 交付物冒烟
+
+执行日期：2026-06-08
+
+启动方式：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn web_app.server:app --host 127.0.0.1 --port 8092
+```
+
+输入与策略：
+
+| 项 | 值 |
+|---|---|
+| 输入文件 | `tests/fixtures/功能清单-录入模板.xlsx` |
+| 生成模式 | `from-excel-gen-fpa` |
+| FPA 方案 | `strict_fpa` |
+| FPA 执行策略 | `rules_only` |
+| 输出目录 | 系统临时目录，验证后已清理 |
+
+验收结果：
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| `/api/run-local` | 通过 | 返回 session，任务进入执行。 |
+| `/api/sessions/{session_id}` | 通过 | session 状态为 `done`。 |
+| FPA 交付物 | 通过 | `done_files` 包含 `FPA 工作量评估` 和 `FPA 审核副本`。 |
+| 输出目录 | 通过 | 生成 `FPA工作量评估.xlsx`、`FPA工作量评估-check.xlsx`、中间 MD、audit trace 和运行日志。 |
+| `/api/history` | 通过 | 历史记录可查到同一 session，状态为 `done`，交付物类型为 `local_dir`，`open_folder_available=true`。 |
+| `/history` 页面 | 通过 | 页面可见本次 FPA 任务、完成状态和 `打开目录` 操作。 |
+
+### COSMIC / SPEC 预览发布取舍
+
+保持当前占位结构，不在上线前隐藏 COSMIC / SPEC 入口。
+
+理由：
+
+- D6 已明确采用 `预览` 父级，下挂 FPA / COSMIC / SPEC 的最终信息架构。
+- 当前 `/preview/cosmic` 和 `/preview/spec` 页面均展示“预览能力待接入”的安静空状态，没有伪装成可用流程。
+- 本系统尚未上线，保留入口有利于后续能力接入和导航稳定。
+
+发布口径：
+
+- 可以说：`COSMIC / SPEC 预览入口已预留，能力建设中。`
+- 不应说：`COSMIC / SPEC 预览流程已完成。`
