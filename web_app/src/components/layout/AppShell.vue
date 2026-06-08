@@ -8,6 +8,7 @@
         :backend-status-class="backendStatusClass"
         :backend-dot-class="backendDotClass"
         :show-prompt-debug="showPromptDebug"
+        :show-admin-tools="showAdminTools"
       >
         <template #account>
           <AccountControls
@@ -75,6 +76,7 @@
           :backend-status-class="backendStatusClass"
           :backend-dot-class="backendDotClass"
           :show-prompt-debug="showPromptDebug"
+          :show-admin-tools="showAdminTools"
           @navigate="mobileOpen = false"
         >
           <template #account>
@@ -104,6 +106,7 @@ defineProps<{
   backendDotClass: string
   backendOffline: boolean
   showPromptDebug: boolean
+  showAdminTools: boolean
   showUserActions: boolean
   username: string
 }>()

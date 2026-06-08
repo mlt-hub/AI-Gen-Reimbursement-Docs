@@ -14,6 +14,16 @@
           <input id="password" v-model="pwd" type="password" @keyup.enter="isRegister ? doRegister() : doLogin()"
             class="field-control" />
         </div>
+        <div v-if="isRegister">
+          <label for="invite-code" class="field-label">邀请码</label>
+          <input id="invite-code" v-model="inviteCode" type="text" @keyup.enter="doRegister"
+            class="field-control font-mono" />
+        </div>
+
+        <label v-if="!isRegister" class="flex items-center gap-2 text-sm text-[var(--color-ink-muted)]">
+          <input v-model="rememberMe" type="checkbox" class="h-4 w-4 rounded border-[var(--color-rule-strong)]" />
+          <span>记住我</span>
+        </label>
 
         <p v-if="error" class="text-sm text-[var(--color-danger)]">{{ error }}</p>
 
@@ -33,9 +43,9 @@
           </button>
         </template>
 
-        <button v-if="!isRegister && allowRegister" @click="isRegister = true; error = ''"
+        <button v-if="!isRegister" @click="isRegister = true; error = ''"
           class="btn-quiet w-full">
-          没有账号？注册
+          使用邀请码注册
         </button>
       </div>
     </div>
@@ -52,10 +62,11 @@ const auth = useAuthStore()
 
 const user = ref('')
 const pwd = ref('')
+const inviteCode = ref('')
+const rememberMe = ref(false)
 const error = ref('')
 const loading = ref(false)
 const isRegister = ref(false)
-const allowRegister = ref(true)
 
 onMounted(async () => {
   await auth.init()
@@ -63,7 +74,8 @@ onMounted(async () => {
     router.replace('/')
     return
   }
-  allowRegister.value = auth.allowRegister
+  user.value = auth.rememberedUsername()
+  rememberMe.value = !!user.value
 })
 
 async function doLogin() {
@@ -74,7 +86,7 @@ async function doLogin() {
   }
   loading.value = true
   try {
-    await auth.login(user.value, pwd.value)
+    await auth.login(user.value, pwd.value, rememberMe.value)
     router.replace('/')
   } catch (e: any) {
     error.value = e.message
@@ -84,14 +96,18 @@ async function doLogin() {
 
 async function doRegister() {
   error.value = ''
-  if (!user.value.trim() || pwd.value.length < 4) {
-    error.value = '用户名不能为空，密码至少4位'
+  if (!user.value.trim() || pwd.value.length < 6) {
+    error.value = '用户名不能为空，密码至少6位'
+    return
+  }
+  if (!inviteCode.value.trim()) {
+    error.value = '请填写邀请码'
     return
   }
   loading.value = true
   try {
-    await auth.register(user.value, pwd.value)
-    await auth.login(user.value, pwd.value)
+    await auth.register(user.value, pwd.value, inviteCode.value)
+    await auth.login(user.value, pwd.value, rememberMe.value)
     router.replace('/')
   } catch (e: any) {
     error.value = e.message
