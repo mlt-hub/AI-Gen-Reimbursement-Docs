@@ -994,6 +994,8 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 复测结果：Quality Gate PASS；`run_count=10`，`module_count=11`，`quality_issue_count=0`，`retryable_quality_issue_count=0`，`retry_count=1`，`blocking_retry_count=0`。稳定性报告 `warning_count` 从 7 降至 1，唯一剩余计数 warning 为一次已自愈的 `quality_review` 重试；`oa_approval_reference` 和 `sms_notification_service` 的 rules_fallback 覆盖补齐仍保留在 trace 中，但不计入稳定性 warning。
 
+2026-06-08 已将非阻断稳定性重试从 `warning_count` 中排除。`retry_count` 继续记录真实发生过的重试，`Retry Triggers` 继续保留来源分布；只有重试后最终仍存在质量审核问题的 `blocking_retry_count` 才会同时计入 warning。基于 `tmp_fpa_stability_ci_real_recommended_after_warning_noise_20260608` 的 trace 重新汇总后，recommended 集合为 `warning_count=0`、`quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=1`、`blocking_retry_count=0`，Quality Gate PASS。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
