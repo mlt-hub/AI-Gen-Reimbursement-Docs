@@ -1215,15 +1215,15 @@ class StrictFpaProfile(CustomRulesProfile):
 
     def _conflict_matrix_expected_type(self, name: str, desc: str) -> str | None:
         text = f"{name} {desc}"
-        type_mapping = self._configured_type_mapping(text)
-        if type_mapping:
-            return type_mapping[0]
         name_is_data_group = self._looks_like_data_group(name)
-        if self._has_internal_data_function(text) and name_is_data_group:
-            return "ILF"
         name_action = self._explicit_transaction_type(self._function_point_tail(name))
         if name_action and not name_is_data_group:
             return name_action[0]
+        type_mapping = self._configured_type_mapping(text)
+        if type_mapping:
+            return type_mapping[0]
+        if self._has_internal_data_function(text) and name_is_data_group:
+            return "ILF"
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF"
         if name_is_data_group and self._is_external_data_group(text) and self._looks_like_external_data_function_name(name):
