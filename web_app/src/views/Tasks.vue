@@ -38,11 +38,12 @@
         <p class="mt-1 text-xs">运行中、完成、失败和已取消的 Web 任务会显示在这里。</p>
       </div>
       <div v-else class="overflow-x-auto">
-        <table class="w-full min-w-[1040px] border-collapse text-left text-sm">
+        <table class="w-full min-w-[1120px] border-collapse text-left text-sm">
           <thead class="border-b border-[var(--color-rule)] text-xs uppercase text-[var(--color-ink-soft)]">
             <tr>
               <th class="px-4 py-3 font-semibold">状态</th>
               <th class="px-4 py-3 font-semibold">任务模式</th>
+              <th class="px-4 py-3 font-semibold">项目名</th>
               <th class="px-4 py-3 font-semibold">来源</th>
               <th class="px-4 py-3 font-semibold">输入文件</th>
               <th class="px-4 py-3 font-semibold">开始时间</th>
@@ -59,6 +60,9 @@
               <td class="px-4 py-3 align-top">
                 <div class="font-semibold">{{ item.task_mode || '-' }}</div>
                 <div class="text-xs font-mono text-[var(--color-ink-soft)]">{{ item.run_id }}</div>
+              </td>
+              <td class="max-w-[12rem] px-4 py-3 align-top">
+                <div class="truncate" :title="projectName(item)">{{ projectName(item) }}</div>
               </td>
               <td class="px-4 py-3 align-top">
                 <div class="font-semibold">{{ sourceLabel(item) }}</div>
@@ -139,6 +143,10 @@ interface DoneFile {
   is_temp?: boolean
 }
 
+interface RunConfig {
+  project_name?: string
+}
+
 interface TaskItem {
   run_id: string
   session_id: string
@@ -155,6 +163,7 @@ interface TaskItem {
   started_at: string
   updated_at: string
   done_files: DoneFile[]
+  run_config?: RunConfig
   session_available?: boolean
 }
 
@@ -192,6 +201,11 @@ async function loadTasks() {
 
 function sourceLabel(item: TaskItem) {
   return item.mode === 'remote' ? 'Web 远程' : 'Web 本机'
+}
+
+function projectName(item: TaskItem) {
+  const name = item.run_config?.project_name?.trim()
+  return name || '-'
 }
 
 function stateLabel(state: string) {
