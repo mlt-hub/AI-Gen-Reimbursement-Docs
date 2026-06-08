@@ -1,7 +1,7 @@
 <template>
-  <div class="flex h-full">
+  <div class="flex h-full min-w-0 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
     <!-- 左侧：通用提示词调试器 -->
-    <div class="flex min-w-0 flex-1 flex-col overflow-y-auto bg-[var(--color-surface-raised)] p-5">
+    <div class="flex min-h-[520px] min-w-0 flex-1 flex-col bg-[var(--color-surface-raised)] p-4 sm:p-5 lg:min-h-0 lg:overflow-y-auto">
       <h2 class="mb-4 text-base font-semibold text-[var(--color-ink)]">通用提示词调试</h2>
 
       <label class="mb-1 text-sm font-medium text-[var(--color-ink-muted)]">
@@ -9,23 +9,23 @@
       </label>
       <textarea v-model="systemPrompt"
         placeholder="可选，系统级指令（角色设定、输出格式等）"
-        class="field-control min-h-[120px] flex-1 resize-y font-mono leading-relaxed" />
+        class="field-control min-h-[140px] resize-y font-mono leading-relaxed lg:flex-1" />
 
       <label class="mb-1 mt-4 text-sm font-medium text-[var(--color-ink-muted)]">
         用户提示词 <span class="ml-1 text-xs font-normal text-[var(--color-ink-soft)]">{{ userPrompt.length }} 字</span>
       </label>
       <textarea v-model="userPrompt"
         placeholder="可选，具体的任务描述或问题"
-        class="field-control min-h-[120px] flex-1 resize-y font-mono leading-relaxed"
+        class="field-control min-h-[140px] resize-y font-mono leading-relaxed lg:flex-1"
         @keydown="onKeydown" />
 
-      <div class="flex items-center gap-3 mt-4">
+      <div class="mt-4 flex flex-wrap items-center gap-3">
         <button @click="submitPrompt" :disabled="running"
           class="btn-primary">
           发送给 AI
         </button>
         <button @click="clearAll" class="btn-secondary">清空</button>
-        <span :class="['text-sm font-medium ml-auto',
+        <span :class="['text-sm font-medium sm:ml-auto',
           runState === 'idle' ? 'text-[var(--color-ink-soft)]' : runState === 'running' ? 'text-[var(--color-accent-strong)]' : runState === 'done' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">
           {{ { idle: '就绪', running: '请求中...', done: '完成', error: '失败' }[runState] }}
         </span>
@@ -33,33 +33,33 @@
 
       <details class="mt-4">
         <summary class="subtle-link cursor-pointer select-none text-sm">高级选项</summary>
-        <div class="mt-3 flex gap-3 border-t border-[var(--color-rule)] pt-3">
+        <div class="mt-3 grid grid-cols-1 gap-3 border-t border-[var(--color-rule)] pt-3 xl:grid-cols-3">
           <input ref="apiKeyInput" type="password" v-model.trim="apiKey"
             placeholder="API Key（留空使用系统配置）" autocomplete="new-password" autocapitalize="off"
             autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true"
             :name="apiKeyInputName" :readonly="apiKeyReadonly" @focus="activateApiKeyInput"
             @pointerdown="activateApiKeyInput"
-            class="field-control flex-1" />
+            class="field-control min-w-0" />
           <input type="text" v-model="model" placeholder="模型（默认 deepseek-v4-flash）"
-            class="field-control flex-1" />
+            class="field-control min-w-0" />
           <input type="text" v-model="baseUrl" placeholder="API 端点（留空使用默认）"
-            class="field-control flex-1" />
+            class="field-control min-w-0" />
         </div>
       </details>
     </div>
 
     <!-- 右侧：结果 + 快捷测试 -->
-    <div class="flex w-[45%] min-w-[320px] flex-col overflow-hidden bg-[var(--color-console)]">
+    <div class="flex min-h-[520px] min-w-0 flex-none flex-col overflow-hidden bg-[var(--color-console)] lg:min-h-0 lg:w-[45%] lg:min-w-[320px]">
       <!-- 快捷测试工具 -->
       <details class="border-b border-[var(--color-console-line)]">
         <summary class="cursor-pointer select-none px-4 py-2 text-sm text-slate-400 hover:text-slate-300">快捷测试工具</summary>
-        <div class="px-4 pb-4 space-y-3">
+        <div class="space-y-3 px-4 pb-4">
           <!-- 可靠性描述测试 -->
           <div class="rounded-lg bg-[var(--color-console-line)] p-3">
             <h4 class="mb-2 text-xs font-medium text-slate-400">调整因子 — 可靠性描述 AI 生成</h4>
-            <div class="flex gap-2">
+            <div class="flex min-w-0 flex-col gap-2 sm:flex-row">
               <input v-model="quickXlsx" type="text" placeholder="功能清单 .xlsx 路径（留空自动搜索）"
-                class="flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
+                class="min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
               <button @click="runQuickTest('reliability')" :disabled="quickRunning"
                 class="btn-primary min-h-0 whitespace-nowrap px-3 py-1.5 text-xs">
                 {{ quickRunning ? '...' : '执行' }}
@@ -69,11 +69,11 @@
           <!-- 元数据测试 -->
           <div class="rounded-lg bg-[var(--color-console-line)] p-3">
             <h4 class="mb-2 text-xs font-medium text-slate-400">元数据 #AI生成# 字段测试</h4>
-            <div class="flex gap-2">
+            <div class="flex min-w-0 flex-col gap-2 sm:flex-row">
               <input v-model="quickXlsx" type="text" placeholder="功能清单 .xlsx 路径"
-                class="flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
+                class="min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
               <input v-model="quickField" type="text" placeholder="字段 key"
-                class="w-32 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
+                class="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none sm:w-32" />
               <button @click="runQuickTest('metadata')" :disabled="quickRunning"
                 class="btn-secondary min-h-0 whitespace-nowrap px-3 py-1.5 text-xs">
                 {{ quickRunning ? '...' : '执行' }}

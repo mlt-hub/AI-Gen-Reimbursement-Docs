@@ -8,8 +8,8 @@
         </div>
         <nav class="flex flex-wrap gap-2 text-sm">
           <router-link to="/preview/fpa" class="nav-link" active-class="nav-link-active">FPA</router-link>
-          <span class="nav-link cursor-not-allowed opacity-50">COSMIC</span>
-          <span class="nav-link cursor-not-allowed opacity-50">SPEC</span>
+          <router-link to="/preview/cosmic" class="nav-link" active-class="nav-link-active">COSMIC</router-link>
+          <router-link to="/preview/spec" class="nav-link" active-class="nav-link-active">SPEC</router-link>
         </nav>
       </div>
     </section>
