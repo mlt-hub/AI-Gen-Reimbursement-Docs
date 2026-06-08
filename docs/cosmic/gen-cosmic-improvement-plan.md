@@ -98,7 +98,7 @@ CosmicIssue(
 )
 ```
 
-建议先不破坏现有 `CosmicItem.warnings`，而是新增旁挂校验结果：
+本系统尚未上线，不需要保留旧版本兼容路径。`CosmicItem.warnings` 应删除或停止写入，结构化 `CosmicIssue` 是唯一问题事实源：
 
 ```python
 CosmicValidationResult(
@@ -126,6 +126,9 @@ CosmicValidationResult(
 6. `MISSING_PROCESS_NAME`
 7. `EMPTY_DATA_GROUP`
 8. `EMPTY_DATA_ATTRS`
+9. `NO_COSMIC_ITEMS`
+10. `MISSING_CFP_FORMULA`
+11. `GENERIC_FUNCTION_USER`
 
 第二轮再做启发式规则：
 
@@ -222,10 +225,10 @@ DataMovement(
 建议策略：
 
 1. 有 `error` 时默认不写正式 Excel。
-2. 如需保留当前行为，可增加 `allow_cosmic_draft_output` 配置，允许写入带标记草稿。
+2. 如需在待审状态写出草稿，可增加 `gen_cosmic.allow_draft_excel_output` 配置，允许写入带标记草稿；草稿不得登记为正式 artifact。
 3. `warning` 写入 Excel 批注，并同步写校验报告。
 4. CFP 公式缺失时进入待审或阻断，不能无提示继续生成汇总。
-5. Excel 写入只接受结构化草稿中的已确认 items，避免再次从 Markdown 解析引入格式风险。
+5. Excel 写入只接受结构化草稿和校验报告，避免再次从 Markdown 解析引入格式风险。
 
 ## 六阶段：预览页准备
 
@@ -249,11 +252,11 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 ## 推荐实施顺序
 
 1. 确认 CFP 口径：模板公式、手册规则、代码汇总三者谁为准。
-2. 新增 `cosmic_validator.py`，先做确定性硬规则校验。
-3. 将现有 `warnings` 迁移或映射为结构化 `CosmicIssue`。
+2. 新增 `cosmic_validator.py`，先做确定性硬规则、全局规则和功能用户泛化 warning。
+3. 删除或停止写入现有 `warnings`，统一改为结构化 `CosmicIssue`。
 4. 更新 `cosmic_split` prompt，减少明显违规 AI 输出。
 5. 新增 JSON 草稿产物和校验报告。
-6. 调整 Excel 写入，让正式输出受校验状态控制。
+6. 调整 Excel 写入，让正式输出和草稿输出都受校验状态控制。
 7. 再评估 `/preview/cosmic` 的数据契约和 UI。
 
 ## 测试建议
