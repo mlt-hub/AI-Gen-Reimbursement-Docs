@@ -5,8 +5,19 @@
 - 状态：已实施并合并到 `master`
 - 功能提交：`ebd205f988b1bd20f151001c757c973681d31916` (`feat: add admin invite auth flow`)
 - 合并提交：`eb768707ab08a410e4e2dc2e156e08c1a7dbcfca` (`Merge branch 'feature/auth-account'`)
+- 风险收敛提交：`2afea257bba32efa5c1f7071c8d3d7fd9d677a79` (`fix: harden auth account flow`)
 - 实施分支：`feature/auth-account`
 - 实施 worktree：`F:\tmp\ai_gen_reimbursement_docs-auth-account`
+
+## 风险收敛更新
+
+`2afea257bba32efa5c1f7071c8d3d7fd9d677a79` 已将合入后复核发现的剩余风险收敛到当前 `master`：
+
+- 内置管理员首次登录后必须修改初始密码；未改密前禁止访问管理员接口。
+- `/api/auth/change-password` 支持当前登录用户修改密码，管理员不能继续使用内置初始密码。
+- 邀请码注册流程改为同一 SQLite 事务内完成用户写入和邀请码次数扣减，避免注册失败消耗邀请码。
+- HTTPS 请求下设置 `ard_token` cookie 的 `Secure` 属性，本地 HTTP 开发模式保持可用。
+- 开发期旧 `users` 表会轻量补齐 `role`、`disabled`、`must_change_password` 字段。
 
 ## 背景
 
