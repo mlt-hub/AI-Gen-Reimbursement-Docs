@@ -1083,6 +1083,30 @@ R1 的 4 条计数 warning 来源为：
 
 最终结果为 `run_count=10`、`module_count=11`、`warning_count=0`、`quality_issue_count=0`、`retryable_quality_issue_count=0`、`retry_count=0`、`blocking_retry_count=0`，Quality Gate PASS。连续趋势中未发现 AI JSON 解析失败；`sms_notification_service` 的覆盖补齐仍保留在 trace 的 `coverage.rules_fallback` 规则命中详情中，但不计入稳定性 warning。
 
+2026-06-09 在 `99f703a` 收口后，重新运行 `strict-real-model-recommended` 连续 3 轮 fresh 趋势复测，验证推荐集是否稳定连续归零。复测基于当前 HEAD `2488d86`，FPA 修复 `99f703a` 已包含在历史中，输出目录为：
+
+- `tmp_fpa_stability_ci_real_recommended_post99_trend_r1_20260609`
+- `tmp_fpa_stability_ci_real_recommended_post99_trend_r2_20260609`
+- `tmp_fpa_stability_ci_real_recommended_post99_trend_r3_20260609`
+
+复测结果：
+
+```text
+R1: Quality Gate PASS；run_count=10，module_count=11，warning_count=0，quality_issue_count=0，retryable_quality_issue_count=0，retry_count=0，blocking_retry_count=0，sources=ai=11。
+R2: Quality Gate PASS；run_count=10，module_count=11，warning_count=0，quality_issue_count=0，retryable_quality_issue_count=0，retry_count=1，blocking_retry_count=0，sources=ai=11。
+R3: Quality Gate PASS；run_count=10，module_count=11，warning_count=0，quality_issue_count=0，retryable_quality_issue_count=0，retry_count=0，blocking_retry_count=0，sources=ai=11。
+```
+
+结论：
+
+- `strict-real-model-recommended` 已完成连续 3 轮 fresh 复测稳定归零：三轮均 `warning_count=0`、`quality_issue_count=0`、`retryable_quality_issue_count=0`、`blocking_retry_count=0`。
+- R2 出现 1 次 `quality_review` 自愈重试，`blocking_retry_count=0`，质量门仍 PASS。
+- 三轮均未出现 AI JSON 解析失败。
+- 三轮均无 `rules_fallback` 作为生成源；所有模块生成来源均为 `ai`。
+- `sms_notification_service` 的 `coverage.rules_fallback` 审计记录仍保留在 trace 的规则命中详情中，但不计入稳定性 warning。
+
+至此，`strict-real-model-recommended` 推荐集可作为当前 FPA 真实模型稳定基线。后续除非更换模型、prompt、rule_set 或新增 fixture，否则 FPA 输出稳定性主线可阶段收口。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
