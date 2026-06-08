@@ -1221,13 +1221,13 @@ class StrictFpaProfile(CustomRulesProfile):
         name_is_data_group = self._looks_like_data_group(name)
         if self._has_internal_data_function(text) and name_is_data_group:
             return "ILF"
+        name_action = self._explicit_transaction_type(self._function_point_tail(name))
+        if name_action and not name_is_data_group:
+            return name_action[0]
         if self._looks_like_external_data_function_name(name) and self._is_external_data_group(text):
             return "EIF"
         if name_is_data_group and self._is_external_data_group(text) and self._looks_like_external_data_function_name(name):
             return "EIF"
-        name_action = self._explicit_transaction_type(self._function_point_tail(name))
-        if name_action and not name_is_data_group:
-            return name_action[0]
         if self._matching_internal_data_rule(text) is not None and name_is_data_group:
             return "ILF"
         if name_is_data_group or self._looks_like_data_group(name, desc):
@@ -1598,6 +1598,8 @@ class StrictFpaProfile(CustomRulesProfile):
             return False
         return any(k in text for k in [
             "本系统维护", "本系统保存", "本系统只保存", "本系统继续维护",
+            "本系统创建并维护", "本系统内部创建", "本系统内部维护", "本系统唯一维护",
+            "系统内部创建", "系统内部维护", "系统唯一维护",
             "维护本系统", "记录本系统",
         ])
 
