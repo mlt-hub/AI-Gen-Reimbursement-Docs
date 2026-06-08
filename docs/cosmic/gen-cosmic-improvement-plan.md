@@ -135,9 +135,8 @@ CosmicValidationResult(
 1. `POSSIBLE_CONTROL_COMMAND`
 2. `POSSIBLE_DATA_OPERATION_ONLY`
 3. `POSSIBLE_INTERNAL_TECHNICAL_STEP`
-4. `GENERIC_FUNCTION_USER`
-5. `UNCLEAR_INTERFACE_BOUNDARY`
-6. `POSSIBLE_NON_FUNCTIONAL_SCOPE`
+4. `UNCLEAR_INTERFACE_BOUNDARY`
+5. `POSSIBLE_NON_FUNCTIONAL_SCOPE`
 
 ## 三阶段：CFP 口径收口
 
@@ -151,7 +150,7 @@ CosmicValidationResult(
 
 1. **正式产物以 Excel 模板公式为准。**
 2. Python 模型只记录 `reuse`、`cfp_override`、`cfp_basis` 等结构化字段。
-3. 如果模板未配置 `CFP计算公式`，应输出 `warning` 或 `error`，不能静默留空后继续汇总。
+3. 如果模板未配置 `CFP计算公式`，必须输出 `MISSING_CFP_FORMULA` error，不能静默留空后继续汇总。
 4. `利旧`、`复用`、`优化未改子过程 CFP=0` 的规则应从模板或配置中读取，不应写死在 `CosmicItem.total_cfp()`。
 
 建议后续模型扩展：
@@ -227,7 +226,7 @@ DataMovement(
 1. 有 `error` 时默认不写正式 Excel。
 2. 如需在待审状态写出草稿，可增加 `gen_cosmic.allow_draft_excel_output` 配置，允许写入带标记草稿；草稿不得登记为正式 artifact。
 3. `warning` 写入 Excel 批注，并同步写校验报告。
-4. CFP 公式缺失时进入待审或阻断，不能无提示继续生成汇总。
+4. CFP 公式缺失时进入阻断，不能无提示继续生成汇总。
 5. Excel 写入只接受结构化草稿和校验报告，避免再次从 Markdown 解析引入格式风险。
 
 ## 六阶段：预览页准备
@@ -270,7 +269,7 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 5. 功能用户不含三级模块或配置匹配结果时产生 `warning`。
 6. 控制命令类子过程产生 `warning` 或被过滤。
 7. 数据运算类子过程产生 `warning` 或被过滤。
-8. CFP 公式缺失时进入待审或阻断。
+8. CFP 公式缺失时产生 `MISSING_CFP_FORMULA` error 并进入阻断。
 9. 有 `error` 时不写正式 Excel。
 10. JSON 草稿、Markdown 审阅稿、Excel 写入使用同一份结构化数据。
 
@@ -281,3 +280,91 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 3. 内部接口是否计列需要业务上下文，单靠关键词难以完全判断，宜进入待审状态。
 4. 非功能内容识别不能只靠 AI，需要模块树或元数据中有明确标记。
 5. 预览页不应早于结构化草稿产物，否则会固化当前 Markdown 绕行链路。
+
+## 剩余改进清单
+
+以下事项不属于“是否能开始第一阶段实现”的前置条件，但会影响 `gen-cosmic` 走向稳定送审结果。应在结构化校验链路落地后按优先级推进。
+
+### P0：结构化主链路落地
+
+当前代码仍以 `_generate_cosmic` 编排、`generate_cosmic_items` 生成、`write_cosmic_xlsx` 写入为主，Excel 写入仍可接收未经校验的 `list[CosmicItem]`。第一阶段实现必须完成以下替换：
+
+1. `generate_cosmic_items` 或其上层包装直接返回结构化 `CosmicDraft` 或 `list[CosmicItem]`。
+2. `cosmic_validator` 产出 `CosmicValidationReport`。
+3. `write_cosmic_xlsx` 只接收 `CosmicValidationReport` 或已校验结果，不能绕过校验写正式 Excel。
+4. Markdown 只作为审阅稿和日志，不作为正式管线结构化输入。
+
+### P0：正式和草稿产物隔离
+
+正式 Excel 和草稿 Excel 必须使用不同路径和不同状态字段。草稿 Excel 可用于人工排查，但不得登记为正式 artifact，不得被 `gen-list` 读取。
+
+需要明确并测试：
+
+1. `formal_excel_path` / `formal_excel_written`。
+2. `draft_excel_path` / `draft_excel_written`。
+3. `cfp_total` 只来自正式 Excel 成功写入后的结果。
+4. 上一轮残留正式 Excel 不得被本轮阻断结果误登记。
+
+### P0：空结果和失败状态工程化
+
+无 API Key、AI 全部失败、AI 超限导致全为空、结构化解析为空，都必须进入全局 `NO_COSMIC_ITEMS` error。不能用“阶段完成”掩盖“没有可送审 COSMIC 结果”。
+
+需要区分并记录：
+
+1. `NO_API_KEY`：未设置 API Key。
+2. `AI_GENERATION_FAILED`：AI 调用或解析全部失败。
+3. `NO_COSMIC_ITEMS`：最终没有功能过程。
+4. `PARTIAL_AI_FAILURE`：部分模块失败但仍有可校验结果。
+
+### P1：CFP 口径收口
+
+`MISSING_CFP_FORMULA` 已确定为 error，但还需要继续处理以下问题：
+
+1. `CosmicItem.total_cfp()` 中 `复用 = 1/3` 不应作为正式业务口径继续扩散。
+2. `复用`、`利旧`、`不涉及修改`、人工覆盖 CFP 的规则需要配置化或模板化。
+3. JSON 草稿中应记录 `cfp_basis`，说明 CFP 来源是模板公式、人工覆盖还是未确认。
+4. `gen-list` 只能读取正式 CFP 总和。
+
+### P1：功能用户规则增强
+
+第一阶段只要求 `GENERIC_FUNCTION_USER` warning，后续需要把功能用户口径进一步工程化：
+
+1. 明确功能用户是否必须直接包含三级模块名，还是允许元数据规则映射到业务角色。
+2. 建立“模块路径 -> 可接受功能用户”的判定表。
+3. 对一对多、多对一、泛化角色等情况给出稳定 issue code。
+4. 在预览或审阅页支持人工确认功能用户。
+
+### P1：Prompt 和后置校验协同
+
+Prompt 需要和校验器同步升级，减少明显违规输出，而不是只靠后置校验拦截。
+
+重点规则：
+
+1. 前端/后端、前台/后台交互不识别为 COSMIC 边界。
+2. 上一页、下一页、排序、展示/隐藏菜单、点击确认等控制命令不计列。
+3. 校验、分析、统计、格式化、连接数据库等通常不单独作为数据移动。
+4. 非功能内容不得拆成 COSMIC 功能过程。
+5. 错误和确认消息按手册规则合并识别。
+
+### P2：COSMIC 预览页
+
+`/preview/cosmic` 应等 JSON 草稿、校验报告、正式/草稿产物状态稳定后再实现。预览页的数据源必须是结构化 JSON，不得读 Markdown 表格。
+
+预览页前置条件：
+
+1. COSMIC 审阅术语映射已补充。
+2. 行级 issue、全局 issue、AI 依据说明都在 JSON 中可用。
+3. 人工确认和导出策略有明确状态流转。
+
+### P2：真实样例回归集
+
+除单元测试外，需要准备小型固定样例覆盖：
+
+1. 全部通过。
+2. 只有 warning，生成草稿 Excel。
+3. blocked，不写正式 Excel。
+4. 无 API Key。
+5. AI 空结果。
+6. 缺 CFP 公式。
+7. 功能用户泛化。
+8. 控制命令、内部技术步骤、非功能事项等后续启发式规则。
