@@ -2,13 +2,15 @@
 
 ## 推进状态
 
-状态：任务列表、关闭状态、继续执行、重跑配置快照已落地到 `master`；完成时回写项目名已在 `web-task-finish-project-name` 分支实现，待合并到 `master`。
+状态：任务列表、关闭状态、继续执行、不可恢复任务标记、重跑配置快照、项目名展示和完成时回写项目名均已落地到 `master`。
 
 相关提交：
 
 - `e191f93 feat: add web task list close state`
 - `ccb4f19 merge: web task list close state`
 - `7a4773e feat: continue running tasks from list`
+- `a208cce feat: backfill project name on finish`
+- `9d918b7 merge: backfill project name on finish`
 
 已完成：
 
