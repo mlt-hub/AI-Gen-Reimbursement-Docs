@@ -1021,10 +1021,10 @@ style(ui): tighten web ui spacing and states
 
 ## 下一步建议
 
-当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成本机与远程服务模式冒烟，并已落地远程 FPA 运行配置预检。后续继续推进时，建议从真实业务样例留档开始，而不是继续扩大视觉微调：
+当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成本机与远程服务模式冒烟、远程 FPA 运行配置预检和真实业务样例完整生成留档。后续继续推进时，建议进入发布包与真实 AI 联调取舍，而不是继续扩大视觉微调：
 
-1. 用业务非空功能清单再跑一次完整生成，并留存输出清单。
-2. 发布前执行 `.\scripts\check_release.ps1 -ConfigDir <全局配置目录>`，确认远程服务的全局配置目录包含 `fpa_config.yaml`、`fpa_judgement_rules.yaml` 和 `domain_context.json`。
+1. 发布前执行 `.\scripts\check_release.ps1 -ConfigDir <全局配置目录>`，确认远程服务的全局配置目录包含 `fpa_config.yaml`、`fpa_judgement_rules.yaml` 和 `domain_context.json`。
+2. 若需要宣称 COSMIC 交付能力完成，应使用真实 API Key 单独补跑 `from-excel-gen-cosmic` 或 `from-excel-gen-all`，确认 COSMIC Excel 产物。
 3. 若上线范围只包含 FPA，发布口径继续保持：COSMIC / SPEC 预览入口已预留，能力建设中。
 
 这一步以真实后端联调和发布取舍为主，避免在 UI 结构已经稳定后继续扩大纯视觉改动。
@@ -1183,3 +1183,83 @@ npm run build
 
 - 使用补齐 `fpa_config.yaml`、`fpa_judgement_rules.yaml`、`domain_context.json` 的临时配置目录运行 preflight，结果通过。
 - 使用空临时配置目录运行 preflight，按预期返回 `FPA 运行配置缺失`。
+
+### 第五轮真实业务样例完整生成留档
+
+执行日期：2026-06-08
+
+输入目录：
+
+```text
+F:\mlt\mlt-tests\AI-Gen-Reimbursement-Docs\6\
+```
+
+输入文件：
+
+```text
+F:\mlt\mlt-tests\AI-Gen-Reimbursement-Docs\6\功能清单-录入模板.xlsx
+```
+
+输入文件概况：
+
+| Sheet | 非空行数 | 说明 |
+|---|---:|---|
+| `1、工单需求-元数据录入` | 8 | 工单编号为 `闽市移需【202501】17658 号`，工单标题为 `关于构建垂直行业场景化营销的需求`。 |
+| `2、功能清单-内容录入` | 57 | 覆盖垂直行业管理、客户认证、行业权益、营销页面和券码办理等业务功能。 |
+| `3、FPA工作量评估-元数据录入` | 11 | 可解析 FPA 输出文件名和评估元数据。 |
+
+启动方式：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn web_app.server:app --host 127.0.0.1 --port 8095
+```
+
+运行方式：
+
+| 项 | 值 |
+|---|---|
+| 接口 | `POST /api/run-local` |
+| 输入参数 | 传入测试目录路径，由后端自动解析目录中的 `功能清单-录入模板.xlsx` |
+| 生成模式 | `from-excel-gen-all` |
+| FPA 方案 | `strict_fpa` |
+| FPA 执行策略 | `rules_only` |
+| FPA 规则集 | `strict_fpa_rs` |
+| API Key | 未传入，避免本轮调用外部 AI |
+| session | `1827b677` |
+| 输出目录 | `F:\mlt\mlt-tests\AI-Gen-Reimbursement-Docs\6\web-ui-stage7-full-20260608-162231` |
+
+人工确认点：
+
+| 阶段 | 输入 | 说明 |
+|---|---:|---|
+| COSMIC | `FPA核减后的工作量=204.0` | 使用规则生成得到的 FPA 工作量默认值继续。 |
+| 需求清单 | `送审工作量=204.0`、`送审功能点=0` | 本轮未传 API Key，因此 COSMIC 未生成 CFP 总和，送审功能点按 0 留档。 |
+
+验收结果：
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| `/api/health` | 通过 | `ok=true`、`work_mode=local`、`fpa_runtime_config_present=true`。 |
+| `/api/run-local` | 通过 | 返回 session `1827b677`，任务进入执行。 |
+| `/api/sessions/1827b677` | 通过 | 最终 `run_state=done`。 |
+| 基础数据 | 通过 | 解析出 2 个入口、3 个一级模块、8 个二级模块、19 个三级模块、56 个功能过程。 |
+| FPA 工作量评估 | 通过 | 生成主工作簿，`FPA功能点估算` 56 行，FPA 工作量为 `204.0` 人/天。 |
+| FPA 审核副本 | 通过 | 生成 `FPA结果`、`覆盖审核`、`Warnings`、`规则命中详情`、`AI原始返回`、`稳定性报告` 6 个 Sheet。 |
+| 项目需求说明书 | 通过 | 生成 DOCX，包内存在 `word/document.xml`，文件大小约 456 KB。 |
+| 项目需求清单 | 通过 | 生成 XLSX，`功能清单` Sheet 21 行。 |
+| COSMIC 阶段 | 有限制通过 | 无 API Key 时不调用 AI，不生成 COSMIC Excel；生成 `3.2.gen-cosmic-COSMIC-模板.md` 并完成阶段。 |
+| `/api/history` | 通过 | 历史记录状态为 `done`，`artifact_kind=local_dir`，`open_folder_available=true`。 |
+| `/history` 页面 | 通过 | 桌面和 390px 视口可见 session、完成状态和 `打开目录`，无横向溢出、无页面错误。 |
+
+输出清单：
+
+| 类型 | 文件 |
+|---|---|
+| FPA 工作量评估 | `闽市移需【202501】17658 号-关于构建垂直行业场景化营销的需求（和乐业）-FPA工作量评估.xlsx` |
+| FPA 审核副本 | `闽市移需【202501】17658 号-关于构建垂直行业场景化营销的需求（和乐业）-FPA工作量评估-check.xlsx` |
+| 项目需求说明书 | `cosmic文档\【提醒】请手动更新整个目录 附件1-闽市移需【202501】17658 号-关于构建垂直行业场景化营销的需求（和乐业）项目需求说明书V1.0.0.docx` |
+| 项目需求清单 | `cosmic文档\附件3-闽市移需【202501】17658 号-关于构建垂直行业场景化营销的需求（和乐业）项目需求清单V1.0.0.xlsx` |
+| 中间文件 | `md\0.1.gen-basedata-功能清单-模块树.md`、`md\0.2.gen-basedata-录入文档元数据-模板.md`、`md\1.1.gen-fpa-FPA-模板.md`、`md\1.2.gen-fpa-FPA工作量-总和.md`、`md\1.5.gen-fpa-audit-trace.json`、`md\2.1.gen-spec-SPEC-功能需求章节-模板.md`、`md\2.2.gen-spec-AI填充-SPEC-功能需求章节.md`、`md\3.1.gen-cosmic-FPA核减后的工作量-总和.md`、`md\3.2.gen-cosmic-COSMIC-模板.md` |
+| 日志 | `日志\AI生成项目报账文档_run_1_web-local_20260608_162232.log` |
+
+验证结束后已停止临时 Web 服务并清理临时 HOME / USERPROFILE。业务样例输出目录保留在测试目录下，便于人工打开复核。
