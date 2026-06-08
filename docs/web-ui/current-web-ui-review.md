@@ -969,13 +969,24 @@ style(ui): tighten web ui spacing and states
 
 | 阶段 | 状态 | 依赖决策 | 主要文件 | 验收方式 |
 |---|---|---|---|---|
-| 阶段 0：基线确认 | 待开始 | 无 | 无生产代码 | 截图或人工记录 |
-| 阶段 1：首页主流程收口 | 待开始 | D1、D2、D3 | `Home.vue`、`ConfigPanel.vue`、`FpaRunSettingsSection.vue` | `npm run build` + 首页视口检查 |
-| 阶段 2：统一后端离线错误态 | 待开始 | D4 | `AppShell.vue`、`Config.vue`、`FpaPreview.vue` | 离线态人工检查 |
-| 阶段 3：配置页分区化 | 待开始 | D5 | `Config.vue` | 配置保存回归 |
-| 阶段 4：FPA 预览审阅优化 | 待开始 | D2、D3 | `FpaPreview.vue`、`FpaPreviewPage.vue` | 术语检查 + 预览流程检查 |
-| 阶段 5：导航与高级工具 | 待开始 | D6、D7 | `router/index.ts`、`AppShell.vue` | 导航可见性检查 |
-| 阶段 6：视觉密度收尾 | 待开始 | 前 5 阶段完成 | `main.css`、相关组件 | 多视口检查 |
+| 阶段 0：基线确认 | 已完成 | 无 | 无生产代码 | Playwright 多路由、多视口观察 |
+| 阶段 1：首页主流程收口 | 已完成：`7f25439` | D1、D2、D3 | `Home.vue`、`ConfigPanel.vue`、`FpaRunSettingsSection.vue` | `npm run build` + 首页视口检查 |
+| 阶段 2：统一后端离线错误态 | 已完成：`ef463a6` | D4 | `AppShell.vue`、`Config.vue`、`FpaPreview.vue`、`lib/api.ts` | `npm run build` + `/config`、`/preview/fpa` 离线态检查 |
+| 阶段 3：配置页分区化 | 已完成：`6c8cb1e` | D5 | `Config.vue` | `npm run build` + tabs 切换 + 多视口无横向溢出 |
+| 阶段 4：FPA 预览审阅优化 | 已完成：`bb8dbcf` | D2、D3 | `FpaPreview.vue`、`FpaPreviewPage.vue` | `npm run build` + 术语检查 + 预览页多视口检查 |
+| 阶段 5：导航与高级工具 | 已完成：`229f25a` | D6、D7 | `router/index.ts`、`AppShell.vue`、`SideNav.vue`、`PreviewLayout.vue` | `npm run build` + 侧边栏展开 + COSMIC/SPEC 路由检查 |
+| 阶段 6：视觉密度收尾 | 进行中：`09dd5cc` | 前 5 阶段完成 | `PromptDebug.vue`、`PreviewLayout.vue`、后续相关组件 | `npm run build` + `/prompt-debug` 320/375/414/768/1280/1440 无横向溢出 |
+
+### 已完成提交摘要
+
+| 提交 | 阶段 | 摘要 |
+|---|---|---|
+| `7f25439` | 阶段 1 | 首页改成主操作、运行监控、高级参数的工作台结构，低频 FPA 设置默认折叠。 |
+| `ef463a6` | 阶段 2 | 增加全局后端离线状态，配置页和 FPA 预览页减少重复 `请求失败 (500)`。 |
+| `6c8cb1e` | 阶段 3 | 配置页增加 `常用 / FPA / 模板 / 高级 / 维护` 分区 tabs。 |
+| `bb8dbcf` | 阶段 4 | FPA 预览页移除左侧重复参数，补充模块摘要和“待确认”区。 |
+| `229f25a` | 阶段 5 | 侧边栏增加 `预览` 父级与 FPA/COSMIC/SPEC 子入口，提示词调试进入高级工具。 |
+| `09dd5cc` | 阶段 6 | 提示词调试页改为移动端上下堆叠，预览中心页内 COSMIC/SPEC 链接可跳转。 |
 
 ## 每阶段通用完成定义
 
@@ -993,11 +1004,10 @@ style(ui): tighten web ui spacing and states
 
 ## 下一步建议
 
-如果按最小可交付推进，建议先确认本文的 D1-D7 决策。若默认方案都可以接受，就从阶段 1 开始实施：
+当前 D1-D7 已按推荐方案完成到阶段 5，阶段 6 已完成一轮调试页和预览壳层的响应式收口。后续继续推进时，建议优先做阶段 6 的剩余收尾：
 
-1. 首页主操作区收口。
-2. 低频 FPA 设置默认折叠。
-3. `开始生成` 与 `预览 FPA 功能点` 重新分配主次。
-4. 后端离线时首页只保留一个明确提示。
+1. 复查 `History.vue`、`License.vue`、`Config.vue` 的按钮主次和空状态密度。
+2. 抽齐状态 badge 的视觉强度，避免成功、警告、离线、等待状态在不同页面表现不一致。
+3. 再跑一轮 `390 x 844`、`768 x 1024`、`1280 x 720`、`1440 x 1000` 的多路由检查，把阶段 6 标记为完成。
 
-这一步改动范围较小，但会显著改善用户第一次进入页面的判断成本。
+这一步改动范围较小，但会让已完成的信息架构改动在细节上更一致。
