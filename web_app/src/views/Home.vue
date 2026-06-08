@@ -1,16 +1,16 @@
 <template>
   <div class="box-border flex h-full max-w-full min-w-0 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 xl:p-5">
-    <!-- 任务设置 -->
+    <!-- 主操作区 -->
     <section class="surface min-h-0 w-full max-w-full min-w-0 rounded-xl p-4">
       <div class="mb-5 border-b border-[var(--color-rule)] pb-4">
-        <p class="text-xs font-semibold text-[var(--color-ink-soft)]">任务设置</p>
+        <p class="text-xs font-semibold text-[var(--color-ink-soft)]">主操作区</p>
         <h2 class="mt-1 text-xl font-bold text-[var(--color-ink)]">生成任务</h2>
-        <p class="mt-1 text-sm text-[var(--color-ink-muted)]">选择输入和操作模式后启动文档生成。</p>
+        <p class="mt-1 text-sm text-[var(--color-ink-muted)]">选择生成内容，填写功能清单路径，然后启动生成或先预览 FPA 功能点。</p>
       </div>
       <ConfigPanel @start="startTask" />
     </section>
 
-    <section class="surface flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-xl">
+    <section class="surface flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-xl">
       <div class="border-b border-[var(--color-rule)] px-5 py-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="min-w-0">
@@ -24,6 +24,12 @@
         </div>
       </div>
       <GenerationProgress v-if="session.isRunning || session.isDone || session.runState === 'cancelled' || steps.hasProgress" />
+      <div v-else class="flex min-h-[160px] flex-1 items-center justify-center bg-[var(--color-page)] p-5 text-center">
+        <div>
+          <p class="text-sm font-semibold text-[var(--color-ink)]">等待任务启动</p>
+          <p class="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">任务开始后，这里会显示阶段进展、日志入口和交付物操作。</p>
+        </div>
+      </div>
       <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
         <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
           运行详情 / 排错信息
@@ -35,7 +41,7 @@
       <ActionBar @ai="openAIModal" @reset="resetTask" />
     </section>
 
-    <FpaRunSettingsSection />
+    <FpaRunSettingsSection :default-open="false" />
 
     <!-- FPA核减后的工作量输入弹窗 -->
     <Teleport to="body">

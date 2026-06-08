@@ -18,40 +18,31 @@
 
     <FileInput />
 
-    <router-link
-      to="/preview/fpa"
-      class="group rounded-lg border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-3 py-3 transition-colors hover:bg-[var(--color-surface-raised)]"
-    >
-      <div class="flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <div class="text-sm font-semibold text-[var(--color-accent-strong)]">预览 FPA 功能点</div>
-          <p class="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">按当前输入和 FPA 方案先生成可审阅的功能点估算。</p>
-        </div>
-        <span class="shrink-0 text-lg font-semibold text-[var(--color-accent-strong)] transition-transform group-hover:translate-x-0.5">→</span>
-      </div>
-    </router-link>
+    <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-stretch">
+      <button @click="$emit('start')"
+        :disabled="!config.isValid || session.isRunning || config.backendStatus === 'offline'"
+        class="btn-primary w-full text-base">
+        <PlayIcon class="h-4 w-4" />
+        开始生成
+      </button>
 
-    <button @click="$emit('start')"
-      :disabled="!config.isValid || session.isRunning || config.backendStatus === 'offline'"
-      class="btn-primary w-full text-base">
-      开始生成
-    </button>
-
-    <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2 text-sm">
-      <div class="flex items-center justify-between gap-3">
-        <span class="text-[var(--color-ink-muted)]">任务状态</span>
-        <span :class="['font-semibold', statusClass]">{{ statusText }}</span>
-      </div>
+      <router-link
+        to="/preview/fpa"
+        class="btn-secondary w-full text-sm sm:w-auto"
+      >
+        <EyeIcon class="h-4 w-4" />
+        预览 FPA 功能点
+      </router-link>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useConfigStore } from '@/stores/config.ts'
 import { useSessionStore } from '@/stores/session.ts'
 import FileInput from './FileInput.vue'
 import { apiFetch } from '@/lib/api.ts'
+import { EyeIcon, PlayIcon } from '@heroicons/vue/24/outline'
 
 import { ref, onMounted } from 'vue'
 
@@ -80,21 +71,5 @@ onMounted(async () => {
     modes.value = fallbackModes
     modesOffline.value = true
   }
-})
-
-const statusText = computed(() => {
-  const map = { idle: '就绪', running: '运行中...', done: '完成', error: '出错', cancelled: '已停止' }
-  return map[session.runState]
-})
-
-const statusClass = computed(() => {
-  const map = {
-    idle: 'text-[var(--color-ink-soft)]',
-    running: 'text-[var(--color-accent-strong)]',
-    done: 'text-[var(--color-success)]',
-    error: 'text-[var(--color-danger)]',
-    cancelled: 'text-[var(--color-warning)]',
-  }
-  return map[session.runState]
 })
 </script>
