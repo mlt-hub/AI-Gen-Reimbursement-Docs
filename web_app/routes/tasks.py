@@ -34,6 +34,7 @@ from web_app.services.run_history_service import (
     close_history_item,
     finish_web_run,
     list_tasks,
+    mark_unrecoverable_history_item,
     require_rerunnable_history_item,
     start_web_run,
 )
@@ -577,6 +578,30 @@ def create_router(
         except RuntimeError as exc:
             raise HTTPException(400, str(exc)) from exc
         return _start_rerun(record, local_mode=local, user=owner_id)
+
+    @router.post("/api/tasks/{run_id}/mark-unrecoverable")
+    async def api_mark_unrecoverable_task(
+        run_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        local, owner_id = _request_scope(request, user)
+        if session_manager.can_access(run_id, owner_id, local_mode=local):
+            raise HTTPException(400, "任务仍可继续执行，不能标记为不可恢复")
+        try:
+            item = mark_unrecoverable_history_item(
+                base_dir=base_dir,
+                run_id=run_id,
+                local_mode=local,
+                owner_id=owner_id,
+            )
+        except PermissionError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True, "item": item}
 
     @router.get("/api/sessions/{session_id}")
     async def get_session_status(

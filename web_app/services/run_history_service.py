@@ -18,6 +18,7 @@ from web_app.services.config_service import remote_session_retention_seconds
 
 
 logger = logging.getLogger("ai_gen_reimbursement_docs")
+UNRECOVERABLE_SESSION_ERROR = "服务已重启或会话已结束，无法继续当前执行"
 
 
 def _history_path(*, base_dir: Path, mode: str) -> Path:
@@ -215,6 +216,37 @@ def close_history_item(
     if record.get("run_state") == "closed":
         return record
     updated = update_run_state(run_id, path, run_state="closed")
+    if updated is None:
+        raise ValueError("历史记录不存在")
+    return updated
+
+
+def mark_unrecoverable_history_item(
+    *,
+    base_dir: Path,
+    run_id: str,
+    local_mode: bool,
+    owner_id: str,
+) -> dict[str, Any]:
+    path = user_history_path() if local_mode else service_history_path(base_dir)
+    record = get_run(run_id, path)
+    if record is None:
+        raise ValueError("历史记录不存在")
+    if not local_mode and record.get("owner_id") != owner_id:
+        raise PermissionError("历史记录不存在")
+    if record.get("source") != "web":
+        raise RuntimeError("仅支持标记 Web 任务")
+    if record.get("run_state") != "running":
+        raise RuntimeError("仅运行中任务可标记为不可恢复")
+    now = now_iso()
+    updated = update_run_state(
+        run_id,
+        path,
+        run_state="cancelled",
+        error=UNRECOVERABLE_SESSION_ERROR,
+        finished_at=now,
+        updated_at=now,
+    )
     if updated is None:
         raise ValueError("历史记录不存在")
     return updated

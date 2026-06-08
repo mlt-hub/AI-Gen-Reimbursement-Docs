@@ -8,6 +8,7 @@
 
 - `e191f93 feat: add web task list close state`
 - `ccb4f19 merge: web task list close state`
+- `7a4773e feat: continue running tasks from list`
 
 已完成：
 
@@ -18,6 +19,9 @@
 - `running` 禁止关闭，需要先取消后再关闭。
 - 关闭任务不删除历史记录、交付物信息、错误信息和日志索引。
 - 远程模式按 owner 隔离任务列表、关闭和重跑权限。
+- 运行中任务支持从任务列表“继续”回到仍可恢复的 session。
+- 任务列表能区分 `running` 且 session 可恢复、以及历史仍为 `running` 但 session 不可恢复。
+- session 不可恢复的 `running` 任务可由用户显式标记为 `cancelled`，随后按既有规则重跑。
 
 已验证：
 
@@ -25,7 +29,7 @@
 .\.venv\Scripts\python.exe -m pytest tests\test_run_history.py tests\test_web_history.py tests\test_web_tasks.py
 ```
 
-结果：`51 passed`。
+结果：`55 passed`。
 
 ```powershell
 npm run build
@@ -35,7 +39,6 @@ npm run build
 
 后续关注：
 
-- 任务列表中的 `running` 任务还需要补充“继续”入口，用于回到仍在运行的 session。
 - 远程重跑依赖历史记录中的原始输入文件路径；如果远程临时目录已被清理，接口会返回“原始输入文件不存在，无法重跑”。
 - 当前方案暂不支持关闭后恢复。
 
@@ -121,7 +124,7 @@ npm run build
 任务列表建议展示规则：
 
 - `running` 且 session 存在：展示“继续”。
-- `running` 但 session 不存在：展示“会话不可恢复”提示，不展示“继续”。
+- `running` 但 session 不存在：展示“会话不可恢复”提示和“标记已取消”入口，不展示“继续”。
 - `done`、`error`、`cancelled`：展示“重跑”。
 - `closed`：不在任务列表展示，历史页也不展示“继续”或“重跑”。
 
@@ -211,6 +214,22 @@ GET /api/sessions/{session_id}
 
 前端点击“继续”时应先调用该接口确认 session 可恢复，再进入生成页执行监控。
 
+### 标记不可恢复任务
+
+新增接口：
+
+```http
+POST /api/tasks/{run_id}/mark-unrecoverable
+```
+
+行为：
+
+- 仅允许历史状态为 `running` 的 Web 任务调用。
+- 如果 `SessionManager` 中仍存在对应 session，返回 400，提示任务仍可继续执行。
+- 如果 session 不存在，说明服务已重启、session 已过期或已被清理，可将历史状态标记为 `cancelled`。
+- 写入 `finished_at`、`updated_at` 和错误说明“服务已重启或会话已结束，无法继续当前执行”。
+- 标记后任务仍留在任务列表中，状态变为 `cancelled`，可按既有规则重跑。
+
 ## 数据模型
 
 现有运行历史表已有 `run_state` 字段，因此可以直接扩展状态值为 `closed`。
@@ -241,6 +260,7 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
   - 默认调用 `/api/tasks`。
   - 提供刷新、继续、重跑、关闭、进入历史等操作。
   - `running` 任务点击“继续”时携带 `session_id` 回到生成页。
+  - `running` 但 session 不可恢复时展示“标记已取消”。
 - `web_app/src/views/Home.vue`
   - 支持从路由参数或 query 中读取 `session_id`。
   - 调用 `/api/sessions/{session_id}` 恢复执行监控状态。
@@ -267,6 +287,7 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
   - 增加 `/api/tasks`。
   - 增加 `/api/tasks/{run_id}/close`。
   - 增加 `/api/tasks/{run_id}/rerun`。
+  - 增加 `/api/tasks/{run_id}/mark-unrecoverable`。
 
 ## 验收标准
 
@@ -274,6 +295,8 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - 服务未重启且 session 仍存在时，运行中任务可以从任务列表点击“继续”回到执行监控。
 - 点击“继续”后能查看当前进度、继续监听日志流，并可响应后续人工输入。
 - 服务已重启或 session 已清理时，运行中历史记录不能继续执行，页面应明确提示会话不可恢复。
+- 会话不可恢复的 `running` 任务可标记为 `cancelled`，标记后可重跑。
+- 仍可继续执行的 `running` 任务不能标记为不可恢复。
 - 任务完成后，任务列表页仍可以看到该任务。
 - 完成任务可以重跑，重跑后生成新的运行记录。
 - 关闭任务后，任务列表页不再展示该任务。
@@ -295,6 +318,9 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - 关闭 `running` 任务返回 400。
 - 重跑 `done` 任务成功创建新任务。
 - 重跑 `closed` 任务返回 400。
+- 标记不可恢复的 `running` 任务成功后状态变为 `cancelled`。
+- 仍可恢复的 `running` 任务调用标记接口返回 400。
+- 标记不可恢复后的任务可以重跑。
 - 远程模式下，用户不能关闭或重跑其他用户任务。
 
 前端测试：
@@ -302,7 +328,7 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - 任务列表页不展示关闭任务。
 - 运行中任务展示“继续”按钮，不展示“重跑”按钮。
 - 点击“继续”能回到生成页并恢复对应 session 的执行监控。
-- session 不存在时展示“会话已结束或服务已重启，无法继续当前执行”。
+- session 不存在时展示“会话已结束或服务已重启，无法继续当前执行”，并可标记为已取消。
 - 完成任务展示重跑按钮。
 - 关闭任务在历史页展示，且无重跑按钮。
 - 点击关闭有二次确认。

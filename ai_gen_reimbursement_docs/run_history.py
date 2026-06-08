@@ -205,14 +205,25 @@ def update_run_state(
     history_path: Path,
     *,
     run_state: str,
+    error: str | None = None,
+    finished_at: str | None = None,
     updated_at: str | None = None,
 ) -> dict[str, Any] | None:
     init_db(history_path)
     updated_at = updated_at or now_iso()
+    assignments = ["run_state = ?", "updated_at = ?"]
+    params: list[Any] = [run_state, updated_at]
+    if error is not None:
+        assignments.append("error = ?")
+        params.append(error)
+    if finished_at is not None:
+        assignments.append("finished_at = ?")
+        params.append(finished_at)
+    params.append(run_id)
     with connect(history_path) as conn:
         cursor = conn.execute(
-            "UPDATE run_history SET run_state = ?, updated_at = ? WHERE run_id = ?",
-            (run_state, updated_at, run_id),
+            f"UPDATE run_history SET {', '.join(assignments)} WHERE run_id = ?",
+            tuple(params),
         )
         if cursor.rowcount == 0:
             return None
