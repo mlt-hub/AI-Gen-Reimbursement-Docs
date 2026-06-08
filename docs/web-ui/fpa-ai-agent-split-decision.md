@@ -10,6 +10,10 @@
 
 ## 背景
 
+FPA AI 稳定性收敛不是新开方向，主线已经在 [`docs/fpa/gen-fpa-output-stability.md`](../fpa/gen-fpa-output-stability.md) 中持续推进。该主线已经覆盖 `strict_fpa` 逻辑事务合并口径、prompt 决策树、harness、golden cases、validator、`quality_review`、`agent_review`、`type_judgement`、稳定性报告和真实模型抽样质量门。
+
+本决策文档只负责 Web UI 真实业务样例这一轮的 agent 分工和复跑边界。下一步不是从零设计 FPA 稳定性机制，而是把 Web UI 真实 Excel + 真实 API Key 的运行结果接入既有稳定性主线。
+
 第七轮真实 API Key 验收已跑通：
 
 | 指标 | 第七轮基线 |
@@ -19,6 +23,9 @@
 | `retry_count` | 5 |
 | `quality_issue_count` | 2 |
 | `retryable_quality_issue_count` | 2 |
+| `warning_count` | 19 |
+| `quality.type_judgement_mismatch` | 1 |
+| `validator.split_query_eq` | 1 |
 | 人工确认数 | 0 |
 
 审计报告暴露的主要收敛方向：
@@ -41,7 +48,17 @@
 
 ## 下一轮目标
 
-在保持同一真实业务样例、同一 Web UI 模式和同一 FPA 策略的前提下，降低可避免的 AI 稳定性重试和质量问题，并让审计报告中的问题归因更清晰。
+在保持同一真实业务样例、同一 Web UI 模式和同一 FPA 策略的前提下，把 Web UI 真实业务样本纳入 FPA 稳定性主线，降低可避免的 AI 稳定性重试和质量问题，并让审计报告中的问题归因更清晰。
+
+当前推进方式：
+
+| 动作 | 说明 |
+|---|---|
+| 接续主线 | 以 `docs/fpa/gen-fpa-output-stability.md` 为稳定性机制和口径来源。 |
+| 接入真实样本 | 使用第七轮 Web UI 真实业务输出作为真实样本基线。 |
+| 定向诊断 | 聚焦 `quality.type_judgement_mismatch=1`、`validator.split_query_eq=1` 和 5 次稳定性重试。 |
+| 定向复跑 | 同一 Excel、同一 `strict_fpa / ai_first / strict_fpa_rs / auto` 配置复跑，对比第七轮基线。 |
+| 回写主线 | 若修改 prompt、validator、type judgement 或质量审核口径，需要同步更新 `docs/fpa/gen-fpa-output-stability.md` 的实施记录。 |
 
 建议实施范围：
 
