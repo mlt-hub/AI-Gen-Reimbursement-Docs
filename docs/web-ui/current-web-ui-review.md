@@ -1342,3 +1342,74 @@ API 验收：
 - 登录前直接访问 `/config` 会触发若干 `401 Unauthorized` 静态页面数据请求，这是远程鉴权保护的预期行为；登录后页面和 API 均正常。
 - `/config` 页面环境诊断中有 `提示词调试` 能力状态文案，但远程侧边栏没有 `提示词调试` 导航入口，符合 D7。
 - 验证结束后已停止临时远程服务并清理临时 HOME / USERPROFILE。
+
+### 第七轮 FPA 真实 API Key AI 路径验收
+
+执行日期：2026-06-08
+
+目标：验证 Web UI 本地模式下 `from-excel-gen-fpa` 使用真实 API Key 和 `strict_fpa / ai_first` 策略时，能够完成 FPA AI 规划、产出主工作簿、审核副本、AI 填充稿和审计轨迹。
+
+启动方式：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn web_app.server:app --host 127.0.0.1 --port 8099
+```
+
+运行方式：
+
+| 项 | 值 |
+|---|---|
+| 接口 | `POST /api/run-local` |
+| 生成模式 | `from-excel-gen-fpa` |
+| 输入目录 | `F:\mlt\mlt-tests\AI-Gen-Reimbursement-Docs\6` |
+| 输入文件 | `功能清单-录入模板.xlsx` |
+| FPA 方案 | `strict_fpa` |
+| FPA 执行策略 | `ai_first` |
+| FPA 规则集 | `strict_fpa_rs` |
+| FPA 确认模式 | `auto` |
+| 模型 | `deepseek-v4-flash[1m]` |
+| API Key | 已配置；运行日志记录为 `source=session_override`、`fingerprint=sha256:a3d85e60b6f6`，未记录明文。 |
+| session | `5be16e5d` |
+| 输出目录 | `F:\mlt\mlt-tests\AI-Gen-Reimbursement-Docs\6\web-ui-fpa-ai-first-20260608-164819` |
+
+验收结果：
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| `/api/health` | 通过 | `ok=true`、`work_mode=local`、`fpa_runtime_config_present=true`。 |
+| `/api/run-local` | 通过 | 返回 session `5be16e5d`，任务进入执行。 |
+| `/api/sessions/5be16e5d` | 通过 | 最终 `run_state=done`，FPA 阶段完成时间为 `2026-06-08T16:59:58+08:00`。 |
+| 基础数据 | 通过 | 解析出 2 个入口、3 个一级模块、8 个二级模块、19 个三级模块、56 个功能过程。 |
+| FPA AI 规划 | 通过 | 审计轨迹中 19 个三级模块来源均为 `ai`，`raw_rows_total=52`。 |
+| AI 填充稿 | 通过 | 生成 `md\1.3.gen-fpa-AI填充-FPA.md`，大小约 72 KB。 |
+| 审计轨迹 | 通过 | 生成 `md\1.5.gen-fpa-audit-trace.json`，记录 `profile=strict_fpa`、`rule_set=strict_fpa_rs`、`strategy=ai_first`。 |
+| FPA 工作量评估 | 通过 | 生成主工作簿，`FPA功能点估算` Sheet 55 行。 |
+| FPA 审核副本 | 通过 | 生成 `FPA结果`、`覆盖审核`、`Warnings`、`规则命中详情`、`AI原始返回`、`稳定性报告` 6 个 Sheet。 |
+| AI 对话日志 | 通过 | `ai_prompts`、`ai_responses`、`ai_thinking` 各 30 个文件，并汇总生成 `日志\ai_对话日志.md`。 |
+| `/api/history` | 通过 | 历史记录状态为 `done`，`artifact_kind=local_dir`，`open_folder_available=true`，`download_available=false`。 |
+
+稳定性观察：
+
+| 项目 | 结果 |
+|---|---:|
+| 三级模块总数 | 19 |
+| AI 来源模块数 | 19 |
+| 稳定性重试次数 | 5 |
+| 质量问题数 | 2 |
+| 可重试质量问题数 | 2 |
+| 人工确认数 | 0 |
+
+本轮出现的重试触发来源为 `quality_review=4`、`validator=1`。审计报告给出 3 条 P1 建议：强化 `type_judgement` 引用、强化维护/查询合并口径、继续前置基础类型边界到 prompt 和类型判定节点。
+
+输出清单：
+
+| 类型 | 文件 |
+|---|---|
+| FPA 工作量评估 | `闽市移需【202501】17658 号-关于构建垂直行业场景化营销的需求（和乐业）-FPA工作量评估.xlsx` |
+| FPA 审核副本 | `闽市移需【202501】17658 号-关于构建垂直行业场景化营销的需求（和乐业）-FPA工作量评估-check.xlsx` |
+| AI 填充稿 | `md\1.3.gen-fpa-AI填充-FPA.md` |
+| 审计轨迹 | `md\1.5.gen-fpa-audit-trace.json` |
+| AI 缓存 | `md\fpa_ai_cache.json` |
+| AI 对话日志 | `日志\ai_对话日志.md`、`日志\ai_prompts_日志.md`、`日志\ai_responses_日志.md`、`日志\ai_thinking_日志.md` |
+
+验证结束后已停止临时 Web 服务。业务样例输出目录保留在测试目录下，便于人工打开复核。
