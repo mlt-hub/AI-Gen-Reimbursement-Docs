@@ -210,13 +210,91 @@ features:
 
 生成逻辑可以根据这些能力决定启用或禁用某些写入行为。
 
-### 6. 和提示词、规则联动
+### 6. 描述单元格格式契约
+
+模板格式也可以进入 manifest。这里的格式包括：
+
+- 字体、字号、颜色。
+- 边框、填充色、对齐、自动换行。
+- 行高、列宽。
+- 合并单元格。
+- 数字格式。
+- 公式。
+- 数据验证。
+- 冻结窗格。
+
+第一版不一定要让代码完全按这些配置写格式，但应至少把关键格式契约显式写出来，便于校验和诊断。
+
+示例：
+
+```yaml
+format:
+  style_source_row: 3
+  copy_row_style: true
+  preserve_formulas: true
+  preserve_column_widths: true
+  preserve_row_heights: true
+  preserve_merged_cells: true
+  preserve_data_validations: true
+```
+
+更完整的 FPA 示例：
+
+```yaml
+template_id: fpa_default_v1
+kind: fpa
+file: FPA工作量评估-输出模板.xlsx
+sheets:
+  result:
+    name: FPA工作量评估
+    header_row: 2
+    data_start_row: 3
+    style_source_row: 3
+columns:
+  function_point_name:
+    header: 新增/修改功能点
+    required: true
+  type:
+    header: 类型
+    required: true
+  classification_basis:
+    header: 计算依据归类
+    required: true
+  explanation:
+    header: 计算依据说明
+    required: true
+format:
+  preserve:
+    - column_widths
+    - row_heights
+    - merged_cells
+    - formulas
+    - data_validations
+    - freeze_panes
+  copy_row_style:
+    from_row: 3
+    apply_to_generated_rows: true
+  formulas:
+    copy_down: true
+    source_row: 3
+  number_formats:
+    workload: "0.00"
+```
+
+这类格式契约可以用于：
+
+- 校验模板行是否有必要边框、公式、数字格式。
+- 指导写入器从哪一行复制样式。
+- 声明哪些模板区域不能删除或破坏。
+- 帮助排查“生成结果格式乱了”的原因。
+
+### 7. 和提示词、规则联动
 
 FPA 模板如果声明“判定原则来自模板附录”，生成 prompt 时可以读取模板附录。
 
 如果模板声明“不支持复杂度列”，AI 就不需要返回相关字段，或者相关字段只进入 check 文件。
 
-### 7. Web UI 展示
+### 8. Web UI 展示
 
 Web 可以显示：
 
@@ -229,7 +307,7 @@ Web 可以显示：
 
 用户不再只看到一个文件名。
 
-### 8. 作为模板包基础
+### 9. 作为模板包基础
 
 后续可以支持模板包：
 
@@ -243,17 +321,58 @@ template_pack/
 
 一个包同时定义模板、FPA 口径、规则集、文件命名规则。
 
+## 当前单元格格式机制
+
+当前单元格格式基本由两部分共同决定。
+
+### 1. 模板文件自带格式
+
+模板文件里原本存在的格式会作为基础格式：
+
+- 字体、颜色、边框。
+- 列宽、行高。
+- 合并单元格。
+- 公式。
+- Sheet 顺序。
+- 固定说明、附录、脚注。
+
+生成器打开模板后往里面写值，因此这些格式可以保留一部分。
+
+### 2. 代码写死或半写死的格式处理
+
+部分生成器在写入时会主动处理格式：
+
+- 删除模板里的旧数据行。
+- 解除合并单元格。
+- 重新合并某些列。
+- 从某一行复制边框或对齐。
+- 写固定单元格。
+- 写固定列。
+- 保留或复制公式。
+
+因此当前机制不是“模板完全控制格式”，也不是“代码完全控制格式”，而是：
+
+```text
+模板提供基础格式
++
+代码按固定假设写入和修补格式
+```
+
+问题在于：如果模板结构变化，例如表头行、样式源行、关键列位置变化，代码里的固定假设就可能导致格式错位或写入失败。
+
+`template_manifest` 的价值之一，就是把这部分“代码默认知道的格式规则”显式写出来。第一阶段用于说明和校验，第二阶段再让代码真正按 manifest 执行。
+
 ## 第一版建议范围
 
 第一版不建议追求“任意模板都能用”。建议先实现：
 
 - 为每类输出模板支持 manifest。
-- manifest 能说明模板文件、kind、version、关键 sheet、关键列、数据起始行、基础能力。
-- 生成前能校验 sheet、表头、占位符是否存在。
+- manifest 能说明模板文件、kind、version、关键 sheet、关键列、数据起始行、样式源行、基础能力。
+- 生成前能校验 sheet、表头、占位符、样式源行、关键公式是否存在。
 - Web/CLI 能提示当前使用的模板来源和校验结果。
 - 写入器暂时可以继续使用旧硬编码，只把 manifest 用于说明和预检。
 
-第二阶段再让写入器真正按 manifest 做列映射和锚点定位。
+第二阶段再让写入器真正按 manifest 做列映射、锚点定位、样式复制和公式保留。
 
 ## 建议实施顺序
 
@@ -263,8 +382,9 @@ template_pack/
 4. 在 pipeline 启动阶段输出模板来源和校验结果。
 5. 在 Web UI 展示当前模板、版本、来源、校验状态。
 6. FPA 和需求清单优先支持按 manifest 列映射。
-7. Word 需求说明书再支持占位符锚点。
-8. 最后做模板 profile 和模板包。
+7. FPA 和需求清单继续支持按 manifest 复制样式源行、保留公式和关键合并区域。
+8. Word 需求说明书再支持占位符锚点。
+9. 最后做模板 profile 和模板包。
 
 ## 最实际的第一版目标
 
@@ -272,7 +392,7 @@ template_pack/
 
 - 用户可以知道当前模板结构和来源。
 - 系统可以在生成前告诉用户模板哪里不符合要求。
-- 用户可以改样式、标题、公式、部分列名，但不能破坏 manifest 声明的关键结构。
+- 用户可以改样式、标题、公式、部分列名，但不能破坏 manifest 声明的关键结构和格式契约。
 - 后续扩展列映射时，不需要重新设计配置模型。
 
 这样模板的作用会从“固定格式皮肤”提升为“可校验、可描述、可扩展的交付规格”，实现风险仍然可控。
