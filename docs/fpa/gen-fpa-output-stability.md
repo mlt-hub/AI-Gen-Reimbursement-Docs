@@ -972,6 +972,18 @@ ard --fpa-stability-sample-fixtures .\tests\fixtures\fpa_golden_cases\vertical_i
 
 2026-06-08 已收口 OA 审批单关联口径：OA 系统维护的审批流程单据按 `EIF`，本系统保存的业务对象与审批单关联关系按 `ILF`，用户选择审批单并保存关联关系按 `EI`，查看审批进度按 `EQ`。`ai_first` 下如果 AI 已输出内部 `ILF` 但漏掉外部 `EIF`，规则补齐会按数据功能类型补齐缺失的 `EIF`，并继续通过 `coverage.rules_fallback` 追溯。
 
+2026-06-08 已补充真实模型质量门的 `blocking_retry_count` 口径：`retry_count` 继续记录真实发生过的稳定性重试，`blocking_retry_count` 只统计重试后最终仍存在质量审核问题的阻断性重试。`strict-real-model` 和 `strict-real-model-recommended` preset 的质量门改为检查 `retryable_quality_issue_count=0` 与 `blocking_retry_count=0`，避免把已经自愈且最终质量审核通过的真实模型波动当作失败。
+
+2026-06-08 完成 `strict-real-model-recommended` 推荐集最终复测：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset strict-real-model-recommended `
+  --output-dir tmp_fpa_stability_ci_real_recommended_final_20260608
+```
+
+复测结果：Quality Gate PASS；`run_count=10`，`module_count=11`，`quality_issue_count=0`，`retryable_quality_issue_count=0`，`retry_count=1`，`blocking_retry_count=0`。剩余 `warning_count=7` 均非阻断，来源分布为 `postprocess_normalization=4`、`quality_review=1`、`other=2`。当前 recommended 集合已完成 OA 审批单关联口径、组织维护 EI 口径和真实模型质量门收口。
+
 也可以直接使用 CI 友好的脚本入口：
 
 ```powershell
