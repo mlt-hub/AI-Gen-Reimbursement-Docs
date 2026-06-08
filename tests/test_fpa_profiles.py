@@ -834,6 +834,7 @@ def test_strict_profile_type_conflict_matrix_for_transactions_and_data_functions
         ("OA审批单关联数据组", "本系统创建并维护此关联数据，记录业务对象与 OA 审批单之间的关联关系。", "ILF"),
         ("外部组织维护", "用户选择外部组织并保存到当前业务对象，本系统存储关联记录。", "EI"),
         ("组织主数据维护", "从主数据平台选择组织主数据后，在本系统内创建关联记录。", "EI"),
+        ("营销活动数据组", "包含从CRM选择的客户信息；本系统后台数据库新增或变更了营销活动相关数据表。", "ILF"),
     ]
     for name, desc, ai_type in non_conflict_cases:
         assert not STRICT_FPA_PROFILE.has_obvious_conflict(name, desc, ai_type), (name, ai_type)
