@@ -1,4 +1,12 @@
-# 密码保存、自动登录与管理员邀请注册方案
+# 密码保存、自动登录与管理员邀请注册实施记录
+
+## 状态
+
+- 状态：已实施并合并到 `master`
+- 功能提交：`ebd205f988b1bd20f151001c757c973681d31916` (`feat: add admin invite auth flow`)
+- 合并提交：`eb768707ab08a410e4e2dc2e156e08c1a7dbcfca` (`Merge branch 'feature/auth-account'`)
+- 实施分支：`feature/auth-account`
+- 实施 worktree：`F:\tmp\ai_gen_reimbursement_docs-auth-account`
 
 ## 背景
 
@@ -9,7 +17,7 @@
 - 浏览器通过 `ard_token` cookie 携带登录 token。
 - 注册开关由 `system_config.yaml` 中的 `allow_register` 控制。
 
-本方案扩展现有认证体系，不新增并行认证系统。
+本次实现扩展现有认证体系，不新增并行认证系统。
 
 ## 目标行为
 
@@ -71,7 +79,7 @@
 - 管理员可停用未停用的邀请码。
 - 非管理员不显示入口；即使直接访问接口，后端也必须拒绝。
 
-## 拟修改文件
+## 实际修改文件
 
 - `ai_gen_reimbursement_docs/auth.py`
   - 扩展用户表结构。
@@ -83,6 +91,9 @@
   - 保留现有 `require_auth` 行为。
 
 - `web_app/server.py`
+  - 增加 `/admin/invites` 和 `/static/dist/admin/invites` SPA 入口。
+
+- `web_app/routes/auth.py`
   - 扩展 `/api/auth/login`，支持 `remember_me`。
   - 扩展 `/api/auth/register`，支持邀请码校验。
   - 扩展 `/api/auth/me`，返回用户角色。
@@ -109,11 +120,11 @@
 - 测试文件
   - `tests/test_auth_config.py`
   - `tests/test_web_session_auth.py`
-  - 必要时新增 `tests/test_web_admin_invites.py`
+  - `tests/test_web_admin_invites.py`
 
-## 建议数据模型
+## 数据模型
 
-系统尚未上线，不需要对旧版 `users.db` 做迁移兼容。实施时可以直接按以下结构初始化新库；如本地存在开发期旧库，可由开发者手动删除后重建。
+系统尚未上线，不需要对旧版 `users.db` 做迁移兼容。当前实现直接按以下结构初始化新库；如本地存在开发期旧库，可由开发者手动删除后重建。
 
 ### users
 
@@ -240,21 +251,15 @@
 - 未登录返回 `401`。
 - 非管理员返回 `403`。
 
-## 验证方式
+## 验证结果
 
-后端认证测试：
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_auth_config.py tests/test_web_session_auth.py
-```
-
-新增邀请注册测试后：
+后端认证测试已通过：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_web_admin_invites.py
+F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest tests/test_auth_config.py tests/test_web_admin_invites.py tests/test_web_session_auth.py
 ```
 
-管理员邀请注册 UI 完成后：
+前端构建已通过：
 
 ```powershell
 npm run build
