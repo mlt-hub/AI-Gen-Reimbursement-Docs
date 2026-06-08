@@ -1,5 +1,43 @@
 # Web UI 任务列表与关闭状态方案
 
+## 推进状态
+
+状态：已落地到 `master`。
+
+相关提交：
+
+- `e191f93 feat: add web task list close state`
+- `ccb4f19 merge: web task list close state`
+
+已完成：
+
+- 新增 `/tasks` 任务列表页，默认展示未关闭的 Web 任务。
+- 新增 `closed` 状态，任务列表默认排除 `closed`，历史页保留并支持筛选。
+- 新增 `/api/tasks`、`/api/tasks/{run_id}/close`、`/api/tasks/{run_id}/rerun`。
+- `done`、`error`、`cancelled` 支持重跑；`running`、`closed` 禁止重跑。
+- `running` 禁止关闭，需要先取消后再关闭。
+- 关闭任务不删除历史记录、交付物信息、错误信息和日志索引。
+- 远程模式按 owner 隔离任务列表、关闭和重跑权限。
+
+已验证：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_run_history.py tests\test_web_history.py tests\test_web_tasks.py
+```
+
+结果：`51 passed`。
+
+```powershell
+npm run build
+```
+
+结果：前端类型检查和生产构建通过。
+
+后续关注：
+
+- 远程重跑依赖历史记录中的原始输入文件路径；如果远程临时目录已被清理，接口会返回“原始输入文件不存在，无法重跑”。
+- 当前方案暂不支持关闭后恢复。
+
 ## 背景
 
 当前 Web UI 已有运行历史页和运行历史接口，但任务生命周期语义还不够清晰：
