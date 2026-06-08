@@ -832,6 +832,51 @@ def test_ai_name_prefix_is_forced_from_source_module_path():
     )
 
 
+def test_ai_name_prefix_overlap_keeps_only_business_suffix():
+    group = _group_rows_by_l3([{
+        "客户端类型": "地市后台",
+        "一级模块": "支付管理",
+        "二级模块": "退款处理",
+        "三级模块": "退款处理",
+        "三级模块整体功能描述": "处理支付退款。",
+        "功能过程": "提交退款申请",
+        "功能过程类型": "新增",
+        "功能过程描述": "提交退款申请并记录退款状态。",
+    }])[0]
+
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": "【地市后台】支付管理-退款处理-退款处理数据组",
+                "type": "ILF",
+                "explanation": "来源场景：【地市后台】支付管理-退款处理-退款处理-退款处理数据组\n业务数据：退款申请数据。\n业务规则：记录退款申请。\n计算说明：内部逻辑数据按 ILF 计量。",
+            },
+            {
+                "name": "【地市后台】支付管理-退款处理-退款处理维护",
+                "type": "EI",
+                "explanation": "来源场景：【地市后台】支付管理-退款处理-退款处理-退款处理维护\n业务数据：退款申请数据。\n业务规则：提交退款申请并更新状态。\n计算说明：外部输入维护内部数据按 EI 计量。",
+            },
+        ],
+    )
+
+    assert [row["新增/修改功能点"] for row in rows] == [
+        "【地市后台】支付管理-退款处理-退款处理-退款处理数据组",
+        "【地市后台】支付管理-退款处理-退款处理-退款处理维护",
+    ]
+    assert all("退款处理-【地市后台】" not in row["新增/修改功能点"] for row in rows)
+    assert len([w for w in warnings if "AI 行名称前缀已按源功能清单规范化" in w]) == 2
+    assert all(
+        any(hit["rule_id"] == "postprocess.ai_name_prefix" for hit in row["_规则命中详情"])
+        for row in rows
+    )
+
+
 def test_ai_name_process_suffix_normalization_does_not_duplicate_prefix_warning():
     group = _group_rows_by_l3([{
         "客户端类型": "地市后台",
