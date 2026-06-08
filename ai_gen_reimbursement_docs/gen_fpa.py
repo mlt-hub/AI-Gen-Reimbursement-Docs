@@ -488,11 +488,17 @@ def _normalize_ai_fpa_name_prefix(name: str, group: dict[str, object]) -> str:
         return clean_name
     if clean_name == prefix or clean_name.startswith(f"{prefix}-"):
         return clean_name
+    l3 = str(group.get("l3", "") or "").strip()
+    if clean_name.startswith(prefix):
+        overlap_suffix = clean_name[len(prefix):].strip()
+        if overlap_suffix:
+            if l3 and prefix.endswith(l3) and not overlap_suffix.startswith(l3):
+                overlap_suffix = f"{l3}{overlap_suffix}"
+            return f"{prefix}-{overlap_suffix}"
 
     client_type = str(group.get("client_type", "") or "").strip()
     l1 = str(group.get("l1", "") or "").strip()
     l2 = str(group.get("l2", "") or "").strip()
-    l3 = str(group.get("l3", "") or "").strip()
     path_parts = [part for part in [l1, l2, l3] if part]
     suffix = clean_name
 
