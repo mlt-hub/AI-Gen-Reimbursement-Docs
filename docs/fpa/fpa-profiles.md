@@ -22,6 +22,17 @@ multi_uis      多界面口径，kind: unified_ui，默认 rules_first + multi_u
 ui_api_mapping 界面接口映射口径，kind: ui_api_mapping，默认 rules_first + ui_api_mapping_rs
 ```
 
+也就是说，当前输出结果口径有 4 套 profile，但底层代码行为类型只有 3 类：
+
+```text
+strict_fpa      -> kind: strict_fpa
+unified_ui      -> kind: unified_ui
+multi_uis       -> kind: unified_ui
+ui_api_mapping  -> kind: ui_api_mapping
+```
+
+`multi_uis` 暂时不是独立 kind，而是通过 `unified_ui` kind + `multi_uis_rs` + `multi_uis` prompt 形成的多界面口径变体。后续如果需要稳定的规则兜底拆分算法，再考虑新增独立 `kind: multi_uis`。
+
 用户配置可以只保留实际需要的 profile，也可以新增自定义 profile。自定义 profile 只要绑定支持的 `kind`，并引用存在的 `rule_set/core_rules/system_prompt/user_prompt` 即可。
 
 ## 如何选择
@@ -33,6 +44,57 @@ ui_api_mapping 界面接口映射口径，kind: ui_api_mapping，默认 rules_fi
 `multi_uis` 适合确有多个独立界面时使用：可按独立页面、独立业务对象、独立业务流程或独立用户端拆分多条界面开发行，拆分理由进入 check/review 元数据。
 
 `ui_api_mapping` 适合需要展示“功能过程 -> 界面开发 + 接口开发”映射时使用：每个功能过程默认生成一条界面开发 EI 和一条接口开发 ILF；输入中明确出现的接口、服务、调用、请求、对接、同步、外部系统、第三方或 API 单独生成明确接口/后端调用 ILF。
+
+## Profile 组合与 Harness 分层
+
+FPA 的实际运行组合不只由 profile 决定，而是由以下维度共同决定：
+
+```text
+profile × kind × strategy × rule_set × prompt × model
+```
+
+因此，4 种 strategy 和不同 rule_set 可以形成很多混搭组合。Harness 仍然有用，但不能把所有组合都当成同等级质量保证。当前应按组合分层管理：
+
+| 等级 | 含义 | Harness 要求 |
+|---|---|---|
+| `certified` | 推荐基线组合，承诺业务口径稳定。 | golden fixtures、行为断言、稳定性抽样、质量门。 |
+| `supported` | 允许使用，规则和配置路径清楚。 | 配置校验、规则/AI smoke、输出 schema 和基本审计。 |
+| `experimental` | 技术上可运行，但不承诺业务口径稳定。 | 防崩溃、清晰 warning、可追踪 audit。 |
+| `invalid` | 语义明显不兼容或配置引用错误。 | 直接报错，不回退默认组合。 |
+
+当前推荐分层：
+
+| 组合 | 当前等级 | 说明 |
+|---|---|---|
+| `strict_fpa + ai_first + strict_fpa_rs` | `certified` | 已有 golden、validator、确认流、稳定性报告和真实模型 recommended 连续复测。 |
+| `unified_ui + rules_first + unified_ui_rs` | `supported` | 有配置、规则兜底和部分验收测试；缺 profile 级 golden 和真实模型稳定性基线。 |
+| `multi_uis + rules_first + multi_uis_rs` | `supported / experimental` | 多界面同名行和拆分理由已有基础测试，但主要依赖 prompt/rule_set。 |
+| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 规则兜底较清楚；缺 AI 稳定性抽样。 |
+| 任意 profile + 自定义 rule_set | 视继承关系而定 | 继承推荐 rule_set 时复用 base harness，再补扩展断言。 |
+| 任意 profile + 明显不匹配 rule_set | `experimental / invalid` | 只保证配置错误可见或输出可审计，不承诺业务正确。 |
+
+规则集扩展不需要重写整套 harness。推荐采用：
+
+```text
+base harness + extension assertions
+```
+
+例如 `client_a_rules extends strict_fpa_rs` 时，继续复用 `strict_fpa` 的基础断言，再为客户 A 的外部数据组、特殊业务对象或合并边界补增量 fixture。
+
+稳定性报告和 audit trace 必须记录组合指纹：
+
+```text
+profile
+kind
+strategy
+rule_set
+prompt ids
+model
+fixture suite
+run_id
+```
+
+这样才能在 warning 上升时定位是哪个组合退化，而不是把单个混搭组合的问题误判为整个 `gen-fpa` 退化。
 
 ## 配置文件
 

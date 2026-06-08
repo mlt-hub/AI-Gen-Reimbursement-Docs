@@ -743,7 +743,7 @@
       <section id="harness">
         <h2>Harness 成熟度</h2>
         <p class="section-note">
-          strict_fpa 的稳定性主线已阶段收口；其它 profile 有基础测试，但还没有同等级 golden + 真实模型趋势质量门。
+          strict_fpa 的稳定性主线已阶段收口；其它 profile 有基础测试，但还没有同等级 golden + 真实模型趋势质量门。4 种 strategy 和不同 rule_set 可以混搭，但 harness 不能把所有组合都当成同等级保证，需要按组合分层。
         </p>
         <table class="matrix">
           <thead>
@@ -781,6 +781,51 @@
             </tr>
           </tbody>
         </table>
+        <div class="panel" style="margin-top:14px">
+          <h3>组合分层</h3>
+          <p class="small">
+            实际运行组合由 profile、kind、strategy、rule_set、prompt 和 model 共同决定。Harness 的目标不是穷举证明所有混搭都业务正确，而是定义推荐基线、继承扩展断言、阻止危险组合，并对实验组合提供可追踪审计。
+          </p>
+          <table class="matrix">
+            <thead>
+              <tr>
+                <th>等级</th>
+                <th>含义</th>
+                <th>当前示例</th>
+                <th>Harness 要求</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="pill green">certified</span></td>
+                <td>推荐组合，承诺业务口径稳定。</td>
+                <td>`strict_fpa + ai_first + strict_fpa_rs`</td>
+                <td>golden fixtures、行为断言、真实模型抽样、质量门。</td>
+              </tr>
+              <tr>
+                <td><span class="pill indigo">supported</span></td>
+                <td>允许使用，有基础规则和审计闭环。</td>
+                <td>`unified_ui + rules_first + unified_ui_rs`、`ui_api_mapping + rules_first + ui_api_mapping_rs`</td>
+                <td>配置校验、规则/AI smoke、schema 校验、source_process_ids 校验。</td>
+              </tr>
+              <tr>
+                <td><span class="pill gold">experimental</span></td>
+                <td>技术上可运行，但不承诺业务口径稳定。</td>
+                <td>跨口径 profile/rule_set 混搭、自定义模型或 prompt 试验。</td>
+                <td>防崩溃、清晰 warning、audit trace、生成来源可追踪。</td>
+              </tr>
+              <tr>
+                <td><span class="pill red">invalid</span></td>
+                <td>语义明显不兼容或配置引用错误。</td>
+                <td>不存在的 profile、未知 kind、缺失 rule_set/core_rules/prompt。</td>
+                <td>直接报错，不回退默认组合。</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout" style="margin-top:14px">
+            规则集扩展推荐使用 `base harness + extension assertions`：继承 `strict_fpa_rs` 的客户规则集复用 strict 基线，只为新增外部数据组、特殊业务对象或合并边界补增量 fixture。
+          </div>
+        </div>
       </section>
 
       <section id="outputs">

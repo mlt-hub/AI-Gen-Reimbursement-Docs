@@ -120,6 +120,81 @@ EI / EQ / EO / ILF / EIF
 
 因此，当前骨架对 `unified_ui` 可以作为审计和调试信息，但不应直接驱动生成约束。
 
+## 非 strict Profile 的 Harness 现状
+
+`strict_fpa` 外的 harness 有基础覆盖，但成熟度明显低一档。
+
+当前非 strict profile 的覆盖重点主要是配置、规则兜底和少量验收行为：
+
+| profile | 当前 harness | 当前成熟度 |
+|---|---|---|
+| `unified_ui` | 配置校验、prompt 渲染、三级模块界面行、非界面过程行、同名非界面行合并等规则/acceptance 测试。 | 基础可用，但缺真实模型稳定性基线。 |
+| `multi_uis` | 多界面同名行保留、拆分理由进入 review/check 元数据。 | 偏薄，主要依赖 prompt/rule_set。 |
+| `ui_api_mapping` | 默认界面 EI、默认接口 ILF、明确后端调用 ILF、多接口行、重复默认行等规则测试。 | 规则 harness 相对清楚，但缺 AI 稳定性抽样。 |
+| 自定义 profile | 主要依赖所复用 kind 和 rule_set 的配置校验与基础规则。 | 需要自行补 profile 级 fixture。 |
+
+这些 profile 目前还没有达到 `strict_fpa` 的 harness 水平：
+
+- 没有 profile 专属 golden fixture 集合。
+- 没有真实模型 recommended preset。
+- 没有独立质量门定义。
+- 没有适配自身语义的 `workload_judgement` / `unified_quality_review`。
+- 当前 `type_judgement`、`merge_review`、`quality_review` 仍偏 `strict_fpa` 语义。
+
+因此，非 strict profile 可以运行，但不能按 `strict_fpa` 的稳定性结论直接背书。后续应优先补 profile 级 golden fixtures 和行为断言，再考虑把 agent review contract 扩展到各自的工作量口径。
+
+## Profile 组合 Harness 分层
+
+由于实际运行组合由以下维度共同决定：
+
+```text
+profile × kind × strategy × rule_set × prompt × model
+```
+
+所以 4 种 strategy 与不同 rule_set 混搭时，harness 仍然有用，但不能把所有组合都当成同等级保证。
+
+推荐把组合分为四类：
+
+| 等级 | 目标 | 典型检查 |
+|---|---|---|
+| `certified` | 推荐组合，承诺业务口径稳定。 | golden fixtures、行为断言、真实模型抽样、质量门。 |
+| `supported` | 允许使用，有基础规则和审计闭环。 | 配置校验、规则/AI smoke、schema 校验、source_process_ids 校验。 |
+| `experimental` | 技术上可运行，但不承诺业务口径。 | 防崩溃、warning、audit trace、清晰生成来源。 |
+| `invalid` | 语义明显不兼容或配置错误。 | 直接报错，不回退默认 profile。 |
+
+当前建议状态：
+
+| 组合 | 等级 | 说明 |
+|---|---|---|
+| `strict_fpa + ai_first + strict_fpa_rs` | `certified` | 当前最成熟，已完成真实模型 recommended 连续复测归零。 |
+| `unified_ui + rules_first + unified_ui_rs` | `supported` | 规则和配置路径可用，待补 profile 级稳定性 harness。 |
+| `multi_uis + rules_first + multi_uis_rs` | `supported / experimental` | 多界面语义依赖 prompt/rule_set，缺真实模型基线。 |
+| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 默认映射规则清楚，待补 AI 抽样。 |
+| `strict_fpa + rules_first + unified_ui_rs` 等跨口径混搭 | `experimental / invalid` | 只保证可追踪或明确报错，不承诺业务正确。 |
+
+规则集扩展建议采用继承式 harness：
+
+```text
+base harness + extension assertions
+```
+
+例如 `client_a_rules extends strict_fpa_rs` 时，复用 `strict_fpa` 基础断言，只为客户 A 的新增规则补充增量 fixture。这样新增 rule_set 不需要复制整套 harness。
+
+稳定性报告必须记录组合指纹，至少包括：
+
+```text
+profile
+kind
+strategy
+rule_set
+prompt ids
+model
+fixture suite
+run_id
+```
+
+否则同一个 warning 无法判断是 profile 问题、rule_set 问题、prompt 问题还是模型问题。
+
 ## 不推荐的复用方式
 
 不建议为每个 profile 复制一套独立 Python 流程：
