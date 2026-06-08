@@ -32,7 +32,7 @@ const routes = [
   { name: 'home', path: '', expected: ['AI 报账文档生成', '任务设置', '执行监控'] },
   { name: 'config', path: 'config', expected: ['环境诊断', '模型与凭据', '模板配置'] },
   { name: 'fpa-preview', path: 'preview/fpa', expected: ['FPA 预览', '输入设置', '选择功能清单'] },
-  { name: 'fpa-debug', path: 'sessions/mobile-smoke/fpa/debug', expected: ['AI 调试信息', 'Session mobile-smoke'] },
+  { name: 'fpa-debug', path: 'sessions/mobile-smoke/fpa/debug', expected: ['AI 调试信息', 'Session mobile-smoke', '结构化记录'] },
 ]
 
 function joinUrl(base, routePath) {

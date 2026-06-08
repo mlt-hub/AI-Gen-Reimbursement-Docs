@@ -296,7 +296,7 @@ PUT  /api/web-config
 | 配置备份保留 | 每次保存前自动备份，保留最近 5 个版本。 |
 | 配置变更审计 | 记录谁在什么时候改了哪个配置文件，但不记录敏感值。 |
 | 保存失败策略 | 所有高级配置采用“校验全通过才保存”的强规则。 |
-| AI 调试数据源 | 第一阶段复用现有 AI 日志/交互接口，后续再做结构化 FPA 调试接口。 |
+| AI 调试数据源 | 第一阶段已接入现有 AI 日志/交互接口，并补充结构化 FPA 调试接口；后续只扩展筛选维度和导出能力。 |
 | 预览中心扩展 | 第一期只做 FPA，COSMIC、需求清单、需求说明书先保留导航和架构余量。 |
 | 运行中任务配置 | 运行中任务继续使用启动时参数快照，不受新配置影响。 |
 
@@ -547,9 +547,8 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 
 数据源策略：
 
-- 第一阶段先复用现有 AI 日志/交互接口，例如会话级 AI 对话日志和 prompts/responses 文件清单，让页面先跑通。
-- 第二阶段如需筛选到某个 FPA 功能点、某次模型调用、某条解析错误，再新增结构化 FPA 调试接口。
-- 新增结构化接口前，不要求后端重写现有日志产物格式。
+- 第一阶段已同时保留现有 AI 日志/交互接口和结构化 FPA 调试接口，页面可先用现有日志跑通，再逐步细化筛选。
+- 后续如需补更多维度，优先在现有结构化接口上增加耗时、token、规则命中、导出包等字段，不要求重写现有日志产物格式。
 - 无 `sessionId` 或 session 不可访问时，页面显示空态，提示“请先从 FPA 预览或历史任务进入”，不自动跳转。
 
 ## 实施路线
@@ -565,7 +564,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 - 配置页可以保存基础配置和模板配置，配置写入文件后即时生效。
 - API Key 加密落盘，读取、日志、备份、导出均不泄露原文。
 - FPA 预览页接入统一布局。
-- FPA AI 调试页使用 `/sessions/:sessionId/fpa/debug`，第一阶段复用现有 AI 日志/交互接口。
+- FPA AI 调试页使用 `/sessions/:sessionId/fpa/debug`，并接入结构化记录接口，既保留现有 AI 日志/交互数据，也能按功能点、模型和调用原因筛选。
 - 运行中任务继续使用启动快照，不受后续配置修改影响。
 
 ### 第一期工作包
@@ -595,7 +594,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 6 | 配置备份、回滚与审计 | 已完成基础闭环 | `ad58628 feat: add web config backup audit` 起步；保存前备份、最近 5 个版本保留、审计 JSONL、备份列表、脱敏差异查看、恢复入口和原子写入已接入；高级配置文件备份也可在同一列表中查看差异和恢复。 | 后续可继续补按文件筛选、diff 高亮和恢复前二次对比。 |
 | 7 | 任务启动配置合并 | 已完成基础闭环 | `resolve_task_start_config()` 已接入 `/api/run-local`、`/api/run-upload` 和 `/api/fpa/preview-module`，形成正式任务和 FPA 预览的参数快照。 | `fpa_confirmation_mode` 目前在正式生成 pipeline 中尚无承接参数；后续如接入正式生成需继续传递该字段。 |
 | 8 | 远程用户凭据策略 | 已完成基础闭环 | 远程 AI 任务和 FPA AI 预览无可用 API Key 时返回明确错误；共享全局 Key 只有 `allow_shared_ai_credentials: true` 时可用。 | 后续新增其他 AI 预览/调试入口时继续复用同一策略。 |
-| 9 | FPA 预览和调试页 | 已完成第一阶段闭环 | FPA 预览已在统一 AppShell 下；已新增 `/sessions/:sessionId/fpa/debug` 页面，复用现有 AI 交互记录和合并日志接口；FPA 预览页和历史页已有 session-aware 入口；FPA 轻量预览 debug 可写入可访问 session 的 AI 日志目录。 | 后续如需按功能点、模型调用、规则命中筛选，再做结构化 FPA 调试接口。 |
+| 9 | FPA 预览和调试页 | 已完成第一阶段闭环 | FPA 预览已在统一 AppShell 下；已新增 `/sessions/:sessionId/fpa/debug` 页面，复用现有 AI 交互记录和合并日志接口，并接入结构化调试记录；FPA 预览页和历史页已有 session-aware 入口；FPA 轻量预览 debug 可写入可访问 session 的 AI 日志目录。 | 后续可继续补请求耗时、token、规则命中详情和导出调试包。 |
 | 10 | 回归与打磨 | 已完成第一阶段基础闭环 | 当前每轮提交已跑相关 pytest 和 `npm run build`；已新增 `tests/test_web_fpa_debug.py` 覆盖 FPA AI 调试页所需会话访问和日志数据读取；已新增 `tests/test_web_config_audit.py` 覆盖配置变更审计脱敏；第一期指定 pytest 已完整跑通；`scripts/web_mobile_smoke.ps1` 已覆盖 390x844 移动视口下的首页、配置页、FPA 预览页和 FPA AI 调试页横向溢出检查与抽屉导航可用性。 | 后续可补真实手机或更多浏览器人工复核，不阻塞第一阶段闭环。 |
 
 ### 第一期建议提交顺序
@@ -653,7 +652,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 - `domain_context.json` 支持 JSON 表单/编辑器。
 - 配置历史版本可查看差异。
 - 支持恢复默认、导入导出。
-- 如 FPA AI 调试需要更细粒度筛选，再新增结构化 FPA 调试接口。
+- 如 FPA AI 调试需要更细粒度筛选，继续在现有结构化 FPA 调试接口上增加耗时、token、规则命中和导出能力。
 
 第三期工作包：
 
@@ -673,7 +672,7 @@ FPA 用户可见术语必须遵循 `docs/fpa/result-review-terminology.md`：
 | 2 | 领域上下文 UI | 已完成第一阶段基础闭环 | 已新增 `/api/web-config/domain-context` 读写接口；配置页已新增“领域上下文 / FPA 稳定边界”表单，可编辑 `system_boundary`、`internal_data_groups`、`external_data_groups`、`external_services`；保存时写入 `domain_context.json`、保留未知顶层 key、执行 `validate_fpa_domain_context()` 校验、保存前备份、审计和缓存清理；高级 JSON 入口仍可继续编辑完整文件。 | 后续可补字段模板、上下文摘要和差异高亮。 |
 | 3 | 配置历史与差异 | 已完成第一阶段基础闭环 | 已有最近备份列表、`/api/web-config/backups/{backup_id}/diff` 脱敏差异接口和恢复入口；备份列表已覆盖 `.env`、`system_config.yaml` 以及 `business_rules.yaml`、`fpa_config.yaml`、`fpa_judgement_rules.yaml`、`ai_system_prompts_config.yaml`、`domain_context.json` 等高级配置文件；配置页可点“查看差异”展示备份与当前文件的 unified diff；恢复前会备份当前目标文件，恢复后清缓存并刷新结构化配置表单。 | 后续可补按文件筛选、行级 diff 高亮、恢复默认版本。 |
 | 4 | 导入导出 | 已完成第一阶段基础闭环 | 已新增 `/api/web-config/package` 导出/导入接口；配置页已新增“配置导入导出 / 配置包”区块；导出包包含 `.env` 非敏感项、`system_config.yaml` 和高级配置文件内容，不包含 API Key 原文、API Key 密文或本机加密主密钥；导入前会校验 `.env`、YAML、JSON 和各高级配置业务规则，校验全通过才备份并写入，失败不覆盖原文件并写审计。 | 后续可补配置包预览、文件级选择导入和导入前 diff。 |
-| 5 | 结构化 FPA 调试接口 | 未开始 | 当前 `/sessions/:sessionId/fpa/debug` 先复用现有 AI 日志/交互接口。 | 后续再按 session、功能点、模型调用补结构化筛选接口。 |
+| 5 | 结构化 FPA 调试接口 | 已完成第一阶段基础闭环 | 已新增 `/api/sessions/{session_id}/fpa/debug-records` 结构化接口；FPA 轻量预览会同步写入 `日志/debug_records/*.json`，记录模块、模型、调用原因、prompt/response 文件、`parsed_rows`、`final_rows`、`quality_review` 和错误信息；旧日志没有结构化 JSON 时会退回 prompt/response 文件配对解析；`/sessions/:sessionId/fpa/debug` 页面已新增“结构化记录”标签，并可按模型、模块和新增/修改功能点筛选。 | 后续可补请求耗时、token 用量、规则命中详情和导出调试包。 |
 
 ### 依赖关系
 
@@ -693,7 +692,7 @@ config backup / audit
 
 session-aware FPA preview
   -> /sessions/:sessionId/fpa/debug
-  -> 后续结构化 FPA 调试接口
+  -> /api/sessions/{session_id}/fpa/debug-records
 ```
 
 ### 第一期开工前检查
@@ -702,7 +701,7 @@ session-aware FPA preview
 - 确认 DPAPI 在 Windows 打包环境中的可用性；不可用时启用本机密钥文件兜底。
 - 确认本机模式和远程用户模式的配置目录分别可读写。
 - 确认现有模板上传/下载接口可以迁移到配置页复用。
-- 确认现有 AI 日志/交互接口能支撑第一阶段 FPA AI 调试页。
+- 确认现有 AI 日志/交互接口和 `fpa/debug-records` 结构化接口能支撑第一阶段 FPA AI 调试页。
 
 ## 组件拆分建议
 

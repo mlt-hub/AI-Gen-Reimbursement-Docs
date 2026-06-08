@@ -1,4 +1,5 @@
 import pytest
+import json
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
@@ -24,10 +25,29 @@ def _create_debug_session(tmp_path, *, session_id: str = "fpa_debug_session", ow
     log_dir = work_dir / "output" / "日志"
     prompts_dir = log_dir / "ai_prompts"
     responses_dir = log_dir / "ai_responses"
+    records_dir = log_dir / "debug_records"
     prompts_dir.mkdir(parents=True)
     responses_dir.mkdir(parents=True)
+    records_dir.mkdir(parents=True)
     (prompts_dir / "fpa_preview_prompt.txt").write_text("SYSTEM\nUSER", encoding="utf-8")
     (responses_dir / "fpa_preview_response.txt").write_text("RAW RESPONSE", encoding="utf-8")
+    (records_dir / "fpa_preview.json").write_text(
+        json.dumps({
+            "id": "fpa_preview",
+            "source": "fpa_preview",
+            "module": "三级模块A",
+            "model": "test-model",
+            "reason": "rules_first_needs_ai",
+            "ai_called": True,
+            "prompt_file": "fpa_preview_prompt.txt",
+            "response_file": "fpa_preview_response.txt",
+            "parsed_rows": [{"name": "新增/修改功能点A", "type": "EI"}],
+            "final_rows": [{"name": "新增/修改功能点A", "type": "EI"}],
+            "quality_review": {"summary": {"issue_count": 0}},
+            "error": "",
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
     (log_dir / "ai_对话日志.md").write_text("# FPA 预览调试\nRAW RESPONSE", encoding="utf-8")
     server.session_manager.create(session_id, mode="remote", owner=owner, work_dir=work_dir)
     server.session_manager.mark_task_started(session_id)
@@ -41,6 +61,7 @@ def test_fpa_debug_page_data_endpoints_return_session_and_ai_logs(monkeypatch, t
 
     status_resp = client.get(f"/api/sessions/{session_id}")
     interactions_resp = client.get(f"/api/ai-interactions/{session_id}")
+    structured_resp = client.get(f"/api/sessions/{session_id}/fpa/debug-records")
     log_resp = client.get(f"/api/ai-log/{session_id}")
 
     assert status_resp.status_code == 200
@@ -61,6 +82,20 @@ def test_fpa_debug_page_data_endpoints_return_session_and_ai_logs(monkeypatch, t
             "content": "RAW RESPONSE",
         },
     ]
+
+    assert structured_resp.status_code == 200
+    structured = structured_resp.json()
+    assert structured["count"] == 1
+    assert structured["filters"]["models"] == ["test-model"]
+    assert structured["filters"]["modules"] == ["三级模块A"]
+    assert structured["filters"]["function_points"] == ["新增/修改功能点A"]
+    record = structured["records"][0]
+    assert record["id"] == "fpa_preview"
+    assert record["module"] == "三级模块A"
+    assert record["model"] == "test-model"
+    assert record["prompt"] == "SYSTEM\nUSER"
+    assert record["response"] == "RAW RESPONSE"
+    assert record["parsed_rows"][0]["name"] == "新增/修改功能点A"
 
     assert log_resp.status_code == 200
     assert "FPA 预览调试" in log_resp.json()["content"]
@@ -84,9 +119,11 @@ def test_fpa_debug_page_data_endpoints_hide_other_users_session(monkeypatch, tmp
 
     status_resp = client.get(f"/api/sessions/{session_id}")
     interactions_resp = client.get(f"/api/ai-interactions/{session_id}")
+    structured_resp = client.get(f"/api/sessions/{session_id}/fpa/debug-records")
     log_resp = client.get(f"/api/ai-log/{session_id}")
 
     assert status_resp.status_code == 404
     assert interactions_resp.status_code == 404
+    assert structured_resp.status_code == 404
     assert log_resp.status_code == 404
     server.session_manager.cleanup_download(session_id)

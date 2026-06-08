@@ -217,6 +217,26 @@ def create_router(
 
         (prompts_dir / f"{base_name}_prompt.txt").write_text(prompt_text, encoding="utf-8")
         (responses_dir / f"{base_name}_response.txt").write_text(response_text, encoding="utf-8")
+        records_dir = log_dir / "debug_records"
+        records_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "id": base_name,
+            "source": "fpa_preview",
+            "module": module_label,
+            "model": str(debug.get("model") or ""),
+            "reason": str(debug.get("reason") or ""),
+            "ai_called": bool(debug.get("ai_called")),
+            "prompt_file": f"{base_name}_prompt.txt",
+            "response_file": f"{base_name}_response.txt",
+            "parsed_rows": debug.get("parsed_rows") or [],
+            "final_rows": debug.get("final_rows") or [],
+            "quality_review": debug.get("quality_review") or {},
+            "error": str(debug.get("error") or ""),
+        }
+        (records_dir / f"{base_name}.json").write_text(
+            json.dumps(record, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
         combined = log_dir / "ai_对话日志.md"
         with combined.open("a", encoding="utf-8") as handle:
