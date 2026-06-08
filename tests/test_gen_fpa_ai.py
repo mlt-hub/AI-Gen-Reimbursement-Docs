@@ -648,13 +648,13 @@ def test_explanation_normalizes_parenthetical_table_count_detail_without_warning
                 "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业数据组"
                 "\n业务数据：垂直行业基础信息。"
                 "\n业务规则：本系统内部维护，支持新增、修改、删除等操作。"
-                "\n计算说明：本系统维护该逻辑数据组，符合ILF定义，按后台数据库变更的表个数计量（保守按1个表）。"
+                "\n计算说明：本系统维护该逻辑数据组，符合ILF定义，按后台数据库变更的表个数计量（1张表对应1个ILF）。"
             ),
         }],
     )
 
     assert rows[0]["计算依据归类"] == "按后台数据库变更的表个数计量"
-    assert "保守按1个表" not in rows[0]["计算依据说明"]
+    assert "1张表对应1个ILF" not in rows[0]["计算依据说明"]
     assert not any("数据库表个数" in warning for warning in warnings)
     assert any(
         hit["rule_id"] == "postprocess.explanation_table_count_detail"
