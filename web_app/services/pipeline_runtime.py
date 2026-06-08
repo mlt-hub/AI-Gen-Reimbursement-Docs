@@ -43,6 +43,39 @@ def wait_for_fpa_input(session_manager: SessionManager, default_fpa: float) -> f
     return float(result.get("fpa_reduced", default_fpa))
 
 
+def wait_for_fpa_confirmation(
+    session_manager: SessionManager,
+    payload: dict,
+) -> dict:
+    """在 FPA 批量生成中暂停，等待前端提交计量口径确认结果。"""
+    sid = session_var.get()
+    if not sid:
+        return {}
+
+    event = threading.Event()
+    session_manager.set_input_waiter(sid, event)
+
+    emit_session_event(session_manager, {
+        "type": "input_required",
+        "step": "fpa",
+        "message": "等待确认 FPA 计量口径",
+        "payload": payload,
+    })
+    emit_session_event(session_manager, {
+        "type": "fpa_confirmation_required",
+        **payload,
+    })
+
+    event.wait(timeout=1800)
+    result = session_manager.pop_input_result(sid)
+    if session_manager.is_cancelled(sid):
+        raise CancelledError("任务已被用户停止")
+    if str(result.get("kind") or "") != "fpa_confirmation":
+        return {}
+    decisions = result.get("confirmed_decisions")
+    return decisions if isinstance(decisions, dict) else {}
+
+
 def wait_for_list_input(
     session_manager: SessionManager,
     default_cfp: float,

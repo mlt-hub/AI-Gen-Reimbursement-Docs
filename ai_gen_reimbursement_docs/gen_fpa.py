@@ -64,6 +64,7 @@ from ai_gen_reimbursement_docs.fpa_validator import (
     validation_feedback,
 )
 from ai_gen_reimbursement_docs.md_table import parse_md_table_row
+from ai_gen_reimbursement_docs.runtime_context import current_callbacks
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_fpa')
 
@@ -1817,6 +1818,42 @@ def write_fpa_summary_md(summary_md_path: str, total: float) -> None:
         f.write(f"FPA工作量（人/天）: {total}\n")
 
 
+def _wait_for_batch_fpa_confirmation(
+    *,
+    group: dict[str, object],
+    group_index: int,
+    group_total: int,
+    confirmation_mode: str,
+    questions: list[dict[str, object]],
+) -> dict[str, object]:
+    payload = {
+        "confirmation_mode": confirmation_mode,
+        "module": {
+            "index": group_index,
+            "total": group_total,
+            "client_type": group.get("client_type", ""),
+            "l1": group.get("l1", ""),
+            "l2": group.get("l2", ""),
+            "l3": group.get("l3", ""),
+            "process_count": len(group.get("processes", []) or []),
+        },
+        "confirmation_questions": questions,
+    }
+    decisions = current_callbacks().wait_for_fpa_confirmation(payload)
+    if not isinstance(decisions, dict):
+        return {}
+    return decisions
+
+
+def _merge_confirmed_decisions(
+    base: object | None,
+    extra: object | None,
+) -> dict[str, object]:
+    merged: dict[str, object] = dict(normalize_confirmed_decisions(base or {}))
+    merged.update(normalize_confirmed_decisions(extra or {}))
+    return merged
+
+
 def _plan_fpa_rows_with_ai(
     rows: list[dict[str, str]],
     meta: dict[str, str],
@@ -1831,6 +1868,7 @@ def _plan_fpa_rows_with_ai(
     rule_set_config: object | None = None,
     audit_trace_path: str = "",
     confirmed_decisions: object | None = None,
+    fpa_confirmation_mode: str = "auto",
 ) -> list[dict[str, object]]:
     execution = resolve_fpa_execution_config(profile.name, strategy, rule_set)
     profile = execution.profile
@@ -1853,6 +1891,7 @@ def _plan_fpa_rows_with_ai(
             rule_set_config=effective_rule_set_config,
             audit_trace_path=audit_trace_path,
             confirmed_decisions=confirmed_decisions,
+            fpa_confirmation_mode=fpa_confirmation_mode,
         )
     finally:
         reset_current_fpa_rule_set_config(rule_set_token)
@@ -1872,9 +1911,12 @@ def _plan_fpa_rows_with_execution(
     rule_set_config: object | None = None,
     audit_trace_path: str = "",
     confirmed_decisions: object | None = None,
+    fpa_confirmation_mode: str = "auto",
 ) -> list[dict[str, object]]:
     groups = _group_rows_by_l3(rows)
     config_warnings = _rule_set_config_warnings(rule_set_config)
+    confirmation_mode = normalize_confirmation_mode(fpa_confirmation_mode or "auto")
+    confirmed_decisions = normalize_confirmed_decisions(confirmed_decisions or {})
     if strategy == "rules_only":
         logger.info("FPA strategy=%s，使用规则集 %s 生成 FPA", strategy, rule_set)
         all_rows: list[dict[str, object]] = []
@@ -2210,6 +2252,7 @@ def _plan_fpa_rows_with_execution(
                 if retry_group_rows:
                     raw_rows = retry_raw_rows
                     group_rows = retry_group_rows
+                    validation_issues = retry_issues
                     warnings = [retry_notice, *retry_warnings]
                     if retryable_validation_issues(retry_issues):
                         warnings.append(
@@ -2227,7 +2270,6 @@ def _plan_fpa_rows_with_execution(
                         )
                 else:
                     warnings.append(f"{retry_notice}，但重试未生成有效 FPA 行，保留首次结果")
-            warning_count += len(warnings)
             if not group_rows:
                 raise ValueError("AI 规划未生成有效 FPA 行")
             quality_review = _build_quality_review_for_l3(
@@ -2240,6 +2282,86 @@ def _plan_fpa_rows_with_execution(
                 rows=group_rows,
                 confirmed_decisions=confirmed_decisions,
             )
+            confirmation_questions = build_fpa_confirmation_questions(
+                group=group,
+                issues=validation_issues,
+                mode=confirmation_mode,
+                confirmed_decisions=confirmed_decisions,
+            )
+            if confirmation_questions:
+                logger.info(
+                    "FPA 批量生成等待计量口径确认 [%d/%d] %s",
+                    idx,
+                    len(groups),
+                    _group_tag(group),
+                )
+                user_decisions = _wait_for_batch_fpa_confirmation(
+                    group=group,
+                    group_index=idx,
+                    group_total=len(groups),
+                    confirmation_mode=confirmation_mode,
+                    questions=confirmation_questions,
+                )
+                if user_decisions:
+                    confirmed_decisions = _merge_confirmed_decisions(
+                        confirmed_decisions,
+                        user_decisions,
+                    )
+                    raw_rows = _ai_plan_fpa_rows_for_l3(
+                        group,
+                        judgement_rules,
+                        domain_context,
+                        api_key,
+                        model,
+                        base_url,
+                        profile=profile,
+                        confirmed_decisions=confirmed_decisions,
+                    )
+                    group_rows, confirmation_warnings = _normalize_ai_fpa_rows_for_l3(
+                        group=group,
+                        meta=meta,
+                        ai_rows=raw_rows,
+                        judgement_rules=judgement_rules,
+                        start_seq=seq,
+                        profile=profile,
+                        strategy=strategy,
+                    )
+                    if rules_first_reasons:
+                        confirmation_warnings.insert(0, "规则结果触发 AI 复核: " + "；".join(rules_first_reasons))
+                    group_rows, confirmation_supplement_warnings = _supplement_ai_rows_with_rules(
+                        group=group,
+                        meta=meta,
+                        ai_rows=group_rows,
+                        profile=profile,
+                        strategy=strategy,
+                        rule_set_config=rule_set_config,
+                    )
+                    _renumber_rows(group_rows, seq)
+                    confirmation_warnings.extend(confirmation_supplement_warnings)
+                    validation_issues, confirmation_validation_warnings = _validate_fpa_rows_for_l3(
+                        group=group,
+                        rows=group_rows,
+                    )
+                    confirmation_warnings.extend(confirmation_validation_warnings)
+                    warnings = [
+                        f"{_group_tag(group)} 已应用用户确认的 FPA 计量口径并重新生成",
+                        *confirmation_warnings,
+                    ]
+                    if not group_rows:
+                        raise ValueError("用户确认后 AI 规划未生成有效 FPA 行")
+                    quality_review = _build_quality_review_for_l3(
+                        group=group,
+                        rows=group_rows,
+                        confirmed_decisions=confirmed_decisions,
+                    )
+                    agent_review = _build_agent_review_for_l3(
+                        group=group,
+                        rows=group_rows,
+                        confirmed_decisions=confirmed_decisions,
+                    )
+                else:
+                    warnings.append(f"{_group_tag(group)} 未收到 FPA 计量口径确认，保留当前生成结果")
+            warning_count += len(warnings)
             success += 1
             generated += len(group_rows)
             if cache_path:
@@ -2976,6 +3098,7 @@ def plan_fpa_md_from_tree(
     rule_set: str = "",
     audit_trace_path: str = "",
     confirmed_decisions: object | None = None,
+    fpa_confirmation_mode: str = "auto",
 ) -> str:
     """以三级模块为单位 AI 规划 FPA 行，并写入 MD。"""
     logger.info("第1.3步：AI 规划 FPA 数据...")
@@ -3004,6 +3127,7 @@ def plan_fpa_md_from_tree(
             rule_set_config=execution.rule_set_config,
             audit_trace_path=audit_trace_path,
             confirmed_decisions=confirmed_decisions,
+            fpa_confirmation_mode=fpa_confirmation_mode,
         )
     finally:
         reset_current_fpa_rule_set_config(rule_set_token)

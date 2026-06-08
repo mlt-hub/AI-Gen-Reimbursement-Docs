@@ -14,6 +14,35 @@ export interface ListPrompt {
   fpaDefault: number
 }
 
+export interface FpaConfirmationOption {
+  value: string
+  label: string
+}
+
+export interface FpaConfirmationQuestion {
+  id: string
+  topic: string
+  question: string
+  recommendation: string
+  reason: string
+  options: FpaConfirmationOption[]
+  source_issue?: string
+}
+
+export interface FpaConfirmationPrompt {
+  confirmationMode: string
+  module: {
+    index?: number
+    total?: number
+    client_type?: string
+    l1?: string
+    l2?: string
+    l3?: string
+    process_count?: number
+  }
+  questions: FpaConfirmationQuestion[]
+}
+
 export interface DoneFile {
   label: string
   path: string
@@ -34,6 +63,7 @@ export const useSessionStore = defineStore('session', () => {
   const outputDir = ref<string>('')
   const inputPrompt = ref<InputPrompt | null>(null)
   const listPrompt = ref<ListPrompt | null>(null)
+  const fpaConfirmationPrompt = ref<FpaConfirmationPrompt | null>(null)
   const doneFiles = ref<DoneFile[]>([])
 
   const isRunning = computed(() => runState.value === 'running')
@@ -45,6 +75,7 @@ export const useSessionStore = defineStore('session', () => {
     runState.value = 'running'
     inputPrompt.value = null
     listPrompt.value = null
+    fpaConfirmationPrompt.value = null
     doneFiles.value = []
   }
 
@@ -54,6 +85,7 @@ export const useSessionStore = defineStore('session', () => {
     runState.value = snapshot.run_state
     inputPrompt.value = null
     listPrompt.value = null
+    fpaConfirmationPrompt.value = null
     doneFiles.value = snapshot.done_files || []
   }
 
@@ -61,6 +93,7 @@ export const useSessionStore = defineStore('session', () => {
     runState.value = 'done'
     inputPrompt.value = null
     listPrompt.value = null
+    fpaConfirmationPrompt.value = null
     if (files) doneFiles.value = files
   }
 
@@ -68,12 +101,14 @@ export const useSessionStore = defineStore('session', () => {
     runState.value = 'error'
     inputPrompt.value = null
     listPrompt.value = null
+    fpaConfirmationPrompt.value = null
   }
 
   function setCancelled() {
     runState.value = 'cancelled'
     inputPrompt.value = null
     listPrompt.value = null
+    fpaConfirmationPrompt.value = null
   }
 
   function reset() {
@@ -82,6 +117,7 @@ export const useSessionStore = defineStore('session', () => {
     runState.value = 'idle'
     inputPrompt.value = null
     listPrompt.value = null
+    fpaConfirmationPrompt.value = null
     doneFiles.value = []
   }
 
@@ -93,5 +129,9 @@ export const useSessionStore = defineStore('session', () => {
     listPrompt.value = prompt
   }
 
-  return { sessionId, runState, outputDir, inputPrompt, listPrompt, doneFiles, isRunning, isDone, start, restore, finish, setError, setCancelled, reset, showInputPrompt, showListPrompt }
+  function showFpaConfirmationPrompt(prompt: FpaConfirmationPrompt) {
+    fpaConfirmationPrompt.value = prompt
+  }
+
+  return { sessionId, runState, outputDir, inputPrompt, listPrompt, fpaConfirmationPrompt, doneFiles, isRunning, isDone, start, restore, finish, setError, setCancelled, reset, showInputPrompt, showListPrompt, showFpaConfirmationPrompt }
 })

@@ -47,6 +47,7 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
             "fpa_profile": "strict_fpa",
             "fpa_strategy": "ai_first",
             "fpa_rule_set": "strict_fpa_rs",
+            "fpa_confirmation_mode": "strict",
         },
     )
 
@@ -62,6 +63,7 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     assert calls[0]["args"][10] == "strict_fpa"
     assert calls[0]["args"][11] == "ai_first"
     assert calls[0]["args"][12] == "strict_fpa_rs"
+    assert calls[0]["args"][13] == "strict"
     server.session_manager.cleanup_download(data["session_id"])
 
 
@@ -320,6 +322,7 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
             "fpa_profile": "strict_fpa",
             "fpa_strategy": "ai_first",
             "fpa_rule_set": "strict_fpa_rs",
+            "fpa_confirmation_mode": "cautious",
         },
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
@@ -339,6 +342,7 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
     assert calls[0]["args"][10] == "strict_fpa"
     assert calls[0]["args"][11] == "ai_first"
     assert calls[0]["args"][12] == "strict_fpa_rs"
+    assert calls[0]["args"][13] == "cautious"
     server.session_manager.cleanup_download(data["session_id"])
 
 
