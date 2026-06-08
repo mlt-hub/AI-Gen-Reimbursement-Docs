@@ -830,6 +830,9 @@ def test_strict_profile_type_conflict_matrix_for_transactions_and_data_functions
         ("导出客户清单", "导出客户清单文件。", "EO"),
         ("客户档案", "本系统维护的客户基础信息。", "ILF"),
         ("统一用户中心账号", "统一用户中心维护的人员账号，本系统只引用。", "EIF"),
+        ("营销活动数据组", "系统内部创建/更新营销活动记录。营销活动由本系统唯一维护，外部系统不涉及。", "ILF"),
+        ("OA审批单关联数据组", "本系统创建并维护此关联数据，记录业务对象与 OA 审批单之间的关联关系。", "ILF"),
+        ("外部组织维护", "用户选择外部组织并保存到当前业务对象，本系统存储关联记录。", "EI"),
     ]
     for name, desc, ai_type in non_conflict_cases:
         assert not STRICT_FPA_PROFILE.has_obvious_conflict(name, desc, ai_type), (name, ai_type)
