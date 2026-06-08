@@ -1179,6 +1179,15 @@ class StrictFpaProfile(CustomRulesProfile):
         eq_match = self._matching_keyword_rule(text, "EQ")
         if eq_match is not None:
             return eq_match.fpa_type, eq_match.reason or "事务功能读取数据且无派生输出，按 EQ。"
+        if any(k in text for k in ("导出", "下载", "生成文件", "打印")):
+            return "EO", "事务功能产生派生或格式化输出，按 EO。"
+        if any(k in text for k in ("查询", "查看", "详情", "检索", "列表")):
+            return "EQ", "事务功能读取数据且无派生输出，按 EQ。"
+        if any(k in text for k in (
+            "新增", "添加", "修改", "编辑", "删除", "维护", "保存", "提交", "审批",
+            "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联",
+        )):
+            return "EI", "事务功能进入或改变系统边界内数据，按 EI。"
         return None
 
     def _matching_keyword_rule(

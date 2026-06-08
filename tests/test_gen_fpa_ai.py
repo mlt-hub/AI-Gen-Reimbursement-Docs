@@ -776,6 +776,49 @@ def test_explanation_accepts_fpa_type_business_aliases():
     )
 
 
+def test_explanation_accepts_ilf_natural_language_aliases():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["按后台数据库变更的表个数计量"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[
+            {
+                "name": "退款申请数据组",
+                "type": "ILF",
+                "classification_basis_index": 11,
+                "explanation": (
+                    "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-退款申请数据组"
+                    "\n业务数据：退款申请状态、退款金额、订单号。"
+                    "\n业务规则：本系统负责记录和管理退款申请状态。"
+                    "\n计算说明：对应本系统维护的逻辑数据集合，按后台数据库变更的表个数计量。"
+                ),
+            },
+            {
+                "name": "短信模板数据组",
+                "type": "ILF",
+                "classification_basis_index": 11,
+                "explanation": (
+                    "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-短信模板数据组"
+                    "\n业务数据：短信标题、正文和变量字段。"
+                    "\n业务规则：运营人员可以新增或修改短信模板，系统持久化存储。"
+                    "\n计算说明：本系统维护的短信模板数据组属于内部逻辑文件，按后台数据库变更的表个数计量。"
+                ),
+            },
+        ],
+    )
+
+    assert [row["类型"] for row in rows] == ["ILF", "ILF"]
+    assert not any("未明确当前 FPA 类型" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for row in rows
+        for hit in row["_规则命中详情"]
+    )
+
+
 def test_explanation_accepts_output_file_and_ilf_insert_type_aliases():
     group = _group_rows_by_l3([
         {
