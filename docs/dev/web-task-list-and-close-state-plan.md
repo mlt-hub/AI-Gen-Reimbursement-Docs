@@ -22,6 +22,8 @@
 - 运行中任务支持从任务列表“继续”回到仍可恢复的 session。
 - 任务列表能区分 `running` 且 session 可恢复、以及历史仍为 `running` 但 session 不可恢复。
 - session 不可恢复的 `running` 任务可由用户显式标记为 `cancelled`，随后按既有规则重跑。
+- 运行历史保存任务启动参数快照，重跑优先使用原任务参数。
+- 任务列表和历史列表展示项目名，来源为启动参数快照中的 `project_name`。
 
 已验证：
 
@@ -29,7 +31,7 @@
 .\.venv\Scripts\python.exe -m pytest tests\test_run_history.py tests\test_web_history.py tests\test_web_tasks.py
 ```
 
-结果：`55 passed`。
+结果：`57 passed`。
 
 ```powershell
 npm run build
@@ -39,6 +41,7 @@ npm run build
 
 后续关注：
 
+- 出于安全考虑，任务启动参数快照不保存 API Key 明文；重跑时仍需当前用户或系统配置中存在可用 API Key。
 - 远程重跑依赖历史记录中的原始输入文件路径；如果远程临时目录已被清理，接口会返回“原始输入文件不存在，无法重跑”。
 - 当前方案暂不支持关闭后恢复。
 
@@ -79,7 +82,7 @@ npm run build
 任务列表页用于日常工作台视角，默认展示所有未关闭任务：
 
 - 筛选条件默认排除 `closed`。
-- 展示状态、任务模式、来源、输入文件、开始时间、更新时间、交付物状态。
+- 展示状态、任务模式、项目名、来源、输入文件、开始时间、更新时间、交付物状态。
 - `running` 状态展示“继续”入口，用于回到当前运行 session 的执行监控。
 - `done`、`error`、`cancelled` 状态展示“重跑”入口。
 - 非 `closed` 状态展示“关闭”入口。
@@ -97,6 +100,7 @@ npm run build
 
 - 可查看所有状态，包括 `closed`。
 - 支持按状态筛选 `closed`。
+- 展示项目名；旧历史记录或未填写项目名时显示 `-`。
 - `closed` 状态不展示重跑入口。
 - 可继续提供下载、打开目录、查看调试记录等历史能力。
 
@@ -197,6 +201,9 @@ POST /api/tasks/{run_id}/rerun
 - `done`、`error`、`cancelled` 可重跑。
 - 重跑应创建新的 `session_id` 和新的运行历史记录，不覆盖原历史。
 - 原任务保留原状态。
+- 重跑优先使用原任务的启动参数快照，而不是当前页面配置。
+- 快照不保存 API Key；重跑时 API Key 仍按当前配置解析。
+- 原任务使用过自定义模板时，重跑会复用历史快照中的模板目录；模板目录或模板文件缺失时返回 400。
 
 ### 查询运行 session
 
@@ -234,6 +241,26 @@ POST /api/tasks/{run_id}/mark-unrecoverable
 
 现有运行历史表已有 `run_state` 字段，因此可以直接扩展状态值为 `closed`。
 
+新增 `run_config_json` 字段用于保存任务启动参数快照：
+
+- `model`
+- `base_url`
+- `max_tokens`
+- `project_name`
+- `fpa_profile`
+- `fpa_strategy`
+- `fpa_rule_set`
+- `fpa_confirmation_mode`
+- `clean`
+- `custom_templates_dir`
+- `custom_templates`
+
+安全约束：
+
+- 不保存 API Key 明文。
+- 不保存用户上传文件内容，只保存输入文件路径和模板目录路径。
+- 重跑时如果输入文件或自定义模板文件不存在，应返回明确错误。
+
 建议补充一个更新状态的服务函数，例如：
 
 ```python
@@ -258,6 +285,7 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - `web_app/src/views/Tasks.vue`
   - 新增任务列表页。
   - 默认调用 `/api/tasks`。
+  - 展示项目名列，读取 `run_config.project_name`。
   - 提供刷新、继续、重跑、关闭、进入历史等操作。
   - `running` 任务点击“继续”时携带 `session_id` 回到生成页。
   - `running` 但 session 不可恢复时展示“标记已取消”。
@@ -270,6 +298,7 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - `web_app/src/views/History.vue`
   - 状态筛选增加 `closed`。
   - 状态文案增加“关闭”。
+  - 展示项目名列，读取 `run_config.project_name`。
   - 关闭状态隐藏重跑动作。
 
 ## 后端改动范围
@@ -277,10 +306,12 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - `ai_gen_reimbursement_docs/run_history.py`
   - 增加按排除状态查询的能力，或为任务列表新增专用查询。
   - 增加更新历史状态的函数。
+  - 增加 `run_config_json` 字段和旧表补列逻辑。
 - `web_app/services/run_history_service.py`
   - 增加任务列表服务。
   - 增加关闭任务服务。
   - 增加重跑前状态校验服务。
+  - 写入任务启动参数快照。
 - `web_app/routes/history.py`
   - 历史查询支持 `closed` 筛选。
 - `web_app/routes/tasks.py`
@@ -292,6 +323,8 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 ## 验收标准
 
 - 创建运行中任务后，任务列表页可以看到该任务。
+- 任务列表展示项目名；没有项目名的旧记录显示 `-`。
+- 历史列表展示项目名；没有项目名的旧记录显示 `-`。
 - 服务未重启且 session 仍存在时，运行中任务可以从任务列表点击“继续”回到执行监控。
 - 点击“继续”后能查看当前进度、继续监听日志流，并可响应后续人工输入。
 - 服务已重启或 session 已清理时，运行中历史记录不能继续执行，页面应明确提示会话不可恢复。
@@ -299,6 +332,9 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - 仍可继续执行的 `running` 任务不能标记为不可恢复。
 - 任务完成后，任务列表页仍可以看到该任务。
 - 完成任务可以重跑，重跑后生成新的运行记录。
+- 重跑使用原任务保存的模型、base_url、max_tokens、项目名和 FPA 口径参数。
+- 重跑不复用原任务 API Key 明文，而是使用当前可用 API Key。
+- 原任务自定义模板缺失时，重跑返回明确错误。
 - 关闭任务后，任务列表页不再展示该任务。
 - 关闭任务在历史页仍可查询。
 - 关闭任务不可重跑，接口返回明确错误。
@@ -321,11 +357,15 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - 标记不可恢复的 `running` 任务成功后状态变为 `cancelled`。
 - 仍可恢复的 `running` 任务调用标记接口返回 400。
 - 标记不可恢复后的任务可以重跑。
+- 运行历史保存 `run_config_json`，且不保存 API Key。
+- 原任务配置与当前配置不同时，重跑使用原任务启动参数快照。
 - 远程模式下，用户不能关闭或重跑其他用户任务。
 
 前端测试：
 
 - 任务列表页不展示关闭任务。
+- 任务列表页展示项目名列。
+- 历史列表页展示项目名列。
 - 运行中任务展示“继续”按钮，不展示“重跑”按钮。
 - 点击“继续”能回到生成页并恢复对应 session 的执行监控。
 - session 不存在时展示“会话已结束或服务已重启，无法继续当前执行”，并可标记为已取消。
@@ -338,6 +378,9 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - “继续执行”依赖服务进程内存中的 `SessionManager`，服务重启后无法恢复实时后台线程。
 - 历史记录中的 `running` 不等价于当前还有可继续执行的 session；UI 需要区分“运行中且可继续”和“运行记录显示运行中但会话不可恢复”。
 - 重跑需要复用原始输入与启动参数；远程上传文件如果已被清理，可能无法重跑。
+- 重跑不保存也不复用原任务 API Key；如果当前配置没有可用 API Key，AI 任务仍会失败并提示配置问题。
+- 项目名来自启动参数快照；旧历史记录或启动时未填写项目名不会重新解析 Excel，只显示 `-`。
 - 本机任务可以依赖 `input_path` 重跑；远程任务需要确认是否长期保存输入文件。
+- 自定义模板仅保存模板目录路径；目录或文件被清理后，重跑无法保证复现。
 - 如果远程交付物过期，重跑不应依赖旧交付物。
 - 关闭状态是否允许恢复需要另行确认；本方案暂不支持恢复。

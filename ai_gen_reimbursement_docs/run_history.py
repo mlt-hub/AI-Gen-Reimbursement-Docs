@@ -61,6 +61,7 @@ def init_db(history_path: Path) -> None:
                   zip_path TEXT NOT NULL DEFAULT '',
                   download_expires_at TEXT NOT NULL DEFAULT '',
                   done_files_json TEXT NOT NULL DEFAULT '[]',
+                  run_config_json TEXT NOT NULL DEFAULT '{}',
                   error TEXT NOT NULL DEFAULT '',
                   created_at TEXT NOT NULL,
                   started_at TEXT NOT NULL DEFAULT '',
@@ -82,6 +83,15 @@ def init_db(history_path: Path) -> None:
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
                 (SCHEMA_VERSION, now_iso()),
             )
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(run_history)").fetchall()
+            }
+            if "run_config_json" not in columns:
+                conn.execute(
+                    "ALTER TABLE run_history "
+                    "ADD COLUMN run_config_json TEXT NOT NULL DEFAULT '{}'"
+                )
 
 
 def sanitize_done_files(done_files: list[dict[str, Any]], *, remote: bool) -> list[dict[str, Any]]:
@@ -116,7 +126,7 @@ def _record_for_db(record: dict[str, Any]) -> dict[str, Any]:
         done_files = []
     remote = record.get("mode") == "remote"
     done_files = sanitize_done_files(done_files, remote=remote)
-    return {
+    values = {
         "run_id": str(record["run_id"]),
         "schema_version": int(record.get("schema_version") or SCHEMA_VERSION),
         "source": str(record.get("source") or "web"),
@@ -139,6 +149,14 @@ def _record_for_db(record: dict[str, Any]) -> dict[str, Any]:
         "finished_at": str(record.get("finished_at") or ""),
         "updated_at": updated_at,
     }
+    if "run_config" in record:
+        run_config = record.get("run_config")
+        if not isinstance(run_config, dict):
+            run_config = {}
+        run_config = dict(run_config)
+        run_config.pop("api_key", None)
+        values["run_config_json"] = json.dumps(run_config, ensure_ascii=False)
+    return values
 
 
 def upsert_run(record: dict[str, Any], history_path: Path) -> None:
@@ -240,6 +258,11 @@ def _row_to_record(row: sqlite3.Row) -> dict[str, Any]:
         record["done_files"] = json.loads(record.pop("done_files_json") or "[]")
     except json.JSONDecodeError:
         record["done_files"] = []
+    try:
+        run_config = json.loads(record.pop("run_config_json", "{}") or "{}")
+    except json.JSONDecodeError:
+        run_config = {}
+    record["run_config"] = run_config if isinstance(run_config, dict) else {}
     return compute_artifact_status(record)
 
 

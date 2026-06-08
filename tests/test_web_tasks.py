@@ -377,6 +377,70 @@ def test_rerun_done_local_task_creates_new_history(monkeypatch, tmp_path):
     assert "done_rerun" in ids
 
 
+def test_rerun_uses_original_run_config_snapshot(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="snapshot_rerun",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+        run_config={
+            "model": "original-model",
+            "base_url": "https://original.example.test",
+            "max_tokens": "8K",
+            "project_name": "Original Project",
+            "fpa_profile": "strict_fpa",
+            "fpa_strategy": "ai_first",
+            "fpa_rule_set": "strict_fpa_rs",
+            "fpa_confirmation_mode": "strict",
+            "clean": True,
+        },
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="snapshot_rerun",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    calls: list[dict] = []
+
+    def fake_start_background_task(session_manager, session_id, target):
+        session_manager.mark_task_started(session_id)
+        target()
+        session_manager.mark_task_finished(session_id)
+        return None
+
+    def fake_execute_in_session(*args, **kwargs):
+        calls.append({"args": args, "kwargs": kwargs})
+        kwargs["on_finish"](args[1], [], None)
+
+    monkeypatch.setattr(tasks, "start_background_task", fake_start_background_task)
+    monkeypatch.setattr(tasks, "execute_in_session", fake_execute_in_session)
+
+    resp = client.post("/api/tasks/snapshot_rerun/rerun")
+
+    assert resp.status_code == 200
+    assert calls
+    args = calls[0]["args"]
+    assert args[6] == "original-model"
+    assert args[7] == "https://original.example.test"
+    assert args[8] == "Original Project"
+    assert args[9] == "8K"
+    assert args[10] == "strict_fpa"
+    assert args[11] == "ai_first"
+    assert args[12] == "strict_fpa_rs"
+    assert args[13] == "strict"
+    assert args[15] is True
+
+
 def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     client = _client(monkeypatch, local_mode=True)
     xlsx_path = tmp_path / "功能清单.xlsx"

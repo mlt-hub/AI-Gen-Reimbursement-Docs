@@ -44,12 +44,13 @@
         <p class="mt-1 text-xs">生成任务完成后，会在这里显示交付物、状态和后续操作。</p>
       </div>
       <div v-else class="overflow-x-auto">
-        <table class="w-full min-w-[920px] border-collapse text-left text-sm">
+        <table class="w-full min-w-[1040px] border-collapse text-left text-sm">
           <thead class="border-b border-[var(--color-rule)] text-xs uppercase text-[var(--color-ink-soft)]">
             <tr>
               <th class="px-4 py-3 font-semibold">时间</th>
               <th class="px-4 py-3 font-semibold">来源</th>
               <th class="px-4 py-3 font-semibold">任务</th>
+              <th class="px-4 py-3 font-semibold">项目名</th>
               <th class="px-4 py-3 font-semibold">状态</th>
               <th class="px-4 py-3 font-semibold">输入</th>
               <th class="px-4 py-3 font-semibold">交付物</th>
@@ -66,6 +67,9 @@
               <td class="px-4 py-3 align-top">
                 <div class="font-semibold">{{ item.task_mode || '-' }}</div>
                 <div class="text-xs font-mono text-[var(--color-ink-soft)]">{{ item.run_id }}</div>
+              </td>
+              <td class="max-w-[12rem] px-4 py-3 align-top">
+                <div class="truncate" :title="projectName(item)">{{ projectName(item) }}</div>
               </td>
               <td class="px-4 py-3 align-top">
                 <span :class="['status-badge', stateClass(item.run_state)]">{{ stateLabel(item.run_state) }}</span>
@@ -130,6 +134,10 @@ interface DoneFile {
   is_temp?: boolean
 }
 
+interface RunConfig {
+  project_name?: string
+}
+
 interface HistoryItem {
   run_id: string
   session_id: string
@@ -145,6 +153,7 @@ interface HistoryItem {
   open_folder_available: boolean
   created_at: string
   done_files: DoneFile[]
+  run_config?: RunConfig
 }
 
 interface HistoryResponse {
@@ -188,6 +197,11 @@ async function loadHistory() {
 function sourceLabel(item: HistoryItem) {
   if (item.source === 'cli') return 'CLI'
   return item.mode === 'remote' ? 'Web 远程' : 'Web 本机'
+}
+
+function projectName(item: HistoryItem) {
+  const name = item.run_config?.project_name?.trim()
+  return name || '-'
 }
 
 function stateLabel(state: string) {

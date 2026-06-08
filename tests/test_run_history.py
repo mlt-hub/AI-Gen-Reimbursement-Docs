@@ -84,6 +84,37 @@ def test_run_history_sanitizes_remote_file_paths(tmp_path):
     assert record["done_files"][0]["relative_path"] == "spec.docx"
 
 
+def test_run_history_persists_run_config_without_api_key(tmp_path):
+    db = tmp_path / "run_history.sqlite3"
+
+    upsert_run(
+        {
+            "run_id": "r_config",
+            "source": "web",
+            "mode": "local",
+            "task_mode": "gen-fpa",
+            "run_state": "done",
+            "artifact_kind": "local_dir",
+            "run_config": {
+                "model": "original-model",
+                "base_url": "https://api.example.test",
+                "api_key": "sk-should-not-be-used",
+                "fpa_profile": "strict_fpa",
+            },
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        },
+        db,
+    )
+
+    record = get_run("r_config", db)
+
+    assert record is not None
+    assert record["run_config"]["model"] == "original-model"
+    assert record["run_config"]["base_url"] == "https://api.example.test"
+    assert "api_key" not in record["run_config"]
+
+
 def test_run_history_concurrent_writes_do_not_drop_records(tmp_path):
     db = tmp_path / "run_history.sqlite3"
 
