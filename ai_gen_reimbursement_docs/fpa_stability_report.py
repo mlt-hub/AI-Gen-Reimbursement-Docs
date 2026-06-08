@@ -33,15 +33,10 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         if source:
             source_counts[source] += 1
         warnings = _string_list(module.get("warnings", []))
-        stability_warnings = [
+        raw_stability_warnings = [
             warning for warning in warnings
             if _counts_as_stability_warning(warning)
         ]
-        module_warning_count = len(stability_warnings)
-        module_warning_sources = Counter(
-            _classify_warning_source(warning, module)
-            for warning in stability_warnings
-        )
         quality_review = module.get("quality_review", {})
         issues, summary = _quality_parts(quality_review)
         module_issue_count = _int_or_default(summary.get("issue_count"), len(issues))
@@ -50,10 +45,19 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             sum(1 for issue in issues if bool(issue.get("retryable"))),
         )
         module_confirmed_count = _int_or_default(summary.get("confirmed_decision_count"), 0)
+        module_retry_count = sum(1 for warning in raw_stability_warnings if _is_retry_warning(warning))
+        module_blocking_retry_count = module_retry_count if module_issue_count > 0 or module_retryable_count > 0 else 0
+        stability_warnings = [
+            warning for warning in raw_stability_warnings
+            if not (_is_retry_warning(warning) and module_blocking_retry_count == 0)
+        ]
+        module_warning_count = len(stability_warnings)
+        module_warning_sources = Counter(
+            _classify_warning_source(warning, module)
+            for warning in stability_warnings
+        )
         warning_count += module_warning_count
         warning_source_counts.update(module_warning_sources)
-        module_retry_count = sum(1 for warning in stability_warnings if "稳定性校验触发一次重试" in warning)
-        module_blocking_retry_count = module_retry_count if module_issue_count > 0 or module_retryable_count > 0 else 0
         retry_count += module_retry_count
         blocking_retry_count += module_blocking_retry_count
         retry_trigger_source = str(module.get("retry_trigger_source", "") or "").strip()
@@ -495,6 +499,10 @@ def _counts_as_stability_warning(warning: str) -> bool:
     ):
         return False
     return True
+
+
+def _is_retry_warning(warning: str) -> bool:
+    return "稳定性校验触发一次重试" in str(warning or "")
 
 
 def _recommendations(summary: dict[str, object]) -> list[dict[str, object]]:
