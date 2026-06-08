@@ -1021,11 +1021,11 @@ style(ui): tighten web ui spacing and states
 
 ## 下一步建议
 
-当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成两轮本机联调冒烟。后续继续推进时，建议从远程服务模式和发布取舍开始，而不是继续扩大视觉微调：
+当前 D1-D7 和阶段 1-6 已全部完成，阶段 7 已完成本机与远程服务模式冒烟。后续继续推进时，建议从真实业务样例留档和发布配置核对开始，而不是继续扩大视觉微调：
 
-1. 若要进入远程服务模式，补一轮远程登录、上传文件、下载 ZIP 的端到端验收。
-2. 若上线范围只包含 FPA，确认 COSMIC / SPEC 预览壳层保持“建设中”占位，不把它们描述为已完成能力。
-3. 若上线前需要真实业务样例验收，用业务非空功能清单再跑一次完整生成，并留存输出清单。
+1. 用业务非空功能清单再跑一次完整生成，并留存输出清单。
+2. 发布前确认远程服务的全局配置目录包含 `fpa_config.yaml`、`fpa_judgement_rules.yaml` 和 `domain_context.json`。
+3. 若上线范围只包含 FPA，发布口径继续保持：COSMIC / SPEC 预览入口已预留，能力建设中。
 
 这一步以真实后端联调和发布取舍为主，避免在 UI 结构已经稳定后继续扩大纯视觉改动。
 
@@ -1101,3 +1101,56 @@ style(ui): tighten web ui spacing and states
 
 - 可以说：`COSMIC / SPEC 预览入口已预留，能力建设中。`
 - 不应说：`COSMIC / SPEC 预览流程已完成。`
+
+### 第三轮远程服务模式冒烟
+
+执行日期：2026-06-08
+
+启动方式：
+
+```powershell
+cmd /c "set USERPROFILE=<临时目录>&& set HOME=<临时目录>&& .\.venv\Scripts\python.exe -m uvicorn web_app.server:app --host 127.0.0.1 --port 8093"
+```
+
+临时全局配置：
+
+```yaml
+web_work_mode: remote
+allow_register: true
+allow_shared_ai_credentials: false
+remote_download_retention_days: 1
+```
+
+额外配置前提：
+
+远程 FPA 生成需要全局配置目录存在以下文件：
+
+- `fpa_config.yaml`
+- `fpa_judgement_rules.yaml`
+- `domain_context.json`
+
+本轮第一次远程 FPA 生成失败，原因是临时全局配置目录只有 `system_config.yaml`，底层 FPA 读取 `config_dir()/fpa_config.yaml` 时失败：
+
+```text
+未找到 FPA 配置文件：配置目录/fpa_config.yaml
+```
+
+补齐上述全局配置后，远程验收通过。
+
+验证范围：
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| 未登录访问 `/` | 通过 | 远程模式下跳转到登录页。 |
+| `/api/auth/register` | 通过 | 临时用户 `stage7` 注册成功。 |
+| `/api/auth/login` | 通过 | 登录后 cookie `ard_token` 生效。 |
+| `/api/auth/me` | 通过 | 返回 `username=stage7`，`is_local=false`。 |
+| `/api/run-upload` | 通过 | 上传 `tests/fixtures/功能清单-录入模板.xlsx`，模式为 `from-excel-gen-fpa`，策略为 `rules_only`。 |
+| `/api/sessions/{session_id}` | 通过 | session 状态为 `done`，`has_zip=true`，`done_files` 包含 `FPA 工作量评估` 和 `FPA 审核副本`。 |
+| `/api/download/{session_id}` | 通过 | 返回 `200`，下载 ZIP 大小约 49 KB。 |
+| `/api/history` | 通过 | 历史记录状态为 `done`，交付物类型为 `remote_zip`，`download_available=true`。 |
+| `/api/history/{run_id}/download` | 通过 | 返回 `200`，历史下载 ZIP 大小与 session 下载一致。 |
+| `/history` 页面 | 通过 | 登录后可见远程任务、完成状态和 `下载 .zip` 操作。 |
+| 远程侧边栏 | 通过 | 登录后不显示 `提示词调试`，符合 D7。 |
+
+本轮所有远程测试均使用临时 HOME / USERPROFILE 和临时 work_dir。验证结束后已停止服务并清理临时目录。
