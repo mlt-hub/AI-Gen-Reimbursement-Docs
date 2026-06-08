@@ -1,5 +1,5 @@
 <template>
-  <div class="mx-auto box-border w-full max-w-3xl space-y-8 overflow-x-hidden px-4 py-6 sm:px-6">
+  <div class="mx-auto box-border w-full max-w-5xl space-y-6 overflow-x-hidden px-4 py-6 sm:px-6">
     <section class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -24,7 +24,29 @@
       <p v-else-if="healthCheckedAt" class="mt-3 text-xs text-[var(--color-ink-soft)]">最近检查：{{ healthCheckedAt }}</p>
     </section>
 
-    <section class="surface rounded-lg p-5">
+    <nav class="flex flex-wrap gap-2 border-b border-[var(--color-rule)] pb-3" aria-label="配置分区" role="tablist">
+      <button
+        v-for="section in configSectionTabs"
+        :key="section.key"
+        :id="configTabId(section.key)"
+        type="button"
+        role="tab"
+        :aria-selected="activeConfigSection === section.key"
+        :aria-controls="configPanelId(section.key)"
+        :class="['nav-link', activeConfigSection === section.key ? 'nav-link-active' : '']"
+        @click="activeConfigSection = section.key"
+      >
+        {{ section.label }}
+      </button>
+    </nav>
+
+    <div
+      :id="configPanelId(activeConfigSection)"
+      :aria-labelledby="configTabId(activeConfigSection)"
+      class="space-y-6"
+      role="tabpanel"
+    >
+    <section v-if="activeConfigSection === 'common'" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">AI 配置</p>
@@ -126,7 +148,7 @@
       <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中...</p>
     </section>
 
-    <section class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'common'" class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">Web 与运行配置</p>
         <h2 class="mt-1 text-lg font-semibold">运行默认值</h2>
@@ -189,7 +211,7 @@
       <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中...</p>
     </section>
 
-    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'fpa' && !showUserConfig" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">FPA 策略</p>
@@ -261,7 +283,7 @@
       <p v-else class="text-sm text-[var(--color-ink-soft)]">暂无 FPA 策略配置。</p>
     </section>
 
-    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'fpa' && !showUserConfig" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">FPA 判定规则</p>
@@ -307,7 +329,7 @@
       </div>
     </section>
 
-    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'advanced' && !showUserConfig" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">业务规则</p>
@@ -340,7 +362,7 @@
       </div>
     </section>
 
-    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'fpa' && !showUserConfig" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">领域上下文</p>
@@ -433,7 +455,7 @@
       </div>
     </section>
 
-    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'advanced' && !showUserConfig" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">Prompt 配置</p>
@@ -509,7 +531,7 @@
       </div>
     </section>
 
-    <section class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'templates'" class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">模板配置</p>
         <h2 class="mt-1 text-lg font-semibold">输出与下载模板</h2>
@@ -540,7 +562,7 @@
       </div>
     </section>
 
-    <section class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'advanced'" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">高级配置</p>
@@ -622,7 +644,7 @@
       </div>
     </section>
 
-    <section class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'maintenance'" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">配置备份</p>
@@ -686,7 +708,7 @@
       <p v-if="configRestoreMsg" :class="['mt-3 text-sm', configRestoreOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ configRestoreMsg }}</p>
     </section>
 
-    <section v-if="!showUserConfig" class="surface rounded-lg p-5">
+    <section v-if="activeConfigSection === 'maintenance' && !showUserConfig" class="surface rounded-lg p-5">
       <div class="mb-4 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">配置导入导出</p>
         <h2 class="mt-1 text-lg font-semibold">配置包</h2>
@@ -705,7 +727,7 @@
       <p v-if="configPackageMsg" :class="['mt-3 text-sm', configPackageOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ configPackageMsg }}</p>
     </section>
 
-    <nav class="flex flex-wrap gap-2 border-b border-[var(--color-rule)] pb-3" aria-label="配置分区">
+    <nav v-if="activeConfigSection === 'advanced'" class="flex flex-wrap gap-2 border-b border-[var(--color-rule)] pb-3" aria-label="原始配置分区">
       <button
         v-for="tab in configTabs"
         :key="tab.key"
@@ -718,7 +740,7 @@
     </nav>
 
     <!-- 个人配置（可编辑，远程模式） -->
-    <template v-if="showUserConfig">
+    <template v-if="activeConfigSection === 'advanced' && showUserConfig">
       <section v-if="activeTab === 'personal'">
         <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -822,7 +844,7 @@
     </template>
 
     <!-- 本机模式：只读 -->
-    <template v-else>
+    <template v-else-if="activeConfigSection === 'advanced'">
       <section v-if="activeTab === 'env'">
         <h2 class="text-lg font-semibold mb-4">环境变量 (.env)</h2>
         <p class="mb-3 text-sm text-[var(--color-ink-muted)]">~/.ai-gen-reimbursement-docs/.env</p>
@@ -842,6 +864,7 @@
         <p v-else class="text-sm text-[var(--color-ink-soft)]">加载中…</p>
       </section>
     </template>
+    </div>
   </div>
 </template>
 
@@ -1045,6 +1068,15 @@ const { fpaOptions, loadFpaOptions } = useFpaOptions()
 
 const showUserConfig = computed(() => auth.isRemote)
 const backendOffline = computed(() => configStore.backendStatus === 'offline')
+type ConfigSectionKey = 'common' | 'fpa' | 'templates' | 'advanced' | 'maintenance'
+const activeConfigSection = ref<ConfigSectionKey>('common')
+const configSectionTabs = computed<{ key: ConfigSectionKey; label: string }[]>(() => [
+  { key: 'common', label: '常用' },
+  ...(!showUserConfig.value ? [{ key: 'fpa' as const, label: 'FPA' }] : []),
+  { key: 'templates', label: '模板' },
+  { key: 'advanced', label: '高级' },
+  { key: 'maintenance', label: '维护' },
+])
 type ConfigTabKey = 'personal' | 'global' | 'env' | 'system' | 'rules'
 const activeTab = ref<ConfigTabKey>(showUserConfig.value ? 'personal' : 'env')
 const configTabs = computed<{ key: ConfigTabKey; label: string }[]>(() => {
@@ -1484,6 +1516,14 @@ function statusClassFor(value: boolean | null | undefined): string {
 
 function profileLabel(name: string): string {
   return fpaOptions.value.profiles.find(profile => profile.name === name)?.label || name
+}
+
+function configTabId(key: ConfigSectionKey): string {
+  return `config-section-tab-${key}`
+}
+
+function configPanelId(key: ConfigSectionKey): string {
+  return `config-section-panel-${key}`
 }
 
 function presentConfigError(error: unknown): string {
