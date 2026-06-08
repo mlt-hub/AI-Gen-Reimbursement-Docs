@@ -156,7 +156,7 @@ def _strict_default_rule_set() -> FpaRuleSetConfig:
             KeywordTypeRule("EQ", ("查询", "查看", "详情", "检索", "列表"), "事务功能读取数据且无派生输出，按 EQ。"),
             KeywordTypeRule(
                 "EI",
-                ("新增", "添加", "修改", "编辑", "删除", "保存", "提交", "审批", "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联"),
+                ("新增", "添加", "修改", "编辑", "删除", "维护", "保存", "提交", "审批", "启用", "停用", "导入", "同步", "发起", "写入", "选择", "引用", "关联"),
                 "事务功能进入或改变系统边界内数据，按 EI。",
             ),
         ),
@@ -1356,6 +1356,49 @@ def test_ai_first_oa_approval_reference_keeps_external_doc_and_internal_relation
         hit["rule_id"] == "postprocess.ai_first_type_conflict"
         for row in rows
         for hit in row["_规则命中详情"]
+    )
+
+
+def test_ai_first_external_master_data_maintenance_keeps_ei_transaction_type():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "组织管理",
+            "二级模块": "外部组织引用",
+            "三级模块": "外部组织引用",
+            "三级模块整体功能描述": "引用主数据平台维护的组织主数据，本系统不维护组织主数据。",
+            "功能过程": "选择外部组织",
+            "功能过程类型": "新增",
+            "功能过程描述": "从主数据平台组织主数据中选择外部组织并关联到当前业务对象。",
+        },
+    ])[0]
+
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": "【地市后台】组织管理-外部组织引用-外部组织引用-组织主数据维护",
+            "type": "EI",
+            "explanation": (
+                "来源场景：【地市后台】组织管理-外部组织引用-外部组织引用-组织主数据维护。\n"
+                "业务数据：组织主数据、当前业务对象关联关系。\n"
+                "业务规则：将外部组织关联到当前业务对象，内部数据变化。\n"
+                "计算说明：涉及修改或增加界面的输入操作，改变内部数据，按 EI 计量。"
+            ),
+            "source_process_ids": ["m1_p1"],
+            "source_processes": ["选择外部组织"],
+        }],
+    )
+
+    assert rows[0]["类型"] == "EI"
+    assert not any("AI type=EI 与规则存在冲突" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.ai_first_type_conflict"
+        for hit in rows[0]["_规则命中详情"]
     )
 
 
