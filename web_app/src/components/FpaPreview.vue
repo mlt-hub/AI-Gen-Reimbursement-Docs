@@ -48,6 +48,20 @@
           <div class="font-semibold">无法加载 FPA 方案配置</div>
           <div class="mt-1 leading-5">{{ friendlyFpaOptionsError }}</div>
         </div>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2 text-xs">
+            <div class="text-[var(--color-ink-soft)]">模块数量</div>
+            <div class="mt-1 text-sm font-semibold text-[var(--color-ink)]">{{ modules.length || '-' }}</div>
+          </div>
+          <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2 text-xs">
+            <div class="text-[var(--color-ink-soft)]">当前选择</div>
+            <div class="mt-1 truncate text-sm font-semibold text-[var(--color-ink)]">{{ selectedModuleLabel }}</div>
+          </div>
+          <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2 text-xs">
+            <div class="text-[var(--color-ink-soft)]">功能过程</div>
+            <div class="mt-1 text-sm font-semibold text-[var(--color-ink)]">{{ selectedModuleProcessCount }}</div>
+          </div>
+        </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-h-5 text-xs text-[var(--color-ink-soft)]">
             <span v-if="modules.length">已生成 {{ modules.length }} 个三级模块，可从下拉框选择。</span>
@@ -134,14 +148,14 @@
         <section v-if="confirmationQuestions.length || appliedConfirmationCount" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)]">
           <div class="flex flex-col gap-2 border-b border-[var(--color-rule)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div class="text-sm font-semibold text-[var(--color-ink)]">确认计量口径</div>
+              <div class="text-sm font-semibold text-[var(--color-ink)]">待确认</div>
               <div class="mt-1 text-xs text-[var(--color-ink-soft)]">
-                <span v-if="confirmationQuestions.length">发现 {{ confirmationQuestions.length }} 项需要确认的计量口径。</span>
-                <span v-else>已应用 {{ appliedConfirmationCount }} 项计量口径确认。</span>
+                <span v-if="confirmationQuestions.length">发现 {{ confirmationQuestions.length }} 项需要本次运行确认。</span>
+                <span v-else>已应用 {{ appliedConfirmationCount }} 项本次运行确认。</span>
               </div>
             </div>
             <span v-if="appliedConfirmationCount" class="w-fit rounded bg-[var(--color-accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--color-accent-strong)]">
-              已应用 {{ appliedConfirmationCount }} 项
+              本次已应用 {{ appliedConfirmationCount }} 项
             </span>
           </div>
 
@@ -485,6 +499,13 @@ const coverageSummary = computed(() => {
   if (!coverage) return '-'
   return `${coverage.covered_count}/${coverage.process_total}`
 })
+const selectedModule = computed(() => (
+  modules.value.find(module => String(module.index) === selectedModuleIndex.value) ?? null
+))
+const selectedModuleLabel = computed(() => selectedModule.value?.label || '未选择')
+const selectedModuleProcessCount = computed(() => (
+  selectedModule.value ? `${selectedModule.value.process_count} 个` : '-'
+))
 const canLoadModules = computed(() => config.isValid && !session.isRunning && !previewLoading.value)
 const canPreview = computed(() => config.isValid && selectedModuleIndex.value !== '' && !session.isRunning && !modulesLoading.value)
 const selectedProfile = computed(() => (
