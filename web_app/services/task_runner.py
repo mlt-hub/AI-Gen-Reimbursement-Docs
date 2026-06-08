@@ -116,6 +116,7 @@ def execute_mode(
     fpa_strategy: str = "",
     fpa_rule_set: str = "",
     fpa_confirmation_mode: str = "",
+    confirmed_decisions: object | None = None,
     clean: bool = False,
     *,
     mode_info: dict[str, dict[str, str]],
@@ -164,6 +165,7 @@ def execute_mode(
         fpa_strategy=fpa_strategy,
         fpa_rule_set=fpa_rule_set,
         fpa_confirmation_mode=fpa_confirmation_mode,
+        confirmed_decisions=confirmed_decisions,
         callbacks=callbacks,
     )
 
@@ -183,6 +185,7 @@ def execute_in_session(
     fpa_strategy: str,
     fpa_rule_set: str,
     fpa_confirmation_mode: str,
+    confirmed_decisions: object | None,
     clean: bool,
     mode: str,
     *,
@@ -213,6 +216,7 @@ def execute_in_session(
             fpa_strategy=fpa_strategy,
             fpa_rule_set=fpa_rule_set,
             fpa_confirmation_mode=fpa_confirmation_mode,
+            confirmed_decisions=confirmed_decisions,
             clean=clean,
             mode_info=mode_info,
             mode_map=mode_map,

@@ -195,6 +195,7 @@ def run_pipeline(
     fpa_strategy: str = "",
     fpa_rule_set: str = "",
     fpa_confirmation_mode: str = "",
+    confirmed_decisions: object | None = None,
     callbacks: PipelineCallbacks | None = None,
 ) -> PipelineResult:
     """from-excel 管道总入口。
@@ -232,6 +233,7 @@ def run_pipeline(
                 fpa_strategy=fpa_strategy,
                 fpa_rule_set=fpa_rule_set,
                 fpa_confirmation_mode=fpa_confirmation_mode,
+                confirmed_decisions=confirmed_decisions,
             )
         except Exception as exc:
             _step_failed(str(exc))
@@ -324,6 +326,7 @@ def run_pipeline(
             templates_dict, api_key, model, base_url, project_name, result,
             fpa_reduced, cfp_total,
             fpa_profile, fpa_strategy, fpa_rule_set, fpa_confirmation_mode,
+            confirmed_decisions,
         )
     elif mode == "gen-basedata":
         result.tree_md = tree_md
@@ -334,6 +337,7 @@ def run_pipeline(
             file_path, output_dir, md_dir, tree_md, meta_md, fpa_sum_md, fpa_xlsx,
             templates_dict, api_key, model, base_url, result, fpa_profile,
             fpa_strategy, fpa_rule_set, fpa_confirmation_mode,
+            confirmed_decisions,
         )
     elif mode == "gen-cosmic":
         meta_md = _current_meta
@@ -556,7 +560,8 @@ def _check_template(templates_dict: dict, key: str, name: str):
 
 def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
              fpa_sum_md, fpa_xlsx, templates_dict, api_key, model, base_url, result,
-             fpa_profile="", fpa_strategy="", fpa_rule_set="", fpa_confirmation_mode=""):
+             fpa_profile="", fpa_strategy="", fpa_rule_set="", fpa_confirmation_mode="",
+             confirmed_decisions=None):
     """第1步：FPA 工作量评估。"""
     _check_cancelled()
     _step("fpa", "生成 FPA 工作量评估")
@@ -598,6 +603,7 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
             rule_set=execution.rule_set,
             audit_trace_path=fpa_audit_trace,
             fpa_confirmation_mode=fpa_confirmation_mode,
+            confirmed_decisions=confirmed_decisions,
         )
     else:
         fpa_filled_md = fpa_md
@@ -783,7 +789,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
              fpa_xlsx, cosmic_xlsx, require_xlsx, spec_docx,
              templates_dict, api_key, model, base_url, project_name, result,
              fpa_reduced=None, cfp_total=None, fpa_profile="", fpa_strategy="",
-             fpa_rule_set="", fpa_confirmation_mode=""):
+             fpa_rule_set="", fpa_confirmation_mode="", confirmed_decisions=None):
     """全流程：basedata → fpa → spec → cosmic → list（委托独立函数按依赖顺序编排）。"""
 
     # 入口检查所有模板（提前发现模板缺失）
@@ -799,7 +805,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     result = _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
                            fpa_sum_md, fpa_xlsx, templates_dict, api_key, model,
                            base_url, result, fpa_profile, fpa_strategy,
-                           fpa_rule_set, fpa_confirmation_mode)
+                           fpa_rule_set, fpa_confirmation_mode, confirmed_decisions)
 
     # Step 2: SPEC
     result = _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl,
@@ -887,6 +893,7 @@ def run_pipeline_simple(
     fpa_strategy: str = "",
     fpa_rule_set: str = "",
     fpa_confirmation_mode: str = "",
+    confirmed_decisions: object | None = None,
     callbacks: PipelineCallbacks | None = None,
 ) -> PipelineResult:
     """一站式管道入口，CLI / Web UI / 零参数 共享。
@@ -940,5 +947,6 @@ def run_pipeline_simple(
         fpa_strategy=fpa_strategy,
         fpa_rule_set=fpa_rule_set,
         fpa_confirmation_mode=fpa_confirmation_mode,
+        confirmed_decisions=confirmed_decisions,
         callbacks=callbacks,
     )

@@ -24,6 +24,12 @@ from web_app.services.config_service import (
     resolve_task_start_config,
 )
 from web_app.services import pipeline_runtime
+from web_app.services.fpa_project_profile_service import (
+    load_project_profile_decisions,
+    merge_decision_payloads,
+    persist_project_profile_decisions,
+    serialize_decisions,
+)
 from web_app.services.run_history_service import finish_web_run, start_web_run
 from web_app.services.session_access import require_session_access
 from web_app.services.session_manager import SessionManager
@@ -147,6 +153,24 @@ def create_router(
             if os.path.basename(f) in ("功能清单-录入模板.xlsx", "功能清单.xlsx")
         ]
         return Path(preferred[0] if preferred else xlsx_files[0])
+
+    def _profile_config_root(*, local_mode: bool, user: str = "") -> Path:
+        return config_dir() if local_mode else user_config_dir(user)
+
+    def _load_profile_decision_payload(config_root: Path) -> dict[str, dict[str, str]]:
+        return serialize_decisions(load_project_profile_decisions(config_root))
+
+    def _persist_and_merge_profile_decisions(
+        *,
+        config_root: Path,
+        confirmed_decisions: object | None,
+    ) -> dict[str, dict[str, str]]:
+        saved = persist_project_profile_decisions(
+            config_root=config_root,
+            confirmed_decisions=confirmed_decisions,
+        )
+        merged = merge_decision_payloads(saved, confirmed_decisions or {})
+        return serialize_decisions(merged)
 
     def _session_log_dir(session_id: str) -> Path | None:
         state = session_manager.get(session_id)
@@ -343,6 +367,21 @@ def create_router(
     ):
         """接收前端交互输入（送审工作量），唤醒等待中的 pipeline。"""
         require_session_access(session_manager, session_id, request, user)
+        state = session_manager.get(session_id)
+        if (
+            state is not None
+            and str(data.get("kind") or "") == "fpa_confirmation"
+            and isinstance(data.get("confirmed_decisions"), dict)
+        ):
+            config_root = state.config_root or _profile_config_root(
+                local_mode=state.mode == "local",
+                user=state.owner or user,
+            )
+            data = dict(data)
+            data["confirmed_decisions"] = _persist_and_merge_profile_decisions(
+                config_root=config_root,
+                confirmed_decisions=data.get("confirmed_decisions"),
+            )
         if not session_manager.submit_input(session_id, data):
             raise HTTPException(404, "会话不存在或无需输入")
         return {"ok": True}
@@ -454,7 +493,14 @@ def create_router(
         )
 
         session_id = uuid.uuid4().hex[:8]
-        session_manager.create(session_id, mode="local", output_dir=out)
+        profile_root = _profile_config_root(local_mode=True)
+        profile_decisions = _load_profile_decision_payload(profile_root)
+        session_manager.create(
+            session_id,
+            mode="local",
+            output_dir=out,
+            config_root=profile_root,
+        )
         start_web_run(
             base_dir=base_dir,
             session_id=session_id,
@@ -494,6 +540,7 @@ def create_router(
                 task_config["fpa_strategy"],
                 task_config["fpa_rule_set"],
                 task_config["fpa_confirmation_mode"],
+                profile_decisions,
                 bool(clean),
                 mode,
                 mode_info=mode_info,
@@ -569,7 +616,15 @@ def create_router(
             custom_t_dir, fpa_template, cosmic_template, list_template, spec_template
         )
 
-        session_manager.create(session_id, mode="remote", owner=user, work_dir=work_dir)
+        profile_root = _profile_config_root(local_mode=False, user=user)
+        profile_decisions = _load_profile_decision_payload(profile_root)
+        session_manager.create(
+            session_id,
+            mode="remote",
+            owner=user,
+            work_dir=work_dir,
+            config_root=profile_root,
+        )
         start_web_run(
             base_dir=base_dir,
             session_id=session_id,
@@ -621,6 +676,7 @@ def create_router(
                 task_config["fpa_strategy"],
                 task_config["fpa_rule_set"],
                 task_config["fpa_confirmation_mode"],
+                profile_decisions,
                 bool(clean),
                 mode,
                 mode_info=mode_info,
@@ -701,6 +757,11 @@ def create_router(
                 if not isinstance(parsed_decisions, dict):
                     raise HTTPException(400, "confirmed_decisions 必须是 JSON 对象")
                 confirmed_decisions_payload = parsed_decisions
+            profile_root = _profile_config_root(local_mode=local_preview, user=user)
+            confirmed_decisions_payload = _persist_and_merge_profile_decisions(
+                config_root=profile_root,
+                confirmed_decisions=confirmed_decisions_payload,
+            )
             result = preview_fpa_module(
                 file_path=str(file_path),
                 module_name=module_name.strip(),

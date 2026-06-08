@@ -419,6 +419,48 @@ def test_run_upload_uses_config_defaults_snapshot(monkeypatch, tmp_path):
     server.session_manager.cleanup_download(resp.json()["session_id"])
 
 
+def test_run_upload_loads_project_profile_decisions(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    calls: list[dict] = []
+    user_dir = tmp_path / "users" / "alice"
+    user_dir.mkdir(parents=True)
+    (user_dir / "fpa_project_profile.json").write_text(
+        json.dumps({
+            "version": 1,
+            "confirmed_decisions": {
+                "merge_query_demo": {"value": "yes", "scope": "project_profile"},
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    def fake_execute_in_session(*args, **kwargs):
+        calls.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(tasks, "execute_in_session", fake_execute_in_session)
+    monkeypatch.setattr(tasks, "cleanup_expired_sessions", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(tasks, "user_config_dir", lambda user: user_dir)
+
+    resp = client.post(
+        "/api/run-upload",
+        data={
+            "mode": "from-excel-gen-fpa",
+            "api_key": "sk-explicit",
+        },
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 200
+    assert calls
+    assert calls[0]["args"][14] == {
+        "merge_query_demo": {"value": "yes", "scope": "project_profile"},
+    }
+    state = server.session_manager.get(resp.json()["session_id"])
+    assert state is not None
+    assert state.config_root == user_dir
+    server.session_manager.cleanup_download(resp.json()["session_id"])
+
+
 def test_fpa_preview_upload_returns_preview(monkeypatch):
     client = _client(monkeypatch, user="alice")
     calls: list[dict] = []
@@ -480,6 +522,54 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
     assert calls[0]["rule_set"] == "unified_ui_rs"
     assert calls[0]["fpa_confirmation_mode"] == "cautious"
     assert calls[0]["confirmed_decisions"] == {"merge_crud_demo": {"value": "yes", "scope": "current_run"}}
+
+
+def test_fpa_preview_merges_and_persists_project_profile_decisions(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    calls: list[dict] = []
+    user_dir = tmp_path / "users" / "alice"
+    user_dir.mkdir(parents=True)
+    (user_dir / "fpa_project_profile.json").write_text(
+        json.dumps({
+            "version": 1,
+            "confirmed_decisions": {
+                "merge_query_demo": {"value": "yes", "scope": "project_profile"},
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    def fake_preview_fpa_module(**kwargs):
+        calls.append(kwargs)
+        return {"module": {"l3": "垂直行业管理"}, "rows": [], "warnings": [], "status": "ok"}
+
+    monkeypatch.setattr(tasks, "preview_fpa_module", fake_preview_fpa_module)
+    monkeypatch.setattr(tasks, "user_config_dir", lambda user: user_dir)
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        data={
+            "module_name": "垂直行业管理",
+            "api_key": "sk-test",
+            "confirmed_decisions": json.dumps({
+                "merge_crud_demo": {"value": "yes", "scope": "project_profile"},
+                "current_only_demo": {"value": "no", "scope": "current_run"},
+            }),
+        },
+        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 200
+    assert calls[0]["confirmed_decisions"] == {
+        "current_only_demo": {"value": "no", "scope": "current_run"},
+        "merge_crud_demo": {"value": "yes", "scope": "project_profile"},
+        "merge_query_demo": {"value": "yes", "scope": "project_profile"},
+    }
+    saved = json.loads((user_dir / "fpa_project_profile.json").read_text(encoding="utf-8"))
+    assert saved["confirmed_decisions"] == {
+        "merge_crud_demo": {"value": "yes", "scope": "project_profile"},
+        "merge_query_demo": {"value": "yes", "scope": "project_profile"},
+    }
 
 
 def test_fpa_preview_upload_uses_config_defaults(monkeypatch, tmp_path):
@@ -780,6 +870,43 @@ def test_continue_wakes_waiting_input_session(monkeypatch):
     assert server.session_manager.pop_input_result(session_id) == {
         "fpa_reduced": 12.5,
         "cfp_total": 7,
+    }
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_continue_persists_project_profile_fpa_confirmation(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "task_continue_profile"
+    event = threading.Event()
+    server.session_manager.create(
+        session_id,
+        mode="remote",
+        owner="alice",
+        config_root=tmp_path,
+    )
+    server.session_manager.set_input_waiter(session_id, event)
+
+    resp = client.post(
+        f"/api/continue/{session_id}",
+        json={
+            "kind": "fpa_confirmation",
+            "confirmed_decisions": {
+                "merge_query_demo": {"value": "yes", "scope": "project_profile"},
+                "current_only_demo": {"value": "no", "scope": "current_run"},
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    assert event.is_set() is True
+    submitted = server.session_manager.pop_input_result(session_id)
+    assert submitted["confirmed_decisions"] == {
+        "current_only_demo": {"value": "no", "scope": "current_run"},
+        "merge_query_demo": {"value": "yes", "scope": "project_profile"},
+    }
+    saved = json.loads((tmp_path / "fpa_project_profile.json").read_text(encoding="utf-8"))
+    assert saved["confirmed_decisions"] == {
+        "merge_query_demo": {"value": "yes", "scope": "project_profile"},
     }
     server.session_manager.cleanup_download(session_id)
 

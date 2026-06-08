@@ -19,6 +19,7 @@ class SessionState:
     queue: queue.Queue | None
     owner: str | None = None
     output_dir: Path | None = None
+    config_root: Path | None = None
     zip_path: Path | None = None
     work_dir: Path | None = None
     cancelled: bool = False
@@ -45,6 +46,7 @@ class SessionManager:
         mode: Literal["local", "remote"],
         owner: str | None = None,
         output_dir: Path | None = None,
+        config_root: Path | None = None,
         work_dir: Path | None = None,
         queue_size: int = 2000,
     ) -> SessionState:
@@ -53,6 +55,7 @@ class SessionManager:
             mode=mode,
             owner=owner,
             output_dir=output_dir,
+            config_root=config_root,
             work_dir=work_dir,
             queue=queue.Queue(maxsize=queue_size),
         )

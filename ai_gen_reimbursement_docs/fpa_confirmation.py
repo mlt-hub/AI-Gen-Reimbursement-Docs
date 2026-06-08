@@ -8,6 +8,7 @@ from ai_gen_reimbursement_docs.fpa_validator import FpaValidationIssue
 
 
 VALID_FPA_CONFIRMATION_MODES = {"auto", "cautious", "strict"}
+VALID_FPA_CONFIRMATION_SCOPES = {"current_run", "project_profile"}
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,8 @@ def normalize_confirmed_decisions(raw: object) -> dict[str, FpaConfirmationDecis
             scope = "current_run"
         if not decision_value:
             continue
+        if scope not in VALID_FPA_CONFIRMATION_SCOPES:
+            scope = "current_run"
         result[decision_id] = FpaConfirmationDecision(decision_value, scope)
     return result
 
