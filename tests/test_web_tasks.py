@@ -21,9 +21,243 @@ def _clear_dependency_overrides():
 
 def _client(monkeypatch, user: str = "alice", *, local_mode: bool = False):
     monkeypatch.setattr(session_access, "is_local_mode", lambda request: local_mode)
+    monkeypatch.setattr(tasks, "is_local_mode", lambda request: local_mode)
+    monkeypatch.setattr("web_app.routes.history.is_local_mode", lambda request: local_mode)
     server.app.dependency_overrides[dependencies.require_auth] = lambda: user
     server.app.dependency_overrides[dependencies.require_local] = lambda: None
     return TestClient(server.app)
+
+
+def test_task_list_excludes_closed_items(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="visible1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "功能清单.xlsx"),
+        output_dir=str(tmp_path),
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="visible1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "功能清单.xlsx"),
+        output_dir=str(tmp_path),
+    )
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="closed1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "功能清单.xlsx"),
+        output_dir=str(tmp_path),
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="closed1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "功能清单.xlsx"),
+        output_dir=str(tmp_path),
+    )
+    resp_close = client.post("/api/tasks/closed1/close")
+    assert resp_close.status_code == 200
+
+    resp = client.get("/api/tasks")
+
+    assert resp.status_code == 200
+    ids = [item["run_id"] for item in resp.json()["items"]]
+    assert ids == ["visible1"]
+
+
+def test_close_running_task_returns_400(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="running1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "功能清单.xlsx"),
+        output_dir=str(tmp_path),
+    )
+
+    resp = client.post("/api/tasks/running1/close")
+
+    assert resp.status_code == 400
+    assert "运行中任务不能关闭" in resp.json()["detail"]
+
+
+def test_close_done_task_keeps_it_in_history_as_closed(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="done1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="done1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+
+    resp = client.post("/api/tasks/done1/close")
+
+    assert resp.status_code == 200
+    assert resp.json()["item"]["run_state"] == "closed"
+    history = client.get("/api/history?state=closed")
+    assert history.status_code == 200
+    assert [item["run_id"] for item in history.json()["items"]] == ["done1"]
+
+
+def test_task_list_remote_filters_by_owner(monkeypatch, tmp_path):
+    db = tmp_path / "service_history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.service_history_path", lambda base_dir: db)
+    client = _client(monkeypatch, user="alice", local_mode=False)
+
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="alice_task",
+        mode="remote",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "alice.xlsx"),
+        owner_id="alice",
+        owner_label="alice",
+    )
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="bob_task",
+        mode="remote",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "bob.xlsx"),
+        owner_id="bob",
+        owner_label="bob",
+    )
+
+    resp = client.get("/api/tasks")
+
+    assert resp.status_code == 200
+    assert [item["run_id"] for item in resp.json()["items"]] == ["alice_task"]
+
+
+def test_remote_user_cannot_close_other_users_task(monkeypatch, tmp_path):
+    db = tmp_path / "service_history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.service_history_path", lambda base_dir: db)
+    client = _client(monkeypatch, user="bob", local_mode=False)
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="alice_done",
+        mode="remote",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "alice.xlsx"),
+        owner_id="alice",
+        owner_label="alice",
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="alice_done",
+        mode="remote",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(tmp_path / "alice.xlsx"),
+        owner_id="alice",
+        owner_label="alice",
+    )
+
+    resp = client.post("/api/tasks/alice_done/close")
+
+    assert resp.status_code == 404
+
+
+def test_rerun_closed_task_returns_400(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="closed_rerun",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="closed_rerun",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    client.post("/api/tasks/closed_rerun/close")
+
+    resp = client.post("/api/tasks/closed_rerun/rerun")
+
+    assert resp.status_code == 400
+    assert "关闭任务不能重跑" in resp.json()["detail"]
+
+
+def test_rerun_done_local_task_creates_new_history(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="done_rerun",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="done_rerun",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+
+    def fake_start_background_task(session_manager, session_id, target):
+        session_manager.mark_task_started(session_id)
+        target()
+        session_manager.mark_task_finished(session_id)
+        return None
+
+    def fake_execute_in_session(*args, **kwargs):
+        kwargs["on_finish"](args[1], [], None)
+
+    monkeypatch.setattr(tasks, "start_background_task", fake_start_background_task)
+    monkeypatch.setattr(tasks, "execute_in_session", fake_execute_in_session)
+
+    resp = client.post("/api/tasks/done_rerun/rerun")
+
+    assert resp.status_code == 200
+    new_id = resp.json()["session_id"]
+    assert new_id != "done_rerun"
+    history = client.get("/api/history")
+    ids = [item["run_id"] for item in history.json()["items"]]
+    assert new_id in ids
+    assert "done_rerun" in ids
 
 
 def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
@@ -806,6 +1040,7 @@ def test_fpa_preview_requires_module_target(monkeypatch):
         "/static/dist/login",
         "/static/dist/config",
         "/static/dist/license",
+        "/static/dist/tasks",
         "/static/dist/history",
         "/static/dist/prompt-debug",
         "/static/dist/preview/fpa",
@@ -824,7 +1059,7 @@ def test_static_dist_spa_routes_return_spa_index(monkeypatch, path):
 
 @pytest.mark.parametrize(
     "path",
-    ["/login", "/preview/fpa", "/sessions/demo-session/fpa/debug"],
+    ["/login", "/tasks", "/preview/fpa", "/sessions/demo-session/fpa/debug"],
 )
 def test_top_level_spa_routes_return_spa_index(monkeypatch, path):
     client = _client(monkeypatch, user="alice")
