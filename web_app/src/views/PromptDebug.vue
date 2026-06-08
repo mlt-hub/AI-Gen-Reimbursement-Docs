@@ -61,7 +61,7 @@
               <input v-model="quickXlsx" type="text" placeholder="功能清单 .xlsx 路径（留空自动搜索）"
                 class="min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-[var(--color-focus)] focus:outline-none" />
               <button @click="runQuickTest('reliability')" :disabled="quickRunning"
-                class="btn-primary min-h-0 whitespace-nowrap px-3 py-1.5 text-xs">
+                class="btn-secondary min-h-0 whitespace-nowrap px-3 py-1.5 text-xs">
                 {{ quickRunning ? '...' : '执行' }}
               </button>
             </div>
