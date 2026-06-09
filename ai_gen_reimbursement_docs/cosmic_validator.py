@@ -277,6 +277,16 @@ def _finding_details(finding: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _function_user_details(function_user_basis: dict[str, object]) -> dict[str, object]:
+    return {
+        "function_user_parts": list(function_user_basis.get("parts", [])),
+        "match_source": str(function_user_basis.get("match_source", "")),
+        "matched_term": str(function_user_basis.get("matched_term", "")),
+        "matched_part": str(function_user_basis.get("matched_part", "")),
+        "basis_description": str(function_user_basis.get("description", "")),
+    }
+
+
 def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
     issues: list[CosmicIssue] = []
     basis = {
@@ -309,6 +319,7 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
             "warning", "GENERIC_FUNCTION_USER",
             "功能用户未能对应三级模块、最小颗粒度模块或元数据规则结果",
             "user", item=item,
+            details=_function_user_details(basis["function_user"]),
         ))
 
     for finding in basis["process_semantics"]:
@@ -604,10 +615,20 @@ def _issue_details_text(issue: CosmicIssue) -> str:
     if not issue.details:
         return ""
     matched_terms = issue.details.get("matched_terms") or []
+    function_user_parts = issue.details.get("function_user_parts") or []
+    match_source = str(issue.details.get("match_source", "") or "")
+    matched_term = str(issue.details.get("matched_term", "") or "")
     basis_description = str(issue.details.get("basis_description", "") or "")
     parts = []
     if matched_terms:
         parts.append("命中：" + "、".join(str(term) for term in matched_terms))
+    if function_user_parts:
+        parts.append("功能用户：" + "、".join(str(part) for part in function_user_parts))
+    if match_source:
+        text = f"匹配来源：{match_source}"
+        if matched_term:
+            text += f"；匹配项：{matched_term}"
+        parts.append(text)
     if basis_description:
         parts.append(basis_description)
     return "<br>".join(_escape_md_table_cell(part) for part in parts)

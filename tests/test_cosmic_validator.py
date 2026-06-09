@@ -342,6 +342,9 @@ def test_generic_function_user_is_warning():
     assert result.status == "review_required"
     assert result.basis["function_user"]["match_source"] == "generic_only"
     assert result.basis["function_user"]["requires_review"] is True
+    issue = next(issue for issue in result.issues if issue.code == "GENERIC_FUNCTION_USER")
+    assert issue.details["function_user_parts"] == ["操作员", "系统"]
+    assert issue.details["match_source"] == "generic_only"
 
 
 def test_module_context_without_l3_user_requires_review():
