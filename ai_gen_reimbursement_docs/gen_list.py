@@ -5,6 +5,7 @@ import logging
 import os
 from typing import Any
 
+from openpyxl.utils.cell import range_boundaries
 from openpyxl.styles import Alignment
 
 from ai_gen_reimbursement_docs.constants import (
@@ -78,6 +79,71 @@ def _manifest_header(sheet_spec: dict[str, Any], key: str) -> str:
     return ""
 
 
+def _manifest_named_cell(sheet_spec: dict[str, Any], key: str) -> str:
+    named_cells = sheet_spec.get("named_cells", {}) or {}
+    if not isinstance(named_cells, dict):
+        return ""
+    spec = named_cells.get(key, "")
+    if isinstance(spec, str):
+        return spec.strip()
+    if isinstance(spec, dict):
+        return str(spec.get("name", "") or "").strip()
+    return ""
+
+
+def _named_cell_target(wb, name: str, *, expected_sheet: str) -> tuple[str, int, int] | None:
+    if not name:
+        return None
+    defined_name = wb.defined_names.get(name)
+    if defined_name is None:
+        logger.warning("list manifest named_cells 指向的命名单元格不存在: %s", name)
+        return None
+    try:
+        destinations = list(defined_name.destinations)
+    except Exception as exc:
+        logger.warning("list manifest named_cells 无法解析命名单元格 %s: %s", name, exc)
+        return None
+    if len(destinations) != 1:
+        logger.warning("list manifest named_cells 仅支持单一目标命名单元格: %s", name)
+        return None
+    sheet_name, coord = destinations[0]
+    if sheet_name != expected_sheet:
+        logger.warning(
+            "list manifest named_cells 命名单元格 %s 指向 sheet %s，期望 %s",
+            name,
+            sheet_name,
+            expected_sheet,
+        )
+        return None
+    try:
+        min_col, min_row, max_col, max_row = range_boundaries(str(coord))
+    except ValueError:
+        logger.warning("list manifest named_cells 命名单元格 %s 坐标无效: %s", name, coord)
+        return None
+    if min_col != max_col or min_row != max_row:
+        logger.warning("list manifest named_cells 仅支持单个单元格目标: %s -> %s", name, coord)
+        return None
+    return sheet_name, min_row, min_col
+
+
+def _write_named_cell_if_configured(
+    wb,
+    ws,
+    sheet_spec: dict[str, Any],
+    key: str,
+    value: Any,
+) -> bool:
+    name = _manifest_named_cell(sheet_spec, key)
+    if not name:
+        return False
+    target = _named_cell_target(wb, name, expected_sheet=ws.title)
+    if target is None:
+        return False
+    _sheet_name, row, col = target
+    ws.cell(row, col, value)
+    return True
+
+
 def _column_by_header(
     headers: dict[str, int],
     sheet_spec: dict[str, Any],
@@ -144,14 +210,19 @@ def generate_list_xlsx_from_md(
         "owner_contact": ("需求负责人联系方式", "项目信息概览-需求负责人联系方式", 9),
     }
     for key, (header, meta_key, fallback_col) in project_field_map.items():
+        value = meta.get(meta_key, "")
+        if _write_named_cell_if_configured(wb, ws1, project_spec, key, value):
+            continue
         col_idx = _column_by_header(project_headers, project_spec, key, (header,), fallback_col)
         if header in project_headers or _manifest_header(project_spec, key) or not project_headers:
-            ws1.cell(project_data_row, col_idx, meta.get(meta_key, ""))
+            ws1.cell(project_data_row, col_idx, value)
 
-    workload_col = _column_by_header(project_headers, project_spec, "workload", ("送审工作量",), 10)
-    cfp_col = _column_by_header(project_headers, project_spec, "cfp", ("送审功能点",), 11)
-    ws1.cell(project_data_row, workload_col, fpa_reduced)
-    ws1.cell(project_data_row, cfp_col, cfp_total)
+    if not _write_named_cell_if_configured(wb, ws1, project_spec, "workload", fpa_reduced):
+        workload_col = _column_by_header(project_headers, project_spec, "workload", ("送审工作量",), 10)
+        ws1.cell(project_data_row, workload_col, fpa_reduced)
+    if not _write_named_cell_if_configured(wb, ws1, project_spec, "cfp", cfp_total):
+        cfp_col = _column_by_header(project_headers, project_spec, "cfp", ("送审功能点",), 11)
+        ws1.cell(project_data_row, cfp_col, cfp_total)
 
     # ====== Sheet 2: 功能清单 ======
     function_spec = _sheet_spec(manifest, "function_list", default_name="功能清单")
