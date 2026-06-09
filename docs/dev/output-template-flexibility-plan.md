@@ -406,6 +406,7 @@ template_pack/
 - pipeline 在生成前按当前模式校验实际会使用的输出模板。
 - pipeline 预检 activity payload 会携带 manifest 来源和模板能力摘要；CLI 会打印该摘要，Web 生成进度会展示输出模板信息。
 - Excel 预检覆盖 sheet、必要表头、数据起始行、样式源行、关键公式/单元格内容，以及 manifest 声明的命名单元格存在性、目标 sheet、单一目标和单格范围。
+- Excel 预检会校验 `sheets.judgement_rules.rule_header` 是否出现在声明的 `header_row` 上，用于提前发现 FPA 附录判定原则列缺失或表头漂移。
 - Word 预检覆盖正文、表格、页眉、页脚中的必要占位符。
 - pipeline 已支持从 `system_config.yaml` 的 `active_output_template_profile` / `output_template_profiles` 解析输出模板 profile；profile 可直接声明 `templates`，也可通过 `template_pack` 指向带 `manifest.yaml` 的模板包目录。
 
@@ -413,7 +414,7 @@ template_pack/
 
 - `list` 需求清单写入器已开始使用 manifest 做 sheet、表头行、数据起始行、样式源行、列映射和项目概览命名单元格写入。
 - FPA 结果写入器已开始使用 manifest 做 result sheet、表头行、数据起始行、样式源行、关键列定位，以及 result sheet 的数据起始和 FPA 工作量汇总命名单元格定位。
-- FPA 模板附录判定原则读取已开始使用 `sheets.judgement_rules`：可配置 sheet 名、表头定位、规则列、数据起始/结束行、最多读取行数，以及基于固定单元格或包含文本的基础锚点。
+- FPA 模板附录判定原则读取已开始使用 `sheets.judgement_rules`：可配置 sheet 名、表头定位、规则列、数据起始/结束行、最多读取行数，以及基于固定单元格或包含文本的基础锚点；预检会校验声明的规则表头。
 - COSMIC 写入器已开始使用 manifest 做 result sheet、数据起始行、样式源行和结果字段列映射。
 - Excel 预检已支持 manifest 声明的命名单元格存在性、目标 sheet、单一目标和单格范围校验。
 - COSMIC/FPA/list 等 Excel 写入器尚未全面按 manifest 做复杂锚点写入、复杂样式复制、图片/文本框或跨 sheet 公式重写。

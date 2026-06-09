@@ -364,6 +364,7 @@ Excel 预检当前支持：
 - `data_start_row`：数据起始行必须在模板现有范围或下一行内。
 - `style_source_row`：样式源行必须存在。
 - `columns`：必要表头必须出现在表头行。
+- `sheets.judgement_rules.rule_header`：FPA 附录判定原则表头必须出现在声明的 `header_row` 上；对应 sheet `required: false` 时只产生 warning。
 - `named_cells`：可校验 manifest 声明的 Excel 命名单元格是否存在、是否指向期望 sheet、是否为单一目标和单个单元格；`required: false` 时只产生 warning。
 - `required_cells`：关键单元格必须包含指定文本或公式。
 
