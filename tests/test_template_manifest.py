@@ -3,6 +3,7 @@ from pathlib import Path
 import openpyxl
 import pytest
 from docx import Document
+from openpyxl.workbook.defined_name import DefinedName
 
 from ai_gen_reimbursement_docs.exceptions import TemplateError
 from ai_gen_reimbursement_docs.template_manifest import (
@@ -59,6 +60,115 @@ def test_excel_template_preflight_reports_missing_required_header(tmp_path):
 
     with pytest.raises(TemplateError, match="缺少必要表头"):
         validate_output_templates({"list": str(template)}, required_kinds=("list",))
+
+
+def test_excel_template_preflight_validates_required_named_cells(tmp_path):
+    template = tmp_path / "named-list.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "项目信息概览"
+    ws.append(["序号", "项目名称", "送审工作量", "送审功能点"])
+    ws.append(["1", "", "", ""])
+    wb.defined_names.add(DefinedName("PROJECT_NAME_CELL", attr_text="'项目信息概览'!$B$2"))
+    wb.save(template)
+    wb.close()
+    template.with_suffix(".manifest.yaml").write_text(
+        "\n".join([
+            "kind: list",
+            "sheets:",
+            "  project_info:",
+            "    name: 项目信息概览",
+            "    header_row: 1",
+            "    data_start_row: 2",
+            "    style_source_row: 2",
+            "    named_cells:",
+            "      project_name:",
+            "        name: PROJECT_NAME_CELL",
+            "        required: true",
+            "    columns:",
+            "      project_name:",
+            "        header: 项目名称",
+            "        required: true",
+        ]),
+        encoding="utf-8",
+    )
+
+    result = validate_output_template("list", str(template))
+
+    assert result.ok
+    assert result.capabilities["sheets"]["project_info"]["named_cells"] == ["project_name"]
+
+
+def test_excel_template_preflight_reports_missing_required_named_cell(tmp_path):
+    template = tmp_path / "missing-named-list.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "项目信息概览"
+    ws.append(["序号", "项目名称", "送审工作量", "送审功能点"])
+    ws.append(["1", "", "", ""])
+    wb.save(template)
+    wb.close()
+    template.with_suffix(".manifest.yaml").write_text(
+        "\n".join([
+            "kind: list",
+            "sheets:",
+            "  project_info:",
+            "    name: 项目信息概览",
+            "    header_row: 1",
+            "    data_start_row: 2",
+            "    style_source_row: 2",
+            "    named_cells:",
+            "      project_name:",
+            "        name: PROJECT_NAME_CELL",
+            "        required: true",
+            "    columns:",
+            "      project_name:",
+            "        header: 项目名称",
+            "        required: true",
+        ]),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TemplateError, match="缺少命名单元格: PROJECT_NAME_CELL"):
+        validate_output_templates({"list": str(template)}, required_kinds=("list",))
+
+
+def test_excel_template_preflight_warns_for_optional_named_cell(tmp_path):
+    template = tmp_path / "optional-named-list.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "项目信息概览"
+    ws.append(["序号", "项目名称", "送审工作量", "送审功能点"])
+    ws.append(["1", "", "", ""])
+    wb.save(template)
+    wb.close()
+    template.with_suffix(".manifest.yaml").write_text(
+        "\n".join([
+            "kind: list",
+            "sheets:",
+            "  project_info:",
+            "    name: 项目信息概览",
+            "    header_row: 1",
+            "    data_start_row: 2",
+            "    style_source_row: 2",
+            "    named_cells:",
+            "      project_name:",
+            "        name: PROJECT_NAME_CELL",
+            "        required: false",
+            "    columns:",
+            "      project_name:",
+            "        header: 项目名称",
+            "        required: true",
+        ]),
+        encoding="utf-8",
+    )
+
+    result = validate_output_template("list", str(template))
+
+    assert result.ok
+    assert [issue.message for issue in result.warnings] == [
+        "sheet 项目信息概览 缺少命名单元格: PROJECT_NAME_CELL"
+    ]
 
 
 def test_word_template_preflight_reports_missing_required_placeholder(tmp_path):
