@@ -668,6 +668,77 @@ def test_explanation_normalizes_parenthetical_table_count_detail_without_warning
     )
 
 
+def test_explanation_quality_warns_for_fabricated_system_elements():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["维护业务数据的外部输入，按 EI 识别。"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "新增客户",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-新增客户"
+                "\n业务数据：客户名称、证件号码。"
+                "\n业务规则：后台用户提交客户资料后系统保存。"
+                "\n系统元素：涉及客户信息表，用于保存客户资料。"
+                "\n计算说明：该功能体现外部输入事务，按 EI 识别。"
+            ),
+        }],
+    )
+
+    assert any("系统元素疑似包含输入未明确提供" in warning for warning in warnings)
+    quality_hit = next(
+        hit for hit in rows[0]["_规则命中详情"]
+        if hit["rule_id"] == "postprocess.explanation_quality"
+    )
+    assert any("客户信息表" in warning for warning in quality_hit["warnings"])
+
+
+def test_explanation_quality_accepts_explicit_system_elements_from_input():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户运营",
+            "二级模块": "客户同步",
+            "三级模块": "客户资料同步",
+            "三级模块整体功能描述": "对接CRM客户查询接口，同步客户基础资料。",
+            "功能过程": "同步客户资料",
+            "功能过程类型": "新增",
+            "功能过程描述": "调用CRM客户查询接口获取客户名称和证件号码。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["维护业务数据的外部输入，按 EI 识别。"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "同步客户资料",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】客户运营-客户同步-客户资料同步-同步客户资料"
+                "\n业务数据：客户名称和证件号码。"
+                "\n业务规则：系统调用接口获取客户基础资料并保存。"
+                "\n系统元素：涉及CRM客户查询接口。"
+                "\n计算说明：该功能体现外部输入事务，按 EI 识别。"
+            ),
+            "source_process_ids": ["m1_p1"],
+        }],
+    )
+
+    assert not any("系统元素疑似包含输入未明确提供" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
 def test_explanation_accepts_official_measurement_wording_as_type_evidence():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(
