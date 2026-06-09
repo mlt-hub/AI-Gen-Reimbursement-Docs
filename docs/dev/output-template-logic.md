@@ -445,5 +445,6 @@ module_table:
 - `data_start_row`：项目概览和功能清单数据起始行。
 - `style_source_row`：功能清单生成行的边框样式来源行。
 - `columns`：按表头定位项目名称、子系统、一级/二级/三级模块、类型、送审工作量和送审功能点。
+- `sheets.project_info.named_cells`：项目概览字段可优先写入 Excel 命名单元格，例如项目名称、需求部门、送审工作量和送审功能点；未配置或命名区域不可用时回退到表头行列写入。
 
-当前仍不把 Excel 命名单元格、复杂锚点、图片、文本框或跨 sheet 公式重写作为 `gen-list` manifest 行为。
+当前 `gen-list` 仅把命名单元格用于项目概览单格字段写入；功能清单复杂锚点、图片、文本框和跨 sheet 公式重写仍不是当前 manifest 行为。

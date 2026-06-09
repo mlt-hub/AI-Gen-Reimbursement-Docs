@@ -53,7 +53,7 @@
 
 ## Output Template Progress Notes
 
-- `gen-list` 已使用 `list` manifest 驱动项目需求清单写入：sheet 名、表头行、数据起始行、样式源行和关键列映射会影响实际输出。
+- `gen-list` 已使用 `list` manifest 驱动项目需求清单写入：sheet 名、表头行、数据起始行、样式源行、关键列映射和项目概览命名单元格会影响实际输出。
 - `gen-spec` 已使用 Word manifest 驱动占位符替换范围、功能需求锚点、模块清单列配置和样式配置。
 - `gen-fpa` 已使用 `fpa` manifest 驱动 FPA 结果 sheet 名、表头行、数据起始行、样式源行和关键列定位。
 - `gen-cosmic` 已使用 `cosmic` manifest 驱动 COSMIC 结果 sheet 名、数据起始行和样式源行。
