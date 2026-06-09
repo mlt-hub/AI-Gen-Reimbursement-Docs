@@ -813,7 +813,12 @@ def test_build_fpa_strategy_settings_view_reads_profiles_and_rule_sets(tmp_path)
     strict = next(item for item in view["profiles"] if item["name"] == "strict_fpa")
     assert strict["strategy"] == "ai_first"
     assert strict["rule_set"] == "strict_fpa_rs"
+    assert strict["prompt_diagnostics"]["profile"] == "strict_fpa"
+    assert strict["prompt_diagnostics"]["ok"] is True
+    assert strict["prompt_diagnostics"]["calculation_explanation_rules"]["referenced"] is False
+    assert any("未引用 calculation_explanation_rules" in item for item in strict["prompt_diagnostics"]["warnings"])
     assert {item["name"] for item in view["rule_sets"]} == {"strict_fpa_rs", "unified_rs"}
+    assert {item["profile"] for item in view["prompt_diagnostics"]} == {"strict_fpa", "unified_ui"}
 
 
 def test_save_fpa_strategy_settings_validates_backs_up_and_audits(tmp_path):

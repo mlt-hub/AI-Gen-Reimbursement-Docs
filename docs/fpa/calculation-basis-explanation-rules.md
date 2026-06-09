@@ -28,7 +28,7 @@
 
 ## 执行进度
 
-截至 2026-06-09，本规范已进入执行状态，且第一阶段 prompt fragment 抽取已落地。
+截至 2026-06-09，本规范已进入执行状态。第一阶段 prompt fragment 抽取已落地；第二阶段已开始推进运行时 prompt diagnostics。
 
 已完成：
 
@@ -39,6 +39,7 @@
 - 已区分事务功能和数据功能来源路径：`EI/EQ/EO` 检查 `【客户端类型】一级模块-二级模块-三级模块-功能点名称`，`ILF/EIF` 检查 `【客户端类型】一级模块-二级模块-三级模块-数据组名称`。
 - 已保持非阻断策略：质量问题只记录 warning，进入`后处理警告`、`Warnings` 和规则命中详情，不阻断 gen-fpa 生成。
 - 已补充回归测试：覆盖结构化说明通过、非结构化说明告警、数据组路径、表个数归类依据误入说明、以及默认 prompt 规则存在性。
+- 已新增后端 prompt diagnostics helper：`ai_gen_reimbursement_docs.config_utils.diagnose_fpa_user_prompt(profile_name)` 可返回 user prompt 来源、`calculation_explanation_rules` 引用/解析状态、warning/error、未替换占位符和预览渲染结果。
 
 已提交：
 
@@ -48,6 +49,7 @@
 - `13c5204`：补齐 prompt 和文档中的 `ILF/EIF` 数据功能来源路径规则。
 - `41b4fc7`：补充决策摘要和`垂直行业数据组`示例。
 - `17c104e`：抽取 FPA `calculation_explanation_rules` prompt fragment，补齐四个默认 profile 的引用、配置校验、渲染和测试。
+- 本轮：新增 FPA prompt diagnostics 后端 helper 和配置单元测试。
 
 已验证：
 
@@ -58,12 +60,32 @@
 最近一次全量结果：
 
 ```text
-760 passed, 2 skipped
+779 passed, 2 skipped
+```
+
+本轮聚焦验证：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py -q
+```
+
+结果：
+
+```text
+174 passed
 ```
 
 ### 第二阶段实施方案：运行时配置校验与最终 prompt 预览
 
 第二阶段目标是把 fragment 机制从“默认配置和仓库 harness 能正确渲染”推进到“用户在系统中修改 FPA prompt 时能看见、能校验、能定位问题”。本阶段不改变 `gen-fpa` 生成逻辑，不改变 `_explanation_quality_warnings` 质量门，只补运行时配置诊断和最终 prompt 展示能力。
+
+当前落地状态：
+
+- 已新增后端诊断能力：`diagnose_fpa_prompt_config(profile_name, cfg=...)` 返回结构化 `FpaPromptDiagnostics`，旧 `diagnose_fpa_user_prompt(profile_name)` 保留为兼容包装。
+- 已覆盖默认四个 profile、未引用推荐 fragment、缺 fragment、profile override、空 override 回退 default、未知占位符和旧包装返回结构。
+- 已在 Web FPA 配置读取视图 `build_fpa_strategy_settings_view()` 中返回 `prompt_diagnostics`，并在每个 profile 条目上附带对应诊断。
+- 已提供轻量最终 prompt 预览字段 `final_prompt_preview`，并兼容旧字段 `rendered_prompt`；该预览使用配置模板和最小占位值，不调用真实模型。
+- 尚未接入 Web 保存接口阻断逻辑，尚未做前端页面展示和前端 smoke。
 
 #### 实施目标
 
@@ -249,32 +271,32 @@ Web/API 测试：
 
 建议按以下任务推进，保持每个任务可独立验证：
 
-1. 后端诊断 helper
+1. 后端诊断 helper（已完成）
    - 新增 `diagnose_fpa_user_prompt(profile_name: str)` 或等价 service。
    - 返回 profile、user prompt 来源、fragment 引用状态、warnings、errors、unresolved placeholders。
    - 覆盖默认 profile、未引用 fragment、缺失 fragment、profile override、未知占位符等单元测试。
 
-2. 最终 prompt 预览 helper
+2. 最终 prompt 预览 helper（已部分完成）
    - 新增 `render_fpa_prompt_preview(profile_name, sample_group, sample_judgement_rules)` 或等价 service。
-   - 复用现有 `build_prompt` 渲染逻辑，不复制模板替换规则。
-   - 返回 `rendered_prompt`，并保证无 `${...}` 残留。
+   - 当前诊断结果已返回 `final_prompt_preview` / `rendered_prompt`，使用最小占位值展开 fragment 并检查 `${...}` 残留。
+   - 后续如需要真实样例，可再接入 `build_prompt` 或样例试运行，不在本轮实现。
 
-3. Web 配置读取接口接入 diagnostics
+3. Web 配置读取接口接入 diagnostics（已完成 service 层）
    - 在现有 FPA 配置读取接口中附带 profile prompt diagnostics。
    - 不改变现有配置字段语义。
    - 如果 diagnostics 有 warning，接口仍返回 200。
 
-4. Web 配置保存接口接入 diagnostics
+4. Web 配置保存接口接入 diagnostics（待实施）
    - 保存前执行模板合法性和 fragment 解析检查。
    - 阻断 errors，允许 warnings。
    - 返回保存后的 diagnostics，方便前端立即展示。
 
-5. 前端展示 diagnostics
+5. 前端展示 diagnostics（待实施）
    - 展示 warning/error 列表。
    - 展示 fragment 使用状态：未引用、使用 default、使用 profile override、解析失败。
    - 展示最终 prompt 预览折叠区。
 
-6. 测试补齐
+6. 测试补齐（后端已部分完成，Web route/前端待实施）
    - 后端 service 测试覆盖 diagnostics 规则。
    - Web route/service 测试覆盖读取、保存、错误和 warning。
    - 前端 smoke 覆盖 warning 和最终 prompt 预览显示。

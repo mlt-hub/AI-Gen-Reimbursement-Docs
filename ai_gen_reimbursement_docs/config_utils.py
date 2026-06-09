@@ -122,6 +122,47 @@ class PromptConfig:
     source_label: str
 
 
+@dataclass(frozen=True)
+class FpaPromptDiagnostics:
+    """Runtime lint result for one FPA profile prompt."""
+
+    profile: str
+    user_prompt_key: str
+    user_prompt_source: str
+    referenced: bool
+    resolved: bool
+    fragment_source: str
+    missing_required_placeholders: tuple[str, ...]
+    unknown_placeholders: tuple[str, ...]
+    unresolved_placeholders: tuple[str, ...]
+    warnings: tuple[str, ...]
+    errors: tuple[str, ...]
+    final_prompt_preview: str
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "profile": self.profile,
+            "user_prompt_key": self.user_prompt_key,
+            "user_prompt_source": self.user_prompt_source,
+            "calculation_explanation_rules": {
+                "referenced": self.referenced,
+                "resolved": self.resolved,
+                "source": self.fragment_source,
+            },
+            "missing_required_placeholders": list(self.missing_required_placeholders),
+            "unknown_placeholders": list(self.unknown_placeholders),
+            "unresolved_placeholders": list(self.unresolved_placeholders),
+            "warnings": list(self.warnings),
+            "errors": list(self.errors),
+            "ok": self.ok,
+            "final_prompt_preview": self.final_prompt_preview,
+        }
+
+
 class FpaPromptConfigError(ValueError):
     """Raised when required FPA prompt configuration is missing or invalid."""
 
@@ -1546,6 +1587,207 @@ def load_fpa_calculation_explanation_rules(profile_name: str) -> PromptConfig:
             "prompt_fragments.calculation_explanation_rules.default",
         ),
     )
+
+
+def _load_fpa_config_without_validation() -> dict[str, object]:
+    yaml_path = fpa_config_dir() / FPA_CONFIG_FILENAME
+    if not yaml_path.exists():
+        raise FpaConfigError(f"未找到 FPA 配置文件：配置目录/{FPA_CONFIG_FILENAME}")
+    try:
+        cfg = _load_yaml_file(yaml_path)
+    except Exception as exc:
+        raise FpaConfigError(f"读取 FPA 配置失败：配置目录/{FPA_CONFIG_FILENAME}") from exc
+    if not cfg:
+        raise FpaConfigError(f"FPA 配置为空：配置目录/{FPA_CONFIG_FILENAME}")
+    return cfg
+
+
+def _template_identifiers(template_text: str) -> tuple[set[str], str | None]:
+    template = Template(template_text)
+    if not template.is_valid():
+        return set(), (
+            "包含非法占位符，请使用 "
+            "${core_rules} / ${judgement_rules} / ${payload_json} / ${calculation_explanation_rules}"
+        )
+    return set(template.get_identifiers()), None
+
+
+def _diagnose_calculation_explanation_rules(
+    cfg: dict[str, object],
+    profile_name: str,
+    *,
+    referenced: bool,
+) -> tuple[str, str, list[str], list[str]]:
+    warnings: list[str] = []
+    errors: list[str] = []
+    fragments = cfg.get("prompt_fragments")
+    rules = fragments.get("calculation_explanation_rules") if isinstance(fragments, dict) else None
+    if not isinstance(rules, dict):
+        if referenced:
+            errors.append(
+                "当前 user prompt 引用了 ${calculation_explanation_rules}，但缺少 "
+                "prompt_fragments.calculation_explanation_rules.default"
+            )
+        return "", "", warnings, errors
+
+    profile_value = rules.get(profile_name)
+    if isinstance(profile_value, str) and profile_value.strip():
+        return (
+            profile_value.strip(),
+            _user_config_key_source_label(
+                FPA_CONFIG_FILENAME,
+                f"prompt_fragments.calculation_explanation_rules.{profile_name}",
+            ),
+            warnings,
+            errors,
+        )
+    if isinstance(profile_value, str) and not profile_value.strip():
+        warnings.append(
+            f"prompt_fragments.calculation_explanation_rules.{profile_name} 为空，已回退 default"
+        )
+
+    default_value = rules.get("default")
+    if isinstance(default_value, str) and default_value.strip():
+        return (
+            default_value.strip(),
+            _user_config_key_source_label(
+                FPA_CONFIG_FILENAME,
+                "prompt_fragments.calculation_explanation_rules.default",
+            ),
+            warnings,
+            errors,
+        )
+    if referenced:
+        errors.append(
+            "当前 user prompt 引用了 ${calculation_explanation_rules}，但 "
+            "prompt_fragments.calculation_explanation_rules.default 不是非空字符串"
+        )
+    return "", "", warnings, errors
+
+
+def diagnose_fpa_prompt_config(
+    profile_name: str,
+    *,
+    cfg: dict[str, object] | None = None,
+) -> FpaPromptDiagnostics:
+    """Return non-throwing runtime diagnostics for one FPA user prompt template."""
+    cfg = cfg or _load_fpa_config_without_validation()
+    profile_key = str(profile_name or "").strip()
+    warnings: list[str] = []
+    errors: list[str] = []
+    user_prompt_key = ""
+    user_prompt_source = ""
+    prompt_text = ""
+
+    profiles = cfg.get("profiles")
+    entry = profiles.get(profile_key) if isinstance(profiles, dict) else None
+    if not isinstance(entry, dict):
+        errors.append(f"未找到 FPA profile 配置：profiles.{profile_key}")
+    else:
+        user_prompt_key = str(entry.get("user_prompt") or "").strip()
+        if not user_prompt_key:
+            errors.append(f"profiles.{profile_key}.user_prompt 为空")
+
+    user_prompt_sets = cfg.get("user_prompt_sets")
+    if user_prompt_key and isinstance(user_prompt_sets, dict):
+        value = user_prompt_sets.get(user_prompt_key)
+        if isinstance(value, str) and value.strip():
+            prompt_text = value
+            user_prompt_source = _user_config_key_source_label(
+                FPA_CONFIG_FILENAME,
+                f"user_prompt_sets.{user_prompt_key}",
+            )
+        else:
+            errors.append(f"user_prompt_sets.{user_prompt_key} 必须是非空字符串")
+    elif user_prompt_key:
+        errors.append("user_prompt_sets 必须是对象")
+
+    identifiers, placeholder_error = _template_identifiers(prompt_text) if prompt_text else (set(), None)
+    if placeholder_error:
+        errors.append(f"user_prompt_sets.{user_prompt_key} {placeholder_error}")
+    unknown = tuple(sorted(identifiers - FPA_USER_PROMPT_PLACEHOLDERS))
+    if unknown:
+        errors.append("包含未知占位符: " + ", ".join("${" + name + "}" for name in unknown))
+    missing = tuple(sorted(FPA_REQUIRED_USER_PROMPT_PLACEHOLDERS - identifiers))
+    if missing:
+        errors.append("缺少必填占位符: " + ", ".join("${" + name + "}" for name in missing))
+
+    referenced = "calculation_explanation_rules" in identifiers
+    if not referenced and prompt_text:
+        warnings.append(
+            "当前 user prompt 未引用 calculation_explanation_rules（${calculation_explanation_rules}），"
+            "计算依据说明可能不受统一规则约束"
+        )
+
+    fragment_text, fragment_source, fragment_warnings, fragment_errors = _diagnose_calculation_explanation_rules(
+        cfg,
+        profile_key,
+        referenced=referenced,
+    )
+    warnings.extend(fragment_warnings)
+    errors.extend(fragment_errors)
+
+    values = {
+        "core_rules": "[core_rules preview]",
+        "judgement_rules": "1) [judgement_rules preview]",
+        "payload_json": "{}",
+    }
+    if referenced and fragment_text:
+        values["calculation_explanation_rules"] = fragment_text
+    final_prompt_preview = Template(prompt_text).safe_substitute(values) if prompt_text and not placeholder_error else ""
+    unresolved: tuple[str, ...] = ()
+    if final_prompt_preview:
+        final_identifiers, final_error = _template_identifiers(final_prompt_preview)
+        if final_error:
+            errors.append(f"最终 prompt {final_error}")
+        unresolved = tuple("${" + name + "}" for name in sorted(final_identifiers))
+        if unresolved:
+            errors.append("最终 prompt 存在未替换占位符: " + ", ".join(unresolved))
+
+    return FpaPromptDiagnostics(
+        profile=profile_key,
+        user_prompt_key=user_prompt_key,
+        user_prompt_source=user_prompt_source,
+        referenced=referenced,
+        resolved=bool(referenced and fragment_text and not fragment_errors),
+        fragment_source=fragment_source,
+        missing_required_placeholders=missing,
+        unknown_placeholders=unknown,
+        unresolved_placeholders=unresolved,
+        warnings=tuple(warnings),
+        errors=tuple(dict.fromkeys(errors)),
+        final_prompt_preview=final_prompt_preview,
+    )
+
+
+def diagnose_fpa_user_prompt(profile_name: str) -> dict[str, object]:
+    """Return renderability diagnostics for the FPA user prompt template."""
+    try:
+        diagnostics = diagnose_fpa_prompt_config(profile_name).to_dict()
+    except (FpaConfigError, FpaPromptConfigError) as exc:
+        return {
+            "profile": profile_name,
+            "user_prompt_key": "",
+            "user_prompt_source": "",
+            "calculation_explanation_rules": {
+                "referenced": False,
+                "resolved": False,
+                "source": "",
+            },
+            "missing_required_placeholders": [],
+            "unknown_placeholders": [],
+            "unresolved_placeholders": [],
+            "warnings": [],
+            "errors": [str(exc)],
+            "ok": False,
+            "final_prompt_preview": "",
+        }
+    diagnostics["fragments"] = [{
+        "name": "calculation_explanation_rules",
+        **diagnostics["calculation_explanation_rules"],
+    }]
+    diagnostics["rendered_prompt"] = diagnostics["final_prompt_preview"]
+    return diagnostics
 
 
 def migrate_config() -> None:

@@ -10,6 +10,8 @@ from ai_gen_reimbursement_docs.config_utils import (
     _get_system_config_value,
     copy_default_config_files,
     api_key_fingerprint,
+    diagnose_fpa_prompt_config,
+    diagnose_fpa_user_prompt,
     inspect_fpa_runtime_config_files,
     load_fpa_excel_recalc_check,
     load_fpa_domain_context,
@@ -225,6 +227,142 @@ def _write_fpa_domain_context(tmp_path):
 """,
         encoding="utf-8",
     )
+
+
+def _append_calculation_rules_fragment(tmp_path, *, strict_value: str | None = None) -> None:
+    content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+    lines = [
+        "",
+        "prompt_fragments:",
+        "  calculation_explanation_rules:",
+        "    default: DEFAULT EXPLANATION RULES",
+    ]
+    if strict_value is not None:
+        lines.append(f"    strict_fpa: {strict_value!r}")
+    (tmp_path / "fpa_config.yaml").write_text(content + "\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_default_fpa_prompt_diagnostics_resolve_calculation_rules(tmp_path):
+    source = Path(__file__).resolve().parents[1] / "config"
+    copy_default_config_files(tmp_path, source)
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        for profile in ("strict_fpa", "unified_ui", "multi_uis", "ui_api_mapping"):
+            diagnostics = diagnose_fpa_prompt_config(profile)
+
+            assert diagnostics.ok is True, profile
+            assert diagnostics.referenced is True, profile
+            assert diagnostics.resolved is True, profile
+            assert diagnostics.errors == (), profile
+            assert diagnostics.unresolved_placeholders == (), profile
+            assert "prompt_fragments.calculation_explanation_rules.default" in diagnostics.fragment_source
+            assert "${" not in diagnostics.final_prompt_preview
+
+
+def test_prompt_diagnostics_warn_when_calculation_rules_not_referenced(tmp_path):
+    _write_fpa_config(tmp_path)
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        diagnostics = diagnose_fpa_prompt_config("strict_fpa")
+
+    assert diagnostics.ok is True
+    assert diagnostics.referenced is False
+    assert diagnostics.resolved is False
+    assert any("未引用 calculation_explanation_rules" in item for item in diagnostics.warnings)
+
+
+def test_prompt_diagnostics_error_when_referenced_fragment_is_missing(tmp_path):
+    _write_fpa_config(tmp_path)
+    path = tmp_path / "fpa_config.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${calculation_explanation_rules}",
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        diagnostics = diagnose_fpa_prompt_config("strict_fpa")
+
+    assert diagnostics.ok is False
+    assert diagnostics.referenced is True
+    assert diagnostics.resolved is False
+    assert any("缺少 prompt_fragments.calculation_explanation_rules.default" in item for item in diagnostics.errors)
+    assert "${calculation_explanation_rules}" in diagnostics.unresolved_placeholders
+
+
+def test_prompt_diagnostics_uses_profile_override_source(tmp_path):
+    _write_fpa_config(tmp_path)
+    path = tmp_path / "fpa_config.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${calculation_explanation_rules}",
+        ),
+        encoding="utf-8",
+    )
+    _append_calculation_rules_fragment(tmp_path, strict_value="STRICT EXPLANATION RULES")
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        diagnostics = diagnose_fpa_prompt_config("strict_fpa")
+
+    assert diagnostics.ok is True
+    assert diagnostics.resolved is True
+    assert "prompt_fragments.calculation_explanation_rules.strict_fpa" in diagnostics.fragment_source
+    assert "STRICT EXPLANATION RULES" in diagnostics.final_prompt_preview
+    assert "DEFAULT EXPLANATION RULES" not in diagnostics.final_prompt_preview
+
+
+def test_prompt_diagnostics_blank_profile_override_falls_back_to_default(tmp_path):
+    _write_fpa_config(tmp_path)
+    path = tmp_path / "fpa_config.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${calculation_explanation_rules}",
+        ),
+        encoding="utf-8",
+    )
+    _append_calculation_rules_fragment(tmp_path, strict_value=" ")
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        diagnostics = diagnose_fpa_prompt_config("strict_fpa")
+
+    assert diagnostics.ok is True
+    assert "prompt_fragments.calculation_explanation_rules.default" in diagnostics.fragment_source
+    assert "DEFAULT EXPLANATION RULES" in diagnostics.final_prompt_preview
+    assert any("strict_fpa 为空，已回退 default" in item for item in diagnostics.warnings)
+
+
+def test_prompt_diagnostics_reports_unknown_placeholder(tmp_path):
+    _write_fpa_config(tmp_path)
+    path = tmp_path / "fpa_config.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${unknown_placeholder}",
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        diagnostics = diagnose_fpa_prompt_config("strict_fpa")
+
+    assert diagnostics.ok is False
+    assert diagnostics.unknown_placeholders == ("unknown_placeholder",)
+    assert "${unknown_placeholder}" in diagnostics.unresolved_placeholders
+
+
+def test_legacy_prompt_diagnostics_wrapper_returns_fragment_entry(tmp_path):
+    _write_fpa_config(tmp_path)
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        diagnostics = diagnose_fpa_user_prompt("strict_fpa")
+
+    assert diagnostics["profile"] == "strict_fpa"
+    assert diagnostics["fragments"][0]["name"] == "calculation_explanation_rules"
+    assert diagnostics["rendered_prompt"] == diagnostics["final_prompt_preview"]
 
 
 class TestLoadFpaDomainContext:
@@ -958,6 +1096,88 @@ class TestLoadFpaUserPromptTemplate:
 
         assert result.text == "STRICT ${core_rules} ${judgement_rules} ${payload_json}"
         assert result.source_label == "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.strict_fpa_up）"
+
+    def test_prompt_diagnostics_warns_when_fragment_is_not_referenced(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            diagnostics = diagnose_fpa_user_prompt("strict_fpa")
+
+        assert diagnostics["profile"] == "strict_fpa"
+        assert diagnostics["errors"] == []
+        assert diagnostics["unresolved_placeholders"] == []
+        assert diagnostics["fragments"] == [
+            {
+                "name": "calculation_explanation_rules",
+                "referenced": False,
+                "resolved": False,
+                "source": "",
+            }
+        ]
+        assert "未引用 calculation_explanation_rules" in diagnostics["warnings"][0]
+        assert "[core_rules preview]" in diagnostics["rendered_prompt"]
+
+    def test_prompt_diagnostics_reports_resolved_fragment(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${calculation_explanation_rules} ${payload_json}",
+        )
+        content += """
+prompt_fragments:
+  calculation_explanation_rules:
+    default: DEFAULT RULES
+"""
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            diagnostics = diagnose_fpa_user_prompt("strict_fpa")
+
+        assert diagnostics["errors"] == []
+        assert diagnostics["unresolved_placeholders"] == []
+        assert diagnostics["fragments"][0]["referenced"] is True
+        assert diagnostics["fragments"][0]["resolved"] is True
+        assert diagnostics["fragments"][0]["source"] == (
+            "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.default）"
+        )
+        assert "DEFAULT RULES" in diagnostics["rendered_prompt"]
+
+    def test_prompt_diagnostics_reports_profile_override_source(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${calculation_explanation_rules} ${payload_json}",
+        )
+        content += """
+prompt_fragments:
+  calculation_explanation_rules:
+    default: DEFAULT RULES
+    strict_fpa: STRICT OVERRIDE RULES
+"""
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            diagnostics = diagnose_fpa_user_prompt("strict_fpa")
+
+        assert diagnostics["warnings"] == []
+        assert diagnostics["fragments"][0]["source"] == (
+            "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.strict_fpa）"
+        )
+        assert "STRICT OVERRIDE RULES" in diagnostics["rendered_prompt"]
+
+    def test_prompt_diagnostics_reports_unknown_placeholder(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace("${payload_json}", "${payload_json} ${unknown}")
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            diagnostics = diagnose_fpa_user_prompt("strict_fpa")
+
+        assert "${unknown}" in diagnostics["rendered_prompt"]
+        assert diagnostics["unresolved_placeholders"] == ["${unknown}"]
+        assert any("${unknown}" in error for error in diagnostics["errors"])
 
     def test_default_fpa_prompt_example_contains_calculation_explanation_rules(self, tmp_path):
         source = Path(__file__).resolve().parents[1] / "config"

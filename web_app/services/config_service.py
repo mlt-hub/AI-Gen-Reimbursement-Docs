@@ -903,6 +903,8 @@ def _read_fpa_config_from_dir(target_dir: Path) -> dict:
 
 def build_fpa_strategy_settings_view(*, target_dir: Path) -> dict:
     """Build structured settings for common FPA strategy fields."""
+    from ai_gen_reimbursement_docs.config_utils import diagnose_fpa_prompt_config
+
     cfg = _read_fpa_config_from_dir(target_dir)
     profiles = cfg.get("profiles")
     rule_sets = cfg.get("rule_sets")
@@ -910,9 +912,12 @@ def build_fpa_strategy_settings_view(*, target_dir: Path) -> dict:
         raise AdvancedConfigError("fpa_config.yaml 中的 profiles 和 rule_sets 必须是对象")
 
     profile_items: list[dict] = []
+    prompt_diagnostics: list[dict] = []
     for name, entry in profiles.items():
         if not isinstance(entry, dict):
             continue
+        diagnostics = diagnose_fpa_prompt_config(str(name), cfg=cfg).to_dict()
+        prompt_diagnostics.append(diagnostics)
         profile_items.append({
             "name": str(name),
             "kind": str(entry.get("kind") or ""),
@@ -921,6 +926,7 @@ def build_fpa_strategy_settings_view(*, target_dir: Path) -> dict:
             "core_rules": str(entry.get("core_rules") or ""),
             "system_prompt": str(entry.get("system_prompt") or ""),
             "user_prompt": str(entry.get("user_prompt") or ""),
+            "prompt_diagnostics": diagnostics,
         })
 
     rule_set_items = []
@@ -935,6 +941,7 @@ def build_fpa_strategy_settings_view(*, target_dir: Path) -> dict:
         "default_profile": str(cfg.get("default-profile") or ""),
         "profiles": profile_items,
         "rule_sets": rule_set_items,
+        "prompt_diagnostics": prompt_diagnostics,
     }
 
 
