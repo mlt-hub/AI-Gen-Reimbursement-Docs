@@ -830,7 +830,7 @@ md/3.4.gen-cosmic-校验报告.md
 | error | `FIRST_MOVE_NOT_ENTRY` | `movements[0].move_type` | 1 | 第一个子过程必须为输入 E |  |
 ```
 
-报告中不使用“功能点类型”“说明详情”等 FPA 禁用同义词。COSMIC 审阅页尚未实现，本阶段报告里的业务对象统一称为“功能过程”“数据移动”“数据移动类型”“计算依据说明”。
+报告中不使用“功能点类型”“说明详情”等 FPA 禁用同义词。COSMIC 审阅页尚未实现，本阶段报告里的业务对象统一称为“功能过程”“数据移动”“数据移动类型”“计算依据说明”。后续 `/preview/cosmic` 的用户可见文案必须遵循 [`docs/fpa/result-review-terminology.md`](../fpa/result-review-terminology.md) 中的 COSMIC 审阅术语映射。
 
 ### CFP 处理
 
