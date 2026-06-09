@@ -465,7 +465,7 @@ def _build_unified_quality_review(
         return {}
     issues: list[dict[str, object]] = []
     row_names = [str(row.get("新增/修改功能点", "") or row.get("name", "") or "") for row in rows]
-    if process_facts and not any("界面开发" in name for name in row_names):
+    if process_facts and not any("界面" in name for name in row_names):
         issues.append(_unified_issue(
             code="unified_ui.missing_ui_row",
             severity="warning",
@@ -763,10 +763,18 @@ def _unexpected_explicit_backend_rows(
         for explicit in _list_value(judgement.get("explicit_backend_rows"))
         if isinstance(explicit, dict) and str(explicit.get("name", "") or "")
     }
+    expected_default = {
+        f"{_module_prefix(group)}-{judgement.get('process_name', '')}-{expected.get('suffix', '')}"
+        for judgement in _list_value(mapping_judgement.get("judgements"))
+        for expected in _list_value(judgement.get("expected_default_rows"))
+        if isinstance(expected, dict)
+        and str(judgement.get("process_name", "") or "")
+        and str(expected.get("suffix", "") or "")
+    }
     issues: list[dict[str, object]] = []
     for row in rows:
         row_name = str(row.get("新增/修改功能点", "") or row.get("name", "") or "")
-        if not row_name or row_name in expected_explicit:
+        if not row_name or row_name in expected_explicit or row_name in expected_default:
             continue
         tail = row_name.rsplit("-", 1)[-1]
         if tail in {"界面开发", "接口开发"}:
