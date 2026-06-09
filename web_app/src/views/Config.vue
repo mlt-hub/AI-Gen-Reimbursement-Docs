@@ -237,13 +237,15 @@
         </div>
 
         <div class="overflow-x-auto rounded-lg border border-[var(--color-rule)]">
-          <table class="w-full min-w-[720px] text-left text-sm">
+          <table class="w-full min-w-[1040px] text-left text-sm">
             <thead class="border-b border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-xs text-[var(--color-ink-soft)]">
               <tr>
                 <th class="px-3 py-2 font-semibold">方案</th>
                 <th class="px-3 py-2 font-semibold">类型</th>
                 <th class="px-3 py-2 font-semibold">执行策略</th>
                 <th class="px-3 py-2 font-semibold">规则集</th>
+                <th class="px-3 py-2 font-semibold">Prompt 状态</th>
+                <th class="px-3 py-2 font-semibold">试运行</th>
               </tr>
             </thead>
             <tbody>
@@ -267,9 +269,120 @@
                     </option>
                   </select>
                 </td>
+                <td class="px-3 py-2">
+                  <span :class="['status-badge', promptDiagnosticsOk(profile) ? statusClass.ok : statusClass.warn]">
+                    {{ promptDiagnosticsOk(profile) ? '可渲染' : '需检查' }}
+                  </span>
+                  <p v-if="profile.prompt_diagnostics?.warnings?.length" class="mt-1 max-w-[18rem] text-xs text-[var(--color-warning)]">
+                    {{ profile.prompt_diagnostics.warnings[0] }}
+                  </p>
+                </td>
+                <td class="px-3 py-2">
+                  <button
+                    class="btn-secondary min-h-0 px-2 py-1 text-xs"
+                    :disabled="fpaPromptSampleLoading === profile.name"
+                    @click="runFpaPromptSample(profile.name)"
+                  >
+                    {{ fpaPromptSampleLoading === profile.name ? '试运行中...' : '试运行当前 prompt' }}
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div v-if="fpaPromptSampleError" class="rounded-lg border border-[var(--color-warning)] bg-[var(--color-surface-muted)] p-3 text-sm text-[var(--color-warning)]">
+          {{ fpaPromptSampleError }}
+        </div>
+
+        <div v-if="fpaPromptSampleResult" class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+          <div class="flex flex-col gap-2 border-b border-[var(--color-rule)] pb-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p class="text-xs font-semibold text-[var(--color-ink-soft)]">样例试运行</p>
+              <h3 class="mt-1 text-base font-semibold">{{ profileLabel(fpaPromptSampleResult.profile) }}</h3>
+              <p class="mt-1 text-xs text-[var(--color-ink-soft)]">仅检查当前 prompt 输出形状，不生成正式 Excel，不写任务历史。</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <span :class="['status-badge', fpaPromptSampleResult.ai_called ? statusClass.ok : statusClass.neutral]">
+                {{ fpaPromptSampleResult.ai_called ? '已调用模型' : '未调用模型' }}
+              </span>
+              <span :class="['status-badge', fpaPromptSampleResult.parse_ok ? statusClass.ok : statusClass.warn]">
+                {{ fpaPromptSampleResult.parse_ok ? 'JSON 已解析' : 'JSON 未解析' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="mt-3 grid gap-3 md:grid-cols-3">
+            <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2">
+              <div class="text-xs text-[var(--color-ink-soft)]">模型</div>
+              <div class="mt-1 truncate text-sm font-semibold">{{ fpaPromptSampleResult.model || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2">
+              <div class="text-xs text-[var(--color-ink-soft)]">API Key 来源</div>
+              <div class="mt-1 truncate text-sm font-semibold">{{ fpaPromptSampleResult.api_key_source || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-2">
+              <div class="text-xs text-[var(--color-ink-soft)]">样例行数</div>
+              <div class="mt-1 text-sm font-semibold">{{ fpaPromptSampleResult.normalized_rows.length }}</div>
+            </div>
+          </div>
+
+          <div v-if="fpaPromptSampleResult.prompt_diagnostics.errors.length" class="mt-3 rounded-lg border border-[var(--color-warning)] bg-[var(--color-surface-muted)] p-3">
+            <p class="text-sm font-semibold text-[var(--color-warning)]">Prompt 配置错误</p>
+            <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--color-warning)]">
+              <li v-for="item in fpaPromptSampleResult.prompt_diagnostics.errors" :key="item">{{ item }}</li>
+            </ul>
+          </div>
+
+          <div v-if="fpaPromptSampleResult.quality_warnings.length" class="mt-3 rounded-lg border border-[var(--color-warning)] bg-[var(--color-surface-muted)] p-3">
+            <p class="text-sm font-semibold text-[var(--color-warning)]">计算依据说明 warning</p>
+            <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--color-warning)]">
+              <li v-for="item in fpaPromptSampleResult.quality_warnings" :key="item">{{ item }}</li>
+            </ul>
+          </div>
+
+          <div v-if="fpaPromptSampleResult.warnings.length" class="mt-3 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3">
+            <p class="text-sm font-semibold">后处理 warning</p>
+            <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--color-ink-muted)]">
+              <li v-for="item in fpaPromptSampleResult.warnings" :key="item">{{ item }}</li>
+            </ul>
+          </div>
+
+          <div v-if="fpaPromptSampleResult.normalized_rows.length" class="mt-3 overflow-x-auto rounded-lg border border-[var(--color-rule)]">
+            <table class="w-full min-w-[920px] text-left text-sm">
+              <thead class="border-b border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-xs text-[var(--color-ink-soft)]">
+                <tr>
+                  <th class="px-3 py-2 font-semibold">新增/修改功能点</th>
+                  <th class="px-3 py-2 font-semibold">类型</th>
+                  <th class="px-3 py-2 font-semibold">生成方式</th>
+                  <th class="px-3 py-2 font-semibold">计算依据归类</th>
+                  <th class="px-3 py-2 font-semibold">计算依据说明</th>
+                  <th class="px-3 py-2 font-semibold">后处理警告</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in fpaPromptSampleResult.normalized_rows" :key="`${row['序号']}-${row['新增/修改功能点']}`" class="border-b border-[var(--color-rule)] align-top last:border-b-0">
+                  <td class="px-3 py-2 font-semibold">{{ row['新增/修改功能点'] }}</td>
+                  <td class="px-3 py-2">{{ row['类型'] }}</td>
+                  <td class="px-3 py-2">{{ row['生成方式'] }}</td>
+                  <td class="px-3 py-2 text-[var(--color-ink-muted)]">{{ row['计算依据归类'] || '-' }}</td>
+                  <td class="max-w-[24rem] whitespace-pre-wrap px-3 py-2 text-[var(--color-ink-muted)]">{{ row['计算依据说明'] || '-' }}</td>
+                  <td class="max-w-[18rem] px-3 py-2 text-[var(--color-warning)]">{{ row['后处理警告'] || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-3 space-y-2">
+            <details class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3">
+              <summary class="cursor-pointer text-sm font-semibold">最终 prompt</summary>
+              <pre class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-[var(--color-ink-muted)]">{{ fpaPromptSampleResult.prompt_diagnostics.rendered_prompt || fpaPromptSampleResult.prompt_diagnostics.final_prompt_preview }}</pre>
+            </details>
+            <details class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3">
+              <summary class="cursor-pointer text-sm font-semibold">模型原始返回</summary>
+              <pre class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-[var(--color-ink-muted)]">{{ fpaPromptSampleResult.raw_response || fpaPromptSampleResult.error || '-' }}</pre>
+            </details>
+          </div>
         </div>
 
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -997,6 +1110,22 @@ interface AdvancedConfigFileResponse extends AdvancedConfigFileItem {
   content: string
 }
 
+interface FpaPromptDiagnostics {
+  profile: string
+  user_prompt_key?: string
+  user_prompt_source?: string
+  calculation_explanation_rules: {
+    referenced: boolean
+    resolved: boolean
+    source: string
+  }
+  warnings: string[]
+  errors: string[]
+  ok: boolean
+  final_prompt_preview: string
+  rendered_prompt?: string
+}
+
 interface FpaStrategyProfile {
   name: string
   kind: string
@@ -1005,6 +1134,7 @@ interface FpaStrategyProfile {
   core_rules?: string
   system_prompt?: string
   user_prompt?: string
+  prompt_diagnostics?: FpaPromptDiagnostics
 }
 
 interface FpaStrategyRuleSet {
@@ -1016,6 +1146,36 @@ interface FpaStrategySettingsResponse {
   default_profile: string
   profiles: FpaStrategyProfile[]
   rule_sets: FpaStrategyRuleSet[]
+  prompt_diagnostics?: FpaPromptDiagnostics[]
+}
+
+interface FpaPromptSampleRow {
+  '序号': number | string
+  '新增/修改功能点': string
+  '类型': string
+  '生成方式': string
+  '计算依据归类': string
+  '计算依据说明': string
+  '后处理警告': string
+  '源功能过程'?: string
+}
+
+interface FpaPromptSampleResult {
+  profile: string
+  prompt_diagnostics: FpaPromptDiagnostics
+  sample_input: Record<string, unknown>
+  ai_called: boolean
+  parse_ok: boolean
+  raw_response: string
+  parsed_rows: unknown[]
+  normalized_rows: FpaPromptSampleRow[]
+  warnings: string[]
+  quality_warnings: string[]
+  rule_hits: unknown[]
+  error: string
+  model: string
+  base_url: string
+  api_key_source: string
 }
 
 interface FpaJudgementRuleItem {
@@ -1164,6 +1324,9 @@ const fpaStrategyError = ref('')
 const fpaStrategyMsg = ref('')
 const fpaStrategyOk = ref(false)
 const fpaStrategySnapshot = ref('')
+const fpaPromptSampleLoading = ref('')
+const fpaPromptSampleError = ref('')
+const fpaPromptSampleResult = ref<FpaPromptSampleResult | null>(null)
 const fpaStrategyForm = reactive({
   defaultProfile: '',
   profiles: [] as FpaStrategyProfile[],
@@ -1540,6 +1703,10 @@ function profileLabel(name: string): string {
   return fpaOptions.value.profiles.find(profile => profile.name === name)?.label || name
 }
 
+function promptDiagnosticsOk(profile: FpaStrategyProfile): boolean {
+  return profile.prompt_diagnostics?.ok !== false
+}
+
 function configTabId(key: ConfigSectionKey): string {
   return `config-section-tab-${key}`
 }
@@ -1741,6 +1908,23 @@ async function saveFpaStrategySettings() {
     fpaStrategyMsg.value = presentConfigError(e)
   } finally {
     fpaStrategySaving.value = false
+  }
+}
+
+async function runFpaPromptSample(profileName: string) {
+  fpaPromptSampleLoading.value = profileName
+  fpaPromptSampleError.value = ''
+  try {
+    fpaPromptSampleResult.value = await apiFetch<FpaPromptSampleResult>('/api/web-config/fpa-prompt-sample-run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: profileName }),
+    })
+  } catch (e) {
+    fpaPromptSampleResult.value = null
+    fpaPromptSampleError.value = presentConfigError(e)
+  } finally {
+    fpaPromptSampleLoading.value = ''
   }
 }
 

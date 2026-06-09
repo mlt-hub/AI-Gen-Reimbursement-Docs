@@ -28,7 +28,7 @@
 
 ## 执行进度
 
-截至 2026-06-09，本规范已进入执行状态。第一阶段 prompt fragment 抽取已落地；第二阶段已开始推进运行时 prompt diagnostics。
+截至 2026-06-09，本规范已进入执行状态。第一阶段 prompt fragment 抽取已落地；第二阶段运行时 prompt diagnostics 已落地；第三阶段样例试运行与说明质量预检已落地。
 
 已完成：
 
@@ -40,6 +40,9 @@
 - 已保持非阻断策略：质量问题只记录 warning，进入`后处理警告`、`Warnings` 和规则命中详情，不阻断 gen-fpa 生成。
 - 已补充回归测试：覆盖结构化说明通过、非结构化说明告警、数据组路径、表个数归类依据误入说明、以及默认 prompt 规则存在性。
 - 已新增后端 prompt diagnostics helper：`ai_gen_reimbursement_docs.config_utils.diagnose_fpa_user_prompt(profile_name)` 可返回 user prompt 来源、`calculation_explanation_rules` 引用/解析状态、warning/error、未替换占位符和预览渲染结果。
+- 已新增 FPA prompt 样例试运行：`POST /api/web-config/fpa-prompt-sample-run` 使用内置样例模块调用当前 profile prompt，返回 prompt diagnostics、raw response、解析状态、后处理后的 FPA 行、普通 warning、`计算依据说明`质量 warning 和规则命中详情；prompt 配置错误时不调用模型。
+- Web 配置页 FPA 策略区已支持逐 profile 触发“试运行当前 prompt”，并展示最终 prompt、模型原始返回、样例 FPA 行、后处理 warning 和`计算依据说明` warning。
+- 已补充疑似编造系统元素检测：正式`计算依据说明`中的`系统元素`如包含输入未明确出现的表、服务、接口、文件或外部系统/平台，会通过 `postprocess.explanation_quality` 记录 warning；支持同行说明和多行列表写法；输入中明确出现的系统元素不报 warning。
 
 已提交：
 
@@ -49,7 +52,7 @@
 - `13c5204`：补齐 prompt 和文档中的 `ILF/EIF` 数据功能来源路径规则。
 - `41b4fc7`：补充决策摘要和`垂直行业数据组`示例。
 - `17c104e`：抽取 FPA `calculation_explanation_rules` prompt fragment，补齐四个默认 profile 的引用、配置校验、渲染和测试。
-- 本轮：新增 FPA prompt diagnostics 后端 helper 和配置单元测试。
+- 本轮：新增 FPA prompt 样例试运行 service/API、Web 配置页试运行入口、疑似编造系统元素检测和后端/前端验证。
 
 已验证：
 
@@ -66,13 +69,16 @@
 本轮聚焦验证：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_gen_fpa_ai.py -q
+npm run build
+.\scripts\check_web_ui.ps1
 ```
 
 结果：
 
 ```text
-174 passed
+260 passed
+Web UI 检查全部通过
 ```
 
 ### 第二阶段实施方案：运行时配置校验与最终 prompt 预览
@@ -760,7 +766,7 @@ prompt 配置错误响应：
 后续待办：
 
 - 用真实模型对典型模块进行抽样验证，观察 AI 是否稳定按结构输出`计算依据说明`。
-- 根据真实模型输出，继续补充疑似编造表、服务、接口的检测规则。
+- 根据真实模型输出，继续补充疑似编造表、服务、接口的检测规则；当前已覆盖`系统元素`行中输入未明确出现的候选元素。
 - 如需在页面上单独展示 check/debug 信息，再评估是否增加更细的结构化质量报告字段。
 
 ## 正式输出规则
@@ -985,7 +991,7 @@ check/debug 输出可补充：
 - `计算说明`未出现当前 FPA 类型。
 - 正式输出中出现“未识别到”“未明确说明”等缺失提示。
 - `计算依据说明`中出现“数据库表个数=...”“表数量...”等把表数量作为详细计量依据的表述。一句归类式短语可作为 FPA 类型判定说明保留，真正的短依据仍优先放在`计算依据归类`。
-- `系统元素`中出现输入未明确提供的疑似表名、服务名、接口名或外部系统名。
+- `系统元素`中出现输入未明确提供的疑似表名、服务名、接口名、文件名或外部系统/平台名。（已落地为 warning）
 - 文本明显过短，无法支撑人工审阅。
 
 第一阶段仅记录 warning，不阻断生成。
