@@ -292,9 +292,34 @@ def test_report_json_includes_flat_review_items(tmp_path):
     ]
     assert review_items[0]["scope"] == "global"
     assert review_items[0]["item_index"] is None
+    assert review_items[0]["review_id"] == "global::global::MISSING_CFP_FORMULA::cfp_formula::"
     assert review_items[1]["scope"] == "item"
     assert review_items[1]["item_index"] == 0
+    assert review_items[1]["review_id"] == "item::0::GENERIC_FUNCTION_USER::user::"
     assert review_items[1]["details"]["match_source"] == "generic_only"
+
+
+def test_review_id_escapes_separator_characters(tmp_path):
+    report = validate_cosmic_items(
+        [_item()],
+        project_name="测试项目",
+        cfp_formula="IF(L{row}=\"新增\",1,0)",
+        global_issues=[
+            global_cosmic_issue(
+                "warning",
+                "CUSTOM_WARNING",
+                "自定义警告",
+                "field:with\\separator",
+            )
+        ],
+    )
+    output = tmp_path / "cosmic.json"
+
+    write_cosmic_validation_json(report, str(output))
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    review_item = payload["review_items"][0]
+    assert review_item["review_id"] == "global::global::CUSTOM_WARNING::field\\:with\\\\separator::"
 
 
 def test_report_md_includes_issue_details(tmp_path):

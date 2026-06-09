@@ -563,7 +563,29 @@ def _review_item_to_dict(
 ) -> dict:
     data = _issue_to_dict(issue)
     data["item_index"] = item_index
+    data["review_id"] = _review_item_id(issue, item_index=item_index)
     return data
+
+
+def _review_item_id(
+    issue: CosmicIssue,
+    *,
+    item_index: int | None,
+) -> str:
+    index = "global" if item_index is None else str(item_index)
+    order = "" if issue.movement_order is None else str(issue.movement_order)
+    parts = [issue.scope, index, issue.code, issue.field, order]
+    return "::".join(_review_id_part(part) for part in parts)
+
+
+def _review_id_part(value: object) -> str:
+    text = str(value or "")
+    return (
+        text
+        .replace("\\", "\\\\")
+        .replace(":", "\\:")
+        .replace("\n", " ")
+    )
 
 
 def write_cosmic_validation_json(
