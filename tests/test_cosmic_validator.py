@@ -254,6 +254,23 @@ def test_report_json_is_stable_and_chinese_readable(tmp_path):
     assert payload["export_policy"]["unconfirmed_review_item_count"] == 0
     assert payload["export_policy"]["formal_excel"]["status"] == "allowed"
     assert payload["export_policy"]["draft_excel"]["status"] == "not_needed"
+    assert payload["preview_rows"] == [
+        {
+            "item_index": 0,
+            "module_path": "系统管理 > 用户管理 > 用户注册",
+            "module_l1": "系统管理",
+            "module_l2": "用户管理",
+            "module_l3": "用户注册",
+            "process": "注册用户",
+            "user": "发起者：用户注册|接收者：系统管理",
+            "trigger": "用户触发",
+            "movement_count": 2,
+            "movement_types": ["E", "X"],
+            "status": "passed",
+            "issue_count": 0,
+            "review_item_ids": [],
+        }
+    ]
     assert payload["items"][0]["basis"]["function_user"]["matched_term"] == "用户注册"
 
 
@@ -312,6 +329,11 @@ def test_report_json_includes_flat_review_items(tmp_path):
     assert payload["export_policy"]["unconfirmed_review_item_count"] == 2
     assert payload["export_policy"]["formal_excel"]["status"] == "blocked"
     assert payload["export_policy"]["draft_excel"]["status"] == "blocked"
+    assert payload["preview_rows"][0]["status"] == "review_required"
+    assert payload["preview_rows"][0]["issue_count"] == 1
+    assert payload["preview_rows"][0]["review_item_ids"] == [
+        "item::0::GENERIC_FUNCTION_USER::user::"
+    ]
 
 
 def test_review_required_export_policy_allows_configured_draft(tmp_path):

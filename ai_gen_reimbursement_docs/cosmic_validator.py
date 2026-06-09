@@ -522,6 +522,7 @@ def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
         "issue_codes": report.issue_codes,
         "review_items": review_items,
         "export_policy": _export_policy_to_dict(report, review_items),
+        "preview_rows": _preview_rows_to_dict(report, review_items),
         "items": [
             {
                 "project": result.item.project,
@@ -543,6 +544,51 @@ def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
         ],
         "summary": report.summary,
     }
+
+
+def _preview_rows_to_dict(
+    report: CosmicValidationReport,
+    review_items: list[dict],
+) -> list[dict[str, object]]:
+    review_ids_by_item_index: dict[int, list[str]] = {}
+    for review_item in review_items:
+        item_index = review_item.get("item_index")
+        if not isinstance(item_index, int):
+            continue
+        review_ids_by_item_index.setdefault(item_index, []).append(
+            str(review_item.get("review_id", ""))
+        )
+
+    rows: list[dict[str, object]] = []
+    for item_index, result in enumerate(report.results):
+        item = result.item
+        module_parts = [
+            item.module_l1,
+            item.module_l2,
+            item.module_l3,
+        ]
+        module_path = " > ".join(part for part in module_parts if part)
+        movement_types = [
+            movement.move_type
+            for movement in item.movements
+            if movement.move_type
+        ]
+        rows.append({
+            "item_index": item_index,
+            "module_path": module_path,
+            "module_l1": item.module_l1,
+            "module_l2": item.module_l2,
+            "module_l3": item.module_l3,
+            "process": item.process,
+            "user": item.user,
+            "trigger": item.trigger,
+            "movement_count": len(item.movements),
+            "movement_types": movement_types,
+            "status": result.status,
+            "issue_count": len(result.issues),
+            "review_item_ids": review_ids_by_item_index.get(item_index, []),
+        })
+    return rows
 
 
 def _export_policy_to_dict(

@@ -566,6 +566,23 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
       "config_key": "gen_cosmic.allow_draft_excel_output"
     }
   },
+  "preview_rows": [
+    {
+      "item_index": 0,
+      "module_path": "一级模块 > 二级模块 > 三级模块",
+      "module_l1": "一级模块",
+      "module_l2": "二级模块",
+      "module_l3": "三级模块",
+      "process": "提交注册",
+      "user": "发起者：用户|接收者：系统",
+      "trigger": "用户触发",
+      "movement_count": 2,
+      "movement_types": ["E", "X"],
+      "status": "review_required",
+      "issue_count": 1,
+      "review_item_ids": ["item::0::GENERIC_FUNCTION_USER::user::"]
+    }
+  ],
   "items": [
     {
       "module_l1": "...",
@@ -655,6 +672,18 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `export_policy.draft_excel.reason` | `string` | 是 | 草稿 Excel 导出策略原因。 |
 | `export_policy.draft_excel.requires_config` | `boolean` | 是 | 草稿导出是否依赖 `gen_cosmic.allow_draft_excel_output`。 |
 | `export_policy.draft_excel.config_key` | `string` | 是 | 草稿导出配置键，固定为 `gen_cosmic.allow_draft_excel_output`。 |
+| `preview_rows` | `array` | 是 | 面向 `/preview/cosmic` 列表页的轻量行模型，由 `items` 和 `review_items` 派生，不作为新的事实源。 |
+| `preview_rows[].item_index` | `number` | 是 | 对应 `items` 的 0 基序号。 |
+| `preview_rows[].module_path` | `string` | 是 | 由一、二、三级模块拼接得到的模块路径。 |
+| `preview_rows[].module_l1/module_l2/module_l3` | `string` | 是 | 模块路径分段，便于前端筛选。 |
+| `preview_rows[].process` | `string` | 是 | 新增/修改功能过程。 |
+| `preview_rows[].user` | `string` | 是 | 功能用户。 |
+| `preview_rows[].trigger` | `string` | 是 | 触发事件。 |
+| `preview_rows[].movement_count` | `number` | 是 | 数据移动数量。 |
+| `preview_rows[].movement_types` | `array` | 是 | 数据移动类型序列。 |
+| `preview_rows[].status` | `string` | 是 | 当前功能过程校验状态。 |
+| `preview_rows[].issue_count` | `number` | 是 | 当前功能过程关联 issue 数量。 |
+| `preview_rows[].review_item_ids` | `array` | 是 | 当前功能过程关联的 `review_items[].review_id` 列表。 |
 | `items` | `array` | 是 | COSMIC 功能过程列表。 |
 | `items[].module_l1` | `string` | 是 | 一级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
 | `items[].module_l2` | `string` | 是 | 二级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
