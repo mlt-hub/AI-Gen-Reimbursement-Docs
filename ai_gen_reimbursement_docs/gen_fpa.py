@@ -77,7 +77,17 @@ EXPLANATION_MISSING_HINTS = ("未识别到", "未明确说明", "需求未明确
 FPA_PROJECT_DESCRIPTION_MAX_CHARS = 5000
 EXPLANATION_TABLE_COUNT_DETAIL_HINTS = ("数据库表个数=", "表个数=", "表数量", "1张表", "1 张表", "1个表", "1 个表")
 EXPLANATION_SYSTEM_ELEMENT_MARKERS = ("表", "服务", "接口", "文件", "系统", "平台")
+EXPLANATION_INLINE_SYSTEM_ELEMENT_MARKERS = ("表", "服务", "接口", "文件", "平台")
 EXPLANATION_SYSTEM_ELEMENT_SKIP_HINTS = ("未识别到", "未明确", "无明确", "没有明确")
+EXPLANATION_INLINE_SYSTEM_ELEMENT_SKIP_HINTS = (
+    "按后台数据库变更的表个数计量",
+    "按数据库表个数计量",
+    "表个数计量",
+    "输出的票据、报表、统计、文件",
+    "输出格式化文件",
+    "内部逻辑文件",
+    "外部接口文件",
+)
 BASIS_TYPE_HINTS = {
     "EI": ("外部输入", "修改或增加界面", "插入、修改、删除", "输入界面"),
     "EQ": ("外部查询", "查询界面"),
@@ -240,6 +250,17 @@ def _explanation_quality_warnings(
             + "、".join(fabricated_elements)
         )
 
+    inline_fabricated_elements = _suspected_inline_fabricated_system_elements(
+        group=group,
+        name=name,
+        explanation=text,
+    )
+    if inline_fabricated_elements:
+        warnings.append(
+            f"{name} 计算依据说明正文疑似提到输入未明确提供的表、服务、接口、文件或平台，需人工复核: "
+            + "、".join(inline_fabricated_elements)
+        )
+
     return warnings
 
 
@@ -314,6 +335,55 @@ def _candidate_system_elements(system_element_text: str) -> list[str]:
     return list(dict.fromkeys(candidates))
 
 
+def _non_system_element_lines(explanation: str) -> list[str]:
+    lines: list[str] = []
+    in_system_element_block = False
+    for line in str(explanation or "").splitlines():
+        clean = line.strip()
+        if clean.startswith("系统元素：") or clean.startswith("系统元素:"):
+            in_system_element_block = True
+            continue
+        if any(clean.startswith(label) for label in EXPLANATION_STRUCTURED_LABELS):
+            in_system_element_block = False
+        if (
+            not in_system_element_block
+            and clean
+            and (clean.startswith("业务规则：") or clean.startswith("业务规则:") or clean.startswith("计算说明：") or clean.startswith("计算说明:"))
+        ):
+            lines.append(clean)
+    return lines
+
+
+def _candidate_inline_system_elements(explanation_text: str) -> list[str]:
+    candidates: list[str] = []
+    for chunk in re.split(r"[、，,；;。\n]+", explanation_text):
+        item = chunk.strip(" 。.：:（）()[]【】")
+        if not item or any(hint in item for hint in EXPLANATION_SYSTEM_ELEMENT_SKIP_HINTS):
+            continue
+        if any(hint in item for hint in EXPLANATION_INLINE_SYSTEM_ELEMENT_SKIP_HINTS):
+            continue
+        if not any(marker in item for marker in EXPLANATION_INLINE_SYSTEM_ELEMENT_MARKERS):
+            continue
+        item = re.sub(r"^(?:来源场景|业务数据|业务规则|计算说明)[:：]\s*", "", item).strip()
+        item = re.sub(
+            r"^.*?(?:涉及|调用|对接|访问|使用|通过|依赖|写入|读取|保存到|同步到|上传|下载|导入|导出|生成)",
+            "",
+            item,
+        ).strip()
+        item = re.sub(r"(?:用于|支撑|完成|返回|提供|并|以|，|,).*$", "", item).strip(" 。.：:（）()[]【】")
+        cn_match = re.search(
+            r"[\u4e00-\u9fffA-Za-z0-9_（）()·-]{2,30}(?:表|服务|接口|文件|平台)",
+            item,
+        )
+        if cn_match:
+            candidates.append(cn_match.group(0).strip())
+            continue
+        latin_match = re.search(r"[A-Za-z][A-Za-z0-9_./-]{1,}", item)
+        if latin_match:
+            candidates.append(latin_match.group(0))
+    return list(dict.fromkeys(candidates))
+
+
 def _suspected_fabricated_system_elements(
     *,
     group: dict[str, object],
@@ -326,6 +396,23 @@ def _suspected_fabricated_system_elements(
     suspicious: list[str] = []
     for line in _system_element_lines(explanation):
         for candidate in _candidate_system_elements(line):
+            if candidate and candidate not in source_text:
+                suspicious.append(candidate)
+    return list(dict.fromkeys(suspicious))
+
+
+def _suspected_inline_fabricated_system_elements(
+    *,
+    group: dict[str, object],
+    name: str,
+    explanation: str,
+) -> list[str]:
+    source_text = _source_text_for_explanation_system_elements(group=group, name=name)
+    if not source_text.strip():
+        return []
+    suspicious: list[str] = []
+    for line in _non_system_element_lines(explanation):
+        for candidate in _candidate_inline_system_elements(line):
             if candidate and candidate not in source_text:
                 suspicious.append(candidate)
     return list(dict.fromkeys(suspicious))
