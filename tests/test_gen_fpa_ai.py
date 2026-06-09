@@ -771,6 +771,70 @@ def test_explanation_quality_accepts_explicit_system_elements_from_input():
     )
 
 
+def test_ui_api_mapping_keeps_default_ui_rows_without_split_reason():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "后台",
+            "一级模块": "业务管理",
+            "二级模块": "客户管理",
+            "三级模块": "客户资料维护",
+            "三级模块整体功能描述": "维护客户基础资料。",
+            "功能过程": "新增客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "录入客户资料。",
+        },
+        {
+            "客户端类型": "后台",
+            "一级模块": "业务管理",
+            "二级模块": "客户管理",
+            "三级模块": "客户资料维护",
+            "三级模块整体功能描述": "维护客户基础资料。",
+            "功能过程": "查询客户",
+            "功能过程类型": "查询",
+            "功能过程描述": "查询客户列表。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["修改或增加界面的个数"],
+        start_seq=1,
+        profile=UI_API_MAPPING_PROFILE,
+        ai_rows=[
+            {
+                "name": "新增客户-界面开发",
+                "type": "EI",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【后台】业务管理-客户管理-客户资料维护-新增客户-界面开发\n"
+                    "业务数据：客户资料。\n"
+                    "业务规则：用户录入客户资料。\n"
+                    "计算说明：该界面开发行按 EI 识别。"
+                ),
+                "source_process_ids": ["m1_p1"],
+            },
+            {
+                "name": "查询客户-界面开发",
+                "type": "EI",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【后台】业务管理-客户管理-客户资料维护-查询客户-界面开发\n"
+                    "业务数据：客户查询条件。\n"
+                    "业务规则：用户输入查询条件。\n"
+                    "计算说明：该界面开发行按 EI 识别。"
+                ),
+                "source_process_ids": ["m1_p2"],
+            },
+        ],
+    )
+
+    assert [row["新增/修改功能点"] for row in rows] == [
+        "【后台】业务管理-客户管理-客户资料维护-新增客户-界面开发",
+        "【后台】业务管理-客户管理-客户资料维护-查询客户-界面开发",
+    ]
+    assert not any("AI 输出多条界面开发行但缺少 split_reason" in warning for warning in warnings)
+
+
 def test_explanation_accepts_official_measurement_wording_as_type_evidence():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(

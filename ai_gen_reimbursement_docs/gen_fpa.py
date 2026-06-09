@@ -733,7 +733,11 @@ def _normalize_ai_fpa_rows_for_l3(
         r for r in ai_rows
         if isinstance(r, dict) and "界面开发" in str(r.get("name", ""))
     ]
-    if len(ui_rows) > 1 and any(not str(r.get("split_reason", "")).strip() for r in ui_rows):
+    if (
+        profile.name != "ui_api_mapping"
+        and len(ui_rows) > 1
+        and any(not str(r.get("split_reason", "")).strip() for r in ui_rows)
+    ):
         msg = f"{_group_tag(group)} AI 输出多条界面开发行但缺少 split_reason，已合并为三级模块级界面行"
         logger.warning(msg)
         warnings.append(msg)
