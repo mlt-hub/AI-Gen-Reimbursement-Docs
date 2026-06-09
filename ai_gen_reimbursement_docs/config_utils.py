@@ -1528,6 +1528,53 @@ def load_gen_cosmic_cfp_policy() -> dict[str, float]:
         return {}
 
 
+def load_gen_cosmic_governance_config() -> dict[str, object]:
+    """读取 gen_cosmic.governance，用于保守启用 COSMIC 治理策略。"""
+    defaults: dict[str, object] = {
+        "auto_apply_review_actions": False,
+        "auto_apply_issue_codes": [],
+        "function_user_role_map": {},
+        "require_unique_function_user": False,
+        "cfp_formula_consistency_check": False,
+        "audit_hash_chain": True,
+    }
+    yaml_path = config_dir() / "system_config.yaml"
+    if not yaml_path.exists():
+        return defaults
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        section = cfg.get("gen_cosmic", {})
+        if not isinstance(section, dict):
+            return defaults
+        raw = section.get("governance")
+        if not isinstance(raw, dict):
+            return defaults
+        values = dict(defaults)
+        values["auto_apply_review_actions"] = bool(raw.get("auto_apply_review_actions", False))
+        values["require_unique_function_user"] = bool(raw.get("require_unique_function_user", False))
+        values["cfp_formula_consistency_check"] = bool(raw.get("cfp_formula_consistency_check", False))
+        values["audit_hash_chain"] = bool(raw.get("audit_hash_chain", True))
+        raw_codes = raw.get("auto_apply_issue_codes")
+        if isinstance(raw_codes, list):
+            values["auto_apply_issue_codes"] = [
+                str(code).strip()
+                for code in raw_codes
+                if str(code or "").strip()
+            ]
+        raw_role_map = raw.get("function_user_role_map")
+        if isinstance(raw_role_map, dict):
+            values["function_user_role_map"] = {
+                str(key).strip(): str(value).strip()
+                for key, value in raw_role_map.items()
+                if str(key or "").strip() and str(value or "").strip()
+            }
+        return values
+    except Exception:
+        return defaults
+
+
 def load_gen_spec_ai_limit() -> int:
     """读取 gen_spec_ai_limit，限制 spec AI 完善的功能过程描述数（0=不限制）。"""
     return max(_get_system_config_value('gen_spec_ai_limit', 0), 0)

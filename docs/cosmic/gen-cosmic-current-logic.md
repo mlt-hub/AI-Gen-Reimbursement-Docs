@@ -192,7 +192,7 @@ AI 调用限制：
 
 手册要求：功能过程的数据发送者或预期接收者之一必须对应功能架构图上的最小颗粒度模块，用于区分功能过程所属模块，并且功能用户与功能过程是一对一关系。
 
-当前实现：`cosmic_ai._build_user` 主要依赖元数据中的默认值和关键词规则生成 `发起者/接收者`。校验器已经把功能用户拆分和模块匹配结果写入 `items[].basis.function_user`：匹配三级模块时通过；仅匹配一/二级模块、只出现泛化角色或完全无法匹配时进入 `GENERIC_FUNCTION_USER` 待审。审阅项会提供 `apply_function_user` 建议，后端也支持从 `function_user_role_map` 按模块路径取角色映射后修复；但尚未强制验证功能用户与功能过程的一对一关系。
+当前实现：`cosmic_ai._build_user` 主要依赖元数据中的默认值和关键词规则生成 `发起者/接收者`。校验器已经把功能用户拆分和模块匹配结果写入 `items[].basis.function_user`：匹配三级模块时通过；仅匹配一/二级模块、只出现泛化角色或完全无法匹配时进入 `GENERIC_FUNCTION_USER` 待审。审阅项会提供 `apply_function_user` 建议，后端也支持从 `function_user_role_map` 或 `gen_cosmic.governance.function_user_role_map` 按模块路径取角色映射后修复。开启 `gen_cosmic.governance.require_unique_function_user=true` 后，校验器会对同一功能过程中的多业务角色产生 `FUNCTION_USER_ROLE_CONFLICT` 待审项，用于推进功能用户与功能过程的一对一强绑定治理。
 
 影响：可能生成泛化用户，如 `操作员`、`管理模块`，但无法满足送审材料中“绑定最小颗粒度模块”的要求。
 
@@ -209,7 +209,7 @@ AI 调用限制：
 
 当前实现：首步 `E`、末步 `W/X`、至少两步、缺少模块路径、缺少功能过程名称、缺少触发事件等规则已经进入结构化校验。存在 `error` 时报告状态为 `blocked`，默认不会写正式 Excel；存在 `warning` 且没有 `error` 时报告状态为 `review_required`，默认也不会写正式 Excel。
 
-影响：当前批处理输出已经能阻断明显不符合送审规则的结果；但跨模块归属、功能用户一对一关系等更复杂规则仍需要后续阶段继续工程化。
+影响：当前批处理输出已经能阻断明显不符合送审规则的结果；跨模块归属和功能用户一对一关系已具备配置化诊断入口，但审批流和强制修复仍需要后续阶段继续工程化。
 
 ### CFP 和复用口径待确认
 
@@ -221,13 +221,13 @@ AI 调用限制：
 2. Excel 写入时 CFP 列依赖模板或元数据中的 `CFP计算公式`；未配置公式时产生 `MISSING_CFP_FORMULA` error，并阻断正式输出。
 3. `利旧`、优化未改子过程填 `0` 的规则没有进入模型层。
 
-影响：缺公式不再静默生成正式结果；确认后导出已支持 `cfp_policy` 和后端计算出的 `cfp_policy_effective`，但组织级配置来源、审批流程和 Excel 公式一致性仍待治理。
+影响：缺公式不再静默生成正式结果；确认后导出已支持 `cfp_policy`、`gen_cosmic.cfp_policy` 和后端计算出的 `cfp_policy_effective`。开启 `gen_cosmic.governance.cfp_formula_consistency_check=true` 后，会在保存确认时产生 `CFP_POLICY_FORMULA_MISMATCH` 待审项，提示确认后 Python 汇总口径与 Excel 公式疑似不一致；更完整的公式解析和审批流程仍待治理。
 
 ### 边界识别规则缺失
 
 手册说明：前端/后端、前台/后台交互不识别为边界；跨越边界的数据移动通常体现在功能用户、外部系统、持久存储等之间。
 
-当前实现：AI prompt 已明确提示前端/后端、前台/后台交互不识别为 COSMIC 边界。校验器会对命中前端/后端、前台/后台、内部接口、临时接口、微服务等关键词的数据移动产生 `INTERNAL_TECHNICAL_BOUNDARY` warning，并把命中依据、治理分类和 `exclude_movement/merge_movement` 建议动作写入结构化 details；当前仍需人工确认，不自动判定接口是否跨有效边界。
+当前实现：AI prompt 已明确提示前端/后端、前台/后台交互不识别为 COSMIC 边界。校验器会对命中前端/后端、前台/后台、内部接口、临时接口、微服务等关键词的数据移动产生 `INTERNAL_TECHNICAL_BOUNDARY` warning，并把命中依据、治理分类和 `exclude_movement/merge_movement` 建议动作写入结构化 details；默认仍需人工确认。若开启 `gen_cosmic.governance.auto_apply_review_actions=true` 且在 `auto_apply_issue_codes` 白名单中声明该 code，保存确认时可自动应用对应建议动作。
 
 影响：AI 可能把内部技术交互、微服务交互、临时开发接口误计为 COSMIC 数据移动，导致过度拆分。
 
@@ -235,7 +235,7 @@ AI 调用限制：
 
 手册说明：数据格式化、操作提交、校验、分析、统计等通常归入相关数据移动的数据运算，不单独识别为数据移动；连接数据库、连接服务器、建立容器等不应作为数据移动子过程。
 
-当前实现：校验器会对命中格式化、校验、统计、连接数据库等关键词的子过程产生 `DATA_OPERATION_ONLY_MOVEMENT` warning，并把命中依据、治理分类和 `exclude_movement/merge_movement` 建议动作写入 `items[].basis.movement_semantics` 和 issue details；当前只在人工确认后排除或合并，不做无确认自动删除。
+当前实现：校验器会对命中格式化、校验、统计、连接数据库等关键词的子过程产生 `DATA_OPERATION_ONLY_MOVEMENT` warning，并把命中依据、治理分类和 `exclude_movement/merge_movement` 建议动作写入 `items[].basis.movement_semantics` 和 issue details；默认只在人工确认后排除或合并。若开启自动治理并把该 code 放入白名单，保存确认时可自动应用建议动作。
 
 影响：AI 可能把运算步骤或技术准备步骤写成独立子过程，导致 CFP 虚高。
 
@@ -243,7 +243,7 @@ AI 调用限制：
 
 手册说明：上一页、下一页、排序、展示/隐藏菜单、点击 `OK` 确认前一操作等控制命令不移动兴趣对象数据，应被忽略。
 
-当前实现：校验器会对命中上一页、下一页、排序、展示/隐藏菜单、点击确认等关键词的子过程产生 `CONTROL_COMMAND_MOVEMENT` warning，并把命中依据、治理分类和 `exclude_movement/merge_movement` 建议动作写入 `items[].basis.movement_semantics` 和 issue details；当前只在人工确认后排除或合并，不做无确认自动删除。
+当前实现：校验器会对命中上一页、下一页、排序、展示/隐藏菜单、点击确认等关键词的子过程产生 `CONTROL_COMMAND_MOVEMENT` warning，并把命中依据、治理分类和 `exclude_movement/merge_movement` 建议动作写入 `items[].basis.movement_semantics` 和 issue details；默认只在人工确认后排除或合并。若开启自动治理并把该 code 放入白名单，保存确认时可自动应用建议动作。
 
 影响：页面交互类需求容易被拆出不应计列的数据移动。
 
@@ -251,7 +251,7 @@ AI 调用限制：
 
 手册说明：错误/确认消息通常可归为一个输出；但因持久数据读或写而接收到的错误提示不单独识别；操作系统发布的错误消息等不应识别。
 
-当前实现：校验器会对命中错误提示、确认消息、成功/失败提示等关键词的数据移动产生 `ERROR_CONFIRMATION_MESSAGE` warning，并把命中依据、治理分类和 `exclude_movement/merge_movement` 建议动作写入 `items[].basis.movement_semantics` 和 issue details；当前只在人工确认后排除或合并，不做无确认自动删除。
+当前实现：校验器会对命中错误提示、确认消息、成功/失败提示等关键词的数据移动产生 `ERROR_CONFIRMATION_MESSAGE` warning，并把命中依据、治理分类和 `exclude_movement/merge_movement` 建议动作写入 `items[].basis.movement_semantics` 和 issue details；默认只在人工确认后排除或合并。若开启自动治理并把该 code 放入白名单，保存确认时可自动应用建议动作。
 
 影响：AI 仍可能多计或漏计错误/确认类输出，但结构化草稿会提示人工确认是否重复计列。
 
@@ -259,20 +259,20 @@ AI 调用限制：
 
 手册说明：非功能部分 COSMIC 无法评估，只检查是否包含于 COSMIC 开发里，对工作量不进行确认。多系统联调、系统迁移、前端适配、软硬件环境扩容、架构及组件改造等应与 COSMIC 功能规模区分。
 
-当前实现：校验器会对命中系统迁移、前端适配、环境扩容、架构/组件改造等关键词的模块路径或功能过程产生 `NON_FUNCTIONAL_SCOPE` warning，并把命中依据、治理分类和 `exclude_process` 建议动作写入 `items[].basis.process_semantics` 和 issue details；当前只在人工确认后排除整个功能过程，不做无确认自动剔除。
+当前实现：校验器会对命中系统迁移、前端适配、环境扩容、架构/组件改造等关键词的模块路径或功能过程产生 `NON_FUNCTIONAL_SCOPE` warning，并把命中依据、治理分类和 `exclude_process` 建议动作写入 `items[].basis.process_semantics` 和 issue details；默认只在人工确认后排除整个功能过程。若开启自动治理并把该 code 放入白名单，保存确认时可自动应用建议动作。
 
 影响：如果模块树中混入非功能或技术改造事项，AI 可能将其误拆为功能过程。
 
 ## 当前风险和重构关注点
 
-1. 边界识别不足：prompt 已加入送审口径硬约束，内部技术交互、控制命令、部分纯数据运算、错误/确认消息和部分非功能事项已有待审 warning；但复杂边界和复杂非功能事项仍主要依赖 AI 自觉和后续人工确认。
-2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；`GENERIC_FUNCTION_USER` 会提供候选修复动作，预览页可一键采用候选功能用户并在保存时重校验；但尚未接入业务角色映射表，也未强制验证功能用户与功能过程的一对一关系。
-3. CFP 口径已具备基础配置：缺公式已阻断；确认后导出 CFP 汇总会按 `cfp_policy_effective` 计算，内置默认 `新增/修改=1`、`复用=1/3`、`利旧/优化未改=0`，可通过 `gen_cosmic.cfp_policy` 配置组织级默认值，并允许确认 JSON 中的 `cfp_policy` 覆盖；但 Excel 模板公式与 Python 汇总口径的一致性校验仍需继续完善。
+1. 边界识别不足：prompt 已加入送审口径硬约束，内部技术交互、控制命令、部分纯数据运算、错误/确认消息和部分非功能事项已有待审 warning 和建议动作；复杂边界和复杂非功能事项默认仍依赖人工确认，但可通过 `gen_cosmic.governance.auto_apply_review_actions` 和白名单逐步启用自动治理。
+2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；`GENERIC_FUNCTION_USER` 会提供候选修复动作，预览页可一键采用候选功能用户并在保存时重校验；系统已支持确认 JSON 和组织级 `gen_cosmic.governance.function_user_role_map`，也可开启 `FUNCTION_USER_ROLE_CONFLICT` 诊断，但审批和强制修复仍待治理。
+3. CFP 口径已具备基础配置：缺公式已阻断；确认后导出 CFP 汇总会按 `cfp_policy_effective` 计算，内置默认 `新增/修改=1`、`复用=1/3`、`利旧/优化未改=0`，可通过 `gen_cosmic.cfp_policy` 配置组织级默认值，并允许确认 JSON 中的 `cfp_policy` 覆盖；已支持可选 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但 Excel 公式的完整解析和审批仍需继续完善。
 4. 预览审阅导出闭环已完成基础闭环：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口、审阅结果 JSON 保存/读取接口和确认后 Excel 再导出接口；远程 session 导出后会刷新 ZIP，前端交付物清单和运行历史都会记录确认后 Excel 与确认后 CFP 汇总。预览页已支持编辑功能过程、功能用户、触发事件和数据移动，并把编辑后的 `items` 保存到会话审阅结果 JSON；控制命令、纯数据运算和内部技术边界 warning 已能提供排除计数或合并建议，审阅动作会写入 `review_actions/review_audit` 并在保存时重校验。
 5. 解析格式敏感：`parse_md_to_items` 仍保留给兼容或排查场景，不适合承载复杂人工编辑；当前人工编辑闭环基于结构化 JSON `items`，不依赖 Markdown 反解析。
 6. 送审规则未完整工程化：软评填报参考手册中的启发式规则尚未完整进入 prompt、结构化校验和结果状态。
 
-后续如果继续推进 COSMIC 审阅，应优先围绕规则矩阵配置化、组织级角色映射审批、CFP policy 与 Excel 公式一致性校验、以及审计签名扩展；这些能力仍应基于当前结构化 JSON 契约实现。
+后续如果继续推进 COSMIC 审阅，应优先围绕规则矩阵配置化的可视化维护、组织级角色映射审批流、CFP policy 与 Excel 公式一致性校验的完整公式解析、以及审计签名/不可抵赖扩展；这些能力仍应基于当前结构化 JSON 契约实现。
 
 ## 第一阶段实施状态
 
@@ -332,6 +332,19 @@ AI 调用限制：
 2. 确认后 CFP 汇总的有效策略按“内置默认值 -> `gen_cosmic.cfp_policy` -> 确认 JSON `cfp_policy`”顺序合并；非法值、非数字和负数不会覆盖已确定的有效值。
 3. 保存会话审阅结果时会继续写出 `cfp_policy_effective`，用于展示和排查本次确认后汇总实际采用的口径。
 4. 该配置只影响确认后 Python CFP 汇总，不改变正式 Excel 的模板公式来源；Excel 公式与 Python 汇总口径的一致性校验仍是后续治理事项。
+
+### 2026-06-09 继续推进全部治理入口
+
+本次继续推进“复杂边界治理、非功能自动分类、无确认自动动作、功能用户强绑定、角色映射治理、CFP 公式一致性和审计增强”等剩余事项，当前状态如下：
+
+1. `gen_cosmic.governance.auto_apply_review_actions` 与 `auto_apply_issue_codes` 提供保守自动治理入口；默认关闭，只有显式开启且 issue code 进入白名单时，保存确认才会自动应用 `review_items[].details.suggested_actions`。
+2. 自动治理动作会写入 `review_actions` 和 `review_audit`，来源标记为 `auto_governance`；因此自动排除、合并或排除功能过程不再是隐式行为。
+3. `gen_cosmic.governance.function_user_role_map` 提供组织级功能用户映射，确认 JSON 中的 `function_user_role_map` 仍可按项目覆盖；`apply_function_user` 未提供 `suggested_user` 时按三级、二级、一级模块依次取映射值。
+4. `gen_cosmic.governance.require_unique_function_user=true` 时，校验器会对同一功能过程内多个不一致业务角色产生 `FUNCTION_USER_ROLE_CONFLICT` 待审项，推进功能用户与功能过程一对一强绑定治理。
+5. `gen_cosmic.governance.cfp_formula_consistency_check=true` 时，保存确认会检查 `cfp_policy_effective` 与 Excel 公式文本的明显差异，并以 `CFP_POLICY_FORMULA_MISMATCH` 全局待审项提示人工确认。
+6. `review_audit` 默认写入 `previous_audit_hash` 和 `audit_hash`，形成 JSON 级 hash 链；该能力用于发现审计记录被改写，但还不是权限签名或不可抵赖审计。
+7. `governance_effective` 会写入保存后的 payload，记录本次启用的治理开关、自动 issue code 白名单和组织级角色映射 key，便于排查。
+8. 本轮仍坚持默认安全策略：不配置时不自动排除、不强制改功能用户、不阻断既有确认后导出；更强的审批、签名和复杂公式解析仍属于后续治理。
 
 ### 目标行为
 
@@ -717,6 +730,7 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `confirmation_summary` | `object` | 否 | 人工确认汇总；保存或读取会话确认 JSON 时由后端生成，前端编辑确认状态时也会本地刷新。 |
 | `confirmation_summary.unconfirmed_review_item_count` | `number` | 否 | 未处理审阅项数量；`confirmed/rejected/waived` 都视为已处理。 |
 | `confirmation_summary.error_review_item_count` | `number` | 否 | error 级审阅项数量；即使已确认，正式 Excel 仍保持阻断。 |
+| `governance_effective` | `object` | 否 | 保存会话确认 JSON 后由后端写入，记录本次生效的治理开关、自动 issue code 白名单和组织级角色映射 key。 |
 | `export_policy` | `object` | 是 | 基于校验状态推导的预览页导出策略；不表示实际 Excel 是否已经写入。 |
 | `export_policy.manual_confirmation_required` | `boolean` | 是 | 是否存在需要人工处理的审阅项。 |
 | `export_policy.unconfirmed_review_item_count` | `number` | 是 | 未确认审阅项数量；初始等于当前 `review_items` 数量，确认后会减少。 |
@@ -771,6 +785,8 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `items[].issues[].details` | `object` | 是 | 结构化依据。语义 warning 当前包含 `matched_terms`、`basis_description` 和可选 `suggested_actions`；功能用户 warning 当前包含 `function_user_parts`、`match_source`、`matched_term`、`suggested_user` 和可选 `suggested_actions`。 |
 | `review_actions` | `array` | 否 | 待应用的人工审阅动作；保存会话审阅结果时后端会应用这些动作并重校验。 |
 | `review_audit` | `array` | 否 | 已应用审阅动作的 JSON 级审计记录。 |
+| `review_audit[].previous_audit_hash` | `string` | 否 | 前一条审计记录的 SHA-256 hash；默认开启 hash 链时写入。 |
+| `review_audit[].audit_hash` | `string` | 否 | 当前审计记录的 SHA-256 hash；用于发现 JSON 级审计记录被改写。 |
 | `cfp_policy` | `object` | 否 | 确认后 CFP 汇总口径，key 为复用度，value 为每条数据移动 CFP。 |
 | `cfp_policy_effective` | `object` | 否 | 后端规范化后的有效 CFP policy，非法值和负数会回退到默认值。 |
 | `function_user_role_map` | `object` | 否 | 功能用户角色映射，key 为模块名称，value 为 `发起者：...|接收者：...`。 |
@@ -1081,9 +1097,9 @@ md/3.4.gen-cosmic-校验报告.md
 
 以下内容不属于第一阶段验收范围：
 
-1. 更复杂的边界规则治理，例如跨系统/内部技术交互的组织级判定、非功能事项的自动分类，以及无人工确认时的自动剔除策略；当前只提供人工确认动作，不做无确认自动删除。
-2. 功能用户和三级模块的一对一强绑定治理，包括角色映射审批、模块归属冲突处理和强制修复规则；当前支持 `function_user_role_map` 和人工确认动作，但不做无确认强制修复。
-3. CFP policy 的组织级配置治理，以及 Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前确认后汇总使用 JSON `cfp_policy_effective`。
-4. 审计追踪的权限、签名和不可抵赖记录；当前 `review_audit` 会注入服务端登录用户，但仍是 JSON 级基础追踪。
+1. 更复杂的边界规则治理，例如跨系统/内部技术交互的组织级判定和非功能事项的高精度自动分类；当前已有可配置自动治理入口，但默认关闭，且仍主要基于关键词和建议动作。
+2. 功能用户和三级模块的一对一强绑定治理中的审批流、模块归属冲突处理和强制修复规则；当前已有角色映射、人工/自动动作和 `FUNCTION_USER_ROLE_CONFLICT` 诊断，但不做无审批强制修复。
+3. CFP policy、Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前已有文本级 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但尚未做完整 Excel 公式语义解析。
+4. 审计追踪的权限、签名和不可抵赖记录；当前 `review_audit` 会注入服务端登录用户并写入 JSON 级 hash 链，但仍不是加密签名或外部不可篡改审计。
 
 这些内容应在结构化草稿和校验器稳定后，再按 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md) 分阶段实施。

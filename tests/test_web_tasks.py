@@ -1820,6 +1820,165 @@ def test_cosmic_review_action_applies_function_user_role_map(monkeypatch, tmp_pa
     server.session_manager.cleanup_download(session_id)
 
 
+def test_cosmic_review_action_uses_configured_function_user_role_map(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_review_configured_function_user_role_map"
+    payload = _cosmic_export_payload()
+    payload["items"][0]["module_l3"] = "客户资料"
+    payload["items"][0]["user"] = "发起者：操作员|接收者：系统"
+    payload["review_actions"] = [{
+        "action": "apply_function_user",
+        "item_index": 0,
+        "review_id": "item::0::GENERIC_FUNCTION_USER::user::",
+    }]
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_governance_config",
+        lambda: {
+            "auto_apply_review_actions": False,
+            "auto_apply_issue_codes": [],
+            "function_user_role_map": {
+                "客户资料": "发起者：客户资料经办|接收者：客户资料经办",
+            },
+            "require_unique_function_user": False,
+            "cfp_formula_consistency_check": False,
+            "audit_hash_chain": True,
+        },
+    )
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["items"][0]["user"] == "发起者：客户资料经办|接收者：客户资料经办"
+    assert "audit_hash" in saved_payload["review_audit"][0]
+    assert len(saved_payload["review_audit"][0]["audit_hash"]) == 64
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_governance_auto_applies_allowed_review_action(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_auto_apply_review_action"
+    payload = _cosmic_export_payload()
+    payload["items"][0]["movements"].append({
+        "order": 3,
+        "sub_process": "点击下一页并排序列表",
+        "move_type": "X",
+        "data_group": "页面状态",
+        "data_attrs": "排序状态",
+        "reuse": "新增",
+    })
+    payload["review_items"] = [{
+        "review_id": "item::0::CONTROL_COMMAND_MOVEMENT::movements[2].sub_process::3",
+        "scope": "item",
+        "item_index": 0,
+        "movement_order": 3,
+        "severity": "warning",
+        "code": "CONTROL_COMMAND_MOVEMENT",
+        "message": "控制命令待确认",
+        "field": "movements[2].sub_process",
+        "details": {
+            "basis_description": "控制命令不计数",
+            "suggested_actions": [{
+                "action": "exclude_movement",
+                "movement_order": 3,
+                "reason": "控制命令不计数",
+            }],
+        },
+        "confirmation": {"status": "unconfirmed"},
+    }]
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_governance_config",
+        lambda: {
+            "auto_apply_review_actions": True,
+            "auto_apply_issue_codes": ["CONTROL_COMMAND_MOVEMENT"],
+            "function_user_role_map": {},
+            "require_unique_function_user": False,
+            "cfp_formula_consistency_check": False,
+            "audit_hash_chain": True,
+        },
+    )
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["items"][0]["movements"][2]["excluded_from_cfp"] is True
+    assert saved_payload["review_actions"][0]["source"] == "auto_governance"
+    assert saved_payload["review_audit"][0]["source"] == "auto_governance"
+    assert saved_payload["status"] == "passed"
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_cfp_formula_consistency_warning(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_cfp_formula_consistency"
+    payload = _cosmic_export_payload()
+    payload["cfp_policy"] = {"复用": 0.5}
+    payload["review_items"] = []
+    payload["items"][0]["status"] = "passed"
+    payload["items"][0]["movements"][1]["reuse"] = "复用"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_governance_config",
+        lambda: {
+            "auto_apply_review_actions": False,
+            "auto_apply_issue_codes": [],
+            "function_user_role_map": {},
+            "require_unique_function_user": False,
+            "cfp_formula_consistency_check": True,
+            "audit_hash_chain": True,
+        },
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.config_utils.load_cfp_formula",
+        lambda: 'IF(L{row}="复用",0.333333333333,1)',
+    )
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["status"] == "review_required"
+    assert saved_payload["issue_codes"]["CFP_POLICY_FORMULA_MISMATCH"] == 1
+    issue = next(item for item in saved_payload["review_items"] if item["code"] == "CFP_POLICY_FORMULA_MISMATCH")
+    assert issue["scope"] == "global"
+    assert "复用=0.5" in issue["details"]["missing_policy_terms"]
+    assert saved_payload["cfp_basis"]["formula"] == 'IF(L{row}="复用",0.333333333333,1)'
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_unique_function_user_governance_revalidates_payload(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_unique_function_user_governance"
+    payload = _cosmic_export_payload()
+    payload["review_items"] = []
+    payload["items"][0]["module_l3"] = "客户资料"
+    payload["items"][0]["user"] = "发起者：客户资料|接收者：订单管理"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_governance_config",
+        lambda: {
+            "auto_apply_review_actions": False,
+            "auto_apply_issue_codes": [],
+            "function_user_role_map": {},
+            "require_unique_function_user": True,
+            "cfp_formula_consistency_check": False,
+            "audit_hash_chain": True,
+        },
+    )
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["status"] == "review_required"
+    assert saved_payload["issue_codes"]["FUNCTION_USER_ROLE_CONFLICT"] == 1
+    assert saved_payload["governance_effective"]["require_unique_function_user"] is True
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_cosmic_confirmed_export_uses_cfp_policy(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="alice")
     session_id = "cosmic_export_cfp_policy"

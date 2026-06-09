@@ -349,7 +349,26 @@ def _function_user_details(function_user_basis: dict[str, object]) -> dict[str, 
     }
 
 
-def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
+def _has_function_user_role_conflict(function_user_basis: dict[str, object]) -> bool:
+    if function_user_basis.get("requires_review"):
+        return False
+    parts = {
+        str(part).strip()
+        for part in function_user_basis.get("parts", [])
+        if str(part or "").strip()
+    }
+    if len(parts) <= 1:
+        return False
+    matched_part = str(function_user_basis.get("matched_part", "") or "")
+    return any(part != matched_part and part not in _GENERIC_USER_WORDS for part in parts)
+
+
+def validate_cosmic_item(
+    item: CosmicItem,
+    *,
+    governance_config: dict[str, object] | None = None,
+) -> CosmicValidationResult:
+    governance_config = governance_config or {}
     issues: list[CosmicIssue] = []
     basis = {
         "function_user": _function_user_basis(item),
@@ -382,6 +401,21 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
             "功能用户未能对应三级模块、最小颗粒度模块或元数据规则结果",
             "user", item=item,
             details=_function_user_details(basis["function_user"]),
+        ))
+    elif (
+        governance_config.get("require_unique_function_user") is True
+        and _has_function_user_role_conflict(basis["function_user"])
+    ):
+        issues.append(_issue(
+            "warning", "FUNCTION_USER_ROLE_CONFLICT",
+            "功能用户包含多个不一致业务角色，需确认功能用户与功能过程是否一对一",
+            "user", item=item,
+            details={
+                "function_user_parts": list(basis["function_user"].get("parts", [])),
+                "matched_part": str(basis["function_user"].get("matched_part", "")),
+                "match_source": str(basis["function_user"].get("match_source", "")),
+                "basis_description": "启用强绑定治理后，功能用户应稳定对应当前功能过程和最小颗粒度模块",
+            },
         ))
 
     for finding in basis["process_semantics"]:
@@ -460,6 +494,7 @@ def validate_cosmic_items(
     project_name: str = "",
     cfp_formula: str = "",
     global_issues: list[CosmicIssue] | None = None,
+    governance_config: dict[str, object] | None = None,
 ) -> CosmicValidationReport:
     issues: list[CosmicIssue] = list(global_issues or [])
     if not items:
@@ -474,7 +509,10 @@ def validate_cosmic_items(
             "cfp_formula", scope="global",
         ))
 
-    results = [validate_cosmic_item(item) for item in items]
+    results = [
+        validate_cosmic_item(item, governance_config=governance_config)
+        for item in items
+    ]
     return _build_report(project_name, results, issues, cfp_formula)
 
 
@@ -538,6 +576,7 @@ def _build_cfp_basis(cfp_formula: str) -> dict[str, object]:
         return {
             "source": "template_formula",
             "formula_configured": True,
+            "formula": cfp_formula,
             "description": "正式 Excel CFP 以模板或元数据中的 CFP计算公式为准",
         }
     return {

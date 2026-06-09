@@ -1,4 +1,5 @@
 import os
+import hashlib
 import json
 import re
 import shutil
@@ -17,10 +18,14 @@ from ai_gen_reimbursement_docs.cosmic_validator import (
     CosmicValidationReport,
     CosmicValidationResult,
     cosmic_report_to_dict,
+    global_cosmic_issue,
     validate_cosmic_items,
 )
 from ai_gen_reimbursement_docs.cosmic_writer import write_cosmic_xlsx
-from ai_gen_reimbursement_docs.config_utils import load_gen_cosmic_cfp_policy
+from ai_gen_reimbursement_docs.config_utils import (
+    load_gen_cosmic_cfp_policy,
+    load_gen_cosmic_governance_config,
+)
 from ai_gen_reimbursement_docs.excel_source import write_cfp_sum
 from ai_gen_reimbursement_docs.pipeline import (
     _read_cfp_formula_from_meta_md,
@@ -184,15 +189,22 @@ def _review_actions(payload: dict) -> list[dict]:
 
 
 def _function_user_role_map(payload: dict) -> dict[str, str]:
-    role_map = payload.get("function_user_role_map")
-    if not isinstance(role_map, dict):
-        return {}
     values: dict[str, str] = {}
-    for key, value in role_map.items():
-        module_name = str(key or "").strip()
-        user_value = str(value or "").strip()
-        if module_name and user_value:
-            values[module_name] = user_value
+    governance = load_gen_cosmic_governance_config()
+    configured = governance.get("function_user_role_map")
+    if isinstance(configured, dict):
+        for key, value in configured.items():
+            module_name = str(key or "").strip()
+            user_value = str(value or "").strip()
+            if module_name and user_value:
+                values[module_name] = user_value
+    role_map = payload.get("function_user_role_map")
+    if isinstance(role_map, dict):
+        for key, value in role_map.items():
+            module_name = str(key or "").strip()
+            user_value = str(value or "").strip()
+            if module_name and user_value:
+                values[module_name] = user_value
     return values
 
 
@@ -263,6 +275,55 @@ def _apply_review_actions(payload: dict) -> dict:
                     raw_movement["merged_into_order"] = action.get("merged_into_order") or max(1, int(raw_movement.get("order") or 1) - 1)
             break
     return data
+
+
+def _apply_auto_review_actions(payload: dict) -> dict:
+    governance = load_gen_cosmic_governance_config()
+    if governance.get("auto_apply_review_actions") is not True:
+        return payload
+    allowed_codes = {
+        str(code).strip()
+        for code in governance.get("auto_apply_issue_codes", [])
+        if str(code or "").strip()
+    }
+    if not allowed_codes:
+        return payload
+    review_items = payload.get("review_items")
+    if not isinstance(review_items, list):
+        return payload
+    actions = payload.setdefault("review_actions", [])
+    if not isinstance(actions, list):
+        actions = []
+        payload["review_actions"] = actions
+    existing_keys = {_review_action_key(action) for action in actions if isinstance(action, dict)}
+    for review_item in review_items:
+        if not isinstance(review_item, dict):
+            continue
+        code = str(review_item.get("code") or "")
+        if code not in allowed_codes:
+            continue
+        details = review_item.get("details")
+        if not isinstance(details, dict):
+            continue
+        suggested_actions = details.get("suggested_actions")
+        if not isinstance(suggested_actions, list) or not suggested_actions:
+            continue
+        suggested = next((item for item in suggested_actions if isinstance(item, dict)), None)
+        if not suggested:
+            continue
+        action = {
+            **suggested,
+            "item_index": review_item.get("item_index"),
+            "movement_order": review_item.get("movement_order", suggested.get("movement_order")),
+            "review_id": review_item.get("review_id"),
+            "source": "auto_governance",
+            "reason": suggested.get("reason") or details.get("basis_description") or "自动应用 COSMIC 治理建议",
+        }
+        key = _review_action_key(action)
+        if key not in existing_keys:
+            actions.append(action)
+            existing_keys.add(key)
+    return payload
 
 
 def _cosmic_items_from_payload(payload: dict, *, include_excluded: bool) -> list[CosmicItem]:
@@ -340,6 +401,17 @@ def _restore_raw_review_fields(payload: dict, source: dict) -> None:
             payload[key] = value
 
 
+def _audit_hash(record: dict, previous_hash: str = "") -> str:
+    material = {
+        key: value
+        for key, value in record.items()
+        if key not in {"audit_hash", "previous_audit_hash"}
+    }
+    material["previous_audit_hash"] = previous_hash
+    text = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> None:
     actions = payload.get("review_actions")
     if not isinstance(actions, list):
@@ -362,7 +434,15 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> None:
         if not record.get("applied_at"):
             record["applied_at"] = record.get("created_at") or datetime.now(timezone.utc).isoformat()
         keyed[_review_action_key(record)] = record
-    payload["review_audit"] = list(keyed.values())
+    records = list(keyed.values())
+    governance = load_gen_cosmic_governance_config()
+    if governance.get("audit_hash_chain") is not False:
+        previous_hash = ""
+        for record in records:
+            record["previous_audit_hash"] = previous_hash
+            record["audit_hash"] = _audit_hash(record, previous_hash)
+            previous_hash = str(record["audit_hash"])
+    payload["review_audit"] = records
 
 
 def _review_action_key(action: dict) -> tuple:
@@ -377,13 +457,19 @@ def _review_action_key(action: dict) -> tuple:
 def _revalidate_cosmic_payload(payload: dict, *, cfp_formula: str = "", reviewer: str = "") -> dict:
     if not isinstance(payload.get("items"), list):
         return apply_cosmic_confirmation_export_policy(payload)
+    governance = load_gen_cosmic_governance_config()
+    payload = _apply_auto_review_actions(payload)
     acted = _apply_review_actions(payload)
     _stamp_review_audit(acted, reviewer=reviewer)
     confirmations = _confirmation_by_review_id(acted)
+    effective_cfp_policy = _cfp_policy_from_payload(acted)
+    formula = cfp_formula or _cfp_formula_from_payload(acted)
     report = validate_cosmic_items(
         _cosmic_items_from_payload(acted, include_excluded=False),
         project_name=str(acted.get("project") or ""),
-        cfp_formula=cfp_formula or _cfp_formula_from_payload(acted),
+        cfp_formula=formula,
+        global_issues=_cfp_policy_formula_issues(formula, effective_cfp_policy),
+        governance_config=governance,
     )
     data = cosmic_report_to_dict(report)
     raw_items = acted.get("items")
@@ -402,7 +488,8 @@ def _revalidate_cosmic_payload(payload: dict, *, cfp_formula: str = "", reviewer
     else:
         data["items"] = report_items if isinstance(report_items, list) else []
     _merge_review_confirmations(data, confirmations)
-    data["cfp_policy_effective"] = _cfp_policy_from_payload(acted)
+    data["cfp_policy_effective"] = effective_cfp_policy
+    data["governance_effective"] = _cosmic_governance_effective(governance)
     _restore_raw_review_fields(data, acted)
     return apply_cosmic_confirmation_export_policy(data)
 
@@ -477,6 +564,59 @@ def _cfp_policy_from_payload(payload: dict) -> dict[str, float]:
             if number >= 0:
                 policy[str(key)] = number
     return policy
+
+
+def _cfp_policy_formula_issues(cfp_formula: str, policy: dict[str, float]) -> list[CosmicIssue]:
+    governance = load_gen_cosmic_governance_config()
+    if governance.get("cfp_formula_consistency_check") is not True:
+        return []
+    formula = str(cfp_formula or "")
+    if not formula:
+        return []
+    missing_terms: list[str] = []
+    for reuse, value in policy.items():
+        if reuse not in formula:
+            continue
+        value_text = _policy_value_text(value)
+        if value_text and value_text not in formula:
+            missing_terms.append(f"{reuse}={value_text}")
+    if not missing_terms:
+        return []
+    issue = global_cosmic_issue(
+        "warning",
+        "CFP_POLICY_FORMULA_MISMATCH",
+        "确认后 CFP policy 与 Excel 公式疑似不一致，需确认模板公式和 Python 汇总口径",
+        "cfp_policy_effective",
+    )
+    issue.details = {
+        "policy": policy,
+        "formula": formula,
+        "missing_policy_terms": missing_terms,
+        "basis_description": "开启一致性校验后，公式中出现的复用度应能对应有效 CFP policy 数值",
+    }
+    return [issue]
+
+
+def _policy_value_text(value: float) -> str:
+    text = f"{float(value):.12g}"
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+def _cosmic_governance_effective(governance: dict[str, object]) -> dict[str, object]:
+    return {
+        "auto_apply_review_actions": bool(governance.get("auto_apply_review_actions")),
+        "auto_apply_issue_codes": list(governance.get("auto_apply_issue_codes", [])),
+        "require_unique_function_user": bool(governance.get("require_unique_function_user")),
+        "cfp_formula_consistency_check": bool(governance.get("cfp_formula_consistency_check")),
+        "audit_hash_chain": governance.get("audit_hash_chain") is not False,
+        "function_user_role_map_keys": sorted(
+            str(key)
+            for key in (governance.get("function_user_role_map") or {})
+            if str(key or "")
+        ) if isinstance(governance.get("function_user_role_map"), dict) else [],
+    }
 
 
 def _calculate_review_cfp_total(payload: dict) -> float:
