@@ -59,7 +59,8 @@ ui_api_mapping
 2. 对每个样例分别运行四个 profile。
 3. 为每次运行保留正式 `FPA工作量评估.xlsx` 和 `FPA工作量评估-check.xlsx`。
 4. 检查 check 工作簿中的 `FPA结果`、`Warnings`、`规则命中详情`、`AI原始返回`。
-5. 记录每个 profile 的通过项、异常项、是否需要调整 prompt。
+5. 检查 audit trace / stability report 中的 `agent_review.contract`、`agent_review.applicability`、`profile_quality_issue_count` 和 `profile_issue_code_counts`。
+6. 记录每个 profile 的通过项、异常项、是否需要调整 prompt。
 
 ## 建议命令
 
@@ -89,6 +90,8 @@ ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile ui_api_mapping --fpa-
 模型端点：
 模型：
 profile：
+contract：
+applicability：
 strategy：
 rule_set：
 
@@ -96,6 +99,9 @@ rule_set：
 - FPA 行数：
 - 类型分布：
 - warning 数量：
+- quality_issue_count：
+- profile_quality_issue_count：
+- profile_issue_code_counts：
 - check.xlsx 是否生成：
 
 观察结论：
@@ -117,6 +123,7 @@ rule_set：
 - 四个 profile 均能完成真实模型生成并产出 check 工作簿。
 - 结果行名称使用完整模块路径前缀。
 - check/review 元数据记录 profile、strategy、rule_set、规则命中来源和 warning。
+- audit trace 中记录 `agent_review.contract`、`agent_review.applicability` 和 profile 专属 quality issue 汇总。
 - `strict_fpa` 不回退到开发工作项口径。
 - `multi_uis` 的多界面拆分理由可审阅。
 - `ui_api_mapping` 的 EI / ILF 固定类型规则稳定。

@@ -21,12 +21,17 @@ fixture suite：
 ```text
 profile: strict_fpa
 kind:
+contract:
+applicability:
 strategy:
 rule_set:
 system_prompt:
 user_prompt:
 row count:
 warning count:
+quality_issue_count:
+profile_quality_issue_count:
+profile_issue_code_counts:
 check.xlsx:
 ```
 
@@ -43,12 +48,17 @@ check.xlsx:
 ```text
 profile: unified_ui
 kind:
+contract:
+applicability:
 strategy:
 rule_set:
 system_prompt:
 user_prompt:
 row count:
 warning count:
+quality_issue_count:
+profile_quality_issue_count:
+profile_issue_code_counts:
 check.xlsx:
 ```
 
@@ -65,12 +75,17 @@ check.xlsx:
 ```text
 profile: multi_uis
 kind:
+contract:
+applicability:
 strategy:
 rule_set:
 system_prompt:
 user_prompt:
 row count:
 warning count:
+quality_issue_count:
+profile_quality_issue_count:
+profile_issue_code_counts:
 check.xlsx:
 ```
 
@@ -87,12 +102,17 @@ check.xlsx:
 ```text
 profile: ui_api_mapping
 kind:
+contract:
+applicability:
 strategy:
 rule_set:
 system_prompt:
 user_prompt:
 row count:
 warning count:
+quality_issue_count:
+profile_quality_issue_count:
+profile_issue_code_counts:
 check.xlsx:
 ```
 
@@ -110,6 +130,19 @@ check.xlsx:
 | profile | 问题 | 影响 | 建议处理 | 是否阻塞 |
 |---|---|---|---|---|
 |  |  |  |  |  |
+
+## Stability Report 摘要
+
+```text
+module_count:
+warning_count:
+quality_issue_count:
+profile_quality_issue_count:
+retryable_quality_issue_count:
+blocking_retry_count:
+issue_code_counts:
+profile_issue_code_counts:
+```
 
 ## 总结
 
