@@ -253,6 +253,9 @@ interface CosmicExportResponse {
   filename: string
   path: string
   file?: DoneFile
+  files?: DoneFile[]
+  cfp_total?: number
+  cfp_summary_file?: DoneFile
   export_policy?: CosmicReport['export_policy']
 }
 
@@ -489,8 +492,9 @@ async function exportConfirmedExcel() {
     if (response.export_policy) {
       report.value.export_policy = response.export_policy
     }
-    if (response.file && session.sessionId === sessionId.value) {
-      session.upsertDoneFile(response.file)
+    const exportedFiles = response.files ?? (response.file ? [response.file] : [])
+    if (session.sessionId === sessionId.value) {
+      exportedFiles.forEach(file => session.upsertDoneFile(file))
     }
     backendSyncStatus.value = `已导出 ${response.filename}`
   } catch (err) {

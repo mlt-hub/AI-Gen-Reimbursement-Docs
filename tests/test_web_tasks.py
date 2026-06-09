@@ -1630,10 +1630,14 @@ def test_cosmic_confirmed_export_writes_formal_excel(monkeypatch, tmp_path):
     data = resp.json()
     assert data["filename"] == "项目功能点拆分表-确认后.xlsx"
     assert Path(data["path"]).exists()
+    assert data["cfp_total"] == 2.0
+    assert data["cfp_summary_file"]["label"] == "COSMIC CFP 总和（确认后）"
+    assert Path(data["cfp_summary_file"]["path"]).read_text(encoding="utf-8").strip().endswith("CFP 总和: 2.0")
     assert data["export_policy"]["formal_excel"]["status"] == "allowed_after_confirmation"
     state = server.session_manager.get(session_id)
     assert state is not None
     assert any(item["label"] == "项目功能点拆分表（确认后）" for item in state.done_files)
+    assert any(item["label"] == "COSMIC CFP 总和（确认后）" for item in state.done_files)
     server.session_manager.cleanup_download(session_id)
 
 
@@ -1856,11 +1860,17 @@ def test_cosmic_confirmed_export_writes_excel_and_done_file(monkeypatch, tmp_pat
     assert output_path.name == "项目功能点拆分表-确认后.xlsx"
     assert output_path.exists()
     assert data["file"]["label"] == "项目功能点拆分表（确认后）"
+    assert data["cfp_total"] == 2.0
+    cfp_summary_path = work_dir / "output" / "md" / "3.5.gen-cosmic-CFP-总和.md"
+    assert Path(data["cfp_summary_file"]["path"]) == cfp_summary_path
+    assert cfp_summary_path.read_text(encoding="utf-8").strip().endswith("CFP 总和: 2.0")
     state = server.session_manager.get(session_id)
     assert state is not None
     assert any(item["path"] == str(output_path) for item in state.done_files)
+    assert any(item["path"] == str(cfp_summary_path) for item in state.done_files)
     with zipfile.ZipFile(zip_path) as archive:
         assert "cosmic文档/项目功能点拆分表-确认后.xlsx" in archive.namelist()
+        assert "md/3.5.gen-cosmic-CFP-总和.md" in archive.namelist()
     history = run_history_service.get_history_item(
         base_dir=tmp_path,
         run_id=session_id,
@@ -1871,6 +1881,8 @@ def test_cosmic_confirmed_export_writes_excel_and_done_file(monkeypatch, tmp_pat
     assert history["zip_path"] == str(zip_path)
     assert history["done_files"][0]["label"] == "项目功能点拆分表（确认后）"
     assert history["done_files"][0]["relative_path"] == "项目功能点拆分表-确认后.xlsx"
+    assert history["done_files"][1]["label"] == "COSMIC CFP 总和（确认后）"
+    assert history["done_files"][1]["relative_path"] == "3.5.gen-cosmic-CFP-总和.md"
     server.session_manager.cleanup_download(session_id)
 
 

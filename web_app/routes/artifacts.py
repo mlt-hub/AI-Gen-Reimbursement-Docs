@@ -18,6 +18,8 @@ from ai_gen_reimbursement_docs.cosmic_validator import (
     CosmicValidationResult,
 )
 from ai_gen_reimbursement_docs.cosmic_writer import write_cosmic_xlsx
+from ai_gen_reimbursement_docs.excel_source import write_cfp_sum
+from ai_gen_reimbursement_docs.gen_cosmic import _calculate_cfp_total_for_written_excel
 from ai_gen_reimbursement_docs.pipeline import (
     _read_cfp_formula_from_meta_md,
     _resolve_templates,
@@ -551,33 +553,50 @@ def create_router(session_manager: SessionManager, *, base_dir: Path | None = No
             report,
             cfp_formula=cfp_formula,
         ))
+        cfp_total = _calculate_cfp_total_for_written_excel([result.item for result in report.results])
+        write_cfp_sum(str(md_dir), cfp_total)
+        cfp_summary_path = md_dir / "3.5.gen-cosmic-CFP-总和.md"
         file_info = {
             "label": "项目功能点拆分表（确认后）",
             "path": str(saved_path),
             "size_kb": round(saved_path.stat().st_size / 1024),
             "is_temp": "_TEMP" in saved_path.name,
         }
+        cfp_file_info = {
+            "label": "COSMIC CFP 总和（确认后）",
+            "path": str(cfp_summary_path),
+            "size_kb": round(cfp_summary_path.stat().st_size / 1024),
+            "is_temp": False,
+        }
         state = session_manager.get(session_id)
-        if state is not None and not any(item.get("path") == file_info["path"] for item in state.done_files):
-            session_manager.set_done_files(session_id, [*state.done_files, file_info])
+        if state is not None:
+            done_files = list(state.done_files)
+            for item in (file_info, cfp_file_info):
+                if not any(existing.get("path") == item["path"] for existing in done_files):
+                    done_files.append(item)
+            session_manager.set_done_files(session_id, done_files)
         if state is not None and state.mode == "remote" and state.zip_path is not None:
             output_dir = _session_output_dir(session_manager, session_id)
             if output_dir is not None and output_dir.exists():
                 shutil.make_archive(str(state.zip_path.with_suffix("")), "zip", str(output_dir))
         if state is not None and base_dir is not None:
-            append_done_file_to_history(
-                base_dir=base_dir,
-                session_id=session_id,
-                mode=state.mode,
-                done_file=file_info,
-                zip_path=str(state.zip_path) if state.zip_path else "",
-            )
+            for item in (file_info, cfp_file_info):
+                append_done_file_to_history(
+                    base_dir=base_dir,
+                    session_id=session_id,
+                    mode=state.mode,
+                    done_file=item,
+                    zip_path=str(state.zip_path) if state.zip_path else "",
+                )
         return {
             "ok": True,
             "session_id": session_id,
             "filename": saved_path.name,
             "path": str(saved_path),
             "file": file_info,
+            "files": [file_info, cfp_file_info],
+            "cfp_total": cfp_total,
+            "cfp_summary_file": cfp_file_info,
             "export_policy": payload.get("export_policy", {}),
         }
 
