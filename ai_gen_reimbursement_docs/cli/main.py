@@ -504,9 +504,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--fpa-stability-sample-fixtures', nargs='+', default=[],
                         help='读取一个或多个 FPA golden fixture JSON，批量生成稳定性采样 trace 和报告')
     parser.add_argument('--fpa-stability-sample-suite', default='',
-                        help='FPA 稳定性推荐样例集名称；当前支持 standard')
+                        help='FPA 稳定性推荐样例集名称；当前支持 standard、real-model-recommended')
     parser.add_argument('--fpa-stability-sample-preset', default='',
-                        help='FPA 稳定性采样预设；当前支持 strict-real-model')
+                        help='FPA 稳定性采样预设；当前支持 strict-real-model、strict-real-model-recommended、multi-profile-real-model')
     parser.add_argument('--fpa-stability-sample-profiles', default='',
                         help='稳定性采样 profile 列表，逗号分隔')
     parser.add_argument('--fpa-stability-sample-strategies', default='',
@@ -701,7 +701,7 @@ def main():
 
     if args.fpa_stability_sample_fixtures or args.fpa_stability_sample_suite or args.fpa_stability_sample_preset:
         from ai_gen_reimbursement_docs.fpa_stability_sampler import (
-            parse_fpa_stability_sample_configs,
+            resolve_fpa_stability_sample_configs,
             resolve_fpa_stability_sample_preset,
             resolve_fpa_stability_suite_fixtures,
             run_fpa_stability_sampling,
@@ -721,11 +721,12 @@ def main():
         sample_output_dir = args.output_dir or os.path.abspath("fpa-stability-samples")
         sample_api_key = args.api_key or load_api_key()
         sample_model = args.model or load_model_name()
-        sample_base_url = load_base_url()
+        sample_base_url = args.base_url or load_base_url()
         manifest = run_fpa_stability_sampling(
             fixture_paths=fixture_paths,
             output_dir=sample_output_dir,
-            configs=parse_fpa_stability_sample_configs(
+            configs=resolve_fpa_stability_sample_configs(
+                preset=preset,
                 profiles=profiles,
                 strategies=strategies,
                 rule_sets=rule_sets,

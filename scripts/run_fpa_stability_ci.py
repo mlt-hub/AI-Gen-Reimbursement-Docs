@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 from ai_gen_reimbursement_docs.config_utils import load_api_key, load_base_url, load_model_name
 from ai_gen_reimbursement_docs.fpa_stability_sampler import (
-    parse_fpa_stability_sample_configs,
+    resolve_fpa_stability_sample_configs,
     resolve_fpa_stability_sample_preset,
     resolve_fpa_stability_suite_fixtures,
     run_fpa_stability_sampling,
@@ -66,7 +66,8 @@ def main(argv: list[str] | None = None) -> int:
     if suite:
         fixture_paths.extend(resolve_fpa_stability_suite_fixtures(suite))
     fixture_paths = list(dict.fromkeys(fixture_paths))
-    configs = parse_fpa_stability_sample_configs(
+    configs = resolve_fpa_stability_sample_configs(
+        preset=preset,
         profiles=profiles,
         strategies=strategies,
         rule_sets=rule_sets,

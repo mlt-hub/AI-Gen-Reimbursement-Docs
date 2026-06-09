@@ -23,14 +23,15 @@
 | `12c6abd` | 覆盖自定义 `unified_ui` / `ui_api_mapping` profile 的 prompt contract 继承。 |
 | `96687da` | 为 `multi_uis` 增加独立 contract 变体。 |
 | `854cdc2` | 真实模型验证模板补齐 profile 专属质量指标。 |
-| 当前切片 | 增加自定义 profile 继承式 harness 示例，并对齐 `ui_api_mapping` 显式后端行提取与审阅口径。 |
+| `ae27e47` | 增加自定义 profile 继承式 harness 示例，并对齐 `ui_api_mapping` 显式后端行提取与审阅口径。 |
+| 当前切片 | 增加 `multi-profile-real-model` preset，区分 primary/debug_only 基础质量门，并归档首轮多 profile 真实模型基线。 |
 
 当前实现约束：
 
 - 非 strict profile 的专属 review 只进入 `agent_review` 和稳定性报告。
 - profile 专属 warning 不阻断、不自动重试、不改写 rows。
 - `strict_fpa` 的 `type_judgement`、`merge_review`、`quality_review` 语义保持不变。
-- 真实模型抽样模板已经提供，但尚未执行真实模型基线。
+- 已执行首轮多 profile 真实模型基线：20 次调用均走 AI 路径，基础 strict 质量门为 0，但 profile 专属质量门失败，需要继续收敛 `unified_ui` / `multi_uis` / `ui_api_mapping` prompt。
 
 ## 目标行为
 
@@ -227,7 +228,7 @@ mapping_quality_review
 - 明确接口来源可追溯。
 - 默认接口行和明确接口行不互相去重。
 
-### 第六阶段：真实模型抽样基线（待执行）
+### 第六阶段：真实模型抽样基线（已完成首轮）
 
 沿用 `docs/fpa/fpa-multi-profile-real-model-validation.md`，但建议新增按日期记录的验证结果：
 
@@ -259,6 +260,14 @@ warning count
 - `unified_ui` 不过度拆分界面。
 - `multi_uis` 拆分理由可审阅。
 - `ui_api_mapping` 固定 EI / ILF 类型规则稳定。
+
+首轮结果：
+
+- 记录文件：`docs/fpa/validation-runs/2026-06-09-multi-profile-real-model.md`
+- 运行范围：5 个 standard fixture × 4 个 profile，共 20 次真实模型调用。
+- 基础质量门：`quality_issue_count=0`、`retryable_quality_issue_count=0`、`blocking_retry_count=0`。
+- profile 专属质量门：`profile_quality_issue_count=49`，未通过。
+- 后续方向：优先收敛 `unified_ui` / `multi_uis` 的界面与处理开发行 prompt，以及 `ui_api_mapping` 的默认 UI/API 行和显式后端行 prompt。
 
 ## 验证命令
 
@@ -293,8 +302,8 @@ warning count
 
 ## 后续切片
 
-1. 按 `docs/fpa/validation-runs/multi-profile-run-template.md` 执行真实模型抽样并归档。
-2. 根据真实模型抽样结果判断是否把 `workload_judgement`、`mapping_judgement` 写入 prompt 硬约束。
+1. 根据 `docs/fpa/validation-runs/2026-06-09-multi-profile-real-model.md` 的 profile issue 分布，收敛 `unified_ui` / `multi_uis` / `ui_api_mapping` prompt。
+2. 重新运行 `multi-profile-real-model` preset，目标是 `profile_quality_issue_count=0`。
 3. 如果 `multi_uis` 真实项目需求稳定，评估是否新增独立 `kind: multi_uis` 和独立 contract。
 
 每个切片都应保持现有生成行为可回归，并按仓库规则单独提交。

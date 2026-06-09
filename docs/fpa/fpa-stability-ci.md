@@ -64,6 +64,31 @@
 - `max_retryable_issues=0`
 - `max_retries=0`
 
+多 profile 真实模型抽样使用 `multi-profile-real-model` preset：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset multi-profile-real-model `
+  --output-dir .\tmp_fpa_stability_ci_multi_profile
+```
+
+该 preset 使用 `suite=standard`，并显式展开为四条配置，避免 `profiles × strategies × rule_sets` 笛卡尔积产生无意义组合：
+
+| profile | strategy | rule_set |
+|---|---|---|
+| `strict_fpa` | `ai_first` | `strict_fpa_rs` |
+| `unified_ui` | `ai_first` | `unified_ui_rs` |
+| `multi_uis` | `ai_first` | `multi_uis_rs` |
+| `ui_api_mapping` | `ai_first` | `ui_api_mapping_rs` |
+
+多 profile preset 的质量门检查：
+
+- `profile_quality_issue_count=0`
+- `retryable_quality_issue_count=0`
+- `blocking_retry_count=0`
+
+其中 `retryable_quality_issue_count` 只统计 `agent_review.applicability=primary` 的基础 `quality_review`。非 strict profile 的 `applicability=debug_only` 基础 quality review 不作为门禁硬约束；它们的 profile 专属审阅问题单独进入 `profile_quality_issue_count` 和 `profile_issue_code_counts`。
+
 质量门失败时，脚本返回退出码 `2`。
 
 真实模型运行前建议先 dry-run 确认会调用模型：

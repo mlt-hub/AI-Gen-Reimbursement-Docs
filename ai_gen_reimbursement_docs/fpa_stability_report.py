@@ -39,7 +39,9 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             warning for warning in warnings
             if _counts_as_stability_warning(warning)
         ]
-        quality_review = module.get("quality_review", {})
+        agent_review = module.get("agent_review", {})
+        primary_quality_review = _is_primary_agent_review(agent_review)
+        quality_review = module.get("quality_review", {}) if primary_quality_review else {}
         issues, summary = _quality_parts(quality_review)
         module_issue_count = _int_or_default(summary.get("issue_count"), len(issues))
         module_retryable_count = _int_or_default(
@@ -70,7 +72,6 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         retryable_quality_issue_count += module_retryable_count
         confirmed_decision_count += module_confirmed_count
 
-        agent_review = module.get("agent_review", {})
         profile_issues, profile_summary = _profile_quality_parts(agent_review)
         module_profile_issue_count = _int_or_default(profile_summary.get("issue_count"), len(profile_issues))
         profile_quality_issue_count += module_profile_issue_count
@@ -159,6 +160,13 @@ def _agent_roles(agent_review: object) -> list[dict[str, object]]:
     if not isinstance(roles, list):
         return []
     return [role for role in roles if isinstance(role, dict)]
+
+
+def _is_primary_agent_review(agent_review: object) -> bool:
+    if not isinstance(agent_review, dict):
+        return True
+    applicability = str(agent_review.get("applicability", "") or "").strip()
+    return not applicability or applicability == "primary"
 
 
 def load_fpa_stability_trace(path: str) -> dict[str, object]:

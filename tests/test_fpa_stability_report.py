@@ -243,6 +243,42 @@ def test_stability_report_keeps_non_blocking_retry_visible_without_failing_gate(
     assert "Blocking Retries" in markdown
 
 
+def test_debug_only_agent_review_keeps_base_quality_out_of_retryable_gate():
+    report = build_fpa_stability_report({
+        "modules": [{
+            "module": "统一界面模块",
+            "l3": "统一界面模块",
+            "source": "ai",
+            "warnings": [],
+            "quality_review": {
+                "issues": [{
+                    "code": "quality.type_judgement_mismatch",
+                    "retryable": True,
+                }],
+                "summary": {"issue_count": 1, "retryable_count": 1},
+            },
+            "agent_review": {
+                "applicability": "debug_only",
+                "contract_outputs": {"quality_review": "unified_quality_review"},
+                "unified_quality_review": {
+                    "issues": [{
+                        "code": "unified_ui.missing_ui_row",
+                        "severity": "warning",
+                    }],
+                    "summary": {"issue_count": 1, "warning_count": 1},
+                },
+            },
+        }]
+    })
+
+    summary = report["summary"]
+    assert summary["quality_issue_count"] == 0
+    assert summary["retryable_quality_issue_count"] == 0
+    assert summary["issue_code_counts"] == {}
+    assert summary["profile_quality_issue_count"] == 1
+    assert summary["profile_issue_code_counts"] == {"unified_ui.missing_ui_row": 1}
+
+
 def test_stability_comparison_quality_gate_renders_failure():
     comparison = {
         "summary": {

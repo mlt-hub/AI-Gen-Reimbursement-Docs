@@ -2,6 +2,7 @@ import json
 
 from ai_gen_reimbursement_docs.fpa_stability_sampler import (
     parse_fpa_stability_sample_configs,
+    resolve_fpa_stability_sample_configs,
     resolve_fpa_stability_sample_preset,
     resolve_fpa_stability_suite_fixtures,
     run_fpa_stability_sampling,
@@ -84,6 +85,38 @@ def test_resolve_strict_real_model_recommended_preset():
         "retryable_quality_issue_count": 0,
         "blocking_retry_count": 0,
     }
+
+
+def test_resolve_multi_profile_real_model_preset_uses_explicit_configs():
+    preset = resolve_fpa_stability_sample_preset("multi-profile-real-model")
+    configs = resolve_fpa_stability_sample_configs(preset=preset)
+
+    assert preset["suite"] == "standard"
+    assert [(config.profile, config.strategy, config.rule_set) for config in configs] == [
+        ("strict_fpa", "ai_first", "strict_fpa_rs"),
+        ("unified_ui", "ai_first", "unified_ui_rs"),
+        ("multi_uis", "ai_first", "multi_uis_rs"),
+        ("ui_api_mapping", "ai_first", "ui_api_mapping_rs"),
+    ]
+    assert preset["thresholds"] == {
+        "profile_quality_issue_count": 0,
+        "retryable_quality_issue_count": 0,
+        "blocking_retry_count": 0,
+    }
+
+
+def test_explicit_sampling_args_override_preset_configs():
+    preset = resolve_fpa_stability_sample_preset("multi-profile-real-model")
+    configs = resolve_fpa_stability_sample_configs(
+        preset=preset,
+        profiles="strict_fpa",
+        strategies="rules_only",
+        rule_sets="strict_fpa_rs",
+    )
+
+    assert [(config.profile, config.strategy, config.rule_set) for config in configs] == [
+        ("strict_fpa", "rules_only", "strict_fpa_rs")
+    ]
 
 
 def test_run_fpa_stability_sampling_writes_traces_manifest_and_report(tmp_path):

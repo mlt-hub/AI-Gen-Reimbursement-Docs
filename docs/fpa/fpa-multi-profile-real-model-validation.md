@@ -64,7 +64,24 @@ ui_api_mapping
 
 ## 建议命令
 
-按实际输入路径替换命令中的 Excel 或 MD 文件：
+标准 golden fixture 抽样可直接使用 stability preset：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
+  --preset multi-profile-real-model `
+  --output-dir .\tmp_fpa_stability_ci_multi_profile
+```
+
+该 preset 会对 standard fixture suite 展开四个 profile 的真实模型采样：
+
+```text
+strict_fpa + ai_first + strict_fpa_rs
+unified_ui + ai_first + unified_ui_rs
+multi_uis + ai_first + multi_uis_rs
+ui_api_mapping + ai_first + ui_api_mapping_rs
+```
+
+如需验证真实 Excel 输入，按实际输入路径替换命令中的 Excel 或 MD 文件：
 
 ```powershell
 ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa
@@ -102,6 +119,8 @@ rule_set：
 - quality_issue_count：
 - profile_quality_issue_count：
 - profile_issue_code_counts：
+- retryable_quality_issue_count：
+- blocking_retry_count：
 - check.xlsx 是否生成：
 
 观察结论：
@@ -124,6 +143,7 @@ rule_set：
 - 结果行名称使用完整模块路径前缀。
 - check/review 元数据记录 profile、strategy、rule_set、规则命中来源和 warning。
 - audit trace 中记录 `agent_review.contract`、`agent_review.applicability` 和 profile 专属 quality issue 汇总。
+- 非 strict profile 的 `applicability=debug_only` 基础 `quality_review` 不作为门禁硬约束；profile 专属问题以 `profile_quality_issue_count` 为准。
 - `strict_fpa` 不回退到开发工作项口径。
 - `multi_uis` 的多界面拆分理由可审阅。
 - `ui_api_mapping` 的 EI / ILF 固定类型规则稳定。

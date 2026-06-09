@@ -54,6 +54,20 @@ FPA_STABILITY_SAMPLE_PRESETS = {
             "blocking_retry_count": 0,
         },
     },
+    "multi-profile-real-model": {
+        "suite": "standard",
+        "configs": (
+            {"profile": "strict_fpa", "strategy": "ai_first", "rule_set": "strict_fpa_rs"},
+            {"profile": "unified_ui", "strategy": "ai_first", "rule_set": "unified_ui_rs"},
+            {"profile": "multi_uis", "strategy": "ai_first", "rule_set": "multi_uis_rs"},
+            {"profile": "ui_api_mapping", "strategy": "ai_first", "rule_set": "ui_api_mapping_rs"},
+        ),
+        "thresholds": {
+            "profile_quality_issue_count": 0,
+            "retryable_quality_issue_count": 0,
+            "blocking_retry_count": 0,
+        },
+    },
 }
 
 
@@ -177,13 +191,47 @@ def resolve_fpa_stability_sample_preset(preset: str) -> dict[str, object]:
     if preset_name not in FPA_STABILITY_SAMPLE_PRESETS:
         raise ValueError(f"未知 FPA 稳定性采样 preset: {preset}")
     raw = FPA_STABILITY_SAMPLE_PRESETS[preset_name]
+    configs = raw.get("configs", ())
     return {
         "suite": raw["suite"],
-        "profiles": raw["profiles"],
-        "strategies": raw["strategies"],
-        "rule_sets": raw["rule_sets"],
+        "profiles": raw.get("profiles", ""),
+        "strategies": raw.get("strategies", ""),
+        "rule_sets": raw.get("rule_sets", ""),
+        "configs": [dict(config) for config in configs],
         "thresholds": dict(raw["thresholds"]),
     }
+
+
+def resolve_fpa_stability_sample_configs(
+    *,
+    preset: dict[str, object] | None = None,
+    profiles: str = "",
+    strategies: str = "",
+    rule_sets: str = "",
+) -> list[FpaStabilitySampleConfig]:
+    """Resolve sampling configs, preserving explicit per-profile preset configs when present."""
+    if profiles or strategies or rule_sets:
+        return parse_fpa_stability_sample_configs(
+            profiles=profiles,
+            strategies=strategies,
+            rule_sets=rule_sets,
+        )
+    preset_configs = preset.get("configs", []) if isinstance(preset, dict) else []
+    if isinstance(preset_configs, list) and preset_configs:
+        return [
+            FpaStabilitySampleConfig(
+                profile=str(config.get("profile", "") or ""),
+                strategy=str(config.get("strategy", "") or ""),
+                rule_set=str(config.get("rule_set", "") or ""),
+            )
+            for config in preset_configs
+            if isinstance(config, dict)
+        ]
+    return parse_fpa_stability_sample_configs(
+        profiles=profiles,
+        strategies=strategies,
+        rule_sets=rule_sets,
+    )
 
 
 def parse_fpa_stability_sample_configs(
