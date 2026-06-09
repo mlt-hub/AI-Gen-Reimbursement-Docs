@@ -717,6 +717,7 @@
               v-model="webTemplateForm.activeProfile"
               class="field-control"
               :disabled="templateProfileNames.length === 0"
+              @change="applySelectedTemplateProfileRunDefaults"
             >
               <option value="">不使用 profile</option>
               <option v-for="name in templateProfileNames" :key="name" :value="name">
@@ -736,6 +737,14 @@
           <div class="min-w-0">
             <span class="text-[var(--color-ink-soft)]">模板映射</span>
             <p class="mt-1 truncate font-mono text-xs">{{ selectedTemplateProfileTemplateKeys }}</p>
+          </div>
+          <div class="min-w-0">
+            <span class="text-[var(--color-ink-soft)]">FPA 口径</span>
+            <p class="mt-1 truncate font-mono text-xs">{{ selectedTemplateProfileFpaProfile || '未配置' }}</p>
+          </div>
+          <div class="min-w-0">
+            <span class="text-[var(--color-ink-soft)]">规则集 / 策略</span>
+            <p class="mt-1 truncate font-mono text-xs">{{ selectedTemplateProfileFpaPolicy }}</p>
           </div>
         </div>
       </div>
@@ -1141,6 +1150,10 @@ interface OutputTemplateProfileConfig {
   template_pack?: string
   pack?: string
   templates?: Record<string, string>
+  fpa_profile?: string
+  fpa_strategy?: string
+  fpa_rule_set?: string
+  fpa_confirmation_mode?: string
 }
 
 interface WebConfigResponse {
@@ -1626,6 +1639,15 @@ const selectedTemplateProfilePack = computed(() => (
 const selectedTemplateProfileTemplateKeys = computed(() => {
   const keys = Object.keys(selectedTemplateProfile.value?.templates || {})
   return keys.length ? keys.join(', ') : '未配置'
+})
+const selectedTemplateProfileFpaProfile = computed(() => selectedTemplateProfile.value?.fpa_profile || '')
+const selectedTemplateProfileFpaPolicy = computed(() => {
+  const values = [
+    selectedTemplateProfile.value?.fpa_rule_set,
+    selectedTemplateProfile.value?.fpa_strategy,
+    selectedTemplateProfile.value?.fpa_confirmation_mode,
+  ].filter(Boolean)
+  return values.length ? values.join(' / ') : '未配置'
 })
 const activeAdvancedFile = computed(() => (
   advancedConfigFiles.value.find(item => item.id === activeAdvancedFileId.value) || null
@@ -2540,9 +2562,9 @@ function applyWebConfigToForm(data: WebConfigResponse) {
   webRunForm.fpaStrategy = fieldValue(data.run_defaults.fpa_strategy)
   webRunForm.fpaRuleSet = fieldValue(data.run_defaults.fpa_rule_set)
   webRunForm.fpaConfirmationMode = fieldValue(data.run_defaults.fpa_confirmation_mode) || 'cautious'
-  webRunSnapshot.value = webRunFormSnapshot.value
   webTemplateForm.outTemplatesJson = JSON.stringify(data.templates.out_templates.value || {}, null, 2)
   webTemplateForm.activeProfile = String(data.templates.active_output_template_profile?.value || '')
+  webRunSnapshot.value = webRunFormSnapshot.value
   webTemplateSnapshot.value = webTemplateFormSnapshot.value
 }
 
@@ -2624,7 +2646,22 @@ async function saveTemplateSettings() {
       out_templates: { value: outTemplates },
       active_output_template_profile: { value: webTemplateForm.activeProfile },
     },
+    run_defaults: {
+      fpa_profile: { value: webRunForm.fpaProfile },
+      fpa_strategy: { value: webRunForm.fpaStrategy },
+      fpa_rule_set: { value: webRunForm.fpaRuleSet },
+      fpa_confirmation_mode: { value: webRunForm.fpaConfirmationMode },
+    },
   }, '模板配置保存成功')
+}
+
+function applySelectedTemplateProfileRunDefaults() {
+  const profile = selectedTemplateProfile.value
+  if (!profile) return
+  if (profile.fpa_profile) webRunForm.fpaProfile = profile.fpa_profile
+  if (profile.fpa_strategy) webRunForm.fpaStrategy = profile.fpa_strategy
+  if (profile.fpa_rule_set) webRunForm.fpaRuleSet = profile.fpa_rule_set
+  if (profile.fpa_confirmation_mode) webRunForm.fpaConfirmationMode = profile.fpa_confirmation_mode
 }
 
 function applyTemplateImportPatch(patch: Record<string, string>) {

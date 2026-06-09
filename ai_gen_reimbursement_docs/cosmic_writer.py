@@ -2,6 +2,7 @@
 
 import copy
 import logging
+from typing import Any
 
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -13,6 +14,7 @@ from ai_gen_reimbursement_docs.constants import (
 )
 from ai_gen_reimbursement_docs.cosmic_validator import CosmicValidationReport
 from ai_gen_reimbursement_docs.excel_source import safe_load_workbook
+from ai_gen_reimbursement_docs.template_manifest import load_template_manifest
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_writer')
 
@@ -27,6 +29,26 @@ _REF_BORDER = Border(
 )
 _CENTER_ALIGN = Alignment(horizontal='center', vertical='center', wrap_text=True)
 _LEFT_ALIGN = Alignment(horizontal='left', vertical='center', wrap_text=True)
+
+
+def _as_manifest_int(value: object, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _cosmic_result_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
+    sheets = manifest.get("sheets", {}) or {}
+    spec = sheets.get("result", {}) if isinstance(sheets, dict) else {}
+    if not isinstance(spec, dict):
+        spec = {}
+    return {
+        "name": str(spec.get("name") or "2、功能点拆分表"),
+        "data_start_row": _as_manifest_int(spec.get("data_start_row"), FP_DATA_START_ROW),
+        "style_source_row": _as_manifest_int(spec.get("style_source_row"), FP_DATA_START_ROW),
+    }
 
 
 def _safe_save_workbook(wb, output_path: str) -> str:
@@ -124,22 +146,24 @@ def write_cosmic_xlsx(
     """
     if meta is None:
         meta = {}
+    manifest, _, _ = load_template_manifest("cosmic", template_path)
+    sheet_spec = _cosmic_result_sheet_spec(manifest)
     wb = safe_load_workbook(template_path, '项目功能点拆分表')
-    ws = wb['2、功能点拆分表']
+    ws = wb[sheet_spec["name"]]
+    _data_start_row = sheet_spec["data_start_row"]
+    _style_source_row = sheet_spec["style_source_row"]
 
-    # --- Save template row 6 format as reference ---
+    # --- Save template data style format as reference ---
     tmpl_format_row6 = {}
     for col_idx in range(1, FP_TOTAL_COLS):
-        tmpl_format_row6[col_idx] = _get_ref_style(ws, 6, col_idx)
-    _CFP_FILL_TMPL = copy.copy(ws.cell(row=6, column=COL_FP_CFP).fill)
-
-    _data_start_row = FP_DATA_START_ROW
+        tmpl_format_row6[col_idx] = _get_ref_style(ws, _style_source_row, col_idx)
+    _CFP_FILL_TMPL = copy.copy(ws.cell(row=_style_source_row, column=COL_FP_CFP).fill)
 
     # --- Save existing footer notes (rows below header rows, before clearing) ---
     footer_saved = []  # list of (merge_range_string, {col: (value, style_dict)})
 # Collect rows from max_row upward that are NOT sample data (footer notes)
     seen_merges = list(ws.merged_cells.ranges)
-    for row_num in range(ws.max_row, 5, -1):
+    for row_num in range(ws.max_row, _data_start_row - 1, -1):
         cell_a = ws.cell(row=row_num, column=1).value
         if cell_a and isinstance(cell_a, str) and len(cell_a) > 20:
             # Check if rest of the row is empty (footer note, not data)
@@ -180,7 +204,7 @@ def write_cosmic_xlsx(
     # 1. Remove merged cells in data area
     merged_to_remove = []
     for mr in ws.merged_cells.ranges:
-        if mr.min_row >= 6:
+        if mr.min_row >= _data_start_row:
             merged_to_remove.append(str(mr))
     for mr_str in merged_to_remove:
         ws.unmerge_cells(mr_str)

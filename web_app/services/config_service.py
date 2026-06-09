@@ -26,6 +26,13 @@ DEFAULT_WEB_CONFIG = {
     "fpa_confirmation_mode": "cautious",
 }
 
+OUTPUT_TEMPLATE_PROFILE_RUN_DEFAULT_KEYS = (
+    "fpa_profile",
+    "fpa_strategy",
+    "fpa_rule_set",
+    "fpa_confirmation_mode",
+)
+
 ADVANCED_CONFIG_FILES = {
     "business_rules": {
         "filename": "business_rules.yaml",
@@ -1821,6 +1828,21 @@ def _editable_value(payload: dict, section: str, key: str):
     return value
 
 
+def _linked_run_defaults_from_output_template_profile(system: dict, profile_name: str) -> dict[str, str]:
+    profiles = system.get("output_template_profiles")
+    if not isinstance(profiles, dict):
+        return {}
+    profile = profiles.get(profile_name)
+    if not isinstance(profile, dict):
+        return {}
+    linked: dict[str, str] = {}
+    for key in OUTPUT_TEMPLATE_PROFILE_RUN_DEFAULT_KEYS:
+        value = str(profile.get(key) or "").strip()
+        if value:
+            linked[key] = value
+    return linked
+
+
 async def save_web_config_to_dir(
     payload: dict,
     target_dir: Path,
@@ -1878,6 +1900,9 @@ async def save_web_config_to_dir(
         active_profile = str(active_output_template_profile).strip()
         if active_profile:
             system["active_output_template_profile"] = active_profile
+            for key, value in _linked_run_defaults_from_output_template_profile(system, active_profile).items():
+                system[key] = value
+                changed_fields.append(f"run_defaults.{key}")
         else:
             system.pop("active_output_template_profile", None)
         changed_fields.append("templates.active_output_template_profile")

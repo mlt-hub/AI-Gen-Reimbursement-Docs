@@ -78,7 +78,21 @@ output_template_profiles:
 
 `templates` 支持 `fpa/spec/cosmic/list` 和 `fpa_out_template/spec_out_template/cosmic_out_template/list_out_template` 两类 key。`template_pack` 指向的目录应包含 `manifest.yaml` 或 `manifest.yml`，其中通过 `templates` 声明模板文件；模板包内的相对路径按模板包目录解析。
 
-Web 配置页的模板配置区已支持基础 profile 选择：页面会读取 `output_template_profiles`，允许选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。当前选择器只负责模板 profile 的显式选择；profile 与 FPA 口径、规则集、生成策略的联动仍作为后续能力推进。
+Web 配置页的模板配置区已支持基础 profile 选择：页面会读取 `output_template_profiles`，允许选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。
+
+profile 可同时声明 Web 运行默认值：
+
+```yaml
+output_template_profiles:
+  strict_delivery:
+    template_pack: data/template_packs/strict_delivery
+    fpa_profile: strict_fpa
+    fpa_strategy: ai_first
+    fpa_rule_set: strict_fpa_rs
+    fpa_confirmation_mode: strict
+```
+
+Web/API 保存 `active_output_template_profile` 时，会把这些字段同步写入 `system_config.yaml` 的运行默认值。若同一次保存 payload 中显式提供了 `run_defaults`，显式值覆盖 profile 默认值。
 
 ### 3. 用户配置文件 `out_templates`
 
@@ -93,6 +107,8 @@ out_templates:
 ```
 
 相对路径会按项目根目录解析。
+
+Web 导入的需求说明书 Word 模板草稿发布为正式版本后，会复制到用户配置目录的 `published_templates/spec/{import_id}` 下，并返回可写入 `spec_out_template` 的正式模板路径。
 
 ### 4. 项目内置模板
 
@@ -123,6 +139,16 @@ data/out_templates/项目需求说明书-输出模板.docx
 
 FPA 模板不仅用于最终 Excel 写入，在部分配置下也会用于读取模板附录中的判定原则，影响 AI 返回的“计算依据归类”约束。
 
+FPA 结果写入器当前会读取 `fpa` manifest 的 `sheets.result`：
+
+- `name`：FPA 结果 sheet 名。
+- `header_row`：表头行。
+- `data_start_row`：数据写入起始行。
+- `style_source_row`：生成行复制样式的来源行。
+- `columns`：按 manifest header 或模板表头定位关键列。
+
+公式列会按当前模板表头定位，生成公式和汇总公式会跟随数据起始行变化。FPA 附录读取、命名单元格、复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 写入行为。
+
 ### COSMIC 功能点拆分表
 
 入口：`_generate_cosmic(...)`
@@ -134,6 +160,14 @@ FPA 模板不仅用于最终 Excel 写入，在部分配置下也会用于读取
 3. 如果存在 API Key，调用 `generate_cosmic_items` 得到结构化 `CosmicItem`；如果没有 API Key，则以空列表进入校验。
 4. 调用 `generate_cosmic_artifacts(...)` 生成 JSON 草稿、Markdown 审阅稿和校验报告。
 5. 只有校验状态为 `passed` 时写正式 Excel；`review_required` 仅在 `gen_cosmic.allow_draft_excel_output=true` 时写草稿 Excel；`blocked` 不写正式 Excel。
+
+COSMIC 结果写入器当前会读取 `cosmic` manifest 的 `sheets.result`：
+
+- `name`：COSMIC 结果 sheet 名。
+- `data_start_row`：数据写入起始行。
+- `style_source_row`：生成行复制样式的来源行。
+
+COSMIC 列号、合并列、警告标记列和复用度校验列仍沿用当前模板契约；完整列映射、复杂锚点和公式重写后续再推进。
 
 COSMIC 写入过程会基于模板保留既有结构，并更新功能点拆分数据和环境图相关 sheet。CFP 总和只在正式 Excel 写入成功时更新，避免 `gen-list` 读取草稿或阻断结果。
 
