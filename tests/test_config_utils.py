@@ -35,6 +35,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_user_prompt_config,
     load_fpa_user_prompt_template,
     load_model_name,
+    load_output_template_profile,
     log_api_key_resolution,
     resolve_api_key,
     validate_fpa_runtime_config_files,
@@ -536,6 +537,67 @@ class TestBooleanLoaders:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=Path("/nonexistent")):
             assert load_fpa_excel_recalc_check() is False
+
+
+class TestOutputTemplateProfiles:
+    def test_load_output_template_profile_reads_direct_templates(self, tmp_path):
+        (tmp_path / "system_config.yaml").write_text(
+            "\n".join([
+                "active_output_template_profile: delivery_a",
+                "output_template_profiles:",
+                "  delivery_a:",
+                "    templates:",
+                "      fpa_out_template: data/custom/FPA.xlsx",
+                "      list: data/custom/list.xlsx",
+            ]),
+            encoding="utf-8",
+        )
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_output_template_profile() == {
+                "fpa_out_template": "data/custom/FPA.xlsx",
+                "list": "data/custom/list.xlsx",
+            }
+
+    def test_load_output_template_profile_reads_template_pack(self, tmp_path):
+        pack = tmp_path / "packs" / "standard"
+        pack.mkdir(parents=True)
+        (pack / "manifest.yaml").write_text(
+            "\n".join([
+                "template_pack_id: standard",
+                "templates:",
+                "  fpa: FPA.xlsx",
+                "  spec_out_template: spec.docx",
+            ]),
+            encoding="utf-8",
+        )
+        (tmp_path / "system_config.yaml").write_text(
+            "\n".join([
+                "active_output_template_profile: standard",
+                "output_template_profiles:",
+                "  standard:",
+                "    template_pack: packs/standard",
+                "    templates:",
+                "      list_out_template: data/list.xlsx",
+            ]),
+            encoding="utf-8",
+        )
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_output_template_profile(project_root_path=tmp_path) == {
+                "fpa": str(pack / "FPA.xlsx"),
+                "spec_out_template": str(pack / "spec.docx"),
+                "list_out_template": "data/list.xlsx",
+            }
+
+    def test_load_output_template_profile_returns_empty_without_active_profile(self, tmp_path):
+        (tmp_path / "system_config.yaml").write_text(
+            "output_template_profiles:\n  standard:\n    templates:\n      fpa: FPA.xlsx\n",
+            encoding="utf-8",
+        )
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_output_template_profile() == {}
 
 
 class TestLoadFpaProfile:

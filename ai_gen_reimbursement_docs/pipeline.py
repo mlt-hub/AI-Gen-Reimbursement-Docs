@@ -17,6 +17,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_profile,
     load_spec_remind_update_toc, load_spec_auto_update_toc,
     load_out_templates,
+    load_output_template_profile,
 )
 from ai_gen_reimbursement_docs.fpa_profiles import resolve_fpa_execution_config
 from ai_gen_reimbursement_docs.pipeline_callbacks import (
@@ -444,10 +445,16 @@ def _read_fpa_reduced_md(md_dir: str) -> float:
     return 0.0
 
 
+def _configured_template_path(settings: dict[str, str], key: str, config_name: str) -> str:
+    return settings.get(config_name, "") or settings.get(key, "")
+
+
 def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
-    """解析模板路径，优先级：CLI 参数/Web UI指定 > 配置文件"""
+    """解析模板路径，优先级：CLI 参数/Web UI指定 > profile > out_templates > 内置模板"""
     from ai_gen_reimbursement_docs.excel_source import project_root
 
+    root = project_root()
+    profile_templates = load_output_template_profile(project_root_path=root)
     cfg_templates = load_out_templates()
     templates = {}
 
@@ -464,17 +471,26 @@ def _resolve_templates(file_path: str, cli_templates: dict | None) -> dict:
                 templates[key] = path
                 continue
 
-        # 2. 配置文件（system_config.yaml → out_templates）
+        # 2. 配置文件（system_config.yaml → output_template_profiles）
+        profile_path = _configured_template_path(profile_templates, key, config_name)
+        if profile_path:
+            if not os.path.isabs(profile_path):
+                profile_path = os.path.join(root, profile_path)
+            if os.path.exists(profile_path):
+                templates[key] = profile_path
+                continue
+
+        # 3. 配置文件（system_config.yaml → out_templates）
         cfg_path = cfg_templates.get(config_name, '')
         if cfg_path:
             if not os.path.isabs(cfg_path):
-                cfg_path = os.path.join(project_root(), cfg_path)
+                cfg_path = os.path.join(root, cfg_path)
             if os.path.exists(cfg_path):
                 templates[key] = cfg_path
                 continue
 
-        # 3. 内置模板（未初始化 system_config.yaml 时的默认回退）
-        default_path = os.path.join(project_root(), "data", "out_templates", default_filename)
+        # 4. 内置模板（未初始化 system_config.yaml 时的默认回退）
+        default_path = os.path.join(root, "data", "out_templates", default_filename)
         if os.path.exists(default_path):
             templates[key] = default_path
             continue

@@ -1380,6 +1380,84 @@ def load_out_templates() -> dict[str, str]:
     return {}
 
 
+def _clean_template_mapping(value) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(k): str(v) for k, v in value.items() if v}
+
+
+def _read_yaml_mapping(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    import yaml
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _resolve_template_pack_templates(pack_path: str, *, project_root_path: str | Path | None = None) -> dict[str, str]:
+    raw_path = Path(pack_path)
+    if not raw_path.is_absolute() and project_root_path:
+        raw_path = Path(project_root_path) / raw_path
+    pack_dir = raw_path
+    manifest_path = pack_dir / "manifest.yaml"
+    if not manifest_path.exists():
+        manifest_path = pack_dir / "manifest.yml"
+    manifest = _read_yaml_mapping(manifest_path)
+    templates = _clean_template_mapping(manifest.get("templates", {}))
+    resolved: dict[str, str] = {}
+    for key, value in templates.items():
+        template_path = Path(value)
+        if not template_path.is_absolute():
+            template_path = pack_dir / template_path
+        resolved[key] = str(template_path)
+    return resolved
+
+
+def load_output_template_profile(*, project_root_path: str | Path | None = None) -> dict[str, str]:
+    """读取当前输出模板 profile。
+
+    system_config.yaml 示例：
+
+    active_output_template_profile: default_delivery
+    output_template_profiles:
+      default_delivery:
+        template_pack: data/template_packs/default_delivery
+        templates:
+          list_out_template: data/out_templates/项目需求清单-输出模板.xlsx
+
+    Returns:
+        模板路径映射。支持 fpa/spec/cosmic/list 和 *_out_template 两类 key。
+    """
+    yaml_path = config_dir() / "system_config.yaml"
+    try:
+        cfg = _read_yaml_mapping(yaml_path)
+        profile_name = str(
+            cfg.get("active_output_template_profile")
+            or cfg.get("output_template_profile")
+            or ""
+        ).strip()
+        if not profile_name:
+            return {}
+        profiles = cfg.get("output_template_profiles", {})
+        if not isinstance(profiles, dict):
+            return {}
+        profile = profiles.get(profile_name, {})
+        if not isinstance(profile, dict):
+            return {}
+
+        templates: dict[str, str] = {}
+        pack_path = str(profile.get("template_pack") or profile.get("pack") or "").strip()
+        if pack_path:
+            templates.update(
+                _resolve_template_pack_templates(pack_path, project_root_path=project_root_path)
+            )
+        templates.update(_clean_template_mapping(profile.get("templates", {})))
+        return templates
+    except Exception:
+        return {}
+
+
 def load_l3_modules_ai__limit(default: int = 0) -> int:
     """读取 l3_modules_ai__limit，0=不限制。"""
     return _get_system_config_value('l3_modules_ai__limit', default)
