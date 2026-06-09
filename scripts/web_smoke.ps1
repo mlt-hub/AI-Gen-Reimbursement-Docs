@@ -126,6 +126,7 @@ Write-Host "Web smoke test: $cosmicPreviewUrl"
 $cosmicPreviewDom = Get-Dom -Url $cosmicPreviewUrl -BrowserPath $edge
 Assert-Contains -Dom $cosmicPreviewDom -Text "COSMIC 预览" -Url $cosmicPreviewUrl
 Assert-Contains -Dom $cosmicPreviewDom -Text "选择 COSMIC JSON" -Url $cosmicPreviewUrl
+Assert-Contains -Dom $cosmicPreviewDom -Text "导出确认 JSON" -Url $cosmicPreviewUrl
 Assert-Contains -Dom $cosmicPreviewDom -Text "新增/修改功能过程" -Url $cosmicPreviewUrl
 
 Write-Host "Web smoke test: $promptDebugUrl"

@@ -7,6 +7,7 @@
             选择 COSMIC JSON
             <input class="sr-only" type="file" accept="application/json,.json" @change="loadJsonFile" />
           </label>
+          <button class="btn-secondary" type="button" :disabled="!report" @click="exportReport">导出确认 JSON</button>
           <button class="btn-secondary" type="button" :disabled="!report" @click="clearReport">清空</button>
         </div>
         <p v-if="error" class="text-sm text-[var(--color-danger)]">{{ error }}</p>
@@ -58,6 +59,13 @@
             <span class="text-[var(--color-ink-muted)]">草稿 Excel</span>
             <span class="ml-2 font-medium text-[var(--color-ink)]">{{ report.export_policy.draft_excel?.reason || '-' }}</span>
           </div>
+        </div>
+      </section>
+
+      <section v-if="globalReviewItems.length" class="border-b border-[var(--color-rule)] bg-[var(--color-surface)] px-4 py-3">
+        <p class="detail-title">全局审阅项</p>
+        <div class="mt-2 grid gap-2 lg:grid-cols-2">
+          <ReviewItemCard v-for="item in globalReviewItems" :key="item.review_id" :item="item" />
         </div>
       </section>
 
@@ -128,19 +136,7 @@
                     <div>
                       <p class="detail-title">审阅项</p>
                       <div v-if="reviewItemsForRow(row).length" class="mt-2 space-y-2">
-                        <article v-for="item in reviewItemsForRow(row)" :key="item.review_id" class="rounded border border-[var(--color-rule)] p-3 text-xs">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-semibold text-[var(--color-ink)]">{{ item.code }}</span>
-                            <span :class="['status-pill', severityClass(item.severity)]">{{ severityLabel(item.severity) }}</span>
-                            <span class="text-[var(--color-ink-muted)]">字段位置：{{ item.field || '-' }}</span>
-                          </div>
-                          <p class="mt-2 text-sm text-[var(--color-ink)]">{{ item.message }}</p>
-                          <p class="mt-2 text-[var(--color-ink-muted)]">审阅项 ID：{{ item.review_id }}</p>
-                          <dl v-if="detailsText(item.details)" class="mt-2">
-                            <dt class="font-medium text-[var(--color-ink)]">依据</dt>
-                            <dd class="mt-1 whitespace-pre-wrap text-[var(--color-ink-muted)]">{{ detailsText(item.details) }}</dd>
-                          </dl>
-                        </article>
+                        <ReviewItemCard v-for="item in reviewItemsForRow(row)" :key="item.review_id" :item="item" />
                       </div>
                       <p v-else class="mt-2 text-xs text-[var(--color-ink-muted)]">无审阅项。</p>
                     </div>
@@ -156,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, defineComponent, h, ref } from 'vue'
 import PreviewLayout from '@/components/PreviewLayout.vue'
 
 interface CosmicMovement {
@@ -196,6 +192,13 @@ interface CosmicReviewItem {
   field: string
   message: string
   details?: Record<string, unknown>
+  confirmation?: {
+    status?: string
+    decision?: string
+    note?: string
+    confirmed_by?: string
+    confirmed_at?: string
+  }
 }
 
 interface CosmicReport {
@@ -224,6 +227,10 @@ const reviewItemsById = computed(() => {
   return map
 })
 
+const globalReviewItems = computed(() => {
+  return (report.value?.review_items ?? []).filter(item => item.scope === 'global' || item.item_index === null)
+})
+
 async function loadJsonFile(event: Event) {
   error.value = ''
   const input = event.target as HTMLInputElement
@@ -245,6 +252,19 @@ function clearReport() {
   error.value = ''
 }
 
+function exportReport() {
+  if (!report.value) return
+  const blob = new Blob([`${JSON.stringify(report.value, null, 2)}\n`], {
+    type: 'application/json;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${report.value.project || 'cosmic'}-确认.json`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function normalizeReport(value: unknown): CosmicReport {
   if (!value || typeof value !== 'object') {
     throw new Error('COSMIC JSON 必须是对象')
@@ -260,8 +280,21 @@ function normalizeReport(value: unknown): CosmicReport {
     cfp_basis: data.cfp_basis,
     export_policy: data.export_policy,
     preview_rows: data.preview_rows,
-    review_items: data.review_items,
+    review_items: data.review_items.map(normalizeReviewItem),
     items: data.items,
+  }
+}
+
+function normalizeReviewItem(item: CosmicReviewItem): CosmicReviewItem {
+  return {
+    ...item,
+    confirmation: {
+      status: String(item.confirmation?.status || 'unconfirmed'),
+      decision: String(item.confirmation?.decision || ''),
+      note: String(item.confirmation?.note || ''),
+      confirmed_by: String(item.confirmation?.confirmed_by || ''),
+      confirmed_at: String(item.confirmation?.confirmed_at || ''),
+    },
   }
 }
 
@@ -273,6 +306,21 @@ function reviewItemsForRow(row: CosmicPreviewRow): CosmicReviewItem[] {
   return row.review_item_ids
     .map(id => reviewItemsById.value.get(id))
     .filter((item): item is CosmicReviewItem => Boolean(item))
+}
+
+function updateConfirmation(reviewId: string, patch: Record<string, string>) {
+  const item = report.value?.review_items.find(candidate => candidate.review_id === reviewId)
+  if (!item) return
+  const previous = item.confirmation || {}
+  const nextStatus = patch.status ?? previous.status ?? 'unconfirmed'
+  const statusChanged = patch.status !== undefined && patch.status !== previous.status
+  item.confirmation = {
+    status: nextStatus,
+    decision: nextStatus === 'unconfirmed' ? '' : previous.decision || nextStatus,
+    note: patch.note ?? previous.note ?? '',
+    confirmed_by: previous.confirmed_by ?? '',
+    confirmed_at: nextStatus === 'unconfirmed' ? '' : statusChanged ? new Date().toISOString() : previous.confirmed_at ?? '',
+  }
 }
 
 function cfpForRow(index: number): string {
@@ -308,6 +356,26 @@ function severityClass(severity: string): string {
   return 'text-[var(--color-ink-muted)]'
 }
 
+function confirmationLabel(item: CosmicReviewItem): string {
+  const status = item.confirmation?.status || 'unconfirmed'
+  if (status === 'confirmed') return '已确认'
+  if (status === 'rejected') return '已驳回'
+  if (status === 'waived') return '已豁免'
+  return '未确认'
+}
+
+function confirmationText(item: CosmicReviewItem): string {
+  const parts = [
+    item.confirmation?.decision,
+    item.confirmation?.note,
+    item.confirmation?.confirmed_by,
+    item.confirmation?.confirmed_at,
+  ]
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean)
+  return parts.join(' / ')
+}
+
 function detailsText(details: Record<string, unknown> | undefined): string {
   if (!details) return ''
   const parts: string[] = []
@@ -318,6 +386,79 @@ function detailsText(details: Record<string, unknown> | undefined): string {
   }
   return parts.join('\n')
 }
+
+const ReviewItemCard = defineComponent({
+  props: {
+    item: {
+      type: Object,
+      required: true,
+    },
+  },
+  setup(props) {
+    return () => {
+      const item = props.item as CosmicReviewItem
+      const details = detailsText(item.details)
+      const confirmation = confirmationText(item)
+      return h('article', { class: 'rounded border border-[var(--color-rule)] p-3 text-xs' }, [
+        h('div', { class: 'flex flex-wrap items-center gap-2' }, [
+          h('span', { class: 'font-semibold text-[var(--color-ink)]' }, item.code),
+          h(
+            'span',
+            { class: ['inline-flex items-center whitespace-nowrap rounded bg-[var(--color-surface-muted)] px-2 py-0.5 text-xs font-semibold', severityClass(item.severity)] },
+            severityLabel(item.severity),
+          ),
+          h(
+            'span',
+            { class: 'inline-flex items-center whitespace-nowrap rounded bg-[var(--color-surface-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--color-ink-muted)]' },
+            confirmationLabel(item),
+          ),
+          h('span', { class: 'text-[var(--color-ink-muted)]' }, `字段位置：${item.field || '-'}`),
+        ]),
+        h('p', { class: 'mt-2 text-sm text-[var(--color-ink)]' }, item.message),
+        confirmation ? h('p', { class: 'mt-2 text-[var(--color-ink-muted)]' }, `人工确认：${confirmation}`) : null,
+        h('p', { class: 'mt-2 break-all text-[var(--color-ink-muted)]' }, `审阅项 ID：${item.review_id}`),
+        details
+          ? h('dl', { class: 'mt-2' }, [
+              h('dt', { class: 'font-medium text-[var(--color-ink)]' }, '依据'),
+              h('dd', { class: 'mt-1 whitespace-pre-wrap text-[var(--color-ink-muted)]' }, details),
+            ])
+          : null,
+        h('div', { class: 'mt-3 grid gap-2 md:grid-cols-[160px_1fr]' }, [
+          h('label', { class: 'confirmation-field' }, [
+            h('span', '确认状态'),
+            h(
+              'select',
+              {
+                class: 'confirmation-input',
+                value: item.confirmation?.status || 'unconfirmed',
+                onChange: (event: Event) => {
+                  updateConfirmation(item.review_id, { status: (event.target as HTMLSelectElement).value })
+                },
+              },
+              [
+                h('option', { value: 'unconfirmed' }, '未确认'),
+                h('option', { value: 'confirmed' }, '已确认'),
+                h('option', { value: 'rejected' }, '已驳回'),
+                h('option', { value: 'waived' }, '已豁免'),
+              ],
+            ),
+          ]),
+          h('label', { class: 'confirmation-field' }, [
+            h('span', '确认备注'),
+            h('input', {
+              class: 'confirmation-input',
+              type: 'text',
+              value: item.confirmation?.note || '',
+              onInput: (event: Event) => {
+                updateConfirmation(item.review_id, { note: (event.target as HTMLInputElement).value })
+              },
+            }),
+          ]),
+        ]),
+      ])
+    }
+  },
+})
 </script>
 
 <style scoped>
@@ -369,5 +510,26 @@ function detailsText(details: Record<string, unknown> | undefined): string {
   padding: 0.125rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.confirmation-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.confirmation-field span {
+  color: var(--color-ink-muted);
+  font-size: 0.75rem;
+}
+
+.confirmation-input {
+  min-width: 0;
+  border: 1px solid var(--color-rule);
+  border-radius: 0.25rem;
+  background: var(--color-surface);
+  padding: 0.375rem 0.5rem;
+  color: var(--color-ink);
 }
 </style>
