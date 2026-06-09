@@ -9,8 +9,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 from ai_gen_reimbursement_docs.constants import (
-    FP_DATA_START_ROW, FP_LEFT_ALIGN_COLS, FP_TOTAL_COLS,
-    FP_COL_KEY_MAP, COL_FP_CFP, COL_FP_SUB_PROCESS, COL_FP_MOVE_TYPE,
+    FP_DATA_START_ROW, FP_TOTAL_COLS,
 )
 from ai_gen_reimbursement_docs.cosmic_validator import CosmicValidationReport
 from ai_gen_reimbursement_docs.excel_source import safe_load_workbook
@@ -46,8 +45,74 @@ def _cosmic_result_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
         spec = {}
     return {
         "name": str(spec.get("name") or "2、功能点拆分表"),
+        "header_row": _as_manifest_int(spec.get("header_row"), 4),
         "data_start_row": _as_manifest_int(spec.get("data_start_row"), FP_DATA_START_ROW),
         "style_source_row": _as_manifest_int(spec.get("style_source_row"), FP_DATA_START_ROW),
+        "columns": spec.get("columns", {}) if isinstance(spec.get("columns", {}), dict) else {},
+    }
+
+
+def _cell_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _header_map(ws, header_row: int) -> dict[str, int]:
+    headers: dict[str, int] = {}
+    if header_row < 1 or header_row > ws.max_row:
+        return headers
+    for col_idx in range(1, ws.max_column + 1):
+        text = _cell_text(ws.cell(header_row, col_idx).value)
+        if text and text not in headers:
+            headers[text] = col_idx
+    return headers
+
+
+def _manifest_header(sheet_spec: dict[str, Any], key: str) -> str:
+    columns = sheet_spec.get("columns", {}) or {}
+    if not isinstance(columns, dict):
+        return ""
+    spec = columns.get(key, {})
+    if isinstance(spec, str):
+        return spec.strip()
+    if isinstance(spec, dict):
+        return str(spec.get("header", "") or "").strip()
+    return ""
+
+
+def _column_by_header(
+    headers: dict[str, int],
+    sheet_spec: dict[str, Any],
+    key: str,
+    aliases: tuple[str, ...],
+    fallback: int,
+) -> int:
+    candidates = []
+    manifest_header = _manifest_header(sheet_spec, key)
+    if manifest_header:
+        candidates.append(manifest_header)
+    candidates.extend(aliases)
+    for header in candidates:
+        if header in headers:
+            return headers[header]
+    return fallback
+
+
+def _cosmic_columns(ws, sheet_spec: dict[str, Any]) -> dict[str, int]:
+    headers = _header_map(ws, sheet_spec["header_row"])
+    return {
+        "project": _column_by_header(headers, sheet_spec, "project", ("项目", "项目名称"), 1),
+        "module_l1": _column_by_header(headers, sheet_spec, "module_l1", ("一级模块",), 2),
+        "module_l2": _column_by_header(headers, sheet_spec, "module_l2", ("二级模块",), 3),
+        "module_l3": _column_by_header(headers, sheet_spec, "module_l3", ("三级模块",), 4),
+        "user": _column_by_header(headers, sheet_spec, "user", ("用户",), 5),
+        "trigger": _column_by_header(headers, sheet_spec, "trigger", ("触发事件",), 6),
+        "process": _column_by_header(headers, sheet_spec, "process", ("功能过程",), 7),
+        "sub_process": _column_by_header(headers, sheet_spec, "sub_process", ("子过程描述",), 8),
+        "move_type": _column_by_header(headers, sheet_spec, "move_type", ("数据移动类型",), 9),
+        "data_group": _column_by_header(headers, sheet_spec, "data_group", ("数据组",), 10),
+        "data_attrs": _column_by_header(headers, sheet_spec, "data_attrs", ("数据属性",), 11),
+        "reuse": _column_by_header(headers, sheet_spec, "reuse", ("复用度",), 12),
+        "cfp": _column_by_header(headers, sheet_spec, "cfp", ("CFP",), 13),
     }
 
 
@@ -152,12 +217,20 @@ def write_cosmic_xlsx(
     ws = wb[sheet_spec["name"]]
     _data_start_row = sheet_spec["data_start_row"]
     _style_source_row = sheet_spec["style_source_row"]
+    columns = _cosmic_columns(ws, sheet_spec)
+    field_by_col = {col: key for key, col in columns.items()}
+    data_col_max = max(FP_TOTAL_COLS - 1, ws.max_column, *columns.values())
+    left_align_cols = {
+        columns["sub_process"],
+        columns["data_group"],
+        columns["data_attrs"],
+    }
 
     # --- Save template data style format as reference ---
     tmpl_format_row6 = {}
-    for col_idx in range(1, FP_TOTAL_COLS):
+    for col_idx in range(1, data_col_max + 1):
         tmpl_format_row6[col_idx] = _get_ref_style(ws, _style_source_row, col_idx)
-    _CFP_FILL_TMPL = copy.copy(ws.cell(row=_style_source_row, column=COL_FP_CFP).fill)
+    _CFP_FILL_TMPL = copy.copy(ws.cell(row=_style_source_row, column=columns["cfp"]).fill)
 
     # --- Save existing footer notes (rows below header rows, before clearing) ---
     footer_saved = []  # list of (merge_range_string, {col: (value, style_dict)})
@@ -179,7 +252,7 @@ def write_cosmic_xlsx(
                         row_merges.append(str(mr))
                 # Save cell values and styles
                 row_vals = {}
-                for col in range(1, FP_TOTAL_COLS):
+                for col in range(1, data_col_max + 1):
                     c = ws.cell(row=row_num, column=col)
                     if c.value is not None or col == 1:
                         row_vals[col] = (c.value, _get_ref_style(ws, row_num, col))
@@ -251,9 +324,10 @@ def write_cosmic_xlsx(
     start_row = _data_start_row
     for i, row_data in enumerate(all_rows):
         row_num = start_row + i
-        for col_idx in range(1, FP_TOTAL_COLS):
+        for col_idx in range(1, data_col_max + 1):
             cell = ws.cell(row=row_num, column=col_idx)
-            if col_idx == COL_FP_CFP:
+            field_key = field_by_col.get(col_idx, "")
+            if field_key == "cfp":
                 # CFP 列用公式（{row} 替换为实际行号），未配置则留空
                 if cfp_formula:
                     f = cfp_formula.replace('{row}', str(row_num))
@@ -261,18 +335,18 @@ def write_cosmic_xlsx(
                     cell.value = '=' + f
                 cell.number_format = '0.00'
             else:
-                cell.value = row_data.get(FP_COL_KEY_MAP[col_idx], '')
+                cell.value = row_data.get(field_key, '')
 
             # Apply template row 6 format（跳过 fill，避免空单元格带底色）
             _apply_style(cell, tmpl_format_row6[col_idx], skip_fill=True)
 
             # CFP 列：绿色底色 + 整数/分数格式（1→"1"，1/3→"1/3"）
-            if col_idx == COL_FP_CFP:
+            if field_key == "cfp":
                 cell.fill = _CFP_FILL
                 cell.number_format = '0.00'
 
             # Long text columns: left-align
-            if col_idx in FP_LEFT_ALIGN_COLS:
+            if col_idx in left_align_cols:
                 cell.alignment = _LEFT_ALIGN
 
     # --- Apply merged cells for repeating values ---
@@ -280,26 +354,26 @@ def write_cosmic_xlsx(
 
     # Merge project name (column A) - all rows
     if total_rows > 1:
-        ws.merge_cells(start_row=start_row, start_column=1,
-                       end_row=start_row + total_rows - 1, end_column=1)
+        ws.merge_cells(start_row=start_row, start_column=columns["project"],
+                       end_row=start_row + total_rows - 1, end_column=columns["project"])
 
     # Merge L1 module (column B)
-    _merge_column_groups(ws, start_row, total_rows, 2, all_rows, 'module_l1')
+    _merge_column_groups(ws, start_row, total_rows, columns["module_l1"], all_rows, 'module_l1')
 
     # Merge L2 module (column C)
-    _merge_column_groups(ws, start_row, total_rows, 3, all_rows, 'module_l2')
+    _merge_column_groups(ws, start_row, total_rows, columns["module_l2"], all_rows, 'module_l2')
 
     # Merge L3 module (column D)
-    _merge_column_groups(ws, start_row, total_rows, 4, all_rows, 'module_l3')
+    _merge_column_groups(ws, start_row, total_rows, columns["module_l3"], all_rows, 'module_l3')
 
     # Merge user (column E), trigger (column F), process name (column G)
-    _merge_column_groups(ws, start_row, total_rows, 5, all_rows, 'process')
-    _merge_column_groups(ws, start_row, total_rows, 6, all_rows, 'process')
-    _merge_column_groups(ws, start_row, total_rows, 7, all_rows, 'process')
+    _merge_column_groups(ws, start_row, total_rows, columns["user"], all_rows, 'process')
+    _merge_column_groups(ws, start_row, total_rows, columns["trigger"], all_rows, 'process')
+    _merge_column_groups(ws, start_row, total_rows, columns["process"], all_rows, 'process')
 
     # Keep the already-set data validations for reuse dropdown
     # Add new data validation for L column (复用度) - dropdown
-    _add_reuse_validation(ws, start_row, total_rows)
+    _add_reuse_validation(ws, start_row, total_rows, columns["reuse"])
 
     # --- Restore saved footer notes (from template) below the new data ---
     for i, (merges, vals, row_heights) in enumerate(footer_saved):
@@ -378,7 +452,7 @@ def write_cosmic_xlsx(
 
     # 合并后补回边框
     for row_num in range(start_row, start_row + total_rows):
-        for col_idx in range(1, FP_TOTAL_COLS):
+        for col_idx in range(1, data_col_max + 1):
             ws.cell(row=row_num, column=col_idx).border = tmpl_format_row6[col_idx]['border']
 
     # --- Apply warning indicators (after merges, so they don't get overwritten) ---
@@ -399,16 +473,16 @@ def write_cosmic_xlsx(
 
         if row_warnings:
             # Yellow highlight on the first visible data cell (sub_process)
-            ws.cell(row=row_num, column=COL_FP_SUB_PROCESS).fill = _WARN_FILL
+            ws.cell(row=row_num, column=columns["sub_process"]).fill = _WARN_FILL
             # Excel comment with warning text
             from openpyxl.comments import Comment
-            ws.cell(row=row_num, column=COL_FP_SUB_PROCESS).comment = Comment(
+            ws.cell(row=row_num, column=columns["sub_process"]).comment = Comment(
                 "\n".join(f"⚠ {w}" for w in row_warnings), "AI生成项目报账文档"
             )
 
         if move_flagged:
             # Yellow on fuzzy-matched move_type cell (col 9)
-            ws.cell(row=row_num, column=COL_FP_MOVE_TYPE).fill = _WARN_FILL
+            ws.cell(row=row_num, column=columns["move_type"]).fill = _WARN_FILL
 
     # --- Auto-fit column widths and row heights ---
     _auto_fit(ws, start_row, start_row + total_rows - 1)
@@ -439,7 +513,7 @@ def _merge_column_groups(ws, start_row, total_rows, col, all_rows, key):
         i = j
 
 
-def _add_reuse_validation(ws, start_row, total_rows):
+def _add_reuse_validation(ws, start_row, total_rows, reuse_col: int = 12):
     """Add dropdown validation for 复用度 column (L)."""
     from openpyxl.worksheet.datavalidation import DataValidation
     if total_rows > 0:
@@ -448,7 +522,8 @@ def _add_reuse_validation(ws, start_row, total_rows):
             formula1='"新增,复用,利旧"',
             allow_blank=True
         )
-        dv.sqref = f"L{start_row}:L{start_row + total_rows - 1}"
+        col_letter = get_column_letter(reuse_col)
+        dv.sqref = f"{col_letter}{start_row}:{col_letter}{start_row + total_rows - 1}"
         ws.add_data_validation(dv)
 
 
