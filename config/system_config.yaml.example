@@ -102,6 +102,23 @@ gen_cosmic:
     cfp_formula_consistency_check: false
     # 是否给 review_audit 写入前后相连的 SHA-256 hash
     audit_hash_chain: true
+    # COSMIC 治理规则矩阵；不配置时使用内置默认规则。配置同 code 会覆盖内置规则，也可新增组织规则
+    rule_matrix: []
+    # 示例：
+    # rule_matrix:
+    #   - code: CUSTOM_EXTERNAL_LINK
+    #     target: movement
+    #     severity: warning
+    #     message: 外部专线边界需确认
+    #     scope_policy: manual_exclude_or_merge
+    #     governance_category: external_link_boundary
+    #     description: 子过程疑似专线或外部链路边界，需确认是否跨有效 COSMIC 边界
+    #     terms: [外部专线, 专线接口]
+    #     suggested_actions:
+    #       - action: exclude_movement
+    #         label: 排除计数
+    #       - action: merge_movement
+    #         label: 合并到上一条
 
 # 只对前N个功能过程调用SPEC AI（默认0）
 gen_spec_ai_limit: 0

@@ -331,7 +331,7 @@ AI 调用限制：
 1. `system_config.yaml` 支持 `gen_cosmic.cfp_policy`，可配置 `新增`、`修改`、`复用`、`利旧`、`优化未改` 等复用度对应的每条数据移动 CFP。
 2. 确认后 CFP 汇总的有效策略按“内置默认值 -> `gen_cosmic.cfp_policy` -> 确认 JSON `cfp_policy`”顺序合并；非法值、非数字和负数不会覆盖已确定的有效值。
 3. 保存会话审阅结果时会继续写出 `cfp_policy_effective`，用于展示和排查本次确认后汇总实际采用的口径。
-4. 该配置只影响确认后 Python CFP 汇总，不改变正式 Excel 的模板公式来源；Excel 公式与 Python 汇总口径的一致性校验仍是后续治理事项。
+4. 该配置只影响确认后 Python CFP 汇总，不改变正式 Excel 的模板公式来源；开启治理开关后会做公式与 Python 汇总口径的一致性诊断。
 
 ### 2026-06-09 继续推进全部治理入口
 
@@ -341,10 +341,11 @@ AI 调用限制：
 2. 自动治理动作会写入 `review_actions` 和 `review_audit`，来源标记为 `auto_governance`；因此自动排除、合并或排除功能过程不再是隐式行为。
 3. `gen_cosmic.governance.function_user_role_map` 提供组织级功能用户映射，确认 JSON 中的 `function_user_role_map` 仍可按项目覆盖；`apply_function_user` 未提供 `suggested_user` 时按三级、二级、一级模块依次取映射值。
 4. `gen_cosmic.governance.require_unique_function_user=true` 时，校验器会对同一功能过程内多个不一致业务角色产生 `FUNCTION_USER_ROLE_CONFLICT` 待审项，推进功能用户与功能过程一对一强绑定治理。
-5. `gen_cosmic.governance.cfp_formula_consistency_check=true` 时，保存确认会检查 `cfp_policy_effective` 与 Excel 公式文本的明显差异，并以 `CFP_POLICY_FORMULA_MISMATCH` 全局待审项提示人工确认。
-6. `review_audit` 默认写入 `previous_audit_hash` 和 `audit_hash`，形成 JSON 级 hash 链；该能力用于发现审计记录被改写，但还不是权限签名或不可抵赖审计。
-7. `governance_effective` 会写入保存后的 payload，记录本次启用的治理开关、自动 issue code 白名单和组织级角色映射 key，便于排查。
-8. 本轮仍坚持默认安全策略：不配置时不自动排除、不强制改功能用户、不阻断既有确认后导出；更强的审批、签名和复杂公式解析仍属于后续治理。
+5. `gen_cosmic.governance.rule_matrix` 支持把关键词、作用范围、issue code、severity、提示文案和建议动作配置成规则矩阵；未配置时使用内置默认矩阵。配置同 code 会覆盖内置规则，也可新增组织级规则。
+6. `gen_cosmic.governance.cfp_formula_consistency_check=true` 时，保存确认会检查 `cfp_policy_effective` 与 Excel 公式的一致性；当前可解析简单数字和 `1/3` 这类分数，并以 `CFP_POLICY_FORMULA_MISMATCH` 全局待审项提示人工确认。
+7. `review_audit` 默认写入 `previous_audit_hash` 和 `audit_hash`，形成 JSON 级 hash 链；保存时会写出 `review_audit_hash_chain`，记录保存前 hash 链校验结果、算法、记录数和最终 hash。
+8. `governance_effective` 会写入保存后的 payload，记录本次启用的治理开关、自动 issue code 白名单、组织级角色映射 key 和配置规则矩阵 code，便于排查。
+9. 本轮仍坚持默认安全策略：不配置时不自动排除、不强制改功能用户、不阻断既有确认后导出；更强的审批、权限签名和跨系统上下文判定仍属于后续治理。
 
 ### 目标行为
 
@@ -787,9 +788,11 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `review_audit` | `array` | 否 | 已应用审阅动作的 JSON 级审计记录。 |
 | `review_audit[].previous_audit_hash` | `string` | 否 | 前一条审计记录的 SHA-256 hash；默认开启 hash 链时写入。 |
 | `review_audit[].audit_hash` | `string` | 否 | 当前审计记录的 SHA-256 hash；用于发现 JSON 级审计记录被改写。 |
+| `review_audit_hash_chain` | `object` | 否 | 保存审阅结果时写入的 hash 链校验元数据，包含 `algorithm`、`valid`、`checked_record_count`、`record_count` 和 `final_audit_hash`。 |
 | `cfp_policy` | `object` | 否 | 确认后 CFP 汇总口径，key 为复用度，value 为每条数据移动 CFP。 |
 | `cfp_policy_effective` | `object` | 否 | 后端规范化后的有效 CFP policy，非法值和负数会回退到默认值。 |
 | `function_user_role_map` | `object` | 否 | 功能用户角色映射，key 为模块名称，value 为 `发起者：...|接收者：...`。 |
+| `governance_effective.rule_matrix_codes` | `array` | 否 | 本次保存时从 `gen_cosmic.governance.rule_matrix` 读取到的配置规则 code；内置默认规则不列入该字段。 |
 | `summary` | `object` | 是 | 汇总数量。 |
 
 JSON 写入必须使用 `ensure_ascii=False` 和稳定缩进，便于人工排查和测试断言。
@@ -1097,9 +1100,9 @@ md/3.4.gen-cosmic-校验报告.md
 
 以下内容不属于第一阶段验收范围：
 
-1. 更复杂的边界规则治理，例如跨系统/内部技术交互的组织级判定和非功能事项的高精度自动分类；当前已有可配置自动治理入口，但默认关闭，且仍主要基于关键词和建议动作。
+1. 更复杂的边界规则治理，例如跨系统/内部技术交互的组织级判定和非功能事项的高精度自动分类；当前已有可配置规则矩阵和自动治理入口，但默认关闭自动动作，且仍主要基于关键词和建议动作。
 2. 功能用户和三级模块的一对一强绑定治理中的审批流、模块归属冲突处理和强制修复规则；当前已有角色映射、人工/自动动作和 `FUNCTION_USER_ROLE_CONFLICT` 诊断，但不做无审批强制修复。
-3. CFP policy、Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前已有文本级 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但尚未做完整 Excel 公式语义解析。
-4. 审计追踪的权限、签名和不可抵赖记录；当前 `review_audit` 会注入服务端登录用户并写入 JSON 级 hash 链，但仍不是加密签名或外部不可篡改审计。
+3. CFP policy、Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前已有可解析简单数字和分数的 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但尚未做完整 Excel 公式语义解析。
+4. 审计追踪的权限、签名和不可抵赖记录；当前 `review_audit` 会注入服务端登录用户、写入 JSON 级 hash 链并记录保存前校验状态，但仍不是加密签名或外部不可篡改审计。
 
 这些内容应在结构化草稿和校验器稳定后，再按 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md) 分阶段实施。

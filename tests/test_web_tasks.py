@@ -1853,6 +1853,9 @@ def test_cosmic_review_action_uses_configured_function_user_role_map(monkeypatch
     assert saved_payload["items"][0]["user"] == "发起者：客户资料经办|接收者：客户资料经办"
     assert "audit_hash" in saved_payload["review_audit"][0]
     assert len(saved_payload["review_audit"][0]["audit_hash"]) == 64
+    assert saved_payload["review_audit_hash_chain"]["algorithm"] == "sha256-json-v1"
+    assert saved_payload["review_audit_hash_chain"]["valid"] is True
+    assert saved_payload["review_audit_hash_chain"]["record_count"] == 1
     server.session_manager.cleanup_download(session_id)
 
 
@@ -1944,8 +1947,40 @@ def test_cosmic_cfp_formula_consistency_warning(monkeypatch, tmp_path):
     assert saved_payload["issue_codes"]["CFP_POLICY_FORMULA_MISMATCH"] == 1
     issue = next(item for item in saved_payload["review_items"] if item["code"] == "CFP_POLICY_FORMULA_MISMATCH")
     assert issue["scope"] == "global"
-    assert "复用=0.5" in issue["details"]["missing_policy_terms"]
+    assert "复用=policy:0.5,formula:0.333333333333" in issue["details"]["mismatched_policy_terms"]
     assert saved_payload["cfp_basis"]["formula"] == 'IF(L{row}="复用",0.333333333333,1)'
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_cfp_formula_consistency_accepts_fraction(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_cfp_formula_fraction"
+    payload = _cosmic_export_payload()
+    payload["review_items"] = []
+    payload["items"][0]["status"] = "passed"
+    payload["items"][0]["movements"][1]["reuse"] = "复用"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_governance_config",
+        lambda: {
+            "auto_apply_review_actions": False,
+            "auto_apply_issue_codes": [],
+            "function_user_role_map": {},
+            "require_unique_function_user": False,
+            "cfp_formula_consistency_check": True,
+            "audit_hash_chain": True,
+        },
+    )
+    monkeypatch.setattr(
+        "ai_gen_reimbursement_docs.config_utils.load_cfp_formula",
+        lambda: 'IF(OR(L{row}="新增",L{row}="修改"),1,IF(L{row}="复用",1/3,0))',
+    )
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert "CFP_POLICY_FORMULA_MISMATCH" not in saved_payload.get("issue_codes", {})
     server.session_manager.cleanup_download(session_id)
 
 
