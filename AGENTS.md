@@ -49,6 +49,13 @@
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
+```
+
+## Output Template Progress Notes
+
+- `gen-list` 已使用 `list` manifest 驱动项目需求清单写入：sheet 名、表头行、数据起始行、样式源行和关键列映射会影响实际输出。
+- `gen-spec` 已使用 Word manifest 驱动占位符替换范围、功能需求锚点、模块清单列配置和样式配置。
+- 尚未完成的输出模板方向包括：Word 导入模板的版式渲染预览、锚点/字段在线调整、正式版本发布、复杂 Word 结构识别、模板 profile/模板包，以及 FPA/COSMIC 等 Excel 写入器的 manifest 驱动写入。
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph

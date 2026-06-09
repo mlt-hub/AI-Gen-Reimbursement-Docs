@@ -410,7 +410,8 @@ template_pack/
 
 当前边界：
 
-- manifest 只用于说明和生成前预检，尚未驱动写入器做列映射或锚点写入。
+- `list` 需求清单写入器已开始使用 manifest 做 sheet、表头行、数据起始行、样式源行和列映射。
+- 其他 Excel 写入器仍主要使用旧固定结构，尚未全面按 manifest 做列映射或锚点写入。
 - 用户自定义模板如果没有同名 manifest，会按对应 kind 的默认契约预检。
 - `gen-basedata` 不生成最终交付物，因此不执行输出模板预检。
 
@@ -453,6 +454,7 @@ manifest 文件命名规则：
 已覆盖的测试：
 
 - `tests/test_template_manifest.py`
+- `tests/test_gen_list_manifest.py`
 - `tests/test_gen_spec_manifest.py`
 - `tests/test_pipeline_units.py`
 - `tests/test_pipeline.py`
@@ -480,5 +482,17 @@ manifest 文件命名规则：
 
 - 导入后模板草稿的版式渲染预览、锚点/字段在线调整和正式版本发布。
 - 模板 profile 和模板包。
-- Excel 写入器按 manifest 做列映射、锚点定位和样式复制。
+- FPA/COSMIC 等 Excel 写入器按 manifest 做列映射、锚点定位和样式复制。
 - 文本框、内容控件、图片文字等复杂 Word 结构识别。
+
+### gen-list manifest 当前生成行为
+
+`gen-list` 当前使用 `list` manifest 的范围：
+
+- `sheets.project_info.name` 和 `sheets.function_list.name` 控制实际写入的 sheet。
+- `header_row` 控制表头扫描位置。
+- `data_start_row` 控制项目概览和功能清单数据写入起始行。
+- `style_source_row` 控制功能清单生成行的边框样式来源。
+- `columns` 中的 `header` 控制项目名称、子系统、模块层级、类型、送审工作量、送审功能点等字段的列定位。
+
+如果模板旁没有 manifest，生成器会使用 `list` 默认契约；如果表头或列配置不可识别，则回退到内置需求清单模板的旧列号，保证默认模板继续可用。
