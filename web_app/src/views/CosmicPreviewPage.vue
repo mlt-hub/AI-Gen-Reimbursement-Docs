@@ -7,10 +7,18 @@
             选择 COSMIC JSON
             <input class="sr-only" type="file" accept="application/json,.json" @change="loadJsonFile" />
           </label>
+          <button v-if="sessionId" class="btn-secondary" type="button" :disabled="backendLoading" @click="loadSessionConfirmation">
+            {{ backendLoading ? '读取中...' : '读取会话确认' }}
+          </button>
+          <button v-if="sessionId" class="btn-secondary" type="button" :disabled="!report || backendSaving" @click="saveSessionConfirmation">
+            {{ backendSaving ? '保存中...' : '保存到会话' }}
+          </button>
           <button class="btn-secondary" type="button" :disabled="!report" @click="exportReport">导出确认 JSON</button>
           <button class="btn-secondary" type="button" :disabled="!report" @click="clearReport">清空</button>
         </div>
         <p v-if="error" class="text-sm text-[var(--color-danger)]">{{ error }}</p>
+        <p v-if="backendSyncError" class="text-sm text-[var(--color-danger)]">{{ backendSyncError }}</p>
+        <p v-if="backendSyncStatus" class="text-sm text-[var(--color-success)]">{{ backendSyncStatus }}</p>
       </div>
     </template>
 
@@ -153,7 +161,9 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, h, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import PreviewLayout from '@/components/PreviewLayout.vue'
+import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 interface CosmicMovement {
   order: number
@@ -216,9 +226,27 @@ interface CosmicReport {
   items: CosmicItem[]
 }
 
+interface CosmicConfirmationResponse {
+  session_id: string
+  filename: string
+  payload: CosmicReport
+}
+
+const route = useRoute()
 const report = ref<CosmicReport | null>(null)
 const error = ref('')
 const confirmationStoreKey = ref('')
+const backendSyncStatus = ref('')
+const backendSyncError = ref('')
+const backendLoading = ref(false)
+const backendSaving = ref(false)
+
+const sessionId = computed(() => {
+  const routeSession = route.params.sessionId
+  const querySession = route.query.session
+  const raw = Array.isArray(routeSession) ? routeSession[0] : routeSession || querySession
+  return String(Array.isArray(raw) ? raw[0] : raw || '').trim()
+})
 
 const reviewItemsById = computed(() => {
   const map = new Map<string, CosmicReviewItem>()
@@ -234,6 +262,8 @@ const globalReviewItems = computed(() => {
 
 async function loadJsonFile(event: Event) {
   error.value = ''
+  backendSyncError.value = ''
+  backendSyncStatus.value = ''
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
@@ -245,6 +275,7 @@ async function loadJsonFile(event: Event) {
     confirmationStoreKey.value = buildConfirmationStoreKey(normalized)
     applyStoredConfirmations(normalized)
     report.value = normalized
+    backendSyncStatus.value = '已读取本地 COSMIC JSON'
   } catch (err) {
     report.value = null
     confirmationStoreKey.value = ''
@@ -256,6 +287,8 @@ function clearReport() {
   report.value = null
   error.value = ''
   confirmationStoreKey.value = ''
+  backendSyncError.value = ''
+  backendSyncStatus.value = ''
 }
 
 function exportReport() {
@@ -288,6 +321,49 @@ function normalizeReport(value: unknown): CosmicReport {
     preview_rows: data.preview_rows,
     review_items: data.review_items.map(normalizeReviewItem),
     items: data.items,
+  }
+}
+
+async function loadSessionConfirmation() {
+  if (!sessionId.value) return
+  backendLoading.value = true
+  backendSyncError.value = ''
+  backendSyncStatus.value = ''
+  try {
+    const response = await apiFetch<CosmicConfirmationResponse>(
+      `/api/sessions/${encodeURIComponent(sessionId.value)}/cosmic/confirmation`,
+    )
+    const normalized = normalizeReport(response.payload)
+    confirmationStoreKey.value = buildConfirmationStoreKey(normalized)
+    applyStoredConfirmations(normalized)
+    report.value = normalized
+    backendSyncStatus.value = '已读取会话确认'
+  } catch (err) {
+    backendSyncError.value = normalizeApiError(err)
+  } finally {
+    backendLoading.value = false
+  }
+}
+
+async function saveSessionConfirmation() {
+  if (!sessionId.value || !report.value) return
+  backendSaving.value = true
+  backendSyncError.value = ''
+  backendSyncStatus.value = ''
+  try {
+    await apiFetch<CosmicConfirmationResponse>(
+      `/api/sessions/${encodeURIComponent(sessionId.value)}/cosmic/confirmation`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(report.value),
+      },
+    )
+    backendSyncStatus.value = '已保存到会话'
+  } catch (err) {
+    backendSyncError.value = normalizeApiError(err)
+  } finally {
+    backendSaving.value = false
   }
 }
 

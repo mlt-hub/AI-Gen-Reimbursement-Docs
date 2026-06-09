@@ -33,6 +33,7 @@ const routes = [
   { name: 'config', path: 'config', expected: ['环境诊断', '模型与凭据'] },
   { name: 'fpa-preview', path: 'preview/fpa', expected: ['FPA 预览', '输入设置', '选择功能清单'] },
   { name: 'cosmic-preview', path: 'preview/cosmic', expected: ['COSMIC 预览', '新增/修改功能过程'] },
+  { name: 'session-cosmic-preview', path: 'sessions/mobile-smoke/cosmic/preview', expected: ['COSMIC 预览', '新增/修改功能过程'] },
   { name: 'fpa-debug', path: 'sessions/mobile-smoke/fpa/debug', expected: ['AI 调试信息', 'Session mobile-smoke', '结构化记录'] },
 ]
 

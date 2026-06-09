@@ -54,6 +54,12 @@ const router = createRouter({
       meta: { nav: 'preview' },
     },
     {
+      path: '/sessions/:sessionId/cosmic/preview',
+      name: 'session-cosmic-preview',
+      component: () => import('@/views/CosmicPreviewPage.vue'),
+      meta: { nav: 'preview' },
+    },
+    {
       path: '/preview/spec',
       name: 'preview-spec',
       component: () => import('@/views/SpecPreviewPage.vue'),

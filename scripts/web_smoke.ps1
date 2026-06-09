@@ -106,6 +106,7 @@ $edge = Find-Edge -ExplicitPath $EdgePath
 $homeUrl = Join-WebPath -Base $BaseUrl -Path ""
 $configUrl = Join-WebPath -Base $BaseUrl -Path "config"
 $cosmicPreviewUrl = Join-WebPath -Base $BaseUrl -Path "preview/cosmic"
+$sessionCosmicPreviewUrl = Join-WebPath -Base $BaseUrl -Path "sessions/smoke/cosmic/preview"
 $promptDebugUrl = Join-WebPath -Base $BaseUrl -Path "prompt-debug"
 
 Write-Host "Web smoke test: $homeUrl"
@@ -128,6 +129,12 @@ Assert-Contains -Dom $cosmicPreviewDom -Text "COSMIC 预览" -Url $cosmicPreview
 Assert-Contains -Dom $cosmicPreviewDom -Text "选择 COSMIC JSON" -Url $cosmicPreviewUrl
 Assert-Contains -Dom $cosmicPreviewDom -Text "导出确认 JSON" -Url $cosmicPreviewUrl
 Assert-Contains -Dom $cosmicPreviewDom -Text "新增/修改功能过程" -Url $cosmicPreviewUrl
+
+Write-Host "Web smoke test: $sessionCosmicPreviewUrl"
+$sessionCosmicPreviewDom = Get-Dom -Url $sessionCosmicPreviewUrl -BrowserPath $edge
+Assert-Contains -Dom $sessionCosmicPreviewDom -Text "COSMIC 预览" -Url $sessionCosmicPreviewUrl
+Assert-Contains -Dom $sessionCosmicPreviewDom -Text "读取会话确认" -Url $sessionCosmicPreviewUrl
+Assert-Contains -Dom $sessionCosmicPreviewDom -Text "保存到会话" -Url $sessionCosmicPreviewUrl
 
 Write-Host "Web smoke test: $promptDebugUrl"
 $promptDebugDom = Get-Dom -Url $promptDebugUrl -BrowserPath $edge

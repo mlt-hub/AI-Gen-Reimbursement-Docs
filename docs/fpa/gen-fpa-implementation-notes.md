@@ -1620,9 +1620,8 @@ module_name 仍可作为底层函数和 API 的调试能力存在，但界面不
 ```text
 FPA 预览已从生成页折叠面板迁移为独立页面。
 生成页只保留跳转入口，不再嵌入完整预览工具。
-COSMIC / SPEC 预览暂未实现，但已在 PreviewLayout 中预留位置。
-COSMIC 预览暂缓：gen-cosmic 逻辑后续可能重构，当前不新增 /preview/cosmic，避免把现有临时数据流固化到 UI/API/测试。
-后续 gen-cosmic 重构完成、核心输入/输出模型稳定后，再评估 /preview/cosmic；如继续做 /preview/spec，也应复用同一套稳定的预览抽象。
+COSMIC 预览已恢复推进并完成最小结构化 JSON 审阅页：/preview/cosmic 可加载 COSMIC JSON 草稿，展示功能过程、数据移动、审阅项、确认状态，并导出确认 JSON。
+SPEC 预览仍是预留页；如继续做 /preview/spec，应复用当前 PreviewLayout，并避免把未稳定的数据流固化到 UI/API/测试。
 ```
 
 生产部署路由边界：
