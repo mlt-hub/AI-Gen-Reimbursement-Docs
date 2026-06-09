@@ -245,6 +245,251 @@ Web/API 测试：
 .\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_fpa_profiles.py
 ```
 
+### 第三阶段实施方案：样例试运行与说明质量预检
+
+第三阶段目标是在用户修改 FPA prompt 后，提供一个低风险的“样例试运行”能力，让用户在正式执行 `gen-fpa` 前看到模型输出是否能解析、是否包含结构化 `计算依据说明`，以及会触发哪些 `_explanation_quality_warnings`。本阶段只做预检，不写正式 Excel，不改变正式 `gen-fpa` 输出链路。
+
+#### 实施目标
+
+本阶段实施：
+
+- 在第二阶段最终 prompt 预览基础上，增加“使用样例模块试运行”能力。
+- 调用当前配置的 FPA profile、prompt fragment 和模型配置，生成一组样例 AI rows。
+- 解析模型返回 JSON，并复用现有 FPA 行后处理和说明质量检查。
+- 返回样例输出、解析状态、后处理 warnings、`计算依据说明` 质量 warnings。
+- 明确标识本次试运行不会写入正式产物，不影响任务历史和正式 check Excel。
+
+本阶段不实施：
+
+- 不把样例试运行纳入仓库 harness。
+- 不要求用户每次保存 prompt 都跑真实模型。
+- 不自动修复用户 prompt。
+- 不改变 `_explanation_quality_warnings` 的公共质量门。
+- 不把样例结果写入正式 FPA Excel、check Excel 或任务历史。
+- 不引入多模型对比、批量回归或稳定性评分；这些可作为后续模型评测能力。
+
+#### 触发方式
+
+样例试运行必须由用户显式触发，例如配置页按钮：
+
+```text
+试运行当前 prompt
+```
+
+不建议在保存 prompt 时自动调用模型，原因是：
+
+- 会产生模型调用成本。
+- 保存配置应保持快速、可预测。
+- 用户可能只是在编辑草稿，不希望每次保存都触发 AI。
+- 真实模型输出存在波动，不适合作为保存配置的硬阻断条件。
+
+保存 prompt 时仍只执行第二阶段的配置 lint 和最终 prompt 预览；样例试运行用于额外质量确认。
+
+#### 样例输入
+
+第一版样例试运行建议使用内置固定样例模块，确保不同用户、不同环境下可以比较 prompt 行为。样例应覆盖事务功能和数据功能常见证据：
+
+```json
+{
+  "client_type": "后台",
+  "l1": "业务管理",
+  "l2": "客户管理",
+  "l3": "客户资料维护",
+  "l3_desc": "维护客户基础资料，支持新增、编辑、查询和导出客户信息。",
+  "processes": [
+    {
+      "id": "P1",
+      "name": "新增客户",
+      "desc": "录入客户名称、证件号码、联系电话并保存客户资料。"
+    },
+    {
+      "id": "P2",
+      "name": "查询客户",
+      "desc": "按客户名称和证件号码查询客户列表。"
+    },
+    {
+      "id": "P3",
+      "name": "导出客户清单",
+      "desc": "导出客户资料清单。"
+    }
+  ]
+}
+```
+
+样例 judgement rules 使用当前配置来源。如果无法读取真实模板规则，可使用最小示例：
+
+```text
+1) 维护业务数据的外部输入，按 EI 识别。
+2) 查询业务数据且无派生计算，按 EQ 识别。
+3) 输出格式化清单或报表，按 EO 识别。
+4) 本系统维护的逻辑数据组，按 ILF 识别。
+5) 外部系统维护、本系统引用的数据组，按 EIF 识别。
+```
+
+后续可以允许用户选择“内置样例”或“从当前上传功能清单中选一个三级模块”，但第一版先做内置样例，降低实现复杂度。
+
+#### 后端返回模型
+
+建议新增试运行结果结构：
+
+```json
+{
+  "profile": "strict_fpa",
+  "prompt_diagnostics": {
+    "errors": [],
+    "warnings": [],
+    "fragments": [],
+    "unresolved_placeholders": [],
+    "rendered_prompt": "..."
+  },
+  "sample_input": {},
+  "ai_called": true,
+  "parse_ok": true,
+  "raw_response": "...",
+  "parsed_rows": [],
+  "normalized_rows": [],
+  "warnings": [],
+  "quality_warnings": [],
+  "rule_hits": []
+}
+```
+
+字段说明：
+
+- `prompt_diagnostics`：复用第二阶段最终 prompt 诊断结果。
+- `sample_input`：本次试运行使用的样例模块。
+- `ai_called`：是否实际调用模型；如果 prompt 诊断有 error，则为 `false`。
+- `parse_ok`：模型返回是否成功解析为 JSON rows。
+- `raw_response`：模型原始响应，便于用户排查 prompt。
+- `parsed_rows`：解析后的原始 rows。
+- `normalized_rows`：经过现有后处理后的 FPA 行。
+- `warnings`：解析、后处理、source_process_ids、classification_basis_index 等普通 warning。
+- `quality_warnings`：`_explanation_quality_warnings` 产生的说明质量 warning。
+- `rule_hits`：如现有后处理能返回规则命中详情，则同步暴露。
+
+#### 后端实现建议
+
+建议新增服务层函数，而不是把逻辑直接写在 Web route 中：
+
+```python
+def run_fpa_prompt_sample_preview(
+    *,
+    profile_name: str,
+    task_config: dict[str, object],
+) -> dict[str, object]:
+    ...
+```
+
+执行顺序：
+
+1. 调用第二阶段的 prompt diagnostics。
+2. 如果存在配置 `errors`，直接返回，不调用模型。
+3. 构建内置样例 group 和 judgement rules。
+4. 使用当前 profile 的 `build_prompt` 生成最终 prompt。
+5. 调用当前配置的 LLM。
+6. 解析 JSON 响应。
+7. 复用 `_normalize_ai_fpa_rows_for_l3` 或现有 preview/gen-fpa 后处理路径，将 AI rows 转成正式 FPA 行结构。
+8. 收集普通 warnings、rule hits 和 `_explanation_quality_warnings`。
+9. 返回试运行结果，不写文件。
+
+实现时应优先复用已有 preview/debug 代码，避免创建第二套 AI rows 解析和后处理逻辑。如果现有函数耦合到 Excel 输出，应先抽一个无文件副作用的内部 helper。
+
+#### Web/API 展示建议
+
+配置页或调试页展示：
+
+- 试运行按钮。
+- 当前 profile 和模型配置摘要。
+- 最终 prompt 折叠预览。
+- 模型原始返回折叠区。
+- 解析状态。
+- 样例 FPA 行表格，至少展示：
+  - `新增/修改功能点`
+  - `类型`
+  - `生成方式`
+  - `计算依据归类`
+  - `计算依据说明`
+  - `后处理警告`
+- quality warning 列表。
+
+文案建议：
+
+```text
+样例试运行只用于检查当前 prompt 的输出形状，不会生成正式 Excel，也不会写入任务历史。
+```
+
+```text
+当前样例输出存在计算依据说明 warning，正式 gen-fpa 运行时这些问题也会进入 check Excel。
+```
+
+```text
+模型返回无法解析为 JSON，请检查 prompt 是否仍要求“只输出 JSON”。
+```
+
+#### 错误与 warning 边界
+
+阻断试运行：
+
+- prompt diagnostics 存在 `errors`。
+- 当前运行配置没有可用 API Key。
+- 当前 profile 不存在或配置无效。
+
+试运行失败但不影响保存：
+
+- 模型调用失败。
+- 模型返回非 JSON。
+- JSON 中没有 `rows`。
+- rows 为空。
+
+试运行成功但提示 warning：
+
+- 存在 `_explanation_quality_warnings`。
+- `classification_basis_index` 越界或缺失。
+- `source_process_ids` 不合法。
+- 输出行名称被后处理规范化。
+
+#### 测试建议
+
+后端单元测试：
+
+- prompt diagnostics 有 error 时，不调用 LLM，直接返回 `ai_called=false`。
+- mock LLM 返回合法 rows 时，`parse_ok=true`，返回 `normalized_rows`。
+- mock LLM 返回非 JSON 时，`parse_ok=false`，返回明确错误。
+- mock LLM 返回缺少结构化 `explanation` 时，返回 `quality_warnings`。
+- mock LLM 返回 `${calculation_explanation_rules}` 未展开的 prompt 不应发生；如果发生，应由 diagnostics 阻断。
+
+Web/API 测试：
+
+- 试运行接口成功返回样例输入、raw response、parsed rows、normalized rows。
+- 无 API Key 时返回 400 或现有配置错误格式。
+- prompt 配置错误时返回 diagnostics errors，不调用模型。
+- 非 JSON 响应时返回 parse error。
+
+前端测试或 smoke：
+
+- 试运行按钮能触发接口。
+- loading、success、error 三种状态可见。
+- quality warnings 能显示。
+- raw response 和 rendered prompt 可折叠查看。
+
+#### 验收标准
+
+第三阶段完成后应满足：
+
+- 用户可以在正式执行 `gen-fpa` 前，用内置样例试运行当前 profile prompt。
+- 试运行会使用当前 prompt fragment 展开结果。
+- 试运行不会写正式 Excel，不写任务历史。
+- prompt 配置错误会阻断试运行并展示 diagnostics errors。
+- 模型非 JSON 输出能被识别并展示 parse error。
+- 结构化 `计算依据说明` 不合格时能展示 quality warnings。
+- 成功试运行时能看到样例 FPA 行和每行 `计算依据说明`。
+
+建议验证命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_gen_fpa_ai.py
+```
+
 后续待办：
 
 - 用真实模型对典型模块进行抽样验证，观察 AI 是否稳定按结构输出`计算依据说明`。
