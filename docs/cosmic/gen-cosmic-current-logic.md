@@ -268,7 +268,7 @@ AI 调用限制：
 1. 边界识别不足：prompt 已加入送审口径硬约束，内部技术交互、控制命令、部分纯数据运算、错误/确认消息和部分非功能事项已有待审 warning；但复杂边界和复杂非功能事项仍主要依赖 AI 自觉和后续人工确认。
 2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；但尚未自动修复到最小颗粒度模块，也未接入业务角色映射表。
 3. CFP 口径仍需配置化：缺公式已阻断，但 `复用`、`利旧`、优化未改子过程填 `0` 仍未完整工程化。
-4. 预览导出闭环仍需继续增强：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口、确认 JSON 接口和确认后 Excel 再导出接口；远程 session 导出后会刷新 ZIP，前端交付物清单和运行历史都会记录确认后 Excel 与确认后 CFP 汇总。
+4. 预览导出闭环已完成基础闭环：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口、确认 JSON 接口和确认后 Excel 再导出接口；远程 session 导出后会刷新 ZIP，前端交付物清单和运行历史都会记录确认后 Excel 与确认后 CFP 汇总。后续增强重点不再是确认后导出状态流转，而是人工编辑功能过程和数据移动、自动过滤以及 CFP 业务口径配置化。
 5. 解析格式敏感：`parse_md_to_items` 仍保留给兼容或排查场景，不适合承载复杂人工编辑。
 6. 送审规则未完整工程化：软评填报参考手册中的启发式规则尚未完整进入 prompt、结构化校验和结果状态。
 
@@ -281,6 +281,16 @@ AI 调用限制：
 第一阶段没有重写整套 AI 生成策略，也没有一次性覆盖所有《软评填报参考手册2024》启发式规则。当前后续切片已经实现 `/preview/cosmic` 的结构化 JSON 审阅、人工确认状态编辑、确认 JSON 导出、会话级确认 JSON 保存/读取，以及确认后正式 Excel 和 CFP 汇总导出；但人工编辑功能过程或数据移动、内部接口边界自动判定、非功能内容自动剔除仍属于后续阶段。内部技术交互、控制命令、纯数据运算、错误/确认消息和部分非功能事项当前只做待审提示。
 
 本节后续内容保留为第一阶段实现记录和验收基线；其中“必须”“建议”等措辞按已实现规格理解，不再表示新的待办。
+
+### 2026-06-09 实施进度核查
+
+本次在独立 worktree `F:/tmp/ai_gen_reimbursement_docs-cosmic-progress` 核查，基准提交为 `3b0fcd7`。核查结论如下：
+
+1. 第一阶段验收项已落地：`cosmic_validator.py` 已实现结构化校验、`review_items`、`preview_rows`、`export_policy`、JSON 草稿和 Markdown 校验报告；`gen_cosmic.py` 和 `pipeline.py` 已按 `passed/review_required/blocked` 写入正式 Excel、草稿 Excel 或仅写报告。
+2. 生成期异常已结构化：无 API Key、AI 失败、AI 空结果、无三级模块、AI 限制跳过、交互终止和部分失败都会进入全局 issue，不再用日志或目标 Excel 路径推断 COSMIC 是否成功。
+3. 确认后导出闭环已落地：`cosmic_confirmation.py` 会根据人工确认状态刷新 `export_policy` 和 `confirmation_summary`；会话接口可读取任务 COSMIC JSON 草稿、保存/读取 `cosmic-confirmation.json`，并在策略允许时导出 `项目功能点拆分表-确认后.xlsx`、刷新 CFP 汇总和交付物记录。
+4. 已验证的测试范围：`tests/test_cosmic_validator.py`、`tests/test_cosmic_confirmation.py`、`tests/test_pipeline.py`、`tests/test_web_tasks.py -k "cosmic"` 和全量 `pytest` 均通过。
+5. 尚未实施的范围保持不变：人工编辑功能过程或数据移动、内部技术边界自动判定、控制命令/数据运算/非功能内容自动剔除、功能用户自动修复，以及 `复用`、`利旧`、优化未改子过程 CFP 为 `0` 的完整配置化。
 
 ### 目标行为
 
@@ -1020,10 +1030,9 @@ md/3.4.gen-cosmic-校验报告.md
 
 以下内容不属于第一阶段验收范围：
 
-1. 确认后导出状态流转和正式输出执行策略。
-2. 人工编辑功能过程和数据移动。
-3. 控制命令、数据运算、内部技术步骤、非功能事项的自动过滤。
-4. 功能用户和三级模块的一对一强绑定自动修复；第一阶段必须先产生 `GENERIC_FUNCTION_USER` warning。
-5. `复用`、`利旧`、优化未改子过程 CFP 为 `0` 的完整配置化。
+1. 人工编辑功能过程和数据移动。
+2. 控制命令、数据运算、内部技术步骤、非功能事项的自动过滤。
+3. 功能用户和三级模块的一对一强绑定自动修复；第一阶段必须先产生 `GENERIC_FUNCTION_USER` warning。
+4. `复用`、`利旧`、优化未改子过程 CFP 为 `0` 的完整配置化。
 
 这些内容应在结构化草稿和校验器稳定后，再按 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md) 分阶段实施。
