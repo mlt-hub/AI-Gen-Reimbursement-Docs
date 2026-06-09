@@ -1,0 +1,32 @@
+template_id: cosmic_default_v1
+kind: cosmic
+version: 1
+file: 项目功能点拆分表-输出模板.xlsx
+sheets:
+  environment:
+    name: 1、环境图
+    required: true
+  result:
+    name: 2、功能点拆分表
+    header_row: 4
+    data_start_row: 6
+    style_source_row: 6
+    columns:
+      module_l1:
+        header: 一级模块
+        required: true
+      module_l2:
+        header: 二级模块
+        required: true
+      module_l3:
+        header: 三级模块
+        required: true
+features:
+  preserve_formulas: true
+format:
+  preserve:
+    - column_widths
+    - row_heights
+    - merged_cells
+    - formulas
+    - data_validations

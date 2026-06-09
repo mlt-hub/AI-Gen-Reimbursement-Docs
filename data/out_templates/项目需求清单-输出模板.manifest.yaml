@@ -1,0 +1,45 @@
+template_id: list_default_v1
+kind: list
+version: 1
+file: 项目需求清单-输出模板.xlsx
+sheets:
+  project_info:
+    name: 项目信息概览
+    header_row: 2
+    data_start_row: 3
+    style_source_row: 3
+    columns:
+      project_name:
+        header: 项目名称
+        required: true
+      workload:
+        header: 送审工作量
+        required: true
+      cfp:
+        header: 送审功能点
+        required: true
+  function_list:
+    name: 功能清单
+    header_row: 2
+    data_start_row: 3
+    style_source_row: 3
+    columns:
+      module_l1:
+        header: 一级功能模块名称
+        required: true
+      module_l2:
+        header: 二级功能模块名称
+        required: true
+      module_l3:
+        header: 三级功能模块名称
+        required: true
+      type:
+        header: 类型
+        required: true
+features:
+  preserve_formulas: true
+format:
+  preserve:
+    - column_widths
+    - row_heights
+    - formulas
