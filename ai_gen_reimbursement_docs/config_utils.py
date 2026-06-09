@@ -1500,6 +1500,34 @@ def load_gen_cosmic_allow_draft_excel_output() -> bool:
         return False
 
 
+def load_gen_cosmic_cfp_policy() -> dict[str, float]:
+    """读取 gen_cosmic.cfp_policy，非法或负数值由调用方回退默认口径。"""
+    yaml_path = config_dir() / "system_config.yaml"
+    if not yaml_path.exists():
+        return {}
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        section = cfg.get("gen_cosmic", {})
+        if not isinstance(section, dict):
+            return {}
+        raw_policy = section.get("cfp_policy")
+        if not isinstance(raw_policy, dict):
+            return {}
+        policy: dict[str, float] = {}
+        for key, value in raw_policy.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if number >= 0:
+                policy[str(key)] = number
+        return policy
+    except Exception:
+        return {}
+
+
 def load_gen_spec_ai_limit() -> int:
     """读取 gen_spec_ai_limit，限制 spec AI 完善的功能过程描述数（0=不限制）。"""
     return max(_get_system_config_value('gen_spec_ai_limit', 0), 0)

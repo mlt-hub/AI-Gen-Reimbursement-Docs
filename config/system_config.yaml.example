@@ -79,6 +79,17 @@ gen_fpa_ai_limit: 0
 # 只对前N个功能过程调用COSMIC AI（默认0）
 gen_cosmic_ai_limit: 0
 
+gen_cosmic:
+  # review_required 时是否允许写草稿 Excel，默认 false
+  allow_draft_excel_output: false
+  # 确认后 COSMIC CFP 汇总默认口径；确认 JSON 中的 cfp_policy 可覆盖这些默认值
+  cfp_policy:
+    新增: 1
+    修改: 1
+    复用: 0.3333333333333333
+    利旧: 0
+    优化未改: 0
+
 # 只对前N个功能过程调用SPEC AI（默认0）
 gen_spec_ai_limit: 0
 
