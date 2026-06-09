@@ -104,9 +104,30 @@
               <tr class="border-b border-[var(--color-rule)] align-top hover:bg-[var(--color-surface-muted)]">
                 <td class="table-cell text-[var(--color-ink-muted)]">{{ row.item_index + 1 }}</td>
                 <td class="table-cell">{{ row.module_path || '-' }}</td>
-                <td class="table-cell font-medium text-[var(--color-ink)]">{{ row.process || '-' }}</td>
-                <td class="table-cell">{{ row.user || '-' }}</td>
-                <td class="table-cell">{{ row.trigger || '-' }}</td>
+                <td class="table-cell">
+                  <input
+                    class="edit-input font-medium"
+                    type="text"
+                    :value="itemForRow(row.item_index)?.process || ''"
+                    @input="updateItemField(row.item_index, 'process', ($event.target as HTMLInputElement).value)"
+                  />
+                </td>
+                <td class="table-cell">
+                  <input
+                    class="edit-input"
+                    type="text"
+                    :value="itemForRow(row.item_index)?.user || ''"
+                    @input="updateItemField(row.item_index, 'user', ($event.target as HTMLInputElement).value)"
+                  />
+                </td>
+                <td class="table-cell">
+                  <input
+                    class="edit-input"
+                    type="text"
+                    :value="itemForRow(row.item_index)?.trigger || ''"
+                    @input="updateItemField(row.item_index, 'trigger', ($event.target as HTMLInputElement).value)"
+                  />
+                </td>
                 <td class="table-cell">{{ row.movement_count }}</td>
                 <td class="table-cell">{{ row.movement_types.join(' / ') || '-' }}</td>
                 <td class="table-cell">{{ cfpForRow(row.item_index) }}</td>
@@ -131,20 +152,89 @@
                               <th class="detail-head">数据组</th>
                               <th class="detail-head">数据属性</th>
                               <th class="detail-head">复用度</th>
+                              <th class="detail-head w-20">操作</th>
                             </tr>
                           </thead>
                           <tbody>
-                            <tr v-for="movement in itemForRow(row.item_index)?.movements ?? []" :key="movement.order" class="border-t border-[var(--color-rule)]">
+                            <tr
+                              v-for="(movement, movementIndex) in itemForRow(row.item_index)?.movements ?? []"
+                              :key="movementIndex"
+                              :class="['border-t border-[var(--color-rule)]', movement.excluded_from_cfp ? 'bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]' : '']"
+                            >
                               <td class="detail-cell">{{ movement.order }}</td>
-                              <td class="detail-cell">{{ movement.sub_process || '-' }}</td>
-                              <td class="detail-cell font-medium">{{ movement.move_type || '-' }}</td>
-                              <td class="detail-cell">{{ movement.data_group || '-' }}</td>
-                              <td class="detail-cell">{{ movement.data_attrs || '-' }}</td>
-                              <td class="detail-cell">{{ movement.reuse || '-' }}</td>
+                              <td class="detail-cell">
+                                <input
+                                  class="edit-input"
+                                  type="text"
+                                  :value="movement.sub_process"
+                                  @input="updateMovementField(row.item_index, movementIndex, 'sub_process', ($event.target as HTMLInputElement).value)"
+                                />
+                              </td>
+                              <td class="detail-cell">
+                                <select
+                                  class="edit-input font-medium"
+                                  :value="movement.move_type"
+                                  @change="updateMovementField(row.item_index, movementIndex, 'move_type', ($event.target as HTMLSelectElement).value)"
+                                >
+                                  <option value="E">E</option>
+                                  <option value="X">X</option>
+                                  <option value="R">R</option>
+                                  <option value="W">W</option>
+                                  <option v-if="!standardMoveTypes.includes(movement.move_type)" :value="movement.move_type">
+                                    {{ movement.move_type || '-' }}
+                                  </option>
+                                </select>
+                                <p v-if="movement.excluded_from_cfp" class="mt-1 text-[11px] text-[var(--color-warning)]">
+                                  {{ movement.review_action === 'merge_movement' ? `合并到第 ${movement.merged_into_order || movement.order - 1} 条` : movement.review_action === 'exclude_process' ? '功能过程已排除' : '已排除计数' }}
+                                </p>
+                              </td>
+                              <td class="detail-cell">
+                                <input
+                                  class="edit-input"
+                                  type="text"
+                                  :value="movement.data_group"
+                                  @input="updateMovementField(row.item_index, movementIndex, 'data_group', ($event.target as HTMLInputElement).value)"
+                                />
+                              </td>
+                              <td class="detail-cell">
+                                <input
+                                  class="edit-input"
+                                  type="text"
+                                  :value="movement.data_attrs"
+                                  @input="updateMovementField(row.item_index, movementIndex, 'data_attrs', ($event.target as HTMLInputElement).value)"
+                                />
+                              </td>
+                              <td class="detail-cell">
+                                <select
+                                  class="edit-input"
+                                  :value="movement.reuse"
+                                  @change="updateMovementField(row.item_index, movementIndex, 'reuse', ($event.target as HTMLSelectElement).value)"
+                                >
+                                  <option value="新增">新增</option>
+                                  <option value="复用">复用</option>
+                                  <option value="利旧">利旧</option>
+                                  <option v-if="!standardReuseValues.includes(movement.reuse)" :value="movement.reuse">
+                                    {{ movement.reuse || '-' }}
+                                  </option>
+                                </select>
+                              </td>
+                              <td class="detail-cell">
+                                <button
+                                  class="btn-secondary px-2 py-1 text-xs"
+                                  type="button"
+                                  :disabled="(itemForRow(row.item_index)?.movements.length ?? 0) <= 1"
+                                  @click="removeMovement(row.item_index, movementIndex)"
+                                >
+                                  删除
+                                </button>
+                              </td>
                             </tr>
                           </tbody>
                         </table>
                       </div>
+                      <button class="btn-secondary mt-2 px-3 py-1 text-xs" type="button" @click="addMovement(row.item_index)">
+                        新增数据移动
+                      </button>
                     </div>
 
                     <div>
@@ -179,12 +269,25 @@ interface CosmicMovement {
   data_group: string
   data_attrs: string
   reuse: string
+  excluded_from_cfp?: boolean
+  review_action?: string
+  merged_into_order?: number
 }
 
 interface CosmicItem {
+  project?: string
+  module_l1?: string
+  module_l2?: string
+  module_l3?: string
+  user: string
+  trigger: string
   process: string
+  status?: string
+  excluded_from_cfp?: boolean
+  review_action?: string
   movements: CosmicMovement[]
   basis?: Record<string, unknown>
+  issues?: unknown[]
 }
 
 interface CosmicPreviewRow {
@@ -207,6 +310,7 @@ interface CosmicReviewItem {
   code: string
   severity: string
   field: string
+  movement_order?: number
   message: string
   details?: Record<string, unknown>
   confirmation?: {
@@ -216,6 +320,21 @@ interface CosmicReviewItem {
     confirmed_by?: string
     confirmed_at?: string
   }
+}
+
+interface CosmicReviewAction {
+  action: string
+  item_index?: number
+  movement_order?: number
+  movement_index?: number
+  merged_into_order?: number
+  suggested_user?: string
+  review_id?: string
+  reason?: string
+  created_at?: string
+  confirmed_by?: string
+  applied_by?: string
+  applied_at?: string
 }
 
 interface CosmicReport {
@@ -240,6 +359,11 @@ interface CosmicReport {
   preview_rows: CosmicPreviewRow[]
   review_items: CosmicReviewItem[]
   items: CosmicItem[]
+  review_actions?: CosmicReviewAction[]
+  review_audit?: CosmicReviewAction[]
+  cfp_policy?: Record<string, number>
+  cfp_policy_effective?: Record<string, number>
+  function_user_role_map?: Record<string, string>
 }
 
 interface CosmicJsonResponse {
@@ -269,6 +393,8 @@ const backendSyncError = ref('')
 const backendLoading = ref(false)
 const backendSaving = ref(false)
 const backendExporting = ref(false)
+const standardMoveTypes = ['E', 'X', 'R', 'W']
+const standardReuseValues = ['新增', '复用', '利旧']
 
 const sessionId = computed(() => {
   const routeSession = route.params.sessionId
@@ -370,7 +496,12 @@ function normalizeReport(value: unknown): CosmicReport {
     confirmation_summary: data.confirmation_summary,
     preview_rows: data.preview_rows,
     review_items: data.review_items.map(normalizeReviewItem),
-    items: data.items,
+    items: data.items.map(normalizeCosmicItem),
+    review_actions: Array.isArray(data.review_actions) ? data.review_actions : [],
+    review_audit: Array.isArray(data.review_audit) ? data.review_audit : [],
+    cfp_policy: data.cfp_policy,
+    cfp_policy_effective: data.cfp_policy_effective,
+    function_user_role_map: data.function_user_role_map,
   }
 }
 
@@ -436,7 +567,18 @@ async function applySessionConfirmations(data: CosmicReport) {
 }
 
 function mergeConfirmations(target: CosmicReport, source: Partial<CosmicReport>) {
-  if (!Array.isArray(source.review_items)) return
+  if (Array.isArray(source.items)) {
+    source.items.forEach((rawItem, index) => {
+      if (target.items[index]) {
+        target.items[index] = normalizeCosmicItem(rawItem)
+        syncPreviewRow(index, target)
+      }
+    })
+  }
+  if (!Array.isArray(source.review_items)) {
+    applyConfirmationExportPolicy(target)
+    return
+  }
   const confirmations = new Map<string, CosmicReviewItem['confirmation']>()
   for (const item of source.review_items) {
     if (item?.review_id && item.confirmation) {
@@ -469,8 +611,8 @@ async function saveSessionConfirmation() {
         body: JSON.stringify(report.value),
       },
     )
-    report.value.export_policy = response.payload.export_policy
-    report.value.confirmation_summary = response.payload.confirmation_summary
+    report.value = normalizeReport(response.payload)
+    confirmationStoreKey.value = buildConfirmationStoreKey(report.value)
     backendSyncStatus.value = '已保存到会话'
   } catch (err) {
     backendSyncError.value = normalizeApiError(err)
@@ -517,6 +659,40 @@ function normalizeReviewItem(item: CosmicReviewItem): CosmicReviewItem {
   }
 }
 
+function normalizeCosmicItem(item: CosmicItem): CosmicItem {
+  return {
+    ...item,
+    project: String(item.project || ''),
+    module_l1: String(item.module_l1 || ''),
+    module_l2: String(item.module_l2 || ''),
+    module_l3: String(item.module_l3 || ''),
+    user: String(item.user || ''),
+    trigger: String(item.trigger || ''),
+    process: String(item.process || ''),
+    status: String(item.status || ''),
+    excluded_from_cfp: item.excluded_from_cfp === true,
+    review_action: item.review_action ? String(item.review_action) : undefined,
+    basis: item.basis && typeof item.basis === 'object' ? item.basis : undefined,
+    movements: Array.isArray(item.movements)
+      ? item.movements.map((movement, index) => normalizeMovement(movement, index))
+      : [],
+  }
+}
+
+function normalizeMovement(movement: CosmicMovement, index: number): CosmicMovement {
+  return {
+    order: Number.isFinite(Number(movement.order)) ? Number(movement.order) : index + 1,
+    sub_process: String(movement.sub_process || ''),
+    move_type: String(movement.move_type || ''),
+    data_group: String(movement.data_group || ''),
+    data_attrs: String(movement.data_attrs || ''),
+    reuse: String(movement.reuse || '新增'),
+    excluded_from_cfp: movement.excluded_from_cfp === true,
+    review_action: movement.review_action ? String(movement.review_action) : undefined,
+    merged_into_order: Number.isFinite(Number(movement.merged_into_order)) ? Number(movement.merged_into_order) : undefined,
+  }
+}
+
 function buildConfirmationStoreKey(data: CosmicReport): string {
   const ids = data.review_items.map(item => item.review_id).sort().join('|')
   return `cosmic-preview-confirmations:${data.project || 'unknown'}:${ids}`
@@ -553,6 +729,152 @@ function saveConfirmations() {
 
 function itemForRow(index: number): CosmicItem | undefined {
   return report.value?.items[index]
+}
+
+function updateItemField(index: number, field: 'process' | 'user' | 'trigger', value: string) {
+  const item = itemForRow(index)
+  if (!item) return
+  item[field] = value
+  syncPreviewRow(index)
+}
+
+function updateMovementField(index: number, movementIndex: number, field: keyof CosmicMovement, value: string) {
+  const item = itemForRow(index)
+  const movement = item?.movements[movementIndex]
+  if (!item || !movement) return
+  if (field === 'order') {
+    movement.order = Number(value) || movementIndex + 1
+  } else if (field === 'sub_process') {
+    movement.sub_process = value
+  } else if (field === 'move_type') {
+    movement.move_type = value
+  } else if (field === 'data_group') {
+    movement.data_group = value
+  } else if (field === 'data_attrs') {
+    movement.data_attrs = value
+  } else if (field === 'reuse') {
+    movement.reuse = value
+  }
+  syncPreviewRow(index)
+}
+
+function addMovement(index: number) {
+  const item = itemForRow(index)
+  if (!item) return
+  const nextOrder = item.movements.length + 1
+  item.movements.push({
+    order: nextOrder,
+    sub_process: '',
+    move_type: 'X',
+    data_group: '',
+    data_attrs: '',
+    reuse: '新增',
+    excluded_from_cfp: false,
+  })
+  renumberMovements(item)
+  syncPreviewRow(index)
+}
+
+function removeMovement(index: number, movementIndex: number) {
+  const item = itemForRow(index)
+  if (!item || item.movements.length <= 1) return
+  item.movements.splice(movementIndex, 1)
+  renumberMovements(item)
+  syncPreviewRow(index)
+}
+
+function renumberMovements(item: CosmicItem) {
+  item.movements.forEach((movement, index) => {
+    movement.order = index + 1
+  })
+}
+
+function syncPreviewRow(index: number, current: CosmicReport | null = report.value) {
+  const item = current?.items[index]
+  const row = current?.preview_rows.find(candidate => candidate.item_index === index)
+  if (!item || !row) return
+  row.module_path = [item.module_l1, item.module_l2, item.module_l3].filter(Boolean).join(' > ')
+  row.process = item.process
+  row.user = item.user
+  row.trigger = item.trigger
+  row.movement_count = item.movements.length
+  row.movement_types = item.movements.filter(movement => !movement.excluded_from_cfp).map(movement => movement.move_type).filter(Boolean)
+}
+
+function applySuggestedAction(item: CosmicReviewItem, action: Record<string, unknown>) {
+  if (!report.value) return
+  const actionType = String(action.action || '')
+  const itemIndex = typeof item.item_index === 'number' ? item.item_index : undefined
+  if (itemIndex === undefined) return
+  const record: CosmicReviewAction = {
+    action: actionType,
+    item_index: itemIndex,
+    review_id: item.review_id,
+    reason: String(action.reason || item.message || ''),
+    created_at: new Date().toISOString(),
+  }
+  if (actionType === 'apply_function_user') {
+    record.suggested_user = String(action.suggested_user || item.details?.suggested_user || '')
+    if (!record.suggested_user) return
+    const target = itemForRow(itemIndex)
+    if (!target) return
+    target.user = record.suggested_user
+    syncPreviewRow(itemIndex)
+  } else if (actionType === 'exclude_process') {
+    const target = itemForRow(itemIndex)
+    if (!target) return
+    target.excluded_from_cfp = true
+    target.review_action = actionType
+    target.movements.forEach(movement => {
+      movement.excluded_from_cfp = true
+      movement.review_action = actionType
+    })
+    syncPreviewRow(itemIndex)
+  } else if (actionType === 'exclude_movement' || actionType === 'merge_movement') {
+    const movementOrder = Number(action.movement_order || item.movement_order || 0)
+    if (!movementOrder) return
+    record.movement_order = movementOrder
+    const target = itemForRow(itemIndex)
+    const movementIndex = target?.movements.findIndex(movement => movement.order === movementOrder) ?? -1
+    const movement = target?.movements[movementIndex]
+    if (!target || !movement || movementIndex < 0) return
+    record.movement_index = movementIndex
+    movement.excluded_from_cfp = true
+    movement.review_action = actionType
+    if (actionType === 'merge_movement') {
+      record.merged_into_order = Math.max(1, movement.order - 1)
+      movement.merged_into_order = record.merged_into_order
+    }
+    syncPreviewRow(itemIndex)
+  } else {
+    return
+  }
+  report.value.review_actions = [
+    ...(report.value.review_actions ?? []).filter(existing => !sameReviewAction(existing, record)),
+    record,
+  ]
+  report.value.review_audit = [...(report.value.review_audit ?? []), record]
+  updateConfirmation(item.review_id, { status: 'confirmed', note: actionLabel(actionType) })
+}
+
+function sameReviewAction(left: CosmicReviewAction, right: CosmicReviewAction): boolean {
+  return left.action === right.action
+    && left.item_index === right.item_index
+    && left.movement_order === right.movement_order
+    && left.review_id === right.review_id
+}
+
+function suggestedActions(item: CosmicReviewItem): Record<string, unknown>[] {
+  const actions = item.details?.suggested_actions
+  return Array.isArray(actions) ? actions.filter(action => action && typeof action === 'object') as Record<string, unknown>[] : []
+}
+
+function actionLabel(action: string): string {
+  if (action === 'exclude_movement') return '已排除计数'
+  if (action === 'merge_movement') return '已合并到上一条'
+  if (action === 'exclude_process') return '已排除功能过程'
+  if (action === 'apply_function_user') return '已采用候选功能用户'
+  return action
 }
 
 function reviewItemsForRow(row: CosmicPreviewRow): CosmicReviewItem[] {
@@ -716,6 +1038,7 @@ const ReviewItemCard = defineComponent({
       const item = props.item as CosmicReviewItem
       const details = detailsText(item.details)
       const confirmation = confirmationText(item)
+      const actions = suggestedActions(item)
       return h('article', { class: 'rounded border border-[var(--color-rule)] p-3 text-xs' }, [
         h('div', { class: 'flex flex-wrap items-center gap-2' }, [
           h('span', { class: 'font-semibold text-[var(--color-ink)]' }, item.code),
@@ -739,6 +1062,17 @@ const ReviewItemCard = defineComponent({
               h('dt', { class: 'font-medium text-[var(--color-ink)]' }, '依据'),
               h('dd', { class: 'mt-1 whitespace-pre-wrap text-[var(--color-ink-muted)]' }, details),
             ])
+          : null,
+        actions.length
+          ? h('div', { class: 'mt-3 flex flex-wrap gap-2' }, actions.map(action => h(
+              'button',
+              {
+                class: 'btn-secondary px-2 py-1 text-xs',
+                type: 'button',
+                onClick: () => applySuggestedAction(item, action),
+              },
+              String(action.label || actionLabel(String(action.action || ''))),
+            )))
           : null,
         h('div', { class: 'mt-3 grid gap-2 md:grid-cols-[160px_1fr]' }, [
           h('label', { class: 'confirmation-field' }, [

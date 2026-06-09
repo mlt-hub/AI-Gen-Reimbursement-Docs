@@ -137,18 +137,19 @@ def _split_user_parts(user: str) -> list[str]:
 
 def _function_user_basis(item: CosmicItem) -> dict[str, object]:
     parts = _split_user_parts(item.user)
+    module_l3 = (item.module_l3 or "").strip()
     base = {
         "parts": parts,
         "matched": False,
         "match_source": "empty",
         "matched_term": "",
+        "suggested_term": module_l3,
         "requires_review": True,
         "description": "功能用户为空，无法对应三级模块或最小颗粒度模块",
     }
     if not parts:
         return base
 
-    module_l3 = (item.module_l3 or "").strip()
     matched_part = _matching_user_part(parts, module_l3, allow_partial_module=True)
     if matched_part:
         return {
@@ -221,6 +222,8 @@ def _process_semantic_findings(item: CosmicItem) -> list[dict[str, object]]:
         return []
     return [{
         "code": "NON_FUNCTIONAL_SCOPE",
+        "scope_policy": "manual_exclude_process",
+        "governance_category": "non_functional_scope",
         "matched_terms": matched,
         "description": "功能过程或模块路径疑似非功能内容或技术改造事项，通常不应拆成 COSMIC 功能规模",
     }]
@@ -237,6 +240,8 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     if matched:
         findings.append({
             "code": "CONTROL_COMMAND_MOVEMENT",
+            "scope_policy": "manual_exclude_or_merge",
+            "governance_category": "control_command",
             "movement_order": movement.order,
             "matched_terms": matched,
             "description": "子过程疑似控制命令，通常不单独计为 COSMIC 数据移动",
@@ -245,6 +250,8 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     if matched:
         findings.append({
             "code": "DATA_OPERATION_ONLY_MOVEMENT",
+            "scope_policy": "manual_exclude_or_merge",
+            "governance_category": "data_operation_only",
             "movement_order": movement.order,
             "matched_terms": matched,
             "description": "子过程疑似仅为数据运算或技术操作，通常应归入相关数据移动或不单独计列",
@@ -253,6 +260,8 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     if matched:
         findings.append({
             "code": "ERROR_CONFIRMATION_MESSAGE",
+            "scope_policy": "manual_merge_or_exclude",
+            "governance_category": "error_confirmation_message",
             "movement_order": movement.order,
             "matched_terms": matched,
             "description": "子过程疑似错误或确认消息输出，通常需要按手册规则合并识别",
@@ -261,6 +270,8 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     if matched:
         findings.append({
             "code": "INTERNAL_TECHNICAL_BOUNDARY",
+            "scope_policy": "manual_exclude_or_merge",
+            "governance_category": "internal_technical_boundary",
             "movement_order": movement.order,
             "matched_terms": matched,
             "description": "子过程疑似内部技术交互或无效软件边界，需确认是否跨有效 COSMIC 边界",
@@ -273,19 +284,68 @@ def _matched_words(text: str, words: set[str]) -> list[str]:
 
 
 def _finding_details(finding: dict[str, object]) -> dict[str, object]:
-    return {
+    code = str(finding.get("code", ""))
+    details = {
         "matched_terms": list(finding.get("matched_terms", [])),
         "basis_description": str(finding.get("description", "")),
+        "scope_policy": str(finding.get("scope_policy", "manual_review")),
+        "governance_category": str(finding.get("governance_category", "")),
     }
+    movement_order = finding.get("movement_order")
+    if code in {
+        "CONTROL_COMMAND_MOVEMENT",
+        "DATA_OPERATION_ONLY_MOVEMENT",
+        "ERROR_CONFIRMATION_MESSAGE",
+        "INTERNAL_TECHNICAL_BOUNDARY",
+    } and isinstance(movement_order, int):
+        details["suggested_actions"] = [
+            {
+                "action": "exclude_movement",
+                "label": "排除计数",
+                "movement_order": movement_order,
+                "reason": details["basis_description"],
+            },
+            {
+                "action": "merge_movement",
+                "label": "合并到上一条",
+                "movement_order": movement_order,
+                "reason": details["basis_description"],
+            },
+        ]
+    elif code == "NON_FUNCTIONAL_SCOPE":
+        details["suggested_actions"] = [
+            {
+                "action": "exclude_process",
+                "label": "排除功能过程",
+                "reason": details["basis_description"],
+            }
+        ]
+    return details
 
 
 def _function_user_details(function_user_basis: dict[str, object]) -> dict[str, object]:
+    matched_term = str(function_user_basis.get("matched_term", "") or "")
+    suggested_term = str(function_user_basis.get("suggested_term", "") or matched_term)
+    suggested_user = ""
+    if suggested_term:
+        suggested_user = f"发起者：{suggested_term}|接收者：{suggested_term}"
     return {
         "function_user_parts": list(function_user_basis.get("parts", [])),
         "match_source": str(function_user_basis.get("match_source", "")),
-        "matched_term": str(function_user_basis.get("matched_term", "")),
+        "matched_term": matched_term,
+        "suggested_term": suggested_term,
         "matched_part": str(function_user_basis.get("matched_part", "")),
         "basis_description": str(function_user_basis.get("description", "")),
+        "suggested_user": suggested_user,
+        "suggested_actions": (
+            [{
+                "action": "apply_function_user",
+                "label": "采用候选功能用户",
+                "suggested_user": suggested_user,
+                "reason": "将功能用户绑定到当前模块路径中最接近的业务模块",
+            }]
+            if suggested_user else []
+        ),
     }
 
 

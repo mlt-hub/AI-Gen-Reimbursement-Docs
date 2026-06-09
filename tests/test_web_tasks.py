@@ -1523,6 +1523,34 @@ def test_cosmic_confirmation_can_be_saved_and_loaded(monkeypatch, tmp_path):
     server.session_manager.cleanup_download(session_id)
 
 
+def test_cosmic_confirmation_persists_edited_items(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_confirmation_edited_items"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    payload = _cosmic_export_payload()
+    payload["items"][0]["process"] = "维护客户资料"
+    payload["items"][0]["user"] = "发起者：客户|接收者：客户资料"
+    payload["items"][0]["movements"].append({
+        "order": 3,
+        "sub_process": "输出客户维护结果",
+        "move_type": "X",
+        "data_group": "客户维护结果",
+        "data_attrs": "处理状态",
+        "reuse": "新增",
+    })
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+    load_resp = client.get(f"/api/sessions/{session_id}/cosmic/confirmation")
+
+    assert save_resp.status_code == 200
+    saved_payload = load_resp.json()["payload"]
+    assert saved_payload["items"][0]["process"] == "维护客户资料"
+    assert saved_payload["items"][0]["user"] == "发起者：客户|接收者：客户资料"
+    assert len(saved_payload["items"][0]["movements"]) == 3
+    assert saved_payload["items"][0]["movements"][2]["sub_process"] == "输出客户维护结果"
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_cosmic_confirmation_requires_session_access(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="bob")
     session_id = "cosmic_confirmation_other_user"
@@ -1638,6 +1666,251 @@ def test_cosmic_confirmed_export_writes_formal_excel(monkeypatch, tmp_path):
     assert state is not None
     assert any(item["label"] == "项目功能点拆分表（确认后）" for item in state.done_files)
     assert any(item["label"] == "COSMIC CFP 总和（确认后）" for item in state.done_files)
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_confirmed_export_uses_saved_edited_items(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_export_edited_items"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    draft_payload = _cosmic_export_payload()
+    edited_payload = json.loads(json.dumps(draft_payload, ensure_ascii=False))
+    edited_payload["items"][0]["process"] = "维护客户资料"
+    edited_payload["items"][0]["movements"].append({
+        "order": 3,
+        "sub_process": "输出客户维护结果",
+        "move_type": "X",
+        "data_group": "客户维护结果",
+        "data_attrs": "处理状态",
+        "reuse": "新增",
+    })
+    draft_path.write_text(json.dumps(draft_payload, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "cosmic-confirmation.json").write_text(
+        json.dumps(edited_payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    template_path = tmp_path / "项目功能点拆分表-输出模板.xlsx"
+    template_path.write_bytes(b"template")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    def fake_write_cosmic_xlsx(template, output, report, *, meta=None, cfp_formula=""):
+        assert template == str(template_path)
+        assert report.results[0].item.process == "维护客户资料"
+        assert len(report.results[0].item.movements) == 3
+        assert report.results[0].item.movements[2].sub_process == "输出客户维护结果"
+        Path(output).write_bytes(b"xlsx")
+        return output
+
+    monkeypatch.setattr("web_app.routes.artifacts._cosmic_template_path", lambda *_: template_path)
+    monkeypatch.setattr("web_app.routes.artifacts.write_cosmic_xlsx", fake_write_cosmic_xlsx)
+
+    resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert resp.status_code == 200
+    assert resp.json()["cfp_total"] == 3.0
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_review_action_excludes_movement_and_revalidates(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_review_exclude"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    payload["items"][0]["movements"].append({
+        "order": 3,
+        "sub_process": "点击下一页并排序列表",
+        "move_type": "X",
+        "data_group": "页面状态",
+        "data_attrs": "排序状态",
+        "reuse": "新增",
+    })
+    payload["review_actions"] = [{
+        "action": "exclude_movement",
+        "item_index": 0,
+        "movement_order": 3,
+        "review_id": "item::0::CONTROL_COMMAND_MOVEMENT::movements[2].sub_process::3",
+        "reason": "控制命令不计数",
+    }]
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    template_path = tmp_path / "项目功能点拆分表-输出模板.xlsx"
+    template_path.write_bytes(b"template")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr("web_app.routes.artifacts._cosmic_template_path", lambda *_: template_path)
+
+    def fake_write_cosmic_xlsx(template, output, report, **kwargs):
+        assert len(report.results[0].item.movements) == 2
+        Path(output).write_bytes(b"xlsx")
+        return output
+
+    monkeypatch.setattr("web_app.routes.artifacts.write_cosmic_xlsx", fake_write_cosmic_xlsx)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+    export_resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["items"][0]["movements"][2]["excluded_from_cfp"] is True
+    assert saved_payload["status"] == "passed"
+    assert saved_payload["review_items"] == []
+    assert saved_payload["export_policy"]["formal_excel"]["status"] == "allowed"
+    assert export_resp.status_code == 200
+    assert export_resp.json()["cfp_total"] == 2.0
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_review_action_applies_function_user_and_revalidates(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_review_function_user"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    payload["items"][0]["module_l3"] = "客户资料"
+    payload["items"][0]["user"] = "发起者：操作员|接收者：系统"
+    payload["review_actions"] = [{
+        "action": "apply_function_user",
+        "item_index": 0,
+        "suggested_user": "发起者：客户资料|接收者：客户资料",
+        "review_id": "item::0::GENERIC_FUNCTION_USER::user::",
+    }]
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["items"][0]["user"] == "发起者：客户资料|接收者：客户资料"
+    assert saved_payload["status"] == "passed"
+    assert "GENERIC_FUNCTION_USER" not in saved_payload["issue_codes"]
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_review_action_applies_function_user_role_map(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_review_function_user_role_map"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    payload["items"][0]["module_l3"] = "客户资料"
+    payload["items"][0]["user"] = "发起者：操作员|接收者：系统"
+    payload["function_user_role_map"] = {
+        "客户资料": "发起者：客户资料经办|接收者：客户资料经办",
+    }
+    payload["review_actions"] = [{
+        "action": "apply_function_user",
+        "item_index": 0,
+        "review_id": "item::0::GENERIC_FUNCTION_USER::user::",
+    }]
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["items"][0]["user"] == "发起者：客户资料经办|接收者：客户资料经办"
+    assert saved_payload["status"] == "passed"
+    assert "GENERIC_FUNCTION_USER" not in saved_payload["issue_codes"]
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_confirmed_export_uses_cfp_policy(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_export_cfp_policy"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    payload["status"] = "passed"
+    payload["review_items"] = []
+    payload["items"][0]["status"] = "passed"
+    payload["items"][0]["movements"] = [
+        {**payload["items"][0]["movements"][0], "reuse": "新增"},
+        {**payload["items"][0]["movements"][1], "reuse": "复用"},
+        {
+            "order": 3,
+            "sub_process": "归档历史数据",
+            "move_type": "W",
+            "data_group": "历史数据",
+            "data_attrs": "归档状态",
+            "reuse": "利旧",
+        },
+    ]
+    payload["cfp_policy"] = {"新增": 1, "复用": 0.5, "利旧": 0}
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "cosmic-confirmation.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    template_path = tmp_path / "项目功能点拆分表-输出模板.xlsx"
+    template_path.write_bytes(b"template")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr("web_app.routes.artifacts._cosmic_template_path", lambda *_: template_path)
+
+    def fake_write_cosmic_xlsx(template, output, report, **kwargs):
+        Path(output).write_bytes(b"xlsx")
+        return output
+
+    monkeypatch.setattr("web_app.routes.artifacts.write_cosmic_xlsx", fake_write_cosmic_xlsx)
+
+    resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert resp.status_code == 200
+    assert resp.json()["cfp_total"] == 1.5
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_review_action_excludes_non_functional_process_and_stamps_audit(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_review_exclude_process"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    non_functional = json.loads(json.dumps(payload["items"][0], ensure_ascii=False))
+    non_functional["module_l3"] = "服务器扩容"
+    non_functional["process"] = "完成系统迁移和架构改造"
+    non_functional["user"] = "发起者：服务器扩容|接收者：服务器扩容"
+    payload["items"].append(non_functional)
+    payload["review_actions"] = [{
+        "action": "exclude_process",
+        "item_index": 1,
+        "review_id": "item::1::NON_FUNCTIONAL_SCOPE::process::",
+        "reason": "非功能事项不进入 COSMIC 功能规模",
+    }]
+    payload["cfp_policy"] = {"新增": 1, "复用": "bad", "利旧": -1}
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    template_path = tmp_path / "项目功能点拆分表-输出模板.xlsx"
+    template_path.write_bytes(b"template")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr("web_app.routes.artifacts._cosmic_template_path", lambda *_: template_path)
+
+    def fake_write_cosmic_xlsx(template, output, report, **kwargs):
+        assert len(report.results) == 1
+        assert report.results[0].item.process == payload["items"][0]["process"]
+        Path(output).write_bytes(b"xlsx")
+        return output
+
+    monkeypatch.setattr("web_app.routes.artifacts.write_cosmic_xlsx", fake_write_cosmic_xlsx)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+    export_resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["items"][1]["excluded_from_cfp"] is True
+    assert saved_payload["items"][1]["movements"][0]["excluded_from_cfp"] is True
+    assert saved_payload["review_audit"][0]["confirmed_by"] == "alice"
+    assert saved_payload["review_audit"][0]["applied_by"] == "alice"
+    assert "applied_at" in saved_payload["review_audit"][0]
+    assert saved_payload["cfp_policy_effective"]["新增"] == 1.0
+    assert saved_payload["cfp_policy_effective"]["复用"] == 1.0 / 3.0
+    assert saved_payload["cfp_policy_effective"]["利旧"] == 0.0
+    assert export_resp.status_code == 200
+    assert export_resp.json()["cfp_total"] == 2.0
     server.session_manager.cleanup_download(session_id)
 
 
