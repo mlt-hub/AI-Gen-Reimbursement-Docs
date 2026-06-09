@@ -96,6 +96,13 @@
                   >
                     AI 调试
                   </RouterLink>
+                  <RouterLink
+                    v-if="canOpenCosmicPreview(item)"
+                    :to="`/sessions/${item.session_id}/cosmic/preview`"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                  >
+                    COSMIC 预览
+                  </RouterLink>
                   <button
                     v-if="canRerun(item)"
                     class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
@@ -105,7 +112,7 @@
                     重跑
                   </button>
                   <span
-                    v-if="!item.download_available && !item.open_folder_available && !canOpenFpaDebug(item) && !canRerun(item)"
+                    v-if="!item.download_available && !item.open_folder_available && !canOpenFpaDebug(item) && !canOpenCosmicPreview(item) && !canRerun(item)"
                     class="status-badge status-badge--neutral"
                   >
                     {{ unavailableLabel(item) }}
@@ -235,6 +242,14 @@ function unavailableLabel(item: HistoryItem) {
 
 function canOpenFpaDebug(item: HistoryItem) {
   return item.source === 'web' && item.session_id && item.task_mode === 'from-excel-gen-fpa'
+}
+
+function canOpenCosmicPreview(item: HistoryItem) {
+  return Boolean(
+    item.source === 'web'
+    && item.session_id
+    && ['from-excel-gen-all', 'from-excel-gen-cosmic'].includes(item.task_mode),
+  )
 }
 
 function canRerun(item: HistoryItem) {

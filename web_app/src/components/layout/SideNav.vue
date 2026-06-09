@@ -146,8 +146,8 @@ const primaryItems: NavItem[] = [
 ]
 
 const previewItems: NavItem[] = [
-  { label: 'FPA 预览', to: '/preview/fpa', icon: DocumentMagnifyingGlassIcon, match: path => path.startsWith('/preview/fpa') || path.startsWith('/sessions/') || path.startsWith('/static/dist/sessions/') },
-  { label: 'COSMIC 预览', to: '/preview/cosmic', icon: DocumentMagnifyingGlassIcon, match: path => path.startsWith('/preview/cosmic') },
+  { label: 'FPA 预览', to: '/preview/fpa', icon: DocumentMagnifyingGlassIcon, match: path => path.startsWith('/preview/fpa') || isSessionPreviewPath(path, 'fpa') },
+  { label: 'COSMIC 预览', to: '/preview/cosmic', icon: DocumentMagnifyingGlassIcon, match: path => path.startsWith('/preview/cosmic') || isSessionPreviewPath(path, 'cosmic') },
   { label: 'SPEC 预览', to: '/preview/spec', icon: DocumentMagnifyingGlassIcon, match: path => path.startsWith('/preview/spec') },
 ]
 
@@ -174,7 +174,15 @@ watch(activePath, path => {
 })
 
 function isPreviewPath(path: string): boolean {
-  return path.startsWith('/preview') || path.startsWith('/sessions/') || path.startsWith('/static/dist/sessions/')
+  return path.startsWith('/preview') || isSessionPreviewPath(path, 'fpa') || isSessionPreviewPath(path, 'cosmic')
+}
+
+function isSessionPreviewPath(path: string, kind: 'fpa' | 'cosmic'): boolean {
+  const normalized = path.startsWith('/static/dist') ? path.slice('/static/dist'.length) || '/' : path
+  if (kind === 'fpa') {
+    return /^\/sessions\/[^/]+\/fpa\/debug\/?$/.test(normalized)
+  }
+  return /^\/sessions\/[^/]+\/cosmic\/preview\/?$/.test(normalized)
 }
 
 const previewParentClass = computed(() => [

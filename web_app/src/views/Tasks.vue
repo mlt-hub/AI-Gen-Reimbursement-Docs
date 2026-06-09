@@ -109,6 +109,13 @@
                   >
                     重跑
                   </button>
+                  <RouterLink
+                    v-if="canOpenCosmicPreview(item)"
+                    :to="`/sessions/${item.session_id}/cosmic/preview`"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                  >
+                    COSMIC 预览
+                  </RouterLink>
                   <button
                     class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
                     :disabled="actionId === item.run_id"
@@ -234,6 +241,14 @@ function artifactLabel(item: TaskItem) {
 
 function canRerun(item: TaskItem) {
   return ['done', 'error', 'cancelled'].includes(item.run_state)
+}
+
+function canOpenCosmicPreview(item: TaskItem) {
+  return Boolean(
+    item.session_id
+    && item.session_available
+    && ['from-excel-gen-all', 'from-excel-gen-cosmic'].includes(item.task_mode),
+  )
 }
 
 function canContinue(item: TaskItem) {
