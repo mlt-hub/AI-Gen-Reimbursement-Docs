@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -558,6 +559,10 @@ def create_router(session_manager: SessionManager) -> APIRouter:
         state = session_manager.get(session_id)
         if state is not None and not any(item.get("path") == file_info["path"] for item in state.done_files):
             session_manager.set_done_files(session_id, [*state.done_files, file_info])
+        if state is not None and state.mode == "remote" and state.zip_path is not None:
+            output_dir = _session_output_dir(session_manager, session_id)
+            if output_dir is not None and output_dir.exists():
+                shutil.make_archive(str(state.zip_path.with_suffix("")), "zip", str(output_dir))
         return {
             "ok": True,
             "session_id": session_id,

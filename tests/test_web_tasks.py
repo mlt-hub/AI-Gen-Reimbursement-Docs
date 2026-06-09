@@ -1,5 +1,7 @@
 import json
 import threading
+import shutil
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -1829,6 +1831,9 @@ def test_cosmic_confirmed_export_writes_excel_and_done_file(monkeypatch, tmp_pat
         encoding="utf-8",
     )
     server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=work_dir)
+    zip_path = work_dir / f"交付物_{session_id}.zip"
+    shutil.make_archive(str(zip_path.with_suffix("")), "zip", str(work_dir / "output"))
+    server.session_manager.set_zip(session_id, zip_path)
 
     resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
 
@@ -1837,9 +1842,12 @@ def test_cosmic_confirmed_export_writes_excel_and_done_file(monkeypatch, tmp_pat
     output_path = Path(data["path"])
     assert output_path.name == "项目功能点拆分表-确认后.xlsx"
     assert output_path.exists()
+    assert data["file"]["label"] == "项目功能点拆分表（确认后）"
     state = server.session_manager.get(session_id)
     assert state is not None
     assert any(item["path"] == str(output_path) for item in state.done_files)
+    with zipfile.ZipFile(zip_path) as archive:
+        assert "cosmic文档/项目功能点拆分表-确认后.xlsx" in archive.namelist()
     server.session_manager.cleanup_download(session_id)
 
 

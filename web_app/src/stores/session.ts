@@ -97,6 +97,15 @@ export const useSessionStore = defineStore('session', () => {
     if (files) doneFiles.value = files
   }
 
+  function upsertDoneFile(file: DoneFile) {
+    const index = doneFiles.value.findIndex(item => item.path === file.path)
+    if (index >= 0) {
+      doneFiles.value[index] = file
+    } else {
+      doneFiles.value = [...doneFiles.value, file]
+    }
+  }
+
   function setError() {
     runState.value = 'error'
     inputPrompt.value = null
@@ -133,5 +142,5 @@ export const useSessionStore = defineStore('session', () => {
     fpaConfirmationPrompt.value = prompt
   }
 
-  return { sessionId, runState, outputDir, inputPrompt, listPrompt, fpaConfirmationPrompt, doneFiles, isRunning, isDone, start, restore, finish, setError, setCancelled, reset, showInputPrompt, showListPrompt, showFpaConfirmationPrompt }
+  return { sessionId, runState, outputDir, inputPrompt, listPrompt, fpaConfirmationPrompt, doneFiles, isRunning, isDone, start, restore, finish, upsertDoneFile, setError, setCancelled, reset, showInputPrompt, showListPrompt, showFpaConfirmationPrompt }
 })

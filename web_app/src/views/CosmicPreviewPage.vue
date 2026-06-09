@@ -170,6 +170,7 @@ import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import PreviewLayout from '@/components/PreviewLayout.vue'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import { useSessionStore, type DoneFile } from '@/stores/session.ts'
 
 interface CosmicMovement {
   order: number
@@ -251,10 +252,12 @@ interface CosmicExportResponse {
   ok: boolean
   filename: string
   path: string
+  file?: DoneFile
   export_policy?: CosmicReport['export_policy']
 }
 
 const route = useRoute()
+const session = useSessionStore()
 const report = ref<CosmicReport | null>(null)
 const error = ref('')
 const confirmationStoreKey = ref('')
@@ -485,6 +488,9 @@ async function exportConfirmedExcel() {
     )
     if (response.export_policy) {
       report.value.export_policy = response.export_policy
+    }
+    if (response.file && session.sessionId === sessionId.value) {
+      session.upsertDoneFile(response.file)
     }
     backendSyncStatus.value = `已导出 ${response.filename}`
   } catch (err) {
