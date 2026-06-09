@@ -684,6 +684,34 @@ def test_default_prompt_fragment_is_rendered_without_placeholder(tmp_path):
     assert "${" not in prompt
 
 
+def test_default_profiles_render_calculation_explanation_fragment(tmp_path):
+    source = Path(__file__).resolve().parents[1] / "config"
+    copy_default_config_files(tmp_path, source)
+    group = {
+        "client_type": "后台",
+        "l1": "业务",
+        "l2": "管理",
+        "l3": "客户管理",
+        "l3_desc": "维护客户信息。",
+        "processes": [],
+    }
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        prompts = {
+            name: get_fpa_profile(name).build_prompt(group, ["规则一"])
+            for name in ("strict_fpa", "unified_ui", "multi_uis", "ui_api_mapping")
+        }
+
+    for name, prompt in prompts.items():
+        assert "计算依据说明生成规则" in prompt, name
+        assert "来源场景" in prompt, name
+        assert "业务数据" in prompt, name
+        assert "业务规则" in prompt, name
+        assert "计算说明" in prompt, name
+        assert "${calculation_explanation_rules}" not in prompt, name
+        assert "${" not in prompt, name
+
+
 def test_profile_prompt_uses_calculation_explanation_override(tmp_path):
     _write_fpa_config(tmp_path)
     content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
