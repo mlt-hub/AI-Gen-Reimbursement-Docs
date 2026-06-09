@@ -659,9 +659,15 @@ def _fpa_judgement_rules_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
         spec = {"name": spec}
     if not isinstance(spec, dict):
         spec = {}
+    header_row = _fpa_optional_manifest_int(spec.get("header_row"))
+    data_start_row = _fpa_optional_manifest_int(spec.get("data_start_row"))
+    if not data_start_row:
+        data_start_row = header_row + 1 if header_row else 2
     return {
         "name": str(spec.get("name") or "附录1-FPA评估方法说明"),
-        "data_start_row": _as_manifest_int(spec.get("data_start_row"), 2),
+        "header_row": header_row,
+        "rule_header": str(spec.get("rule_header", spec.get("header", "")) or "").strip(),
+        "data_start_row": data_start_row,
         "data_end_row": _fpa_optional_manifest_int(spec.get("data_end_row")),
         "max_rows": _fpa_optional_manifest_int(spec.get("max_rows")),
         "column": _fpa_judgement_rules_column(spec.get("column", spec.get("rule_column")), 3),
@@ -689,14 +695,31 @@ def _fpa_judgement_rules_column(value: object, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
+def _fpa_judgement_rules_header_column(ws, spec: dict[str, Any]) -> int:
+    header_row = int(spec.get("header_row") or 0)
+    rule_header = str(spec.get("rule_header", "") or "").strip()
+    if not header_row or not rule_header or header_row > ws.max_row:
+        return int(spec["column"])
+    for cell in ws[header_row]:
+        if str(cell.value or "").strip() == rule_header:
+            return int(cell.column)
+    logger.warning(
+        "fpa manifest judgement_rules 未在第 %s 行找到表头 %s，回退到列 %s",
+        header_row,
+        rule_header,
+        spec["column"],
+    )
+    return int(spec["column"])
+
+
 def _fpa_judgement_rules_anchor_start(ws, spec: dict[str, Any]) -> tuple[int, int]:
     anchor = spec.get("anchor", {}) or {}
     if not anchor:
-        return int(spec["data_start_row"]), int(spec["column"])
+        return int(spec["data_start_row"]), _fpa_judgement_rules_header_column(ws, spec)
     if isinstance(anchor, str):
         anchor = {"contains": anchor}
     if not isinstance(anchor, dict):
-        return int(spec["data_start_row"]), int(spec["column"])
+        return int(spec["data_start_row"]), _fpa_judgement_rules_header_column(ws, spec)
 
     offset_rows = _as_manifest_int(anchor.get("offset_rows"), 1)
     column = _fpa_judgement_rules_column(anchor.get("column"), int(spec["column"]))

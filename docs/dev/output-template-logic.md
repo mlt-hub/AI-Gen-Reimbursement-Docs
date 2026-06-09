@@ -158,6 +158,7 @@ FPA 结果写入器当前会读取 `fpa` manifest 的 `sheets.result`：
 当 `judgement_rules_source: template` 时，FPA 判定原则会从模板附录读取。读取器当前会使用 `sheets.judgement_rules`：
 
 - `name`：判定原则附录 sheet 名。
+- `header_row` / `rule_header`：没有锚点时，可先在指定表头行按表头文本定位规则列。
 - `data_start_row`：默认规则读取起始行。
 - `data_end_row`：可选读取结束行；未配置时读取到 sheet 最后一行。
 - `column` / `rule_column`：规则文本列，支持列号或 Excel 列字母。
@@ -165,7 +166,7 @@ FPA 结果写入器当前会读取 `fpa` manifest 的 `sheets.result`：
 - `anchor.cell` 或 `anchor.contains`：定位规则标题所在单元格。
 - `anchor.offset_rows` 和 `anchor.column`：从锚点定位第一条规则的位置。
 
-`system_config.yaml` 中历史 `fpa_appendix_sheet` 配置仍可覆盖 sheet 名。没有 manifest 的自定义模板仍使用旧契约：`附录1-FPA评估方法说明` 的 C 列第 2 行起。其他复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 行为。
+`anchor` 配置优先级高于表头定位；没有锚点时，读取器优先用 `header_row` / `rule_header` 找列，找不到再回退到 `column` / `rule_column`。`system_config.yaml` 中历史 `fpa_appendix_sheet` 配置仍可覆盖 sheet 名。没有 manifest 的自定义模板仍使用旧契约：`附录1-FPA评估方法说明` 的 C 列第 2 行起。其他复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 行为。
 
 ### COSMIC 功能点拆分表
 

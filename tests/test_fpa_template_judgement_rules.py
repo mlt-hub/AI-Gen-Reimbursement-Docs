@@ -79,3 +79,32 @@ sheets:
     )
 
     assert _read_fpa_judgement_rules_from_template(str(template)) == ["客户规则一", "客户规则二"]
+
+
+def test_read_fpa_judgement_rules_from_template_uses_manifest_rule_header(tmp_path: Path):
+    template = tmp_path / "header-fpa.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "客户附录"
+    ws["B3"] = "说明"
+    ws["F3"] = "判定原则"
+    ws["B4"] = "不应读取"
+    ws["F4"] = "表头规则一"
+    ws["F5"] = "表头规则二"
+    wb.save(template)
+    wb.close()
+    template.with_suffix(".manifest.yaml").write_text(
+        """
+template_id: header_fpa_v1
+kind: fpa
+version: 1
+sheets:
+  judgement_rules:
+    name: 客户附录
+    header_row: 3
+    rule_header: 判定原则
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    assert _read_fpa_judgement_rules_from_template(str(template)) == ["表头规则一", "表头规则二"]
