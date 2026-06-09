@@ -475,6 +475,15 @@ def _default_manifest(kind: str, template_path: str) -> dict[str, Any]:
                 "module_table": "{{模块清单表}}",
                 "module_details": "{{功能过程详情}}",
             },
+            "module_table": {
+                "style": "Table Grid",
+                "columns": [
+                    {"field": "entry", "header": "入口", "merge": True},
+                    {"field": "module_l1", "header": "一级功能模块", "merge": True},
+                    {"field": "module_l2", "header": "二级功能模块", "merge": True},
+                    {"field": "module_l3", "header": "三级功能模块", "merge": False},
+                ],
+            },
             "styles": {
                 "heading_1": "Heading 1",
                 "heading_2": "Heading 2",

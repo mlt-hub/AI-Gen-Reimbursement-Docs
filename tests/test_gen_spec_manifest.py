@@ -99,6 +99,18 @@ def _write_split_anchor_manifest(path: Path) -> None:
                 '  functional_requirements: "{{功能需求章节}}"',
                 '  module_table: "{{模块清单表}}"',
                 '  module_details: "{{功能过程详情}}"',
+                "module_table:",
+                "  style: Table Grid",
+                "  columns:",
+                "    - field: module_l1",
+                "      header: 一级模块",
+                "      merge: true",
+                "    - field: module_l3",
+                "      header: 三级模块",
+                "      merge: false",
+                "    - field: client_type",
+                "      header: 客户端",
+                "      merge: false",
                 "styles:",
                 "  heading_2: Normal",
                 "  heading_3: Normal",
@@ -175,4 +187,7 @@ def test_generate_spec_supports_split_requirement_anchors(tmp_path):
     assert "4.1.1.1. 账号维护" in body_text
     assert "4.1.1.1.1. 新增账号" in body_text
     assert "填写账号信息并保存" in body_text
-    assert any(table.cell(0, 0).text == "入口" for table in doc.tables)
+    module_table = next(table for table in doc.tables if table.cell(0, 0).text == "一级模块")
+    assert len(module_table.columns) == 3
+    assert [cell.text for cell in module_table.rows[0].cells] == ["一级模块", "三级模块", "客户端"]
+    assert [cell.text for cell in module_table.rows[1].cells] == ["用户管理", "账号维护", "PC"]

@@ -146,16 +146,19 @@ def _generate_section4_content(doc: Document, tree: list[dict], rows: list[dict]
                                  insert_before_elem, meta: dict,
                                  filled_sections: dict[str, str] | None = None,
                                  filled_proc_descs: dict[str, str] | None = None,
-                                 styles: dict[str, str] | None = None):
+                                 styles: dict[str, str] | None = None,
+                                 module_table: dict | None = None):
     """在指定元素前插入 Section 4 内容（模块清单表 + 详细描述）。"""
     styles = styles or {}
+    module_table = module_table or {}
     # 插入模块清单表
     module_tree = _build_module_tree(rows)
     _insert_module_table(
         doc,
         module_tree,
         insert_before_elem,
-        table_style=styles.get("module_table", "Table Grid"),
+        table_style=module_table.get("style") or styles.get("module_table", "Table Grid"),
+        columns=_module_table_columns(module_table),
     )
 
     # 插入详细模块内容
@@ -168,15 +171,18 @@ def _generate_module_table_content(
     rows: list[dict],
     insert_before_elem,
     styles: dict[str, str] | None = None,
+    module_table: dict | None = None,
 ):
     """在指定元素前只插入模块清单表。"""
     styles = styles or {}
+    module_table = module_table or {}
     module_tree = _build_module_tree(rows)
     _insert_module_table(
         doc,
         module_tree,
         insert_before_elem,
-        table_style=styles.get("module_table", "Table Grid"),
+        table_style=module_table.get("style") or styles.get("module_table", "Table Grid"),
+        columns=_module_table_columns(module_table),
     )
 
 
@@ -208,6 +214,7 @@ def _insert_module_table(
     tree: list[dict],
     insert_before_elem,
     table_style: str = "Table Grid",
+    columns: list[dict[str, object]] | None = None,
 ):
     """插入模块清单表，合并相同内容的单元格。表头加粗，所有单元格居中。"""
     from docx.oxml.ns import qn
@@ -229,10 +236,12 @@ def _insert_module_table(
             tcPr.append(valign)
         valign.set(qn('w:val'), 'center')
 
-    table = doc.add_table(rows=1, cols=4)
+    columns = columns or _module_table_columns({})
+    table = doc.add_table(rows=1, cols=len(columns))
     _apply_table_style(doc, table, table_style, "Table Grid")
     hdr = table.rows[0].cells
-    for i, t in enumerate(["入口", "一级功能模块", "二级功能模块", "三级功能模块"]):
+    for i, column in enumerate(columns):
+        t = str(column.get("header", ""))
         hdr[i].text = t
         for p in hdr[i].paragraphs:
             for run in p.runs:
@@ -246,10 +255,8 @@ def _insert_module_table(
         if key not in seen:
             seen.add(key)
             row = table.add_row().cells
-            row[0].text = m["入口"]
-            row[1].text = m["一级模块"]
-            row[2].text = m["二级模块"]
-            row[3].text = m["三级模块"]
+            for i, column in enumerate(columns):
+                row[i].text = _module_table_value(m, str(column.get("field", "")))
             for c in row:
                 for p in c.paragraphs:
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -261,7 +268,11 @@ def _insert_module_table(
         return
 
     # 从第2行开始（跳过表头），逐列合并
-    for col_idx in range(3):  # 0=入口, 1=一级, 2=二级
+    merge_column_indexes = [
+        idx for idx, column in enumerate(columns)
+        if bool(column.get("merge", False))
+    ]
+    for col_idx in merge_column_indexes:
         start_row = 1  # 跳过表头
         while start_row < len(table.rows):
             curr_val = table.rows[start_row].cells[col_idx].text
@@ -288,6 +299,65 @@ def _insert_module_table(
             start_row = end_row + 1
 
     insert_before_elem.addprevious(table._tbl)
+
+
+def _module_table_columns(module_table: dict) -> list[dict[str, object]]:
+    default_columns = [
+        {"field": "entry", "header": "入口", "merge": True},
+        {"field": "module_l1", "header": "一级功能模块", "merge": True},
+        {"field": "module_l2", "header": "二级功能模块", "merge": True},
+        {"field": "module_l3", "header": "三级功能模块", "merge": False},
+    ]
+    configured = module_table.get("columns") if isinstance(module_table, dict) else None
+    if not configured:
+        return default_columns
+    columns: list[dict[str, object]] = []
+    for item in configured:
+        if isinstance(item, str):
+            field = item
+            columns.append({
+                "field": field,
+                "header": _default_module_table_header(field),
+                "merge": field in {"entry", "module_l1", "module_l2"},
+            })
+            continue
+        if not isinstance(item, dict):
+            logger.warning("module_table.columns 存在非法列配置，已忽略: %s", item)
+            continue
+        field = str(item.get("field", "")).strip()
+        if not field:
+            logger.warning("module_table.columns 存在缺少 field 的列配置，已忽略: %s", item)
+            continue
+        columns.append({
+            "field": field,
+            "header": str(item.get("header") or _default_module_table_header(field)),
+            "merge": bool(item.get("merge", field in {"entry", "module_l1", "module_l2"})),
+        })
+    return columns or default_columns
+
+
+def _default_module_table_header(field: str) -> str:
+    return {
+        "entry": "入口",
+        "module_l1": "一级功能模块",
+        "module_l2": "二级功能模块",
+        "module_l3": "三级功能模块",
+        "client_type": "客户端类型",
+        "description": "功能描述",
+    }.get(field, field)
+
+
+def _module_table_value(module: dict, field: str) -> str:
+    field_mapping = {
+        "entry": "入口",
+        "module_l1": "一级模块",
+        "module_l2": "二级模块",
+        "module_l3": "三级模块",
+        "client_type": "客户端类型",
+        "description": "三级模块整体功能描述",
+    }
+    source_key = field_mapping.get(field, field)
+    return str(module.get(source_key, "") or "")
 
 
 
@@ -874,6 +944,10 @@ def generate_spec_docx_from_md(
     if not isinstance(styles, dict):
         logger.warning("spec manifest styles 格式错误，忽略样式配置: %s", spec_manifest_path or spec_manifest_source)
         styles = {}
+    module_table_config = spec_manifest.get("module_table", {}) or {}
+    if not isinstance(module_table_config, dict):
+        logger.warning("spec manifest module_table 格式错误，忽略模块清单表配置: %s", spec_manifest_path or spec_manifest_source)
+        module_table_config = {}
     section_anchors = _spec_section_anchor_names(spec_manifest)
 
     # ====== 替换正文段落中的 {{占位符}}，并处理功能需求章节锚点 ======
@@ -899,12 +973,13 @@ def generate_spec_docx_from_md(
                     filled_sections,
                     filled_proc_descs,
                     styles,
+                    module_table_config,
                 )
                 continue
 
             if placeholder == section_anchors["module_table"]:
                 anchor = _remove_anchor_paragraph(para)
-                _generate_module_table_content(doc, rows, anchor, styles)
+                _generate_module_table_content(doc, rows, anchor, styles, module_table_config)
                 continue
 
             if placeholder == section_anchors["module_details"]:

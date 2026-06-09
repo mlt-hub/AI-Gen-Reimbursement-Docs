@@ -561,13 +561,35 @@ styles:
   module_table: Table Grid
 ```
 
+当前支持的模块清单表配置：
+
+```yaml
+module_table:
+  style: Table Grid
+  columns:
+    - field: entry
+      header: 入口
+      merge: true
+    - field: module_l1
+      header: 一级功能模块
+      merge: true
+    - field: module_l2
+      header: 二级功能模块
+      merge: true
+    - field: module_l3
+      header: 三级功能模块
+      merge: false
+```
+
+`field` 当前支持 `entry`、`module_l1`、`module_l2`、`module_l3`、`client_type`、`description`，也可以直接填写模块树中的中文字段名。`merge` 控制该列是否合并连续相同值。
+
 这里保留 `{{功能需求详情}}` 是为了兼容现有内置 Word 模板。新自定义模板可以直接使用 `{{功能需求章节}}`，或用 `{{模块清单表}}` 和 `{{功能过程详情}}` 分别控制模块清单表与功能过程详情的位置。
 
 ### 下一阶段建议
 
-下一阶段建议先让模块清单表更模板化，而不是直接做上传导入向导：
+下一阶段建议先做模块清单表样例表复制，而不是直接做上传导入向导：
 
-1. 为模块清单表支持样例表复制或更细的列配置。
+1. 为模块清单表支持样例表复制。
 2. 将内置 Word 模板文件中的旧锚点替换为新拆分锚点。
 3. 增加 Web/CLI 对当前 Word 锚点模式的展示。
 4. 再实现 Word 模板导入向导。
