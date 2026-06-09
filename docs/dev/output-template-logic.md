@@ -57,7 +57,7 @@ CLI 会从参数读取：
 
 Web 端上传自定义模板后，会保存到任务目录下的 `custom_templates`，再构造成传给 pipeline 的 `templates` 字典。
 
-### 2. 用户配置文件
+### 2. 输出模板 profile
 
 如果没有通过 CLI 或 Web 指定模板，则读取用户配置目录下的：
 
@@ -65,7 +65,22 @@ Web 端上传自定义模板后，会保存到任务目录下的 `custom_templat
 ~/.ai-gen-reimbursement-docs/system_config.yaml
 ```
 
-其中的 `out_templates` 配置段示例：
+如果配置了 `active_output_template_profile`，pipeline 会优先从 `output_template_profiles` 中解析模板：
+
+```yaml
+active_output_template_profile: standard_delivery
+output_template_profiles:
+  standard_delivery:
+    template_pack: data/template_packs/standard_delivery
+    templates:
+      list_out_template: data/out_templates/项目需求清单-输出模板.xlsx
+```
+
+`templates` 支持 `fpa/spec/cosmic/list` 和 `fpa_out_template/spec_out_template/cosmic_out_template/list_out_template` 两类 key。`template_pack` 指向的目录应包含 `manifest.yaml` 或 `manifest.yml`，其中通过 `templates` 声明模板文件；模板包内的相对路径按模板包目录解析。
+
+### 3. 用户配置文件 `out_templates`
+
+如果没有启用 profile，或 profile 中某类模板未配置可用路径，则继续读取 `out_templates` 配置段：
 
 ```yaml
 out_templates:
@@ -77,7 +92,7 @@ out_templates:
 
 相对路径会按项目根目录解析。
 
-### 3. 项目内置模板
+### 4. 项目内置模板
 
 如果用户配置也没有可用路径，则回退到项目内置模板：
 

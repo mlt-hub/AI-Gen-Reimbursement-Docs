@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from ai_gen_reimbursement_docs import pipeline
 
@@ -99,3 +100,74 @@ def test_resolve_output_filename_falls_back_when_section_missing(tmp_path):
         str(default),
         str(tmp_path / "out"),
     ) == str(default)
+
+
+def test_resolve_templates_prefers_profile_over_out_templates(tmp_path):
+    profile_fpa = tmp_path / "profile-fpa.xlsx"
+    legacy_fpa = tmp_path / "legacy-fpa.xlsx"
+    profile_fpa.write_text("", encoding="utf-8")
+    legacy_fpa.write_text("", encoding="utf-8")
+    (tmp_path / "system_config.yaml").write_text(
+        "\n".join([
+            "active_output_template_profile: delivery_a",
+            "output_template_profiles:",
+            "  delivery_a:",
+            "    templates:",
+            f"      fpa_out_template: {profile_fpa.as_posix()}",
+            "out_templates:",
+            f"  fpa_out_template: {legacy_fpa.as_posix()}",
+        ]),
+        encoding="utf-8",
+    )
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        templates = pipeline._resolve_templates("input.xlsx", None)
+
+    assert Path(templates["fpa"]).resolve() == profile_fpa.resolve()
+
+
+def test_resolve_templates_cli_overrides_profile(tmp_path):
+    cli_fpa = tmp_path / "cli-fpa.xlsx"
+    profile_fpa = tmp_path / "profile-fpa.xlsx"
+    cli_fpa.write_text("", encoding="utf-8")
+    profile_fpa.write_text("", encoding="utf-8")
+    (tmp_path / "system_config.yaml").write_text(
+        "\n".join([
+            "active_output_template_profile: delivery_a",
+            "output_template_profiles:",
+            "  delivery_a:",
+            "    templates:",
+            f"      fpa: {profile_fpa.as_posix()}",
+        ]),
+        encoding="utf-8",
+    )
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        templates = pipeline._resolve_templates("input.xlsx", {"fpa": str(cli_fpa)})
+
+    assert Path(templates["fpa"]).resolve() == cli_fpa.resolve()
+
+
+def test_resolve_templates_uses_template_pack_profile(tmp_path):
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    pack_fpa = pack / "FPA.xlsx"
+    pack_fpa.write_text("", encoding="utf-8")
+    (pack / "manifest.yaml").write_text(
+        "templates:\n  fpa: FPA.xlsx\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "system_config.yaml").write_text(
+        "\n".join([
+            "active_output_template_profile: packed",
+            "output_template_profiles:",
+            "  packed:",
+            f"    template_pack: {pack.as_posix()}",
+        ]),
+        encoding="utf-8",
+    )
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        templates = pipeline._resolve_templates("input.xlsx", None)
+
+    assert Path(templates["fpa"]).resolve() == pack_fpa.resolve()

@@ -129,4 +129,16 @@ out_templates:
   cosmic_out_template: data/out_templates/项目功能点拆分表-输出模板.xlsx
   list_out_template: data/out_templates/项目需求清单-输出模板.xlsx
 
+# 输出模板 profile（可选）
+# 优先级：CLI参数/Web UI指定 > active_output_template_profile > out_templates > 内置模板
+# profile 可以直接声明 templates，也可以通过 template_pack 指向一个模板包目录。
+# 模板包目录应包含 manifest.yaml，manifest.yaml 中使用 templates 声明模板文件。
+# active_output_template_profile: standard_delivery
+# output_template_profiles:
+#   standard_delivery:
+#     template_pack: data/template_packs/standard_delivery
+#     templates:
+#       fpa_out_template: data/out_templates/FPA工作量评估-输出模板.xlsx
+#       spec_out_template: data/out_templates/项目需求说明书-输出模板.docx
+
 # 保持不变 结束

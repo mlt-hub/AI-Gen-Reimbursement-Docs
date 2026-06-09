@@ -407,6 +407,7 @@ template_pack/
 - pipeline 预检 activity payload 会携带 manifest 来源和模板能力摘要；CLI 会打印该摘要，Web 生成进度会展示输出模板信息。
 - Excel 预检覆盖 sheet、必要表头、数据起始行、样式源行和关键公式/单元格内容。
 - Word 预检覆盖正文、表格、页眉、页脚中的必要占位符。
+- pipeline 已支持从 `system_config.yaml` 的 `active_output_template_profile` / `output_template_profiles` 解析输出模板 profile；profile 可直接声明 `templates`，也可通过 `template_pack` 指向带 `manifest.yaml` 的模板包目录。
 
 当前边界：
 
@@ -425,8 +426,10 @@ template_pack/
   - `validate_output_templates(...)`：按当前生成模式批量预检。
   - `required_template_kinds_for_mode(...)`：定义不同 mode 需要校验的模板种类。
 - `ai_gen_reimbursement_docs/pipeline.py`
-  - `_resolve_templates(...)` 解析模板路径后调用预检。
+  - `_resolve_templates(...)` 按 CLI/Web 指定、输出模板 profile、`out_templates`、内置模板的优先级解析模板路径后调用预检。
   - 预检通过后通过 pipeline activity 事件输出模板预检结果。
+- `ai_gen_reimbursement_docs/config_utils.py`
+  - `load_output_template_profile(...)`：读取当前输出模板 profile，并解析可选模板包。
 
 manifest 文件命名规则：
 
@@ -456,6 +459,7 @@ manifest 文件命名规则：
 - `tests/test_template_manifest.py`
 - `tests/test_gen_list_manifest.py`
 - `tests/test_gen_spec_manifest.py`
+- `tests/test_config_utils.py`
 - `tests/test_pipeline_units.py`
 - `tests/test_pipeline.py`
 
@@ -481,9 +485,30 @@ manifest 文件命名规则：
 当前仍未落地：
 
 - 导入后模板草稿的版式渲染预览、锚点/字段在线调整和正式版本发布。
-- 模板 profile 和模板包。
+- Web UI 中的模板 profile/模板包选择器，以及 profile 与 FPA 口径、规则集、生成策略的联动。
 - FPA/COSMIC 等 Excel 写入器按 manifest 做列映射、锚点定位和样式复制。
 - 文本框、内容控件、图片文字等复杂 Word 结构识别。
+
+### 输出模板 profile 当前行为
+
+`system_config.yaml` 当前支持：
+
+```yaml
+active_output_template_profile: standard_delivery
+output_template_profiles:
+  standard_delivery:
+    template_pack: data/template_packs/standard_delivery
+    templates:
+      fpa_out_template: data/out_templates/FPA工作量评估-输出模板.xlsx
+```
+
+模板解析优先级为：
+
+```text
+CLI 参数 / Web UI 指定 > active_output_template_profile > out_templates > 内置模板
+```
+
+`template_pack` 目录需要包含 `manifest.yaml` 或 `manifest.yml`，其中用 `templates` 声明模板文件。模板包 manifest 内的相对路径按模板包目录解析；profile 自身 `templates` 中的相对路径仍按项目根目录解析。
 
 ### gen-list manifest 当前生成行为
 
