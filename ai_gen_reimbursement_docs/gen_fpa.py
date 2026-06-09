@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any
 
 import openpyxl
+from openpyxl.utils.cell import column_index_from_string
 from openpyxl.styles import Alignment, Font, Border
 from openpyxl.styles import PatternFill
 
@@ -651,24 +652,71 @@ def _build_fpa_rule_rows(
     return fpa_rows
 
 
+def _as_positive_int(value: object, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _fpa_judgement_rules_source_spec(template_path: str) -> dict[str, object]:
+    manifest, _, source = load_template_manifest("fpa", template_path)
+    sheets = manifest.get("sheets", {}) or {}
+    sheet_spec = sheets.get("judgement_rules", {}) if isinstance(sheets, dict) else {}
+    if isinstance(sheet_spec, str):
+        sheet_spec = {"name": sheet_spec}
+    if not isinstance(sheet_spec, dict):
+        sheet_spec = {}
+
+    from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
+    default_sheet = _get_system_config_value('fpa_appendix_sheet', '附录1-FPA评估方法说明')
+    sheet_name = str(sheet_spec.get("name") or default_sheet)
+    if source == "default":
+        sheet_name = str(default_sheet)
+    raw_column = sheet_spec.get("rule_column", sheet_spec.get("column", 3))
+    if isinstance(raw_column, str):
+        raw_column = raw_column.strip()
+        if raw_column.isdigit():
+            rule_column = int(raw_column)
+        else:
+            try:
+                rule_column = column_index_from_string(raw_column)
+            except ValueError:
+                rule_column = 3
+    else:
+        rule_column = _as_positive_int(raw_column, 3)
+    return {
+        "sheet_name": sheet_name,
+        "rule_column": rule_column,
+        "data_start_row": _as_positive_int(sheet_spec.get("data_start_row"), 2),
+        "max_rows": _as_positive_int(sheet_spec.get("max_rows"), 0),
+    }
+
+
 def _read_fpa_judgement_rules_from_template(template_path: str = "") -> list[str]:
     judgement_rules: list[str] = []
     if not template_path:
         return judgement_rules
+    wb = None
     try:
         wb = openpyxl.load_workbook(template_path, data_only=True)
-        from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
-        appendix_sheet = _get_system_config_value('fpa_appendix_sheet', '附录1-FPA评估方法说明')
-        ws = wb[appendix_sheet]
-        for row_num in range(2, ws.max_row + 1):
-            val = ws.cell(row_num, 3).value
+        source_spec = _fpa_judgement_rules_source_spec(template_path)
+        ws = wb[str(source_spec["sheet_name"])]
+        data_start_row = int(source_spec["data_start_row"])
+        max_rows = int(source_spec["max_rows"])
+        end_row = ws.max_row if max_rows <= 0 else min(ws.max_row, data_start_row + max_rows - 1)
+        for row_num in range(data_start_row, end_row + 1):
+            val = ws.cell(row_num, int(source_spec["rule_column"])).value
             if val and str(val).strip():
                 judgement_rules.append(str(val).strip())
-        wb.close()
         if judgement_rules:
             logger.debug("从模板附录读取判定原则 %d 条", len(judgement_rules))
     except Exception as e:
         logger.warning("从模板附录读取判定原则失败: %s", e)
+    finally:
+        if wb is not None:
+            wb.close()
     return judgement_rules
 
 

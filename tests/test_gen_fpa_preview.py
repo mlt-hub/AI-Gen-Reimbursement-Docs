@@ -44,6 +44,39 @@ def test_read_fpa_judgement_rules_can_use_template_source(default_fpa_config, tm
     assert _read_fpa_judgement_rules(str(template)) == ["模板规则一", "模板规则二"]
 
 
+def test_read_fpa_judgement_rules_uses_manifest_appendix_range(default_fpa_config, tmp_path):
+    config_path = default_fpa_config / "fpa_config.yaml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace("judgement_rules_source: config", "judgement_rules_source: template"),
+        encoding="utf-8",
+    )
+    template = tmp_path / "template.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "自定义FPA附录"
+    ws.cell(1, 2).value = "说明"
+    ws.cell(4, 2).value = "自定义规则一"
+    ws.cell(5, 2).value = "自定义规则二"
+    ws.cell(6, 2).value = "不应读取"
+    wb.save(template)
+    wb.close()
+    template.with_suffix(".manifest.yaml").write_text(
+        "\n".join([
+            "kind: fpa",
+            "sheets:",
+            "  judgement_rules:",
+            "    name: 自定义FPA附录",
+            "    required: true",
+            "    rule_column: B",
+            "    data_start_row: 4",
+            "    max_rows: 2",
+        ]),
+        encoding="utf-8",
+    )
+
+    assert _read_fpa_judgement_rules(str(template)) == ["自定义规则一", "自定义规则二"]
+
+
 def test_preview_fpa_module_by_index_uses_fallback(test_excel, tmp_path):
     result = preview_fpa_module(
         file_path=test_excel,

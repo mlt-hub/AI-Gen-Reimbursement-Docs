@@ -153,7 +153,14 @@ FPA 结果写入器当前会读取 `fpa` manifest 的 `sheets.result`：
 - `named_cells.data_start`：可用 Excel 命名单元格定位数据起始行，优先级高于 `data_start_row`。
 - `named_cells.summary_total`：可用 Excel 命名单元格定位 FPA 工作量汇总公式写入位置，配置后接管默认 FPA 工作量汇总单元格。
 
-公式列会按当前模板表头定位，生成公式和汇总公式会跟随数据起始行变化。当前命名单元格仅覆盖 result sheet 的数据起始和 FPA 工作量汇总位置；FPA 附录读取、其他复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 写入行为。
+`sheets.judgement_rules` 可声明 FPA 附录判定原则读取位置：
+
+- `name`：附录 sheet 名。
+- `rule_column` / `column`：判定原则所在列，可用列号或 Excel 列字母。
+- `data_start_row`：判定原则读取起始行。
+- `max_rows`：可选，限制最多读取行数。
+
+公式列会按当前模板表头定位，生成公式和汇总公式会跟随数据起始行变化。当前命名单元格仅覆盖 result sheet 的数据起始和 FPA 工作量汇总位置；附录判定原则读取已可由 manifest 指定 sheet、列和起始行。其他复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 写入行为。
 
 ### COSMIC 功能点拆分表
 
@@ -351,6 +358,7 @@ Excel 预检当前支持：
 - `data_start_row`：数据起始行必须在模板现有范围或下一行内。
 - `style_source_row`：样式源行必须存在。
 - `columns`：必要表头必须出现在表头行。
+- `named_cells`：可校验 manifest 声明的 Excel 命名单元格是否存在、是否指向期望 sheet、是否为单一目标和单个单元格；`required: false` 时只产生 warning。
 - `required_cells`：关键单元格必须包含指定文本或公式。
 
 ### Word 预检内容

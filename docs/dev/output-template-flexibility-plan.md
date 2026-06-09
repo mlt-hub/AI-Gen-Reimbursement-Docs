@@ -405,16 +405,16 @@ template_pack/
 - 为内置 FPA、COSMIC、需求清单、需求说明书四类输出模板增加 `.manifest.yaml`。
 - pipeline 在生成前按当前模式校验实际会使用的输出模板。
 - pipeline 预检 activity payload 会携带 manifest 来源和模板能力摘要；CLI 会打印该摘要，Web 生成进度会展示输出模板信息。
-- Excel 预检覆盖 sheet、必要表头、数据起始行、样式源行和关键公式/单元格内容。
+- Excel 预检覆盖 sheet、必要表头、数据起始行、样式源行、关键公式/单元格内容，以及 manifest 声明的命名单元格存在性、目标 sheet、单一目标和单格范围。
 - Word 预检覆盖正文、表格、页眉、页脚中的必要占位符。
 - pipeline 已支持从 `system_config.yaml` 的 `active_output_template_profile` / `output_template_profiles` 解析输出模板 profile；profile 可直接声明 `templates`，也可通过 `template_pack` 指向带 `manifest.yaml` 的模板包目录。
 
 当前边界：
 
 - `list` 需求清单写入器已开始使用 manifest 做 sheet、表头行、数据起始行、样式源行、列映射和项目概览命名单元格写入。
-- FPA 结果写入器已开始使用 manifest 做 result sheet、表头行、数据起始行、样式源行、关键列定位，以及 result sheet 的数据起始和 FPA 工作量汇总命名单元格定位。
+- FPA 结果写入器已开始使用 manifest 做 result sheet、表头行、数据起始行、样式源行、关键列定位、result sheet 的数据起始和 FPA 工作量汇总命名单元格定位，以及附录判定原则 sheet/列/起始行读取。
 - COSMIC 写入器已开始使用 manifest 做 result sheet、数据起始行、样式源行和结果字段列映射。
-- COSMIC 等 Excel 写入器尚未全面按 manifest 做复杂锚点或跨 sheet 公式重写。
+- COSMIC/FPA/list 等 Excel 写入器尚未全面按 manifest 做复杂锚点写入、复杂样式复制或跨 sheet 公式重写。
 - 用户自定义模板如果没有同名 manifest，会按对应 kind 的默认契约预检。
 - `gen-basedata` 不生成最终交付物，因此不执行输出模板预检。
 
