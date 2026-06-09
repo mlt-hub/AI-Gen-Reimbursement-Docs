@@ -530,6 +530,10 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
     "description": "未配置 CFP计算公式，正式 CFP 来源未确认"
   },
   "issues": [],
+  "issue_codes": {
+    "GENERIC_FUNCTION_USER": 1,
+    "MISSING_CFP_FORMULA": 1
+  },
   "items": [
     {
       "module_l1": "...",
@@ -600,6 +604,7 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `status` | `string` | 是 | 报告总状态，`passed/review_required/blocked`。 |
 | `cfp_basis` | `object` | 是 | CFP 来源说明，`source` 当前为 `template_formula/unconfirmed`。 |
 | `issues` | `array` | 是 | 全局 issue，例如无 AI 输出、无功能过程、缺 CFP 公式。 |
+| `issue_codes` | `object` | 是 | 报告级 issue code 计数，包含全局 issue 和所有功能过程 issue。 |
 | `items` | `array` | 是 | COSMIC 功能过程列表。 |
 | `items[].module_l1` | `string` | 是 | 一级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
 | `items[].module_l2` | `string` | 是 | 二级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
@@ -797,6 +802,7 @@ md/3.4.gen-cosmic-校验报告.md
 - 阻断：2
 - error：3
 - warning：5
+- issue code：FIRST_MOVE_NOT_ENTRY=1、GENERIC_FUNCTION_USER=2
 - 正式 Excel 输出：未写入
 - 草稿 Excel 输出：未写入
 - 原因：存在阻断问题
@@ -864,8 +870,8 @@ md/3.4.gen-cosmic-校验报告.md
 | `test_internal_technical_boundary_requires_review` | 子过程命中后端、内部接口、微服务等内部技术交互。 | 包含 `INTERNAL_TECHNICAL_BOUNDARY`，状态为 `review_required`，写入 `basis.movement_semantics`。 |
 | `test_non_functional_scope_requires_review` | 模块或功能过程命中系统迁移、扩容、架构改造等非功能/技术事项。 | 包含 `NON_FUNCTIONAL_SCOPE`，状态为 `review_required`，写入 `basis.process_semantics`。 |
 | `test_error_wins_over_warning` | 同时缺触发事件和缺数据属性。 | 状态为 `blocked`。 |
-| `test_report_summary_counts_status_and_severity` | 三个 item 分别为 passed/review_required/blocked。 | summary 数量正确。 |
-| `test_report_json_is_stable_and_chinese_readable` | 写 JSON 到临时目录。 | 文件为 UTF-8，包含未转义中文和 `summary`。 |
+| `test_report_summary_counts_status_and_severity` | 三个 item 分别为 passed/review_required/blocked。 | summary 和 `issue_codes` 数量正确。 |
+| `test_report_json_is_stable_and_chinese_readable` | 写 JSON 到临时目录。 | 文件为 UTF-8，包含未转义中文、`summary` 和 `issue_codes`。 |
 | `test_empty_items_is_global_error` | `items=[]`。 | report 包含 `NO_COSMIC_ITEMS`，总状态为 `blocked`。 |
 | `test_missing_cfp_formula_is_global_error` | `cfp_formula=""`。 | report 包含 `MISSING_CFP_FORMULA`，总状态为 `blocked`。 |
 | `test_generic_function_user_is_warning` | 功能用户只包含泛化角色。 | 包含 `GENERIC_FUNCTION_USER`，状态为 `review_required`，`basis.function_user.match_source=generic_only`，issue details 包含功能用户拆分和匹配来源。 |

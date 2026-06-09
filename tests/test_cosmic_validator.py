@@ -226,6 +226,10 @@ def test_report_summary_counts_status_and_severity():
     assert report.summary["errors"] == 1
     assert report.summary["warnings"] == 1
     assert report.status == "blocked"
+    assert report.issue_codes == {
+        "EMPTY_DATA_ATTRS": 1,
+        "MISSING_TRIGGER": 1,
+    }
 
 
 def test_report_json_is_stable_and_chinese_readable(tmp_path):
@@ -243,6 +247,7 @@ def test_report_json_is_stable_and_chinese_readable(tmp_path):
     assert "\\u6d4b" not in content
     payload = json.loads(content)
     assert payload["summary"]["passed"] == 1
+    assert payload["issue_codes"] == {}
     assert payload["cfp_basis"]["source"] == "template_formula"
     assert payload["cfp_basis"]["formula_configured"] is True
     assert payload["items"][0]["basis"]["function_user"]["matched_term"] == "用户注册"
@@ -291,6 +296,7 @@ def test_report_md_includes_issue_details(tmp_path):
     )
 
     content = output.read_text(encoding="utf-8")
+    assert "- issue code：ERROR_CONFIRMATION_MESSAGE=1" in content
     assert "| 级别 | code | 字段 | 数据移动序号 | 说明 | 依据 |" in content
     assert "命中：" in content
     assert "确认消息" in content

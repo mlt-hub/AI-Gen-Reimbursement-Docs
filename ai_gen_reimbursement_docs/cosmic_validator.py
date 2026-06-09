@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from dataclasses import dataclass, field as dataclass_field
 from typing import Literal
 
@@ -68,6 +69,7 @@ class CosmicValidationReport:
     status: ValidationStatus
     results: list[CosmicValidationResult]
     summary: dict[str, int]
+    issue_codes: dict[str, int] = dataclass_field(default_factory=dict)
     cfp_basis: dict[str, object] = dataclass_field(default_factory=dict)
     issues: list[CosmicIssue] = dataclass_field(default_factory=list)
 
@@ -452,9 +454,23 @@ def _build_report(
         status=status,
         results=results,
         summary=summary,
+        issue_codes=_count_issue_codes(results, issues),
         cfp_basis=_build_cfp_basis(cfp_formula),
         issues=issues,
     )
+
+
+def _count_issue_codes(
+    results: list[CosmicValidationResult],
+    global_issues: list[CosmicIssue],
+) -> dict[str, int]:
+    counter: Counter[str] = Counter(issue.code for issue in global_issues)
+    counter.update(
+        issue.code
+        for result in results
+        for issue in result.issues
+    )
+    return dict(sorted(counter.items()))
 
 
 def _build_cfp_basis(cfp_formula: str) -> dict[str, object]:
@@ -502,6 +518,7 @@ def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
         "status": report.status,
         "cfp_basis": report.cfp_basis,
         "issues": [_issue_to_dict(issue) for issue in report.issues],
+        "issue_codes": report.issue_codes,
         "items": [
             {
                 "project": result.item.project,
@@ -556,6 +573,7 @@ def write_cosmic_validation_report_md(
         f"- 阻断：{report.summary.get('blocked', 0)}\n",
         f"- error：{report.summary.get('errors', 0) + report.summary.get('global_errors', 0)}\n",
         f"- warning：{report.summary.get('warnings', 0) + report.summary.get('global_warnings', 0)}\n",
+        f"- issue code：{_issue_code_summary_text(report.issue_codes)}\n",
         f"- CFP 来源：{report.cfp_basis.get('description', '')}\n",
         f"- 正式 Excel 输出：{'已写入' if formal_excel_written else '未写入'}\n",
         f"- 草稿 Excel 输出：{'已写入' if draft_excel_written else '未写入'}\n",
@@ -608,6 +626,15 @@ def _issue_row(issue: CosmicIssue) -> str:
     return (
         f"| {issue.severity} | `{issue.code}` | `{issue.field}` | "
         f"{order} | {issue.message} | {details} |\n"
+    )
+
+
+def _issue_code_summary_text(issue_codes: dict[str, int]) -> str:
+    if not issue_codes:
+        return "无"
+    return "、".join(
+        f"{code}={count}"
+        for code, count in issue_codes.items()
     )
 
 
