@@ -16,10 +16,11 @@ from ai_gen_reimbursement_docs.cosmic_validator import (
     CosmicIssue,
     CosmicValidationReport,
     CosmicValidationResult,
+    cosmic_report_to_dict,
+    validate_cosmic_items,
 )
 from ai_gen_reimbursement_docs.cosmic_writer import write_cosmic_xlsx
 from ai_gen_reimbursement_docs.excel_source import write_cfp_sum
-from ai_gen_reimbursement_docs.gen_cosmic import _calculate_cfp_total_for_written_excel
 from ai_gen_reimbursement_docs.pipeline import (
     _read_cfp_formula_from_meta_md,
     _resolve_templates,
@@ -174,10 +175,165 @@ def _issue_from_dict(data: dict) -> CosmicIssue:
     )
 
 
-def _cosmic_report_from_payload(payload: dict) -> CosmicValidationReport:
+def _review_actions(payload: dict) -> list[dict]:
+    actions = payload.get("review_actions")
+    if not isinstance(actions, list):
+        return []
+    return [action for action in actions if isinstance(action, dict)]
+
+
+def _movement_action_matches(raw_movement: dict, action: dict, movement_index: int) -> bool:
+    if not isinstance(raw_movement, dict):
+        return False
+    if isinstance(action.get("movement_index"), int):
+        return action["movement_index"] == movement_index
+    if isinstance(action.get("movement_order"), int):
+        return int(raw_movement.get("order") or movement_index + 1) == action["movement_order"]
+    return False
+
+
+def _apply_review_actions(payload: dict) -> dict:
+    data = json.loads(json.dumps(payload, ensure_ascii=False))
+    items = data.get("items")
+    if not isinstance(items, list):
+        return data
+    for action in _review_actions(data):
+        action_type = str(action.get("action") or "")
+        item_index = action.get("item_index")
+        if not isinstance(item_index, int) or item_index < 0 or item_index >= len(items):
+            continue
+        item = items[item_index]
+        if not isinstance(item, dict):
+            continue
+        if action_type == "apply_function_user":
+            suggested_user = str(action.get("suggested_user") or action.get("value") or "").strip()
+            if suggested_user:
+                item["user"] = suggested_user
+            continue
+        if action_type not in {"exclude_movement", "merge_movement"}:
+            continue
+        movements = item.get("movements")
+        if not isinstance(movements, list):
+            continue
+        for movement_index, raw_movement in enumerate(movements):
+            if not _movement_action_matches(raw_movement, action, movement_index):
+                continue
+            if isinstance(raw_movement, dict):
+                raw_movement["excluded_from_cfp"] = True
+                raw_movement["review_action"] = action_type
+                if action_type == "merge_movement":
+                    raw_movement["merged_into_order"] = action.get("merged_into_order") or max(1, int(raw_movement.get("order") or 1) - 1)
+            break
+    return data
+
+
+def _cosmic_items_from_payload(payload: dict, *, include_excluded: bool) -> list[CosmicItem]:
     items = payload.get("items")
     if not isinstance(items, list):
         raise HTTPException(400, "COSMIC JSON 缺少 items")
+
+    cosmic_items: list[CosmicItem] = []
+    for raw_item in items:
+        if not isinstance(raw_item, dict):
+            continue
+        movements: list[DataMovement] = []
+        for movement_index, raw_movement in enumerate(raw_item.get("movements") or []):
+            if not isinstance(raw_movement, dict):
+                continue
+            if not include_excluded and raw_movement.get("excluded_from_cfp") is True:
+                continue
+            movements.append(DataMovement(
+                order=int(raw_movement.get("order") or movement_index + 1),
+                sub_process=str(raw_movement.get("sub_process") or ""),
+                move_type=str(raw_movement.get("move_type") or ""),
+                data_group=str(raw_movement.get("data_group") or ""),
+                data_attrs=str(raw_movement.get("data_attrs") or ""),
+                reuse=str(raw_movement.get("reuse") or "新增"),
+            ))
+        cosmic_items.append(CosmicItem(
+            project=str(raw_item.get("project") or payload.get("project") or ""),
+            module_l1=str(raw_item.get("module_l1") or ""),
+            module_l2=str(raw_item.get("module_l2") or ""),
+            module_l3=str(raw_item.get("module_l3") or ""),
+            user=str(raw_item.get("user") or ""),
+            trigger=str(raw_item.get("trigger") or ""),
+            process=str(raw_item.get("process") or ""),
+            movements=movements,
+        ))
+    return cosmic_items
+
+
+def _confirmation_by_review_id(payload: dict) -> dict[str, dict]:
+    values: dict[str, dict] = {}
+    review_items = payload.get("review_items")
+    if not isinstance(review_items, list):
+        return values
+    for item in review_items:
+        if not isinstance(item, dict):
+            continue
+        review_id = str(item.get("review_id") or "")
+        confirmation = item.get("confirmation")
+        if review_id and isinstance(confirmation, dict):
+            values[review_id] = confirmation
+    return values
+
+
+def _merge_review_confirmations(payload: dict, confirmations: dict[str, dict]) -> None:
+    review_items = payload.get("review_items")
+    if not isinstance(review_items, list):
+        return
+    for item in review_items:
+        if not isinstance(item, dict):
+            continue
+        confirmation = confirmations.get(str(item.get("review_id") or ""))
+        if confirmation:
+            item["confirmation"] = {
+                **(item.get("confirmation") if isinstance(item.get("confirmation"), dict) else {}),
+                **confirmation,
+            }
+
+
+def _restore_raw_review_fields(payload: dict, source: dict) -> None:
+    for key in ("review_actions", "review_audit", "cfp_policy"):
+        value = source.get(key)
+        if value is not None:
+            payload[key] = value
+
+
+def _revalidate_cosmic_payload(payload: dict, *, cfp_formula: str = "") -> dict:
+    if not isinstance(payload.get("items"), list):
+        return apply_cosmic_confirmation_export_policy(payload)
+    acted = _apply_review_actions(payload)
+    confirmations = _confirmation_by_review_id(acted)
+    report = validate_cosmic_items(
+        _cosmic_items_from_payload(acted, include_excluded=False),
+        project_name=str(acted.get("project") or ""),
+        cfp_formula=cfp_formula or _cfp_formula_from_payload(acted),
+    )
+    data = cosmic_report_to_dict(report)
+    raw_items = acted.get("items")
+    report_items = data.get("items")
+    if isinstance(raw_items, list) and isinstance(report_items, list):
+        for index, raw_item in enumerate(raw_items):
+            if not isinstance(raw_item, dict) or index >= len(report_items):
+                continue
+            report_item = report_items[index]
+            if not isinstance(report_item, dict):
+                continue
+            for key in ("status", "issues", "basis"):
+                if key in report_item:
+                    raw_item[key] = report_item[key]
+        data["items"] = raw_items
+    else:
+        data["items"] = report_items if isinstance(report_items, list) else []
+    _merge_review_confirmations(data, confirmations)
+    _restore_raw_review_fields(data, acted)
+    return apply_cosmic_confirmation_export_policy(data)
+
+
+def _cosmic_report_from_payload(payload: dict) -> CosmicValidationReport:
+    acted = _apply_review_actions(payload)
+    items = _cosmic_items_from_payload(acted, include_excluded=False)
 
     review_items = payload.get("review_items")
     if not isinstance(review_items, list):
@@ -195,36 +351,16 @@ def _cosmic_report_from_payload(payload: dict) -> CosmicValidationReport:
             global_issues.append(issue)
 
     results: list[CosmicValidationResult] = []
-    for index, raw_item in enumerate(items):
-        if not isinstance(raw_item, dict):
-            continue
-        movements = [
-            DataMovement(
-                order=int(raw_movement.get("order") or movement_index + 1),
-                sub_process=str(raw_movement.get("sub_process") or ""),
-                move_type=str(raw_movement.get("move_type") or ""),
-                data_group=str(raw_movement.get("data_group") or ""),
-                data_attrs=str(raw_movement.get("data_attrs") or ""),
-                reuse=str(raw_movement.get("reuse") or "新增"),
-            )
-            for movement_index, raw_movement in enumerate(raw_item.get("movements") or [])
-            if isinstance(raw_movement, dict)
-        ]
-        item = CosmicItem(
-            project=str(raw_item.get("project") or payload.get("project") or ""),
-            module_l1=str(raw_item.get("module_l1") or ""),
-            module_l2=str(raw_item.get("module_l2") or ""),
-            module_l3=str(raw_item.get("module_l3") or ""),
-            user=str(raw_item.get("user") or ""),
-            trigger=str(raw_item.get("trigger") or ""),
-            process=str(raw_item.get("process") or ""),
-            movements=movements,
-        )
+    raw_items = acted.get("items")
+    for index, item in enumerate(items):
+        status = "passed"
+        if isinstance(raw_items, list) and index < len(raw_items) and isinstance(raw_items[index], dict):
+            status = str(raw_items[index].get("status") or status)
         results.append(CosmicValidationResult(
             item=item,
-            status=str(raw_item.get("status") or "passed"),
+            status=status,
             issues=issues_by_item.get(index, []),
-            basis=raw_item.get("basis") if isinstance(raw_item.get("basis"), dict) else {},
+            basis={},
         ))
 
     return CosmicValidationReport(
@@ -236,6 +372,41 @@ def _cosmic_report_from_payload(payload: dict) -> CosmicValidationReport:
         cfp_basis=payload.get("cfp_basis") if isinstance(payload.get("cfp_basis"), dict) else {},
         issues=global_issues,
     )
+
+
+def _cfp_formula_from_payload(payload: dict) -> str:
+    cfp_basis = payload.get("cfp_basis")
+    if not isinstance(cfp_basis, dict):
+        return ""
+    formula = cfp_basis.get("formula")
+    return str(formula or "")
+
+
+def _cfp_policy_from_payload(payload: dict) -> dict[str, float]:
+    policy = {
+        "新增": 1.0,
+        "修改": 1.0,
+        "复用": 1.0 / 3.0,
+        "利旧": 0.0,
+        "优化未改": 0.0,
+    }
+    raw_policy = payload.get("cfp_policy")
+    if isinstance(raw_policy, dict):
+        for key, value in raw_policy.items():
+            try:
+                policy[str(key)] = float(value)
+            except (TypeError, ValueError):
+                continue
+    return policy
+
+
+def _calculate_review_cfp_total(payload: dict) -> float:
+    policy = _cfp_policy_from_payload(payload)
+    total = 0.0
+    for item in _cosmic_items_from_payload(_apply_review_actions(payload), include_excluded=False):
+        for movement in item.movements:
+            total += policy.get(movement.reuse, 1.0)
+    return round(total, 6)
 
 
 def _record_function_points(record: dict) -> list[str]:
@@ -501,7 +672,14 @@ def create_router(session_manager: SessionManager, *, base_dir: Path | None = No
         require_session_access(session_manager, session_id, request, user)
         if not isinstance(payload, dict):
             raise HTTPException(400, "COSMIC 确认 JSON 必须是对象")
-        payload = apply_cosmic_confirmation_export_policy(payload)
+        draft_path = _cosmic_draft_json_path(session_manager, session_id)
+        cfp_formula = ""
+        if draft_path is not None:
+            cfp_formula = _read_cfp_formula_from_meta_md(str(_cosmic_meta_md_path(_cosmic_md_dir_from_draft(draft_path))))
+        if not cfp_formula:
+            from ai_gen_reimbursement_docs.config_utils import load_cfp_formula
+            cfp_formula = load_cfp_formula()
+        payload = _revalidate_cosmic_payload(payload, cfp_formula=cfp_formula)
         path = _cosmic_confirmation_path(session_manager, session_id)
         path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -532,7 +710,12 @@ def create_router(session_manager: SessionManager, *, base_dir: Path | None = No
             payload = json.loads(source_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise HTTPException(500, "COSMIC 确认 JSON 损坏") from exc
-        payload = apply_cosmic_confirmation_export_policy(payload)
+        md_dir = _cosmic_md_dir_from_draft(draft_path)
+        cfp_formula = _read_cfp_formula_from_meta_md(str(_cosmic_meta_md_path(md_dir)))
+        if not cfp_formula:
+            from ai_gen_reimbursement_docs.config_utils import load_cfp_formula
+            cfp_formula = load_cfp_formula()
+        payload = apply_cosmic_confirmation_export_policy(_apply_review_actions(payload))
         formal_policy = payload.get("export_policy", {}).get("formal_excel", {})
         formal_status = str(formal_policy.get("status") or "")
         if formal_status not in {"allowed", "allowed_after_confirmation"}:
@@ -542,18 +725,16 @@ def create_router(session_manager: SessionManager, *, base_dir: Path | None = No
         if template_path is None:
             raise HTTPException(404, "未找到 COSMIC Excel 输出模板")
         report = _cosmic_report_from_payload(payload)
-        md_dir = _cosmic_md_dir_from_draft(draft_path)
         doc_dir = _cosmic_doc_dir_from_draft(draft_path)
         doc_dir.mkdir(parents=True, exist_ok=True)
         output_path = doc_dir / "项目功能点拆分表-确认后.xlsx"
-        cfp_formula = _read_cfp_formula_from_meta_md(str(_cosmic_meta_md_path(md_dir)))
         saved_path = Path(write_cosmic_xlsx(
             str(template_path),
             str(output_path),
             report,
             cfp_formula=cfp_formula,
         ))
-        cfp_total = _calculate_cfp_total_for_written_excel([result.item for result in report.results])
+        cfp_total = _calculate_review_cfp_total(payload)
         write_cfp_sum(str(md_dir), cfp_total)
         cfp_summary_path = md_dir / "3.5.gen-cosmic-CFP-总和.md"
         file_info = {

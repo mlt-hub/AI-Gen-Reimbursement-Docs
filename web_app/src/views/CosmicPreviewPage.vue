@@ -156,7 +156,11 @@
                             </tr>
                           </thead>
                           <tbody>
-                            <tr v-for="(movement, movementIndex) in itemForRow(row.item_index)?.movements ?? []" :key="movementIndex" class="border-t border-[var(--color-rule)]">
+                            <tr
+                              v-for="(movement, movementIndex) in itemForRow(row.item_index)?.movements ?? []"
+                              :key="movementIndex"
+                              :class="['border-t border-[var(--color-rule)]', movement.excluded_from_cfp ? 'bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]' : '']"
+                            >
                               <td class="detail-cell">{{ movement.order }}</td>
                               <td class="detail-cell">
                                 <input
@@ -180,6 +184,9 @@
                                     {{ movement.move_type || '-' }}
                                   </option>
                                 </select>
+                                <p v-if="movement.excluded_from_cfp" class="mt-1 text-[11px] text-[var(--color-warning)]">
+                                  {{ movement.review_action === 'merge_movement' ? `合并到第 ${movement.merged_into_order || movement.order - 1} 条` : '已排除计数' }}
+                                </p>
                               </td>
                               <td class="detail-cell">
                                 <input
@@ -262,6 +269,9 @@ interface CosmicMovement {
   data_group: string
   data_attrs: string
   reuse: string
+  excluded_from_cfp?: boolean
+  review_action?: string
+  merged_into_order?: number
 }
 
 interface CosmicItem {
@@ -298,6 +308,7 @@ interface CosmicReviewItem {
   code: string
   severity: string
   field: string
+  movement_order?: number
   message: string
   details?: Record<string, unknown>
   confirmation?: {
@@ -307,6 +318,18 @@ interface CosmicReviewItem {
     confirmed_by?: string
     confirmed_at?: string
   }
+}
+
+interface CosmicReviewAction {
+  action: string
+  item_index?: number
+  movement_order?: number
+  movement_index?: number
+  merged_into_order?: number
+  suggested_user?: string
+  review_id?: string
+  reason?: string
+  created_at?: string
 }
 
 interface CosmicReport {
@@ -331,6 +354,9 @@ interface CosmicReport {
   preview_rows: CosmicPreviewRow[]
   review_items: CosmicReviewItem[]
   items: CosmicItem[]
+  review_actions?: CosmicReviewAction[]
+  review_audit?: CosmicReviewAction[]
+  cfp_policy?: Record<string, number>
 }
 
 interface CosmicJsonResponse {
@@ -464,6 +490,9 @@ function normalizeReport(value: unknown): CosmicReport {
     preview_rows: data.preview_rows,
     review_items: data.review_items.map(normalizeReviewItem),
     items: data.items.map(normalizeCosmicItem),
+    review_actions: Array.isArray(data.review_actions) ? data.review_actions : [],
+    review_audit: Array.isArray(data.review_audit) ? data.review_audit : [],
+    cfp_policy: data.cfp_policy,
   }
 }
 
@@ -647,6 +676,9 @@ function normalizeMovement(movement: CosmicMovement, index: number): CosmicMovem
     data_group: String(movement.data_group || ''),
     data_attrs: String(movement.data_attrs || ''),
     reuse: String(movement.reuse || '新增'),
+    excluded_from_cfp: movement.excluded_from_cfp === true,
+    review_action: movement.review_action ? String(movement.review_action) : undefined,
+    merged_into_order: Number.isFinite(Number(movement.merged_into_order)) ? Number(movement.merged_into_order) : undefined,
   }
 }
 
@@ -701,8 +733,16 @@ function updateMovementField(index: number, movementIndex: number, field: keyof 
   if (!item || !movement) return
   if (field === 'order') {
     movement.order = Number(value) || movementIndex + 1
-  } else {
-    movement[field] = value
+  } else if (field === 'sub_process') {
+    movement.sub_process = value
+  } else if (field === 'move_type') {
+    movement.move_type = value
+  } else if (field === 'data_group') {
+    movement.data_group = value
+  } else if (field === 'data_attrs') {
+    movement.data_attrs = value
+  } else if (field === 'reuse') {
+    movement.reuse = value
   }
   syncPreviewRow(index)
 }
@@ -718,6 +758,7 @@ function addMovement(index: number) {
     data_group: '',
     data_attrs: '',
     reuse: '新增',
+    excluded_from_cfp: false,
   })
   renumberMovements(item)
   syncPreviewRow(index)
@@ -746,7 +787,72 @@ function syncPreviewRow(index: number, current: CosmicReport | null = report.val
   row.user = item.user
   row.trigger = item.trigger
   row.movement_count = item.movements.length
-  row.movement_types = item.movements.map(movement => movement.move_type).filter(Boolean)
+  row.movement_types = item.movements.filter(movement => !movement.excluded_from_cfp).map(movement => movement.move_type).filter(Boolean)
+}
+
+function applySuggestedAction(item: CosmicReviewItem, action: Record<string, unknown>) {
+  if (!report.value) return
+  const actionType = String(action.action || '')
+  const itemIndex = typeof item.item_index === 'number' ? item.item_index : undefined
+  if (itemIndex === undefined) return
+  const record: CosmicReviewAction = {
+    action: actionType,
+    item_index: itemIndex,
+    review_id: item.review_id,
+    reason: String(action.reason || item.message || ''),
+    created_at: new Date().toISOString(),
+  }
+  if (actionType === 'apply_function_user') {
+    record.suggested_user = String(action.suggested_user || item.details?.suggested_user || '')
+    if (!record.suggested_user) return
+    const target = itemForRow(itemIndex)
+    if (!target) return
+    target.user = record.suggested_user
+    syncPreviewRow(itemIndex)
+  } else if (actionType === 'exclude_movement' || actionType === 'merge_movement') {
+    const movementOrder = Number(action.movement_order || item.movement_order || 0)
+    if (!movementOrder) return
+    record.movement_order = movementOrder
+    const target = itemForRow(itemIndex)
+    const movementIndex = target?.movements.findIndex(movement => movement.order === movementOrder) ?? -1
+    const movement = target?.movements[movementIndex]
+    if (!target || !movement || movementIndex < 0) return
+    record.movement_index = movementIndex
+    movement.excluded_from_cfp = true
+    movement.review_action = actionType
+    if (actionType === 'merge_movement') {
+      record.merged_into_order = Math.max(1, movement.order - 1)
+      movement.merged_into_order = record.merged_into_order
+    }
+    syncPreviewRow(itemIndex)
+  } else {
+    return
+  }
+  report.value.review_actions = [
+    ...(report.value.review_actions ?? []).filter(existing => !sameReviewAction(existing, record)),
+    record,
+  ]
+  report.value.review_audit = [...(report.value.review_audit ?? []), record]
+  updateConfirmation(item.review_id, { status: 'confirmed', note: actionLabel(actionType) })
+}
+
+function sameReviewAction(left: CosmicReviewAction, right: CosmicReviewAction): boolean {
+  return left.action === right.action
+    && left.item_index === right.item_index
+    && left.movement_order === right.movement_order
+    && left.review_id === right.review_id
+}
+
+function suggestedActions(item: CosmicReviewItem): Record<string, unknown>[] {
+  const actions = item.details?.suggested_actions
+  return Array.isArray(actions) ? actions.filter(action => action && typeof action === 'object') as Record<string, unknown>[] : []
+}
+
+function actionLabel(action: string): string {
+  if (action === 'exclude_movement') return '已排除计数'
+  if (action === 'merge_movement') return '已合并到上一条'
+  if (action === 'apply_function_user') return '已采用候选功能用户'
+  return action
 }
 
 function reviewItemsForRow(row: CosmicPreviewRow): CosmicReviewItem[] {
@@ -910,6 +1016,7 @@ const ReviewItemCard = defineComponent({
       const item = props.item as CosmicReviewItem
       const details = detailsText(item.details)
       const confirmation = confirmationText(item)
+      const actions = suggestedActions(item)
       return h('article', { class: 'rounded border border-[var(--color-rule)] p-3 text-xs' }, [
         h('div', { class: 'flex flex-wrap items-center gap-2' }, [
           h('span', { class: 'font-semibold text-[var(--color-ink)]' }, item.code),
@@ -933,6 +1040,17 @@ const ReviewItemCard = defineComponent({
               h('dt', { class: 'font-medium text-[var(--color-ink)]' }, '依据'),
               h('dd', { class: 'mt-1 whitespace-pre-wrap text-[var(--color-ink-muted)]' }, details),
             ])
+          : null,
+        actions.length
+          ? h('div', { class: 'mt-3 flex flex-wrap gap-2' }, actions.map(action => h(
+              'button',
+              {
+                class: 'btn-secondary px-2 py-1 text-xs',
+                type: 'button',
+                onClick: () => applySuggestedAction(item, action),
+              },
+              String(action.label || actionLabel(String(action.action || ''))),
+            )))
           : null,
         h('div', { class: 'mt-3 grid gap-2 md:grid-cols-[160px_1fr]' }, [
           h('label', { class: 'confirmation-field' }, [

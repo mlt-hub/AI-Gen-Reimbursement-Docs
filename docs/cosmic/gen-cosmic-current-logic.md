@@ -81,7 +81,7 @@
 - `复用`：每次数据移动按 `1/3` CFP。
 - 其他值：每次数据移动按 `1` CFP。
 
-第一阶段新链路不再依赖 `CosmicItem.total_cfp()` 计算正式 CFP。正式 Excel 中的 CFP 仍以模板公式为准；Python 侧只在正式 Excel 写入成功时写入 CFP 总和。确认后正式导出同样按确认后的结构化数据移动数量刷新正式 CFP 总和。JSON 草稿会在顶层 `cfp_basis` 中记录 CFP 来源：有公式时为 `template_formula`，缺公式时为 `unconfirmed`。
+第一阶段新链路不再依赖 `CosmicItem.total_cfp()` 计算正式 CFP。正式 Excel 中的 CFP 仍以模板公式为准；Python 侧只在正式 Excel 写入成功时写入 CFP 总和。确认后正式导出会排除 `excluded_from_cfp=true` 的数据移动，并按 `cfp_policy` 刷新正式 CFP 总和。JSON 草稿会在顶层 `cfp_basis` 中记录 CFP 来源：有公式时为 `template_formula`，缺公式时为 `unconfirmed`。
 
 ## AI 生成逻辑
 
@@ -266,19 +266,19 @@ AI 调用限制：
 ## 当前风险和重构关注点
 
 1. 边界识别不足：prompt 已加入送审口径硬约束，内部技术交互、控制命令、部分纯数据运算、错误/确认消息和部分非功能事项已有待审 warning；但复杂边界和复杂非功能事项仍主要依赖 AI 自觉和后续人工确认。
-2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；但尚未自动修复到最小颗粒度模块，也未接入业务角色映射表。
-3. CFP 口径仍需配置化：缺公式已阻断，但 `复用`、`利旧`、优化未改子过程填 `0` 仍未完整工程化。
-4. 预览审阅导出闭环已完成基础闭环：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口、审阅结果 JSON 保存/读取接口和确认后 Excel 再导出接口；远程 session 导出后会刷新 ZIP，前端交付物清单和运行历史都会记录确认后 Excel 与确认后 CFP 汇总。预览页已支持编辑功能过程、功能用户、触发事件和数据移动，并把编辑后的 `items` 保存到会话审阅结果 JSON；后续增强重点是自动过滤以及 CFP 业务口径配置化。
+2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；`GENERIC_FUNCTION_USER` 会提供候选修复动作，预览页可一键采用候选功能用户并在保存时重校验；但尚未接入业务角色映射表，也未强制验证功能用户与功能过程的一对一关系。
+3. CFP 口径已具备基础配置：缺公式已阻断；确认后导出 CFP 汇总会按 `cfp_policy` 计算，默认 `新增/修改=1`、`复用=1/3`、`利旧/优化未改=0`；但组织级配置治理、Excel 模板公式与 Python 汇总口径的一致性校验仍需继续完善。
+4. 预览审阅导出闭环已完成基础闭环：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口、审阅结果 JSON 保存/读取接口和确认后 Excel 再导出接口；远程 session 导出后会刷新 ZIP，前端交付物清单和运行历史都会记录确认后 Excel 与确认后 CFP 汇总。预览页已支持编辑功能过程、功能用户、触发事件和数据移动，并把编辑后的 `items` 保存到会话审阅结果 JSON；控制命令、纯数据运算和内部技术边界 warning 已能提供排除计数或合并建议，审阅动作会写入 `review_actions/review_audit` 并在保存时重校验。
 5. 解析格式敏感：`parse_md_to_items` 仍保留给兼容或排查场景，不适合承载复杂人工编辑；当前人工编辑闭环基于结构化 JSON `items`，不依赖 Markdown 反解析。
 6. 送审规则未完整工程化：软评填报参考手册中的启发式规则尚未完整进入 prompt、结构化校验和结果状态。
 
-后续如果继续推进 COSMIC 审阅，应优先围绕自动过滤建议、功能用户自动修复建议和 CFP 业务口径配置化扩展；这些能力仍应基于当前结构化 JSON 契约实现。
+后续如果继续推进 COSMIC 审阅，应优先围绕更复杂的边界规则治理、功能用户角色映射和 CFP 组织级配置治理扩展；这些能力仍应基于当前结构化 JSON 契约实现。
 
 ## 第一阶段实施状态
 
 第一阶段已完成。当前链路已经把“生成草稿后直接写 Excel”改造成“先生成结构化草稿，再执行确定性规则校验，再决定是否允许正式输出”的链路。
 
-第一阶段没有重写整套 AI 生成策略，也没有一次性覆盖所有《软评填报参考手册2024》启发式规则。当前后续切片已经实现 `/preview/cosmic` 的结构化 JSON 审阅、人工确认状态编辑、审阅结果 JSON 导出、会话级审阅结果 JSON 保存/读取、人工编辑功能过程和数据移动，以及确认后正式 Excel 和 CFP 汇总导出；但内部接口边界自动判定、非功能内容自动剔除仍属于后续阶段。内部技术交互、控制命令、纯数据运算、错误/确认消息和部分非功能事项当前只做待审提示。
+第一阶段没有重写整套 AI 生成策略，也没有一次性覆盖所有《软评填报参考手册2024》启发式规则。当前后续切片已经实现 `/preview/cosmic` 的结构化 JSON 审阅、人工确认状态编辑、审阅结果 JSON 导出、会话级审阅结果 JSON 保存/读取、人工编辑功能过程和数据移动、审阅动作建议、保存后重校验，以及确认后正式 Excel 和 CFP 汇总导出；但复杂内部接口边界自动判定、复杂非功能内容自动剔除、功能用户角色映射和组织级 CFP 口径治理仍属于后续阶段。内部技术交互、控制命令、纯数据运算、错误/确认消息和部分非功能事项当前以待审提示和人工确认动作处理。
 
 本节后续内容保留为第一阶段实现记录和验收基线；其中“必须”“建议”等措辞按已实现规格理解，不再表示新的待办。
 
@@ -298,8 +298,18 @@ AI 调用限制：
 
 1. `/preview/cosmic` 已支持直接编辑功能过程、功能用户、触发事件和数据移动；数据移动可新增、删除，并可编辑子过程、移动类型、数据组、数据属性和复用度。
 2. 会话保存接口继续写入 `cosmic-confirmation.json`，但语义已从仅保存确认状态扩展为保存完整 COSMIC 审阅结果 JSON；其中包含编辑后的 `items`、`review_items` 确认状态、`confirmation_summary` 和 `export_policy`。
-3. 会话草稿加载时会合并已保存审阅结果中的 `items` 和确认状态；确认后导出优先使用会话审阅结果 JSON 中编辑后的 `items` 写 Excel，并按编辑后的数据移动数量刷新 `md/3.5.gen-cosmic-CFP-总和.md`。
+3. 会话草稿加载时会合并已保存审阅结果中的 `items` 和确认状态；确认后导出优先使用会话审阅结果 JSON 中编辑后的 `items` 写 Excel，并按编辑后的非排除数据移动和 `cfp_policy` 刷新 `md/3.5.gen-cosmic-CFP-总和.md`。
 4. 后端测试已覆盖保存编辑后的 `items`，以及确认后导出使用保存后的编辑结果并刷新 CFP。
+
+### 2026-06-09 继续推进 1-5
+
+本次继续推进“保存后重校验、自动过滤建议、功能用户修复建议、CFP policy 和审计动作”五个切片，当前状态如下：
+
+1. 会话保存 `cosmic-confirmation.json` 时会先应用 `review_actions`，再基于确认后的 `items` 重新执行 `validate_cosmic_items`，重建 `review_items`、`confirmation_summary` 和 `export_policy`；历史人工确认状态会按 `review_id` 合并回新报告。
+2. `CONTROL_COMMAND_MOVEMENT`、`DATA_OPERATION_ONLY_MOVEMENT` 和 `INTERNAL_TECHNICAL_BOUNDARY` 的审阅项会在 `details.suggested_actions` 中提供 `exclude_movement` 和 `merge_movement` 建议；前端可一键应用，被处理的数据移动保留在 JSON 中，并标记 `excluded_from_cfp`、`review_action` 和可选 `merged_into_order`。
+3. 确认后导出会使用应用审阅动作后的结构化数据；被标记 `excluded_from_cfp=true` 的数据移动不会写入确认后 Excel，也不会进入 CFP 汇总。
+4. `GENERIC_FUNCTION_USER` 的审阅项会在 `details.suggested_actions` 中提供 `apply_function_user` 候选动作；前端应用后会改写功能用户，保存时通过重校验消除已修复的 warning。
+5. 确认后导出 CFP 汇总会读取 `cfp_policy`，默认 `新增/修改=1`、`复用=1/3`、`利旧/优化未改=0`；`review_actions` 和 `review_audit` 会记录审阅动作、关联审阅项、原因和时间。当前审计是 JSON 级基础追踪，尚未注入服务端登录用户或签名信息。
 
 ### 目标行为
 
@@ -720,6 +730,9 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `items[].movements[].data_group` | `string` | 是 | 数据组。 |
 | `items[].movements[].data_attrs` | `string` | 是 | 数据属性。 |
 | `items[].movements[].reuse` | `string` | 是 | 复用度，标准值先限定为 `新增/复用/利旧`。 |
+| `items[].movements[].excluded_from_cfp` | `boolean` | 否 | 人工审阅动作是否将该数据移动排除出确认后 Excel 和 CFP 汇总。 |
+| `items[].movements[].review_action` | `string` | 否 | 触发排除的审阅动作，例如 `exclude_movement/merge_movement`。 |
+| `items[].movements[].merged_into_order` | `number` | 否 | `merge_movement` 时记录合并目标数据移动序号。 |
 | `items[].status` | `string` | 是 | `passed/review_required/blocked`。 |
 | `items[].issues` | `array` | 是 | 当前功能过程的结构化问题列表。 |
 | `items[].basis` | `object` | 是 | 当前功能过程的结构化判定依据。 |
@@ -731,7 +744,10 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `items[].issues[].message` | `string` | 是 | 面向人的说明。 |
 | `items[].issues[].field` | `string` | 否 | 字段路径，例如 `movements[0].move_type`。 |
 | `items[].issues[].movement_order` | `number|null` | 否 | 问题关联的数据移动序号。 |
-| `items[].issues[].details` | `object` | 是 | 结构化依据。语义 warning 当前包含 `matched_terms` 和 `basis_description`；功能用户 warning 当前包含 `function_user_parts`、`match_source`、`matched_term` 和 `basis_description`。 |
+| `items[].issues[].details` | `object` | 是 | 结构化依据。语义 warning 当前包含 `matched_terms`、`basis_description` 和可选 `suggested_actions`；功能用户 warning 当前包含 `function_user_parts`、`match_source`、`matched_term`、`suggested_user` 和可选 `suggested_actions`。 |
+| `review_actions` | `array` | 否 | 待应用的人工审阅动作；保存会话审阅结果时后端会应用这些动作并重校验。 |
+| `review_audit` | `array` | 否 | 已应用审阅动作的 JSON 级审计记录。 |
+| `cfp_policy` | `object` | 否 | 确认后 CFP 汇总口径，key 为复用度，value 为每条数据移动 CFP。 |
 | `summary` | `object` | 是 | 汇总数量。 |
 
 JSON 写入必须使用 `ensure_ascii=False` 和稳定缩进，便于人工排查和测试断言。
@@ -925,9 +941,9 @@ md/3.4.gen-cosmic-校验报告.md
 
 1. 如果存在 `blocked`，不得更新供 `gen-list` 使用的正式 CFP 总和。
 2. 如果模板未配置 `CFP计算公式`，必须记录 `MISSING_CFP_FORMULA` error，报告总状态为 `blocked`，不能静默留空后继续汇总。
-3. `CosmicItem.total_cfp()` 中 `复用 = 1/3` 的逻辑不得继续扩散到新链路；新链路已经在 JSON 草稿和校验报告中记录 CFP 来源为模板公式或未确认。
+3. `CosmicItem.total_cfp()` 中 `复用 = 1/3` 的逻辑不得继续扩散到生成期正式输出链路；确认后导出的 Python CFP 汇总使用 JSON `cfp_policy`。
 4. 正式 Excel 中的 CFP 仍以模板公式为准，Python 侧只负责结构化记录和异常提示。
-5. 确认后正式导出成功时，按确认后的结构化数据移动数量刷新 `md/3.5.gen-cosmic-CFP-总和.md`，并把确认后 Excel 与 CFP 汇总一起登记到交付物、ZIP 和运行历史。
+5. 确认后正式导出成功时，按确认后的非排除数据移动和 `cfp_policy` 刷新 `md/3.5.gen-cosmic-CFP-总和.md`，并把确认后 Excel 与 CFP 汇总一起登记到交付物、ZIP 和运行历史。
 
 ### 验收标准
 
@@ -1039,8 +1055,9 @@ md/3.4.gen-cosmic-校验报告.md
 
 以下内容不属于第一阶段验收范围：
 
-1. 控制命令、数据运算、内部技术步骤、非功能事项的自动过滤。
-2. 功能用户和三级模块的一对一强绑定自动修复；第一阶段必须先产生 `GENERIC_FUNCTION_USER` warning。
-3. `复用`、`利旧`、优化未改子过程 CFP 为 `0` 的完整配置化。
+1. 更复杂的边界规则治理，例如跨系统/内部技术交互的组织级判定、非功能事项的自动分类，以及无人工确认时的自动剔除策略；当前只提供人工确认动作，不做无确认自动删除。
+2. 功能用户和三级模块的一对一强绑定治理，包括业务角色映射表、模块归属冲突处理和强制修复规则；当前只提供 `GENERIC_FUNCTION_USER` 候选修复动作。
+3. CFP policy 的组织级配置治理，以及 Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前确认后汇总使用 JSON `cfp_policy`。
+4. 审计追踪的登录用户、权限、签名和不可抵赖记录；当前 `review_audit` 是 JSON 级基础追踪。
 
 这些内容应在结构化草稿和校验器稳定后，再按 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md) 分阶段实施。

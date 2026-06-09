@@ -137,18 +137,19 @@ def _split_user_parts(user: str) -> list[str]:
 
 def _function_user_basis(item: CosmicItem) -> dict[str, object]:
     parts = _split_user_parts(item.user)
+    module_l3 = (item.module_l3 or "").strip()
     base = {
         "parts": parts,
         "matched": False,
         "match_source": "empty",
         "matched_term": "",
+        "suggested_term": module_l3,
         "requires_review": True,
         "description": "功能用户为空，无法对应三级模块或最小颗粒度模块",
     }
     if not parts:
         return base
 
-    module_l3 = (item.module_l3 or "").strip()
     matched_part = _matching_user_part(parts, module_l3, allow_partial_module=True)
     if matched_part:
         return {
@@ -273,19 +274,57 @@ def _matched_words(text: str, words: set[str]) -> list[str]:
 
 
 def _finding_details(finding: dict[str, object]) -> dict[str, object]:
-    return {
+    code = str(finding.get("code", ""))
+    details = {
         "matched_terms": list(finding.get("matched_terms", [])),
         "basis_description": str(finding.get("description", "")),
     }
+    movement_order = finding.get("movement_order")
+    if code in {
+        "CONTROL_COMMAND_MOVEMENT",
+        "DATA_OPERATION_ONLY_MOVEMENT",
+        "INTERNAL_TECHNICAL_BOUNDARY",
+    } and isinstance(movement_order, int):
+        details["suggested_actions"] = [
+            {
+                "action": "exclude_movement",
+                "label": "排除计数",
+                "movement_order": movement_order,
+                "reason": details["basis_description"],
+            },
+            {
+                "action": "merge_movement",
+                "label": "合并到上一条",
+                "movement_order": movement_order,
+                "reason": details["basis_description"],
+            },
+        ]
+    return details
 
 
 def _function_user_details(function_user_basis: dict[str, object]) -> dict[str, object]:
+    matched_term = str(function_user_basis.get("matched_term", "") or "")
+    suggested_term = str(function_user_basis.get("suggested_term", "") or matched_term)
+    suggested_user = ""
+    if suggested_term:
+        suggested_user = f"发起者：{suggested_term}|接收者：{suggested_term}"
     return {
         "function_user_parts": list(function_user_basis.get("parts", [])),
         "match_source": str(function_user_basis.get("match_source", "")),
-        "matched_term": str(function_user_basis.get("matched_term", "")),
+        "matched_term": matched_term,
+        "suggested_term": suggested_term,
         "matched_part": str(function_user_basis.get("matched_part", "")),
         "basis_description": str(function_user_basis.get("description", "")),
+        "suggested_user": suggested_user,
+        "suggested_actions": (
+            [{
+                "action": "apply_function_user",
+                "label": "采用候选功能用户",
+                "suggested_user": suggested_user,
+                "reason": "将功能用户绑定到当前模块路径中最接近的业务模块",
+            }]
+            if suggested_user else []
+        ),
     }
 
 
