@@ -71,6 +71,12 @@ def build_fpa_agent_review(
     process_facts = extract_fpa_process_facts(group)
     merge_review = build_fpa_merge_review(group)
     type_judgement = build_fpa_type_judgement(group)
+    workload_judgement = _build_unified_workload_judgement(process_facts) if contract.profile_kind == "unified_ui" else {}
+    unified_merge_review = (
+        _build_unified_merge_review(group, process_facts, workload_judgement)
+        if contract.profile_kind == "unified_ui"
+        else {}
+    )
     quality_review = (
         build_fpa_quality_review(
             group=group,
@@ -80,6 +86,16 @@ def build_fpa_agent_review(
             confirmed_decisions=confirmed_decisions,
         )
         if rows is not None
+        else {}
+    )
+    unified_quality_review = (
+        _build_unified_quality_review(
+            group=group,
+            rows=rows,
+            process_facts=process_facts,
+            workload_judgement=workload_judgement,
+        )
+        if contract.profile_kind == "unified_ui"
         else {}
     )
     roles = [
@@ -129,6 +145,27 @@ def build_fpa_agent_review(
             summary=_quality_summary(quality_review),
         ),
     ]
+    if contract.profile_kind == "unified_ui":
+        roles.extend([
+            _role(
+                name="workload_judge",
+                label="统一界面工作量建议 Agent",
+                implementation="deterministic:fpa_agent_review._build_unified_workload_judgement",
+                status="completed",
+                input_keys=["process_facts"],
+                output_key="workload_judgement",
+                summary=dict(workload_judgement.get("summary", {})),
+            ),
+            _role(
+                name="unified_quality_reviewer",
+                label="统一界面质量审核 Agent",
+                implementation="deterministic:fpa_agent_review._build_unified_quality_review",
+                status="completed" if rows is not None else "awaiting_rows",
+                input_keys=["rows", "workload_judgement"],
+                output_key="unified_quality_review",
+                summary=dict(unified_quality_review.get("summary", {})),
+            ),
+        ])
     return {
         "version": 1,
         "mode": "deterministic_contract",
@@ -147,7 +184,20 @@ def build_fpa_agent_review(
         "merge_review": merge_review,
         "type_judgement": type_judgement,
         "quality_review": quality_review,
-        "summary": _summary(roles, process_facts, merge_review, type_judgement, quality_review),
+        **_profile_review_outputs(
+            contract=contract,
+            workload_judgement=workload_judgement,
+            unified_merge_review=unified_merge_review,
+            unified_quality_review=unified_quality_review,
+        ),
+        "summary": _summary(
+            roles,
+            process_facts,
+            merge_review,
+            type_judgement,
+            quality_review,
+            unified_quality_review,
+        ),
     }
 
 
@@ -191,7 +241,9 @@ def _summary(
     merge_review: dict[str, object],
     type_judgement: dict[str, object],
     quality_review: dict[str, object],
+    unified_quality_review: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    profile_quality_summary = _quality_summary(unified_quality_review or {})
     return {
         "role_count": len(roles),
         "completed_role_count": sum(1 for role in roles if role.get("status") == "completed"),
@@ -204,6 +256,7 @@ def _summary(
         "merge_group_count": len(_list_value(merge_review.get("groups"))),
         "type_judgement_count": _type_summary(type_judgement).get("judgement_count", 0),
         "quality_issue_count": _quality_summary(quality_review).get("issue_count", 0),
+        "profile_quality_issue_count": profile_quality_summary.get("issue_count", 0),
     }
 
 
@@ -223,3 +276,226 @@ def _type_summary(type_judgement: dict[str, object]) -> dict[str, object]:
 
 def _list_value(value: Any) -> list[object]:
     return value if isinstance(value, list) else []
+
+
+def _profile_review_outputs(
+    *,
+    contract: FpaAgentReviewContract,
+    workload_judgement: dict[str, object],
+    unified_merge_review: dict[str, object],
+    unified_quality_review: dict[str, object],
+) -> dict[str, object]:
+    if contract.profile_kind != "unified_ui":
+        return {}
+    return {
+        "workload_judgement": workload_judgement,
+        "unified_merge_review": unified_merge_review,
+        "unified_quality_review": unified_quality_review,
+    }
+
+
+def _build_unified_workload_judgement(process_facts: list[dict[str, object]]) -> dict[str, object]:
+    judgements: list[dict[str, object]] = []
+    for fact in process_facts:
+        categories = ["界面开发"]
+        operation = str(fact.get("operation", "") or "")
+        if operation == "query":
+            categories.append("查询处理开发")
+        elif operation == "output":
+            categories.append("导出处理开发")
+        elif bool(fact.get("changes_internal_data")):
+            categories.append("逻辑处理开发")
+        if bool(fact.get("ordinary_external_service")) or str(fact.get("external_data_group_evidence", "") or ""):
+            categories.append("外部系统对接")
+        judgements.append({
+            "process_id": str(fact.get("process_id", "") or ""),
+            "process_name": str(fact.get("process_name", "") or ""),
+            "target_data_group": str(fact.get("target_data_group", "") or ""),
+            "recommended_categories": categories,
+            "confidence": str(fact.get("confidence", "") or "medium"),
+            "reason": _unified_workload_reason(operation, categories),
+        })
+    return {
+        "version": 1,
+        "mode": "deterministic_debug",
+        "judgements": judgements,
+        "summary": {
+            "judgement_count": len(judgements),
+            "ui_recommendation_count": sum(1 for item in judgements if "界面开发" in item["recommended_categories"]),
+            "process_recommendation_count": sum(
+                1
+                for item in judgements
+                if any(category.endswith("处理开发") for category in item["recommended_categories"])
+            ),
+        },
+    }
+
+
+def _unified_workload_reason(operation: str, categories: list[str]) -> str:
+    if operation == "query":
+        return "查询类功能过程建议保留统一界面行，并补充查询处理开发审计建议。"
+    if operation == "output":
+        return "输出类功能过程建议保留统一界面行，并补充导出处理开发审计建议。"
+    if "外部系统对接" in categories:
+        return "存在外部服务或外部数据证据，建议在统一界面口径下审查外部系统对接表达。"
+    return "维护或处理类功能过程建议保留统一界面行，并补充逻辑处理开发审计建议。"
+
+
+def _build_unified_merge_review(
+    group: dict[str, object],
+    process_facts: list[dict[str, object]],
+    workload_judgement: dict[str, object],
+) -> dict[str, object]:
+    judgements = _list_value(workload_judgement.get("judgements"))
+    process_ids = [
+        str(fact.get("process_id", "") or fact.get("process_name", "") or "")
+        for fact in process_facts
+        if str(fact.get("process_id", "") or fact.get("process_name", "") or "")
+    ]
+    groups: list[dict[str, object]] = []
+    if judgements:
+        groups.append({
+            "kind": "same_module_ui",
+            "category": "界面开发",
+            "target": str(group.get("l3", "") or ""),
+            "process_ids": process_ids,
+            "recommendation": "merge",
+            "reason": "统一界面口径下同一三级模块默认合并为一条界面开发行。",
+        })
+    for category in ("查询处理开发", "导出处理开发", "逻辑处理开发"):
+        category_processes = [
+            str(item.get("process_id", "") or item.get("process_name", "") or "")
+            for item in judgements
+            if category in _list_value(item.get("recommended_categories"))
+        ]
+        if len(category_processes) > 1:
+            groups.append({
+                "kind": "same_category_process",
+                "category": category,
+                "target": str(group.get("l3", "") or ""),
+                "process_ids": category_processes,
+                "recommendation": "review_merge",
+                "reason": f"同一三级模块存在多条{category}建议，需审查是否应按业务动作合并。",
+            })
+    return {
+        "version": 1,
+        "mode": "deterministic_debug",
+        "groups": groups,
+        "summary": {
+            "group_count": len(groups),
+            "merge_recommendation_count": sum(1 for group_item in groups if group_item.get("recommendation") == "merge"),
+        },
+    }
+
+
+def _build_unified_quality_review(
+    *,
+    group: dict[str, object],
+    rows: list[dict[str, object]] | None,
+    process_facts: list[dict[str, object]],
+    workload_judgement: dict[str, object],
+) -> dict[str, object]:
+    if rows is None:
+        return {}
+    issues: list[dict[str, object]] = []
+    row_names = [str(row.get("新增/修改功能点", "") or row.get("name", "") or "") for row in rows]
+    if process_facts and not any("界面开发" in name for name in row_names):
+        issues.append(_unified_issue(
+            code="unified_ui.missing_ui_row",
+            severity="warning",
+            message="存在功能过程但未发现界面开发行。",
+            suggestion="审查 unified_ui 是否应保留三级模块级界面开发行。",
+        ))
+    for judgement in _list_value(workload_judgement.get("judgements")):
+        process_name = str(judgement.get("process_name", "") or "")
+        categories = [str(category) for category in _list_value(judgement.get("recommended_categories"))]
+        for category in categories:
+            if not category.endswith("处理开发"):
+                continue
+            if not any(category in name and (not process_name or process_name in name) for name in row_names):
+                issues.append(_unified_issue(
+                    code="unified_ui.missing_process_row",
+                    severity="warning",
+                    message=f"功能过程“{process_name}”建议存在{category}，但结果行未体现。",
+                    suggestion="审查 AI 或 fallback 是否漏掉对应处理开发行。",
+                    process_name=process_name,
+                    category=category,
+                ))
+    issues.extend(_duplicate_unified_rows(rows))
+    issues.extend(_source_process_scope_issues(group=group, rows=rows))
+    return {
+        "version": 1,
+        "mode": "deterministic_debug",
+        "issues": issues,
+        "summary": {
+            "issue_count": len(issues),
+            "warning_count": sum(1 for issue in issues if issue.get("severity") == "warning"),
+            "blocking_count": 0,
+        },
+    }
+
+
+def _unified_issue(
+    *,
+    code: str,
+    severity: str,
+    message: str,
+    suggestion: str,
+    process_name: str = "",
+    category: str = "",
+) -> dict[str, object]:
+    issue: dict[str, object] = {
+        "code": code,
+        "severity": severity,
+        "message": message,
+        "suggestion": suggestion,
+    }
+    if process_name:
+        issue["process_name"] = process_name
+    if category:
+        issue["category"] = category
+    return issue
+
+
+def _duplicate_unified_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    issues: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    duplicates: set[tuple[str, str]] = set()
+    for row in rows:
+        key = (str(row.get("新增/修改功能点", "") or row.get("name", "") or ""), str(row.get("类型", "") or row.get("type", "") or ""))
+        if not key[0]:
+            continue
+        if key in seen and key not in duplicates:
+            duplicates.add(key)
+            issues.append(_unified_issue(
+                code="unified_ui.duplicate_same_name_type",
+                severity="warning",
+                message=f"结果中存在同名同类型重复行：{key[0]} / {key[1]}。",
+                suggestion="审查是否应合并来源流程或保留人工审阅提示。",
+            ))
+        seen.add(key)
+    return issues
+
+
+def _source_process_scope_issues(group: dict[str, object], rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    valid_names = {
+        str(process.get("process_name", "") or process.get("name", "") or "")
+        for process in _list_value(group.get("processes"))
+        if isinstance(process, dict)
+    }
+    issues: list[dict[str, object]] = []
+    for row in rows:
+        source_names = [
+            part.strip()
+            for part in str(row.get("源功能过程", "") or row.get("source_processes", "") or "").split("、")
+            if part.strip()
+        ]
+        out_of_scope = [name for name in source_names if name not in valid_names]
+        if out_of_scope:
+            issues.append(_unified_issue(
+                code="unified_ui.source_process_out_of_scope",
+                severity="warning",
+                message=f"结果行来源功能过程超出当前模块范围：{'、'.join(out_of_scope)}。",
+                suggestion="审查 source_processes / 源功能过程 是否来自当前三级模块。",
+            ))
+    return issues
