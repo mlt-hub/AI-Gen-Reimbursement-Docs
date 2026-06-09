@@ -45,6 +45,8 @@ def test_passed_item_has_no_issues():
 
     assert result.status == "passed"
     assert result.issues == []
+    assert result.basis["function_user"]["matched"] is True
+    assert result.basis["function_user"]["match_source"] == "module_l3"
 
 
 def test_missing_trigger_is_error():
@@ -165,6 +167,7 @@ def test_report_json_is_stable_and_chinese_readable(tmp_path):
     assert payload["summary"]["passed"] == 1
     assert payload["cfp_basis"]["source"] == "template_formula"
     assert payload["cfp_basis"]["formula_configured"] is True
+    assert payload["items"][0]["basis"]["function_user"]["matched_term"] == "用户注册"
 
 
 def test_empty_items_is_global_error():
@@ -210,3 +213,15 @@ def test_generic_function_user_is_warning():
 
     assert "GENERIC_FUNCTION_USER" in _codes(result)
     assert result.status == "review_required"
+    assert result.basis["function_user"]["match_source"] == "generic_only"
+    assert result.basis["function_user"]["requires_review"] is True
+
+
+def test_module_context_without_l3_user_requires_review():
+    result = validate_cosmic_item(_item(user="发起者：系统管理|接收者：用户管理"))
+
+    assert "GENERIC_FUNCTION_USER" in _codes(result)
+    assert result.status == "review_required"
+    assert result.basis["function_user"]["matched"] is False
+    assert result.basis["function_user"]["match_source"] == "module_context_only"
+    assert result.basis["function_user"]["matched_term"] == "用户管理"

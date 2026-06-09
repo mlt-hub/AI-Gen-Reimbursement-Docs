@@ -36,6 +36,7 @@ class CosmicValidationResult:
     item: CosmicItem
     status: ValidationStatus
     issues: list[CosmicIssue] = field(default_factory=list)
+    basis: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -107,21 +108,85 @@ def _split_user_parts(user: str) -> list[str]:
     return parts
 
 
+def _function_user_basis(item: CosmicItem) -> dict[str, object]:
+    parts = _split_user_parts(item.user)
+    base = {
+        "parts": parts,
+        "matched": False,
+        "match_source": "empty",
+        "matched_term": "",
+        "requires_review": True,
+        "description": "功能用户为空，无法对应三级模块或最小颗粒度模块",
+    }
+    if not parts:
+        return base
+
+    module_l3 = (item.module_l3 or "").strip()
+    matched_part = _matching_user_part(parts, module_l3, allow_partial_module=True)
+    if matched_part:
+        return {
+            **base,
+            "matched": True,
+            "match_source": "module_l3",
+            "matched_term": module_l3,
+            "matched_part": matched_part,
+            "requires_review": False,
+            "description": "功能用户已匹配三级模块或最小颗粒度模块",
+        }
+
+    for source, module_name in [
+        ("module_l2", (item.module_l2 or "").strip()),
+        ("module_l1", (item.module_l1 or "").strip()),
+    ]:
+        matched_part = _matching_user_part(parts, module_name, allow_partial_module=False)
+        if matched_part:
+            return {
+                **base,
+                "match_source": "module_context_only",
+                "matched_term": module_name,
+                "matched_part": matched_part,
+                "matched_module_level": source,
+                "description": "功能用户只匹配到上级模块，仍需确认是否对应三级模块",
+            }
+
+    if all(part in _GENERIC_USER_WORDS for part in parts):
+        return {
+            **base,
+            "match_source": "generic_only",
+            "description": "功能用户仅为泛化角色，未能对应三级模块或最小颗粒度模块",
+        }
+
+    return {
+        **base,
+        "match_source": "unmatched",
+        "description": "功能用户未能匹配模块路径，需要人工确认",
+    }
+
+
+def _matching_user_part(
+    parts: list[str],
+    module_name: str,
+    *,
+    allow_partial_module: bool,
+) -> str:
+    if not module_name:
+        return ""
+    for part in parts:
+        if module_name in part or (allow_partial_module and part in module_name):
+            return part
+    return ""
+
+
 def is_generic_function_user(item: CosmicItem) -> bool:
     """Return true when the user does not clearly bind to the L3 module."""
-    if not (item.user or "").strip():
-        return True
-    parts = _split_user_parts(item.user)
-    if not parts:
-        return True
-    module_l3 = (item.module_l3 or "").strip()
-    if module_l3 and any(module_l3 in part or part in module_l3 for part in parts):
-        return False
-    return all(part in _GENERIC_USER_WORDS for part in parts)
+    return bool(_function_user_basis(item).get("requires_review"))
 
 
 def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
     issues: list[CosmicIssue] = []
+    basis = {
+        "function_user": _function_user_basis(item),
+    }
 
     if not item.module_l1 or not item.module_l2 or not item.module_l3:
         issues.append(_issue(
@@ -142,7 +207,7 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
             "trigger", item=item,
         ))
 
-    if is_generic_function_user(item):
+    if basis["function_user"].get("requires_review"):
         issues.append(_issue(
             "warning", "GENERIC_FUNCTION_USER",
             "功能用户未能对应三级模块、最小颗粒度模块或元数据规则结果",
@@ -193,6 +258,7 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
         item=item,
         status=_status_from_issues(issues),
         issues=issues,
+        basis=basis,
     )
 
 
@@ -320,6 +386,7 @@ def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
                 ],
                 "status": result.status,
                 "issues": [_issue_to_dict(issue) for issue in result.issues],
+                "basis": result.basis,
             }
             for result in report.results
         ],
