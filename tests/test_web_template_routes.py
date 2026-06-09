@@ -20,8 +20,14 @@ def _client(monkeypatch, tmp_path, *, local_mode=True):
 
 def _write_docx(path: Path) -> None:
     doc = Document()
+    section = doc.sections[0]
+    section.header.paragraphs[0].text = "页眉 {{项目名称}}"
+    section.footer.paragraphs[0].text = "页脚 {{文档标题}}"
     doc.add_paragraph("项目名称：客户报账系统")
     doc.add_paragraph("文档标题：客户需求说明书")
+    table = doc.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "需求部门"
+    table.cell(0, 1).text = "财务部"
     doc.add_paragraph("功能需求")
     doc.save(path)
 
@@ -77,6 +83,19 @@ def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp
     assert download_resp.status_code == 200
     assert b"kind: spec" in download_resp.content
 
+    preview_resp = client.get(f"/api/templates/spec/imported/{import_id}/preview")
+    assert preview_resp.status_code == 200
+    preview = preview_resp.json()
+    assert preview["id"] == import_id
+    assert preview["ok"] is True
+    assert preview["summary"]["placeholder_count"] >= 6
+    assert preview["summary"]["anchor_count"] == 2
+    assert {item["token"] for item in preview["anchors"]} == {"{{模块清单表}}", "{{功能过程详情}}"}
+    assert any(item["text"] == "功能需求" for item in preview["section_candidates"])
+    assert any(item["scope"] == "headers" and item["token"] == "{{项目名称}}" for item in preview["placeholders"])
+    assert any(item["scope"] == "footers" and item["token"] == "{{文档标题}}" for item in preview["placeholders"])
+    assert any(item["scope"] == "tables" and item["token"] == "{{需求部门}}" for item in preview["placeholders"])
+
     delete_resp = client.delete(f"/api/templates/spec/imported/{import_id}")
     assert delete_resp.status_code == 200
     assert delete_resp.json() == {"deleted": True, "id": import_id}
@@ -119,4 +138,5 @@ def test_imported_spec_template_management_rejects_remote_mode(monkeypatch, tmp_
     client = _client(monkeypatch, tmp_path, local_mode=False)
 
     assert client.get("/api/templates/spec/imported").status_code == 403
+    assert client.get("/api/templates/spec/imported/abc/preview").status_code == 403
     assert client.delete("/api/templates/spec/imported/abc").status_code == 403
