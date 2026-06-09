@@ -36,6 +36,13 @@ def test_stability_report_summarizes_module_quality_signals():
                     },
                 },
                 "agent_review": {
+                    "contract_outputs": {"quality_review": "unified_quality_review"},
+                    "unified_quality_review": {
+                        "issues": [
+                            {"code": "unified_ui.missing_ui_row", "severity": "warning"},
+                        ],
+                        "summary": {"issue_count": 1, "warning_count": 1},
+                    },
                     "roles": [
                         {"name": "business_fact_extractor", "status": "completed"},
                         {"name": "fpa_type_judge", "status": "pending_agent"},
@@ -69,6 +76,7 @@ def test_stability_report_summarizes_module_quality_signals():
         "quality_review": 1,
     }
     assert summary["quality_issue_count"] == 3
+    assert summary["profile_quality_issue_count"] == 1
     assert summary["retryable_quality_issue_count"] == 2
     assert summary["confirmed_decision_count"] == 1
     assert summary["retry_count"] == 1
@@ -76,6 +84,7 @@ def test_stability_report_summarizes_module_quality_signals():
     assert summary["retry_trigger_source_counts"] == {"quality_review": 1}
     assert summary["source_counts"] == {"ai": 1, "rules_fallback": 1}
     assert summary["issue_code_counts"]["validator.query_as_ei"] == 1
+    assert summary["profile_issue_code_counts"]["unified_ui.missing_ui_row"] == 1
     assert summary["recommendations"][0]["area"] == "explanation"
     assert any(item["area"] == "rules_only_baseline" for item in summary["recommendations"])
     assert any(item["area"] == "manual_review" for item in summary["recommendations"])
@@ -83,6 +92,8 @@ def test_stability_report_summarizes_module_quality_signals():
     assert summary["agent_role_counts"]["business_fact_extractor"] == 2
     assert summary["pending_agent_role_counts"]["fpa_type_judge"] == 2
     assert report["modules"][0]["warning_count"] == 4
+    assert report["modules"][0]["profile_quality_issue_count"] == 1
+    assert report["modules"][0]["profile_issue_code_counts"] == {"unified_ui.missing_ui_row": 1}
     assert report["modules"][0]["retry_count"] == 1
     assert report["modules"][0]["blocking_retry_count"] == 1
     assert report["modules"][0]["pending_agent_roles"] == ["fpa_type_judge"]
@@ -120,6 +131,17 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
                 }],
                 "summary": {"issue_count": 1, "retryable_count": 1},
             },
+            "agent_review": {
+                "contract_outputs": {"quality_review": "mapping_quality_review"},
+                "mapping_quality_review": {
+                    "issues": [{
+                        "code": "ui_api_mapping.missing_default_api_row",
+                        "severity": "warning",
+                        "message": "缺少默认接口开发行",
+                    }],
+                    "summary": {"issue_count": 1},
+                },
+            },
         }],
     }, ensure_ascii=False), encoding="utf-8")
     trace_b.write_text(json.dumps({
@@ -131,6 +153,7 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
                 "module_count": 2,
                 "warning_count": 0,
                 "quality_issue_count": 0,
+                "profile_quality_issue_count": 0,
                 "retryable_quality_issue_count": 0,
                 "confirmed_decision_count": 0,
                 "retry_count": 0,
@@ -138,6 +161,7 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
                 "warning_source_counts": {"postprocess_normalization": 2},
                 "source_counts": {"ai_cache": 2},
                 "issue_code_counts": {},
+                "profile_issue_code_counts": {},
             },
             "modules": [],
         },
@@ -149,6 +173,7 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert comparison["summary"]["run_count"] == 2
     assert comparison["summary"]["module_count"] == 3
     assert comparison["summary"]["warning_count"] == 1
+    assert comparison["summary"]["profile_quality_issue_count"] == 1
     assert comparison["summary"]["retry_count"] == 1
     assert comparison["summary"]["blocking_retry_count"] == 1
     assert comparison["summary"]["retry_trigger_source_counts"] == {"validator": 1}
@@ -157,11 +182,15 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
         "validator": 1,
     }
     assert comparison["summary"]["source_counts"] == {"ai": 1, "ai_cache": 2}
+    assert comparison["summary"]["profile_issue_code_counts"] == {"ui_api_mapping.missing_default_api_row": 1}
     assert comparison["runs"][0]["case_id"] == "customer_query"
+    assert comparison["runs"][0]["profile_quality_issue_count"] == 1
     assert comparison["runs"][0]["run_id"] == "customer_query__strict_fpa__ai_first__strict_fpa_rs"
     assert comparison["issue_details"][0]["case_id"] == "customer_query"
     assert comparison["issue_details"][0]["message"] == "查询流程不应判为 EI"
     assert "validator.query_as_ei" in markdown
+    assert "ui_api_mapping.missing_default_api_row" in markdown
+    assert "## Profile Issue Codes" in markdown
     assert "## Recommendations" in markdown
     assert "validator_retries=1" in markdown
     assert "## Retry Triggers" in markdown
@@ -171,6 +200,7 @@ def test_stability_comparison_loads_traces_and_renders_markdown(tmp_path):
     assert "| customer_query | customer_query__strict_fpa__ai_first__strict_fpa_rs | model-a.json |" in markdown
     assert "## Issue Details" in markdown
     assert "| 1 | customer_query | 客户管理 | validator.query_as_ei | yes | 查询流程不应判为 EI |" in markdown
+    assert "| 1 | customer_query | 客户管理 | ui_api_mapping.missing_default_api_row | no | 缺少默认接口开发行 |" in markdown
 
 
 def test_stability_report_keeps_non_blocking_retry_visible_without_failing_gate(tmp_path):
@@ -208,7 +238,7 @@ def test_stability_report_keeps_non_blocking_retry_visible_without_failing_gate(
 
     assert comparison["evaluation"]["status"] == "pass"
     assert "Status: **PASS**" in markdown
-    assert "| 1 | external_user_center_reference | external_user_center_reference__strict_fpa__ai_first__strict_fpa_rs | trace.json | strict_fpa | ai_first | strict_fpa_rs | 1 | 0 | 0 | 0 | 0 | 1 | 0 |" in markdown
+    assert "| 1 | external_user_center_reference | external_user_center_reference__strict_fpa__ai_first__strict_fpa_rs | trace.json | strict_fpa | ai_first | strict_fpa_rs | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |" in markdown
     assert "| blocking_retry_count | 0 | 0 | yes |" in markdown
     assert "Blocking Retries" in markdown
 

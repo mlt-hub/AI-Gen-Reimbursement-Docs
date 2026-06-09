@@ -15,8 +15,10 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
     module_reports: list[dict[str, object]] = []
     source_counts: Counter[str] = Counter()
     issue_code_counts: Counter[str] = Counter()
+    profile_issue_code_counts: Counter[str] = Counter()
     warning_count = 0
     quality_issue_count = 0
+    profile_quality_issue_count = 0
     retryable_quality_issue_count = 0
     retry_count = 0
     blocking_retry_count = 0
@@ -69,6 +71,9 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         confirmed_decision_count += module_confirmed_count
 
         agent_review = module.get("agent_review", {})
+        profile_issues, profile_summary = _profile_quality_parts(agent_review)
+        module_profile_issue_count = _int_or_default(profile_summary.get("issue_count"), len(profile_issues))
+        profile_quality_issue_count += module_profile_issue_count
         module_agent_roles = _agent_roles(agent_review)
         agent_role_counts.update(
             str(role.get("name", "") or "").strip()
@@ -86,7 +91,13 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             for issue in issues
             if str(issue.get("code", "") or "").strip()
         ]
+        module_profile_issue_codes = [
+            str(issue.get("code", "") or "").strip()
+            for issue in profile_issues
+            if str(issue.get("code", "") or "").strip()
+        ]
         issue_code_counts.update(module_issue_codes)
+        profile_issue_code_counts.update(module_profile_issue_codes)
         module_reports.append({
             "module_index": index,
             "module": str(module.get("module", "") or ""),
@@ -95,12 +106,14 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
             "warning_count": module_warning_count,
             "warning_source_counts": dict(module_warning_sources),
             "quality_issue_count": module_issue_count,
+            "profile_quality_issue_count": module_profile_issue_count,
             "retryable_quality_issue_count": module_retryable_count,
             "confirmed_decision_count": module_confirmed_count,
             "retry_count": module_retry_count,
             "blocking_retry_count": module_blocking_retry_count,
             "retry_trigger_source": retry_trigger_source,
             "issue_code_counts": dict(Counter(module_issue_codes)),
+            "profile_issue_code_counts": dict(Counter(module_profile_issue_codes)),
             "agent_role_counts": dict(Counter(
                 str(role.get("name", "") or "").strip()
                 for role in module_agent_roles
@@ -117,6 +130,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         "module_count": len(module_reports),
         "warning_count": warning_count,
         "quality_issue_count": quality_issue_count,
+        "profile_quality_issue_count": profile_quality_issue_count,
         "retryable_quality_issue_count": retryable_quality_issue_count,
         "confirmed_decision_count": confirmed_decision_count,
         "retry_count": retry_count,
@@ -125,6 +139,7 @@ def build_fpa_stability_report(audit_trace: dict[str, object]) -> dict[str, obje
         "warning_source_counts": dict(warning_source_counts),
         "source_counts": dict(source_counts),
         "issue_code_counts": dict(issue_code_counts),
+        "profile_issue_code_counts": dict(profile_issue_code_counts),
         "agent_role_counts": dict(agent_role_counts),
         "pending_agent_role_counts": dict(pending_agent_role_counts),
     }
@@ -170,12 +185,14 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
     total_modules = 0
     total_warnings = 0
     total_quality_issues = 0
+    total_profile_quality_issues = 0
     total_retryable_issues = 0
     total_retries = 0
     total_blocking_retries = 0
     total_confirmed_decisions = 0
     source_counts: Counter[str] = Counter()
     issue_code_counts: Counter[str] = Counter()
+    profile_issue_code_counts: Counter[str] = Counter()
     retry_trigger_source_counts: Counter[str] = Counter()
     warning_source_counts: Counter[str] = Counter()
 
@@ -191,24 +208,28 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         module_count = _int_or_default(summary.get("module_count"), 0)
         warning_count = _int_or_default(summary.get("warning_count"), 0)
         quality_issue_count = _int_or_default(summary.get("quality_issue_count"), 0)
+        profile_quality_issue_count = _int_or_default(summary.get("profile_quality_issue_count"), 0)
         retryable_count = _int_or_default(summary.get("retryable_quality_issue_count"), 0)
         retry_count = _int_or_default(summary.get("retry_count"), 0)
         blocking_retry_count = _int_or_default(summary.get("blocking_retry_count"), 0)
         confirmed_count = _int_or_default(summary.get("confirmed_decision_count"), 0)
         run_source_counts = _counter_from_dict(summary.get("source_counts", {}))
         run_issue_counts = _counter_from_dict(summary.get("issue_code_counts", {}))
+        run_profile_issue_counts = _counter_from_dict(summary.get("profile_issue_code_counts", {}))
         run_retry_trigger_counts = _counter_from_dict(summary.get("retry_trigger_source_counts", {}))
         run_warning_source_counts = _counter_from_dict(summary.get("warning_source_counts", {}))
 
         total_modules += module_count
         total_warnings += warning_count
         total_quality_issues += quality_issue_count
+        total_profile_quality_issues += profile_quality_issue_count
         total_retryable_issues += retryable_count
         total_retries += retry_count
         total_blocking_retries += blocking_retry_count
         total_confirmed_decisions += confirmed_count
         source_counts.update(run_source_counts)
         issue_code_counts.update(run_issue_counts)
+        profile_issue_code_counts.update(run_profile_issue_counts)
         retry_trigger_source_counts.update(run_retry_trigger_counts)
         warning_source_counts.update(run_warning_source_counts)
         issue_details.extend(_issue_details_for_trace(index, trace, case_id, run_id))
@@ -225,12 +246,14 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
             "module_count": module_count,
             "warning_count": warning_count,
             "quality_issue_count": quality_issue_count,
+            "profile_quality_issue_count": profile_quality_issue_count,
             "retryable_quality_issue_count": retryable_count,
             "confirmed_decision_count": confirmed_count,
             "retry_count": retry_count,
             "blocking_retry_count": blocking_retry_count,
             "source_counts": dict(run_source_counts),
             "issue_code_counts": dict(run_issue_counts),
+            "profile_issue_code_counts": dict(run_profile_issue_counts),
             "retry_trigger_source_counts": dict(run_retry_trigger_counts),
             "warning_source_counts": dict(run_warning_source_counts),
         })
@@ -240,6 +263,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         "module_count": total_modules,
         "warning_count": total_warnings,
         "quality_issue_count": total_quality_issues,
+        "profile_quality_issue_count": total_profile_quality_issues,
         "retryable_quality_issue_count": total_retryable_issues,
         "confirmed_decision_count": total_confirmed_decisions,
         "retry_count": total_retries,
@@ -248,6 +272,7 @@ def build_fpa_stability_comparison(trace_paths: list[str]) -> dict[str, object]:
         "warning_source_counts": dict(warning_source_counts),
         "source_counts": dict(source_counts),
         "issue_code_counts": dict(issue_code_counts),
+        "profile_issue_code_counts": dict(profile_issue_code_counts),
     }
     return {
         "summary": {
@@ -300,13 +325,14 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
         "",
         "## Summary",
         "",
-        "| Runs | Modules | Warnings | Quality Issues | Retryable Issues | Confirmations | Retries | Blocking Retries |",
-        "|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Runs | Modules | Warnings | Quality Issues | Profile Quality Issues | Retryable Issues | Confirmations | Retries | Blocking Retries |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         (
             f"| {_int_or_default(summary.get('run_count'), 0)} "
             f"| {_int_or_default(summary.get('module_count'), 0)} "
             f"| {_int_or_default(summary.get('warning_count'), 0)} "
             f"| {_int_or_default(summary.get('quality_issue_count'), 0)} "
+            f"| {_int_or_default(summary.get('profile_quality_issue_count'), 0)} "
             f"| {_int_or_default(summary.get('retryable_quality_issue_count'), 0)} "
             f"| {_int_or_default(summary.get('confirmed_decision_count'), 0)} "
             f"| {_int_or_default(summary.get('retry_count'), 0)} "
@@ -357,8 +383,8 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
     lines.extend([
         "## Runs",
         "",
-        "| # | Case ID | Run ID | Trace | Profile | Strategy | Rule Set | Modules | Warnings | Quality Issues | Retryable | Confirmations | Retries | Blocking Retries |",
-        "|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| # | Case ID | Run ID | Trace | Profile | Strategy | Rule Set | Modules | Warnings | Quality Issues | Profile Quality Issues | Retryable | Confirmations | Retries | Blocking Retries |",
+        "|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ])
     for run in runs:
         if not isinstance(run, dict):
@@ -374,6 +400,7 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
             f"| {_int_or_default(run.get('module_count'), 0)} "
             f"| {_int_or_default(run.get('warning_count'), 0)} "
             f"| {_int_or_default(run.get('quality_issue_count'), 0)} "
+            f"| {_int_or_default(run.get('profile_quality_issue_count'), 0)} "
             f"| {_int_or_default(run.get('retryable_quality_issue_count'), 0)} "
             f"| {_int_or_default(run.get('confirmed_decision_count'), 0)} "
             f"| {_int_or_default(run.get('retry_count'), 0)} "
@@ -407,6 +434,17 @@ def render_fpa_stability_comparison_markdown(comparison: dict[str, object]) -> s
     ])
     for code, count in sorted(_counter_from_dict(summary.get("issue_code_counts", {})).items()):
         lines.append(f"| {_escape_md(code)} | {count} |")
+    profile_issue_counts = _counter_from_dict(summary.get("profile_issue_code_counts", {}))
+    if profile_issue_counts:
+        lines.extend([
+            "",
+            "## Profile Issue Codes",
+            "",
+            "| Code | Count |",
+            "|---|---:|",
+        ])
+        for code, count in sorted(profile_issue_counts.items()):
+            lines.append(f"| {_escape_md(code)} | {count} |")
     retry_trigger_counts = _counter_from_dict(summary.get("retry_trigger_source_counts", {}))
     warning_source_counts = _counter_from_dict(summary.get("warning_source_counts", {}))
     if retry_trigger_counts:
@@ -448,6 +486,18 @@ def _quality_parts(value: object) -> tuple[list[dict[str, Any]], dict[str, objec
     issues = [issue for issue in raw_issues if isinstance(issue, dict)] if isinstance(raw_issues, list) else []
     summary = value.get("summary", {})
     return issues, summary if isinstance(summary, dict) else {}
+
+
+def _profile_quality_parts(agent_review: object) -> tuple[list[dict[str, Any]], dict[str, object]]:
+    if not isinstance(agent_review, dict):
+        return [], {}
+    outputs = agent_review.get("contract_outputs", {})
+    quality_key = ""
+    if isinstance(outputs, dict):
+        quality_key = str(outputs.get("quality_review", "") or "")
+    if not quality_key or quality_key == "quality_review":
+        return [], {}
+    return _quality_parts(agent_review.get(quality_key, {}))
 
 
 def _classify_warning_source(warning: str, module: dict[str, object]) -> str:
@@ -648,6 +698,22 @@ def _issue_details_for_trace(
                 "retryable": bool(issue.get("retryable")),
                 "message": str(issue.get("message", "") or ""),
                 "suggested_action": str(issue.get("suggested_action", "") or ""),
+            })
+        profile_issues, _profile_summary = _profile_quality_parts(module.get("agent_review", {}))
+        for issue in profile_issues:
+            details.append({
+                "run_index": run_index,
+                "case_id": case_id,
+                "run_id": run_id,
+                "module_index": module_index,
+                "module": str(module.get("module", "") or ""),
+                "l3": str(module.get("l3", "") or ""),
+                "code": str(issue.get("code", "") or ""),
+                "severity": str(issue.get("severity", "") or ""),
+                "retryable": False,
+                "message": str(issue.get("message", "") or ""),
+                "suggested_action": str(issue.get("suggestion", "") or issue.get("suggested_action", "") or ""),
+                "source": "profile_quality_review",
             })
     return details
 
