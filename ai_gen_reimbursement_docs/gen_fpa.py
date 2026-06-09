@@ -85,6 +85,8 @@ EXPLANATION_INLINE_SYSTEM_ELEMENT_SKIP_HINTS = (
     "表个数计量",
     "输出的票据、报表、统计、文件",
     "输出格式化文件",
+    "生成文件",
+    "文件生成",
     "内部逻辑文件",
     "外部接口文件",
     "接口开发行",
@@ -96,6 +98,11 @@ BROAD_SYSTEM_ELEMENT_CANDIDATES = (
     "外部文件",
     "接口开发",
     "界面开发",
+)
+NON_SYSTEM_ELEMENT_CANDIDATE_SUFFIXES = (
+    "列表",
+    "代表",
+    "表示",
 )
 BASIS_TYPE_HINTS = {
     "EI": ("外部输入", "修改或增加界面", "插入、修改、删除", "输入界面"),
@@ -355,6 +362,8 @@ def _normalize_system_element_candidate(candidate: str) -> str:
     clean = re.sub(r"[、,，/]*(?:EI|EQ|EO|ILF|EIF)\b.*$", "", clean, flags=re.IGNORECASE).strip(" 、,，/。.")
     if not clean or clean.upper() in VALID_FPA_TYPES:
         return ""
+    if clean.endswith(NON_SYSTEM_ELEMENT_CANDIDATE_SUFFIXES):
+        return ""
     if any(hint in clean for hint in BROAD_SYSTEM_ELEMENT_CANDIDATES):
         return ""
     if "或" in clean and any(marker in clean for marker in EXPLANATION_SYSTEM_ELEMENT_MARKERS):
@@ -388,6 +397,8 @@ def _candidate_inline_system_elements(explanation_text: str) -> list[str]:
         if not item or any(hint in item for hint in EXPLANATION_SYSTEM_ELEMENT_SKIP_HINTS):
             continue
         if any(hint in item for hint in EXPLANATION_INLINE_SYSTEM_ELEMENT_SKIP_HINTS):
+            continue
+        if "文件" in item and any(action in item for action in ("导出", "输出", "生成", "下载")):
             continue
         if not any(marker in item for marker in EXPLANATION_INLINE_SYSTEM_ELEMENT_MARKERS):
             continue

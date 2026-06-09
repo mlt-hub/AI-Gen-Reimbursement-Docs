@@ -108,15 +108,51 @@ tmp_validation_runs\20260609_175558_after_connector_and_warning_filter
 
 误报收紧后继续执行第二轮真实模型轻量复跑，本轮只完成 `strict_fpa` 和 `unified_ui`。`multi_uis` 和 `ui_api_mapping` 调用超时，未得到可记录的第二轮结果；该项不作为失败结论，保留为后续复跑观察项。
 
+## 误报收紧后补充复跑
+
+继续在新 worktree 中补齐四 profile 真实模型轻量复跑，临时结果目录为：
+
+```text
+tmp_validation_runs\20260609_192310_warning_filter_rerun
+tmp_validation_runs\20260609_192310_warning_filter_rerun_final
+```
+
+复跑摘要：
+
+| profile | ai_called | parse_ok | parsed rows | normalized rows | warnings | quality warnings |
+|---|---:|---:|---:|---:|---:|---:|
+| `strict_fpa` | yes | yes | 4 | 4 | 0 | 0 |
+| `unified_ui` | yes | yes | 4 | 4 | 0 | 0 |
+| `multi_uis` | yes | yes | 4 | 4 | 3 | 3 |
+| `ui_api_mapping` | yes | yes | 6 | 6 | 0 | 0 |
+
+本轮观察：
+
+- `strict_fpa` 输出 1 条 `ILF` 数据组、1 条 `EI`、1 条 `EQ`、1 条 `EO`，无 warning。
+- `unified_ui` 最终复跑输出 4 行，无 warning；复跑过程中暴露“列表”“代表”“导出/输出文件产物”被正文低置信系统元素检测误报，已收紧候选词过滤。
+- `multi_uis` 本轮完整跑通，输出 4 行；3 条界面行触发 `计算说明未明确当前 FPA 类型: EI`，属于真实模型说明表达质量观察，后续可通过 profile prompt 强化。
+- `ui_api_mapping` 最终复跑继续稳定输出 6 行，名称保持 `-界面开发` / `-接口开发` 短横线连接，无 warning。
+
+`ui_api_mapping` 最终复跑的 6 行：
+
+| 新增/修改功能点 | 类型 |
+|---|---|
+| `【后台】业务管理-客户管理-客户资料维护-新增客户-界面开发` | `EI` |
+| `【后台】业务管理-客户管理-客户资料维护-新增客户-接口开发` | `ILF` |
+| `【后台】业务管理-客户管理-客户资料维护-查询客户-界面开发` | `EI` |
+| `【后台】业务管理-客户管理-客户资料维护-查询客户-接口开发` | `ILF` |
+| `【后台】业务管理-客户管理-客户资料维护-导出客户清单-界面开发` | `EI` |
+| `【后台】业务管理-客户管理-客户资料维护-导出客户清单-接口开发` | `ILF` |
+
 ## 剩余观察项
 
 1. `multi_uis` 输出无 warning，但查询、导出行被模型标为 `EI`，且 `计算依据归类`分别指向 `EQ` / `EO` 规则。后处理已新增 `postprocess.classification_basis_type_conflict`，后续复跑会将这类“类型”和“计算依据归类”不一致写入 warning。
 2. `multi_uis` 和部分 profile 的说明中出现“客户表”，但没有使用 `系统元素：` 标签。后处理已新增正文低置信系统元素检测，后续复跑会将输入未明确提供的疑似表/服务/接口词写入 warning。
-3. `ui_api_mapping` 首轮名称连接符规范化后复跑已确认 6 行结构稳定，且名称已规范为 `-界面开发` / `-接口开发`。误报收紧后的第二轮 `ui_api_mapping` 调用超时，仍需后续复跑确认 warning 命中情况。
+3. `multi_uis` 本轮完整复跑后主要剩余问题变为说明中未明确写出当前 `EI` 类型；下一步更适合通过 profile prompt 强化“界面行计算说明必须显式写出 EI”。
 
 ## 后续建议
 
 优先级建议：
 
-1. 后续再运行一次四 profile 真实模型样例，重点补齐误报收紧后 `multi_uis` 和 `ui_api_mapping` 的第二轮观察。
+1. 优先强化 `multi_uis` profile prompt，要求界面拆分行的`计算说明`显式写出当前 `EI` 类型。
 2. 根据真实模型复跑结果，继续治理低置信 warning 误报和 profile 差异化规则。
