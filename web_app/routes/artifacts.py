@@ -20,6 +20,7 @@ from ai_gen_reimbursement_docs.cosmic_validator import (
     validate_cosmic_items,
 )
 from ai_gen_reimbursement_docs.cosmic_writer import write_cosmic_xlsx
+from ai_gen_reimbursement_docs.config_utils import load_gen_cosmic_cfp_policy
 from ai_gen_reimbursement_docs.excel_source import write_cfp_sum
 from ai_gen_reimbursement_docs.pipeline import (
     _read_cfp_formula_from_meta_md,
@@ -465,8 +466,9 @@ def _cfp_policy_from_payload(payload: dict) -> dict[str, float]:
         "利旧": 0.0,
         "优化未改": 0.0,
     }
-    raw_policy = payload.get("cfp_policy")
-    if isinstance(raw_policy, dict):
+    for raw_policy in (load_gen_cosmic_cfp_policy(), payload.get("cfp_policy")):
+        if not isinstance(raw_policy, dict):
+            continue
         for key, value in raw_policy.items():
             try:
                 number = float(value)
