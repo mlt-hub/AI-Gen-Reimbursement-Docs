@@ -67,6 +67,59 @@
 
         <button class="btn-primary w-fit" @click="applyMapping">应用到模板映射</button>
       </div>
+
+      <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="text-xs font-semibold text-[var(--color-ink-soft)]">已导入草稿</p>
+            <p class="mt-1 text-xs text-[var(--color-ink-muted)]">选择已生成的 Word 模板草稿应用到模板映射。</p>
+          </div>
+          <button class="btn-secondary w-fit" :disabled="draftsLoading" @click="loadDrafts">
+            {{ draftsLoading ? '加载中...' : '刷新' }}
+          </button>
+        </div>
+
+        <p v-if="draftsMessage" :class="['mt-2 text-sm', draftsOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ draftsMessage }}</p>
+
+        <div v-if="drafts.length" class="mt-3 space-y-2">
+          <div
+            v-for="item in drafts"
+            :key="item.id"
+            class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3"
+          >
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-mono text-xs text-[var(--color-ink-muted)]">{{ item.id }}</span>
+                  <span :class="['status-badge', item.ok ? 'status-badge--success' : 'status-badge--warning']">
+                    {{ item.ok ? '预检通过' : '需检查' }}
+                  </span>
+                  <span class="text-xs text-[var(--color-ink-soft)]">{{ formatBytes(item.size_bytes) }}</span>
+                </div>
+                <p class="mt-1 break-all font-mono text-xs text-[var(--color-ink-soft)]">{{ item.template_path }}</p>
+                <p v-if="item.capabilities?.anchor_mode" class="mt-1 text-xs text-[var(--color-ink-muted)]">
+                  {{ anchorModeLabel(item.capabilities.anchor_mode) }} / 模块表 {{ moduleColumnCount(item) }} 列
+                </p>
+                <ul v-if="item.errors.length" class="mt-2 list-disc space-y-1 pl-5 text-xs text-[var(--color-danger)]">
+                  <li v-for="error in item.errors" :key="error">{{ error }}</li>
+                </ul>
+                <ul v-if="item.warnings.length" class="mt-2 list-disc space-y-1 pl-5 text-xs text-[var(--color-warning)]">
+                  <li v-for="warning in item.warnings" :key="warning">{{ warning }}</li>
+                </ul>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <a class="btn-secondary min-h-0 px-2 py-1 text-xs" :href="draftDownloadUrl(item, item.template_filename)">下载</a>
+                <a class="btn-secondary min-h-0 px-2 py-1 text-xs" :href="draftDownloadUrl(item, item.manifest_filename)">manifest</a>
+                <button class="btn-primary min-h-0 px-2 py-1 text-xs" @click="applyDraft(item)">应用</button>
+                <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="deletingId === item.id" @click="deleteDraft(item)">
+                  {{ deletingId === item.id ? '删除中' : '删除' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p v-else-if="!draftsLoading" class="mt-3 text-xs text-[var(--color-ink-soft)]">暂无已导入草稿。</p>
+      </div>
     </div>
   </div>
 </template>
@@ -100,6 +153,25 @@ interface ImportResult {
   out_templates_patch: Record<string, string>
 }
 
+interface ImportedDraft {
+  id: string
+  template_path: string
+  manifest_path: string
+  template_filename: string
+  manifest_filename: string
+  created_at: number
+  size_bytes: number
+  ok: boolean
+  warnings: string[]
+  errors: string[]
+  capabilities: Record<string, any>
+  out_templates_patch: Record<string, string>
+}
+
+interface ImportedDraftsResponse {
+  templates?: ImportedDraft[]
+}
+
 const emit = defineEmits<{
   apply: [patch: Record<string, string>]
 }>()
@@ -109,6 +181,11 @@ const loading = ref(false)
 const result = ref<ImportResult | null>(null)
 const message = ref('')
 const ok = ref(true)
+const drafts = ref<ImportedDraft[]>([])
+const draftsLoading = ref(false)
+const draftsMessage = ref('')
+const draftsOk = ref(true)
+const deletingId = ref('')
 
 const statusText = computed(() => {
   if (loading.value) return '导入中'
@@ -145,6 +222,7 @@ async function importTemplate() {
     })
     ok.value = true
     message.value = '模板草稿已生成'
+    await loadDrafts()
   } catch (error) {
     ok.value = false
     message.value = normalizeApiError(error)
@@ -156,6 +234,48 @@ async function importTemplate() {
 function applyMapping() {
   if (!result.value) return
   emit('apply', result.value.out_templates_patch || {})
+}
+
+async function loadDrafts() {
+  draftsLoading.value = true
+  draftsMessage.value = ''
+  try {
+    const data = await apiFetch<ImportedDraftsResponse>('/api/templates/spec/imported')
+    drafts.value = data.templates || []
+    draftsOk.value = true
+  } catch (error) {
+    drafts.value = []
+    draftsOk.value = false
+    draftsMessage.value = normalizeApiError(error)
+  } finally {
+    draftsLoading.value = false
+  }
+}
+
+function applyDraft(item: ImportedDraft) {
+  emit('apply', item.out_templates_patch || {})
+  draftsOk.value = true
+  draftsMessage.value = '已应用到模板映射，请保存'
+}
+
+async function deleteDraft(item: ImportedDraft) {
+  const confirmed = window.confirm(`确认删除模板草稿 ${item.id}？`)
+  if (!confirmed) return
+  deletingId.value = item.id
+  draftsMessage.value = ''
+  try {
+    await apiFetch(`/api/templates/spec/imported/${encodeURIComponent(item.id)}`, {
+      method: 'DELETE',
+    })
+    draftsOk.value = true
+    draftsMessage.value = '模板草稿已删除'
+    await loadDrafts()
+  } catch (error) {
+    draftsOk.value = false
+    draftsMessage.value = normalizeApiError(error)
+  } finally {
+    deletingId.value = ''
+  }
 }
 
 function scopeLabel(scope: string) {
@@ -173,4 +293,30 @@ function anchorLocationLabel(location: string) {
   if (location.startsWith('after:')) return `位于 ${location.slice(6)} 之后`
   return location
 }
+
+function draftDownloadUrl(item: ImportedDraft, filename: string) {
+  return `/api/templates/spec/imported/${encodeURIComponent(item.id)}/${encodeURIComponent(filename)}`
+}
+
+function anchorModeLabel(mode: unknown) {
+  return {
+    split: '拆分锚点',
+    full: '完整章节锚点',
+    legacy_full: '历史完整锚点',
+    optional: '可选锚点',
+  }[String(mode)] || '锚点已配置'
+}
+
+function moduleColumnCount(item: ImportedDraft) {
+  const moduleTable = item.capabilities?.module_table
+  return Number(moduleTable?.column_count || 0)
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value)) return '-'
+  if (value < 1024) return `${value} B`
+  return `${(value / 1024).toFixed(1)} KB`
+}
+
+loadDrafts()
 </script>

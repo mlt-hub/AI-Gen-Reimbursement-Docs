@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from web_app.dependencies import config_dir, is_local_mode, require_auth
-from web_app.services.template_service import import_spec_template_upload
+from web_app.services.template_service import (
+    delete_imported_spec_template,
+    import_spec_template_upload,
+    list_imported_spec_templates,
+    resolve_imported_spec_template_file,
+)
 
 
 router = APIRouter()
@@ -93,3 +98,48 @@ async def import_spec_template(
             "spec_out_template": str(result.template_path),
         },
     }
+
+
+@router.get("/api/templates/spec/imported")
+async def list_imported_spec_templates_route(
+    request: Request,
+    _user: str = Depends(require_auth),
+):
+    """列出已导入的需求说明书模板草稿。"""
+    if not is_local_mode(request):
+        raise HTTPException(403, "Word 模板草稿只能由本机管理员管理")
+    return {
+        "templates": list_imported_spec_templates(config_dir()),
+    }
+
+
+@router.get("/api/templates/spec/imported/{import_id}/{filename}")
+async def download_imported_spec_template(
+    request: Request,
+    import_id: str,
+    filename: str,
+    _user: str = Depends(require_auth),
+):
+    """下载已导入的需求说明书模板草稿或 manifest。"""
+    if not is_local_mode(request):
+        raise HTTPException(403, "Word 模板草稿只能由本机管理员管理")
+    try:
+        path = resolve_imported_spec_template_file(config_dir(), import_id, filename)
+    except FileNotFoundError:
+        raise HTTPException(404, "模板草稿不存在")
+    return FileResponse(path, filename=filename)
+
+
+@router.delete("/api/templates/spec/imported/{import_id}")
+async def delete_imported_spec_template_route(
+    request: Request,
+    import_id: str,
+    _user: str = Depends(require_auth),
+):
+    """删除已导入的需求说明书模板草稿。"""
+    if not is_local_mode(request):
+        raise HTTPException(403, "Word 模板草稿只能由本机管理员管理")
+    deleted = delete_imported_spec_template(config_dir(), import_id)
+    if not deleted:
+        raise HTTPException(404, "模板草稿不存在")
+    return {"deleted": True, "id": import_id}

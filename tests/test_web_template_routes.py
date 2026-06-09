@@ -51,6 +51,46 @@ def test_import_spec_template_route_creates_template_draft(monkeypatch, tmp_path
     assert [item["key"] for item in data["inserted_anchors"]] == ["module_table", "module_details"]
 
 
+def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    assert import_resp.status_code == 200
+    imported = import_resp.json()
+    import_id = Path(imported["template_path"]).parent.name
+
+    list_resp = client.get("/api/templates/spec/imported")
+    assert list_resp.status_code == 200
+    items = list_resp.json()["templates"]
+    assert len(items) == 1
+    assert items[0]["id"] == import_id
+    assert items[0]["ok"] is True
+    assert items[0]["out_templates_patch"] == {"spec_out_template": imported["template_path"]}
+
+    download_resp = client.get(f"/api/templates/spec/imported/{import_id}/项目需求说明书-输出模板.manifest.yaml")
+    assert download_resp.status_code == 200
+    assert b"kind: spec" in download_resp.content
+
+    delete_resp = client.delete(f"/api/templates/spec/imported/{import_id}")
+    assert delete_resp.status_code == 200
+    assert delete_resp.json() == {"deleted": True, "id": import_id}
+    assert client.get("/api/templates/spec/imported").json()["templates"] == []
+
+
+def test_imported_spec_template_routes_reject_invalid_file(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+
+    resp = client.get("/api/templates/spec/imported/not-found/..%2Fsecret.txt")
+
+    assert resp.status_code == 404
+
+
 def test_import_spec_template_route_rejects_non_docx(monkeypatch, tmp_path):
     client = _client(monkeypatch, tmp_path)
 
@@ -73,3 +113,10 @@ def test_import_spec_template_route_rejects_remote_mode(monkeypatch, tmp_path):
 
     assert resp.status_code == 403
     assert "本机管理员" in resp.json()["detail"]
+
+
+def test_imported_spec_template_management_rejects_remote_mode(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path, local_mode=False)
+
+    assert client.get("/api/templates/spec/imported").status_code == 403
+    assert client.delete("/api/templates/spec/imported/abc").status_code == 403
