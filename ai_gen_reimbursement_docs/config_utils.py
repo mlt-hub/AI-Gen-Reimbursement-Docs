@@ -398,6 +398,7 @@ def load_fpa_excel_recalc_check() -> bool:
 FPA_CONFIG_FILENAME = "fpa_config.yaml"
 FPA_DOMAIN_CONTEXT_FILENAME = "domain_context.json"
 FPA_JUDGEMENT_RULES_FILENAME = "fpa_judgement_rules.yaml"
+FPA_CONFIG_DIR_ENV = "AI_REIMBURSEMENT_FPA_CONFIG_DIR"
 FPA_RUNTIME_CONFIG_FILES = (
     FPA_CONFIG_FILENAME,
     FPA_JUDGEMENT_RULES_FILENAME,
@@ -415,9 +416,17 @@ VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
 FPA_USER_PROMPT_PLACEHOLDERS = frozenset({"core_rules", "judgement_rules", "payload_json"})
 
 
+def fpa_config_dir() -> Path:
+    """Path to FPA runtime config files, overrideable for isolated validation runs."""
+    override = os.environ.get(FPA_CONFIG_DIR_ENV, "").strip()
+    if override:
+        return Path(override).expanduser()
+    return config_dir()
+
+
 def inspect_fpa_runtime_config_files(target_dir: Path | None = None) -> dict[str, object]:
     """Return presence information for FPA files required by Web runtime tasks."""
-    base_dir = target_dir or config_dir()
+    base_dir = target_dir or fpa_config_dir()
     files = {name: (base_dir / name).is_file() for name in FPA_RUNTIME_CONFIG_FILES}
     missing = [name for name, present in files.items() if not present]
     return {
@@ -499,7 +508,7 @@ def validate_fpa_domain_context(context: dict[str, object]) -> None:
 
 def load_fpa_domain_context() -> dict[str, object]:
     """Strictly read project-level FPA domain boundary context."""
-    json_path = config_dir() / FPA_DOMAIN_CONTEXT_FILENAME
+    json_path = fpa_config_dir() / FPA_DOMAIN_CONTEXT_FILENAME
     if not json_path.exists():
         raise FpaConfigError(f"未找到 FPA 领域上下文文件：配置目录/{FPA_DOMAIN_CONTEXT_FILENAME}")
     try:
@@ -512,7 +521,7 @@ def load_fpa_domain_context() -> dict[str, object]:
 
 def load_optional_fpa_domain_context() -> dict[str, object]:
     """Read project-level FPA domain context when configured."""
-    if not (config_dir() / FPA_DOMAIN_CONTEXT_FILENAME).exists():
+    if not (fpa_config_dir() / FPA_DOMAIN_CONTEXT_FILENAME).exists():
         return {}
     return load_fpa_domain_context()
 
@@ -1059,7 +1068,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
 
 def load_fpa_config() -> dict[str, object]:
     """严格读取 FPA 专用配置。"""
-    yaml_path = config_dir() / FPA_CONFIG_FILENAME
+    yaml_path = fpa_config_dir() / FPA_CONFIG_FILENAME
     if not yaml_path.exists():
         raise FpaConfigError(f"未找到 FPA 配置文件：配置目录/{FPA_CONFIG_FILENAME}")
     try:
@@ -1114,7 +1123,7 @@ def load_fpa_judgement_rules_source() -> str:
 
 def load_fpa_judgement_rules_config() -> list[str]:
     """严格读取独立 FPA 计算依据归类判定原则配置。"""
-    yaml_path = config_dir() / FPA_JUDGEMENT_RULES_FILENAME
+    yaml_path = fpa_config_dir() / FPA_JUDGEMENT_RULES_FILENAME
     if not yaml_path.exists():
         raise FpaConfigError(f"未找到 FPA 判定原则配置文件：配置目录/{FPA_JUDGEMENT_RULES_FILENAME}")
     try:

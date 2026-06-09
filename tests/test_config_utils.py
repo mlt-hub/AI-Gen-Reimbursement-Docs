@@ -425,6 +425,26 @@ class TestLoadFpaProfile:
             with pytest.raises(FpaConfigError, match="profiles\\.fpa_profile"):
                 load_fpa_profile()
 
+    def test_fpa_config_dir_env_overrides_only_fpa_runtime_config(self, tmp_path):
+        home_config = tmp_path / "home"
+        fpa_config = tmp_path / "fpa"
+        home_config.mkdir()
+        fpa_config.mkdir()
+        _write_fpa_config(home_config)
+        _write_fpa_config(fpa_config)
+        fpa_path = fpa_config / "fpa_config.yaml"
+        fpa_path.write_text(
+            fpa_path.read_text(encoding="utf-8").replace(
+                "CUSTOM ${core_rules} ${judgement_rules} ${payload_json}",
+                "OVERRIDE ${core_rules} ${judgement_rules} ${payload_json}",
+            ),
+            encoding="utf-8",
+        )
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=home_config):
+            with patch.dict(os.environ, {"AI_REIMBURSEMENT_FPA_CONFIG_DIR": str(fpa_config)}):
+                assert load_fpa_user_prompt_template("unified_ui").startswith("OVERRIDE")
+
 class TestLoadFpaExecutionOptions:
     def test_adjustment_value_config_requires_explicit_legacy_weights(self, tmp_path):
         _write_fpa_config(tmp_path)

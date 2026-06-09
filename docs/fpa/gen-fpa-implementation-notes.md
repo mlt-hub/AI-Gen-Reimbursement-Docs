@@ -341,6 +341,25 @@ AI 输出要求为 JSON：
 | AI 失败兜底拆分规则 | `fpa_profiles.py` 中各 profile 的 `fallback_rows_for_l3()`；custom_rules 的行名、类型理由和说明模板来自 `row_planning_rules` | 代码 + FPA 专用配置文件 |
 | 多界面合并规则 | `gen_fpa.py` 的 `_normalize_ai_fpa_rows_for_l3()` | 代码 |
 
+### FPA 运行时配置目录
+
+默认情况下，FPA 专用运行配置从用户配置目录读取：
+
+```text
+~/.ai-gen-reimbursement-docs/
+  fpa_config.yaml
+  fpa_judgement_rules.yaml
+  domain_context.json
+```
+
+为了让稳定性验证、真实模型抽样和隔离测试使用独立配置集，可以设置环境变量：
+
+```text
+AI_REIMBURSEMENT_FPA_CONFIG_DIR=path/to/fpa-runtime-config
+```
+
+该变量只影响 FPA 运行时配置文件读取，包括 `fpa_config.yaml`、`fpa_judgement_rules.yaml` 和 `domain_context.json`。它不改变通用系统配置目录，也不影响 `.env`、`system_config.yaml` 或输出模板解析。
+
 ### 系统提示词
 
 读取方式：
