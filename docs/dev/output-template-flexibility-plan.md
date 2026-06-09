@@ -412,3 +412,45 @@ template_pack/
 - manifest 只用于说明和生成前预检，尚未驱动写入器做列映射或锚点写入。
 - 用户自定义模板如果没有同名 manifest，会按对应 kind 的默认契约预检。
 - `gen-basedata` 不生成最终交付物，因此不执行输出模板预检。
+
+### 已实施代码入口
+
+第一阶段实现集中在：
+
+- `ai_gen_reimbursement_docs/template_manifest.py`
+  - `load_template_manifest(...)`：读取模板旁 manifest，缺失时使用默认契约。
+  - `validate_output_template(...)`：校验单个模板。
+  - `validate_output_templates(...)`：按当前生成模式批量预检。
+  - `required_template_kinds_for_mode(...)`：定义不同 mode 需要校验的模板种类。
+- `ai_gen_reimbursement_docs/pipeline.py`
+  - `_resolve_templates(...)` 解析模板路径后调用预检。
+  - 预检通过后通过 pipeline activity 事件输出模板预检结果。
+
+manifest 文件命名规则：
+
+```text
+输出模板.xlsx.manifest.yaml
+输出模板.docx.manifest.yaml
+```
+
+同时兼容当前内置模板采用的简短命名：
+
+```text
+输出模板.manifest.yaml
+```
+
+### 第一阶段验收标准
+
+第一阶段的验收点是：
+
+- 默认四类内置模板预检全部通过。
+- 自定义模板缺少 manifest 时，按 kind 使用默认契约预检。
+- Excel 模板缺少必要 sheet、表头、样式源行、数据起始行或关键公式时，生成前失败。
+- Word 模板缺少必要占位符时，生成前失败。
+- `gen-basedata` 不受输出模板预检影响。
+
+已覆盖的测试：
+
+- `tests/test_template_manifest.py`
+- `tests/test_pipeline_units.py`
+- `tests/test_pipeline.py`
