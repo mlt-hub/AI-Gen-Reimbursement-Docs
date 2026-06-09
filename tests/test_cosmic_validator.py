@@ -121,6 +121,38 @@ def test_non_standard_move_type_is_warning():
     assert "NON_STANDARD_MOVE_TYPE" in _codes(result)
 
 
+def test_control_command_movement_requires_review():
+    control = _movement(3, "X", data_group="页面状态", data_attrs="排序状态")
+    control.sub_process = "点击下一页并排序列表"
+    result = validate_cosmic_item(
+        _item(movements=[
+            _movement(1, "E", data_group="查询参数", data_attrs="页码"),
+            _movement(2, "X", data_group="查询结果", data_attrs="列表"),
+            control,
+        ])
+    )
+
+    assert "CONTROL_COMMAND_MOVEMENT" in _codes(result)
+    assert result.status == "review_required"
+    assert result.basis["movement_semantics"][0]["code"] == "CONTROL_COMMAND_MOVEMENT"
+    assert result.basis["movement_semantics"][0]["movement_order"] == 3
+
+
+def test_data_operation_only_movement_requires_review():
+    operation = _movement(2, "X", data_group="校验结果", data_attrs="提示")
+    operation.sub_process = "格式化手机号并校验输入格式"
+    result = validate_cosmic_item(
+        _item(movements=[
+            _movement(1, "E", data_group="用户数据", data_attrs="手机号"),
+            operation,
+        ])
+    )
+
+    assert "DATA_OPERATION_ONLY_MOVEMENT" in _codes(result)
+    assert result.status == "review_required"
+    assert result.basis["movement_semantics"][0]["code"] == "DATA_OPERATION_ONLY_MOVEMENT"
+
+
 def test_error_wins_over_warning():
     result = validate_cosmic_item(
         _item(trigger="", movements=[_movement(1, "E", data_attrs=""), _movement(2, "X")])

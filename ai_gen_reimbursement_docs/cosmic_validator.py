@@ -17,6 +17,14 @@ _GENERIC_USER_WORDS = {
     "操作员", "用户", "管理员", "后台管理员", "管理人员", "业务人员",
     "系统管理员", "系统", "外部系统",
 }
+_CONTROL_COMMAND_WORDS = {
+    "上一页", "下一页", "翻页", "分页", "排序", "筛选", "展示菜单",
+    "隐藏菜单", "展开", "收起", "点击确认", "点击确定", "确认前一操作",
+}
+_DATA_OPERATION_WORDS = {
+    "格式化", "校验", "验证", "分析", "统计", "计算", "汇总", "转换",
+    "排序计算", "数据清洗", "连接数据库", "连接服务器", "建立容器",
+}
 
 
 @dataclass
@@ -182,10 +190,41 @@ def is_generic_function_user(item: CosmicItem) -> bool:
     return bool(_function_user_basis(item).get("requires_review"))
 
 
+def _movement_semantic_findings(movement) -> list[dict[str, object]]:
+    text = " ".join([
+        str(getattr(movement, "sub_process", "") or ""),
+        str(getattr(movement, "data_group", "") or ""),
+        str(getattr(movement, "data_attrs", "") or ""),
+    ])
+    findings: list[dict[str, object]] = []
+    matched = _matched_words(text, _CONTROL_COMMAND_WORDS)
+    if matched:
+        findings.append({
+            "code": "CONTROL_COMMAND_MOVEMENT",
+            "movement_order": movement.order,
+            "matched_terms": matched,
+            "description": "子过程疑似控制命令，通常不单独计为 COSMIC 数据移动",
+        })
+    matched = _matched_words(text, _DATA_OPERATION_WORDS)
+    if matched:
+        findings.append({
+            "code": "DATA_OPERATION_ONLY_MOVEMENT",
+            "movement_order": movement.order,
+            "matched_terms": matched,
+            "description": "子过程疑似仅为数据运算或技术操作，通常应归入相关数据移动或不单独计列",
+        })
+    return findings
+
+
+def _matched_words(text: str, words: set[str]) -> list[str]:
+    return sorted(word for word in words if word and word in text)
+
+
 def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
     issues: list[CosmicIssue] = []
     basis = {
         "function_user": _function_user_basis(item),
+        "movement_semantics": [],
     }
 
     if not item.module_l1 or not item.module_l2 or not item.module_l3:
@@ -238,6 +277,16 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
             ))
 
     for index, movement in enumerate(item.movements):
+        for finding in _movement_semantic_findings(movement):
+            basis["movement_semantics"].append(finding)
+            if finding["code"] == "CONTROL_COMMAND_MOVEMENT":
+                message = "控制命令通常不移动兴趣对象数据，需确认是否应计列"
+            else:
+                message = "数据运算或技术操作通常不单独计为数据移动，需确认是否应计列"
+            issues.append(_issue(
+                "warning", finding["code"], message,
+                f"movements[{index}].sub_process", movement.order, item=item,
+            ))
         if movement.move_type not in _VALID_MOVE_TYPES:
             issues.append(_issue(
                 "warning", "NON_STANDARD_MOVE_TYPE", "移动类型不是标准 E/X/R/W",
