@@ -59,7 +59,7 @@
           <div>
             <span class="text-[var(--color-ink-muted)]">人工确认</span>
             <span class="ml-2 font-medium text-[var(--color-ink)]">
-              {{ report.export_policy.manual_confirmation_required ? '需要' : '不需要' }}
+              {{ confirmationSummaryText }}
             </span>
           </div>
           <div>
@@ -221,8 +221,17 @@ interface CosmicReport {
   cfp_basis?: Record<string, unknown>
   export_policy?: {
     manual_confirmation_required: boolean
-    formal_excel?: { reason?: string }
-    draft_excel?: { reason?: string }
+    unconfirmed_review_item_count?: number
+    formal_excel?: { status?: string; reason?: string }
+    draft_excel?: { status?: string; reason?: string; requires_config?: boolean; config_key?: string }
+  }
+  confirmation_summary?: {
+    total_review_item_count?: number
+    unconfirmed_review_item_count?: number
+    resolved_review_item_count?: number
+    error_review_item_count?: number
+    warning_review_item_count?: number
+    info_review_item_count?: number
   }
   preview_rows: CosmicPreviewRow[]
   review_items: CosmicReviewItem[]
@@ -263,6 +272,14 @@ const globalReviewItems = computed(() => {
   return (report.value?.review_items ?? []).filter(item => item.scope === 'global' || item.item_index === null)
 })
 
+const confirmationSummaryText = computed(() => {
+  const summary = report.value?.confirmation_summary
+  const total = summary?.total_review_item_count ?? report.value?.review_items.length ?? 0
+  const unconfirmed = summary?.unconfirmed_review_item_count ?? report.value?.export_policy?.unconfirmed_review_item_count ?? total
+  if (!total) return '不需要'
+  return unconfirmed ? `未确认 ${unconfirmed}/${total}` : `已处理 ${total}/${total}`
+})
+
 onMounted(() => {
   if (sessionId.value) {
     void loadSessionDraft({ silent: true })
@@ -283,6 +300,7 @@ async function loadJsonFile(event: Event) {
     const normalized = normalizeReport(parsed)
     confirmationStoreKey.value = buildConfirmationStoreKey(normalized)
     applyStoredConfirmations(normalized)
+    applyConfirmationExportPolicy(normalized)
     report.value = normalized
     backendSyncStatus.value = '已读取本地 COSMIC JSON'
   } catch (err) {
@@ -327,6 +345,7 @@ function normalizeReport(value: unknown): CosmicReport {
     summary: data.summary,
     cfp_basis: data.cfp_basis,
     export_policy: data.export_policy,
+    confirmation_summary: data.confirmation_summary,
     preview_rows: data.preview_rows,
     review_items: data.review_items.map(normalizeReviewItem),
     items: data.items,
@@ -343,6 +362,7 @@ async function loadSessionConfirmation() {
     const normalized = normalizeReport(response.payload)
     confirmationStoreKey.value = buildConfirmationStoreKey(normalized)
     applyStoredConfirmations(normalized)
+    applyConfirmationExportPolicy(normalized)
     report.value = normalized
     backendSyncStatus.value = '已读取会话确认'
   } catch (err) {
@@ -365,6 +385,7 @@ async function loadSessionDraft(options: { silent?: boolean } = {}) {
     confirmationStoreKey.value = buildConfirmationStoreKey(normalized)
     applyStoredConfirmations(normalized)
     await applySessionConfirmations(normalized)
+    applyConfirmationExportPolicy(normalized)
     report.value = normalized
     backendSyncStatus.value = '已读取任务草稿'
   } catch (err) {
@@ -409,6 +430,7 @@ function mergeConfirmations(target: CosmicReport, source: Partial<CosmicReport>)
       }
     }
   }
+  applyConfirmationExportPolicy(target)
 }
 
 async function saveSessionConfirmation() {
@@ -417,7 +439,7 @@ async function saveSessionConfirmation() {
   backendSyncError.value = ''
   backendSyncStatus.value = ''
   try {
-    await apiFetch<CosmicJsonResponse>(
+    const response = await apiFetch<CosmicJsonResponse>(
       `/api/sessions/${encodeURIComponent(sessionId.value)}/cosmic/confirmation`,
       {
         method: 'PUT',
@@ -425,6 +447,8 @@ async function saveSessionConfirmation() {
         body: JSON.stringify(report.value),
       },
     )
+    report.value.export_policy = response.payload.export_policy
+    report.value.confirmation_summary = response.payload.confirmation_summary
     backendSyncStatus.value = '已保存到会话'
   } catch (err) {
     backendSyncError.value = normalizeApiError(err)
@@ -503,7 +527,70 @@ function updateConfirmation(reviewId: string, patch: Record<string, string>) {
     confirmed_by: previous.confirmed_by ?? '',
     confirmed_at: nextStatus === 'unconfirmed' ? '' : statusChanged ? new Date().toISOString() : previous.confirmed_at ?? '',
   }
+  if (report.value) {
+    applyConfirmationExportPolicy(report.value)
+  }
   saveConfirmations()
+}
+
+function applyConfirmationExportPolicy(data: CosmicReport) {
+  const total = data.review_items.length
+  const unconfirmed = data.review_items.filter(item => !isResolvedConfirmation(item)).length
+  const errorCount = data.review_items.filter(item => item.severity === 'error').length
+  const warningCount = data.review_items.filter(item => item.severity === 'warning').length
+  const infoCount = data.review_items.filter(item => item.severity === 'info').length
+  data.confirmation_summary = {
+    total_review_item_count: total,
+    unconfirmed_review_item_count: unconfirmed,
+    resolved_review_item_count: total - unconfirmed,
+    error_review_item_count: errorCount,
+    warning_review_item_count: warningCount,
+    info_review_item_count: infoCount,
+  }
+  data.export_policy = buildConfirmationExportPolicy(data.status, total, unconfirmed, errorCount)
+}
+
+function isResolvedConfirmation(item: CosmicReviewItem): boolean {
+  const status = item.confirmation?.status || 'unconfirmed'
+  return status === 'confirmed' || status === 'rejected' || status === 'waived'
+}
+
+function buildConfirmationExportPolicy(status: string, total: number, unconfirmed: number, errorCount: number): CosmicReport['export_policy'] {
+  if (status === 'passed') {
+    return {
+      manual_confirmation_required: total > 0,
+      unconfirmed_review_item_count: unconfirmed,
+      formal_excel: { status: 'allowed', reason: '校验通过，可写正式 Excel' },
+      draft_excel: { status: 'not_needed', reason: '校验通过，不需要草稿 Excel', requires_config: false, config_key: 'gen_cosmic.allow_draft_excel_output' },
+    }
+  }
+  if (unconfirmed) {
+    return {
+      manual_confirmation_required: total > 0,
+      unconfirmed_review_item_count: unconfirmed,
+      formal_excel: { status: 'blocked', reason: `仍有 ${unconfirmed} 个审阅项未确认，正式 Excel 需人工确认后再导出` },
+      draft_excel: {
+        status: status === 'review_required' ? 'eligible' : 'blocked',
+        reason: status === 'review_required' ? '存在待审问题，可在配置开启后写草稿 Excel' : '存在阻断问题，不能写草稿 Excel',
+        requires_config: status === 'review_required',
+        config_key: 'gen_cosmic.allow_draft_excel_output',
+      },
+    }
+  }
+  if (errorCount) {
+    return {
+      manual_confirmation_required: total > 0,
+      unconfirmed_review_item_count: 0,
+      formal_excel: { status: 'blocked', reason: '存在 error 级阻断项，即使已确认也不能写正式 Excel' },
+      draft_excel: { status: 'blocked', reason: '存在 error 级阻断项，不能写草稿 Excel', requires_config: false, config_key: 'gen_cosmic.allow_draft_excel_output' },
+    }
+  }
+  return {
+    manual_confirmation_required: total > 0,
+    unconfirmed_review_item_count: 0,
+    formal_excel: { status: 'allowed_after_confirmation', reason: '待审项已人工处理，可写正式 Excel' },
+    draft_excel: { status: 'not_needed', reason: '待审项已人工处理，不需要草稿 Excel', requires_config: false, config_key: 'gen_cosmic.allow_draft_excel_output' },
+  }
 }
 
 function cfpForRow(index: number): string {

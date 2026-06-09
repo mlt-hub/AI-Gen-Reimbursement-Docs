@@ -7,6 +7,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
+from ai_gen_reimbursement_docs.cosmic_confirmation import (
+    apply_cosmic_confirmation_export_policy,
+)
 from web_app.dependencies import require_auth, require_local
 from web_app.services.artifact_service import find_log_dir
 from web_app.services.session_access import require_session_access
@@ -334,6 +337,7 @@ def create_router(session_manager: SessionManager) -> APIRouter:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise HTTPException(500, "COSMIC 确认 JSON 损坏") from exc
+        payload = apply_cosmic_confirmation_export_policy(payload)
         return {
             "session_id": session_id,
             "filename": path.name,
@@ -372,6 +376,7 @@ def create_router(session_manager: SessionManager) -> APIRouter:
         require_session_access(session_manager, session_id, request, user)
         if not isinstance(payload, dict):
             raise HTTPException(400, "COSMIC 确认 JSON 必须是对象")
+        payload = apply_cosmic_confirmation_export_policy(payload)
         path = _cosmic_confirmation_path(session_manager, session_id)
         path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -381,6 +386,7 @@ def create_router(session_manager: SessionManager) -> APIRouter:
             "ok": True,
             "session_id": session_id,
             "filename": path.name,
+            "payload": payload,
         }
 
     return router

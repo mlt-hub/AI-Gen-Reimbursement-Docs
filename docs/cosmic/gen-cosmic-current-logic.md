@@ -21,7 +21,7 @@
 6. 根据 `passed/review_required/blocked` 决定是否写正式 Excel 或草稿 Excel。
 7. 只有正式 Excel 写入成功时，才写入 CFP 总和，供后续 `gen-list` 使用。
 
-批处理阶段不再用“目标 Excel 路径已设置”表示 COSMIC 成功。`/preview/cosmic` 已提供基于结构化 JSON 的最小审阅页；会话页 `/sessions/:sessionId/cosmic/preview` 会自动读取生成任务产出的 COSMIC JSON 草稿，并可手动读取和保存确认 JSON。当前尚未实现确认后正式导出执行策略。
+批处理阶段不再用“目标 Excel 路径已设置”表示 COSMIC 成功。`/preview/cosmic` 已提供基于结构化 JSON 的最小审阅页；会话页 `/sessions/:sessionId/cosmic/preview` 会自动读取生成任务产出的 COSMIC JSON 草稿，并可手动读取和保存确认 JSON。当前已能根据确认状态刷新 `export_policy`，但尚未实际执行确认后的 Excel 再导出动作。
 
 ## 流水线入口
 
@@ -268,11 +268,11 @@ AI 调用限制：
 1. 边界识别不足：prompt 已加入送审口径硬约束，内部技术交互、控制命令、部分纯数据运算、错误/确认消息和部分非功能事项已有待审 warning；但复杂边界和复杂非功能事项仍主要依赖 AI 自觉和后续人工确认。
 2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；但尚未自动修复到最小颗粒度模块，也未接入业务角色映射表。
 3. CFP 口径仍需配置化：缺公式已阻断，但 `复用`、`利旧`、优化未改子过程填 `0` 仍未完整工程化。
-4. 预览导出闭环未完成：当前已有 `preview_rows`、`review_items`、`confirmation` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口和确认 JSON 接口；但确认后导出策略尚未执行化。
+4. 预览导出闭环未完成：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口和确认 JSON 接口；确认状态会刷新导出策略，但确认后的 Excel 再导出动作尚未执行化。
 5. 解析格式敏感：`parse_md_to_items` 仍保留给兼容或排查场景，不适合承载复杂人工编辑。
 6. 送审规则未完整工程化：软评填报参考手册中的启发式规则尚未完整进入 prompt、结构化校验和结果状态。
 
-后续如果继续推进 COSMIC 审阅，应优先把确认 JSON 和导出策略串成闭环；更复杂的人工编辑和自动过滤仍应基于当前结构化 JSON 契约扩展。
+后续如果继续推进 COSMIC 审阅，应优先把确认后的 Excel 再导出动作串成闭环；更复杂的人工编辑和自动过滤仍应基于当前结构化 JSON 契约扩展。
 
 ## 第一阶段实施状态
 
@@ -663,10 +663,13 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `review_items[].confirmation.note` | `string` | 是 | 人工备注，默认空字符串。 |
 | `review_items[].confirmation.confirmed_by` | `string` | 是 | 确认人，默认空字符串。 |
 | `review_items[].confirmation.confirmed_at` | `string` | 是 | 确认时间，默认空字符串；后续建议使用 ISO 8601 字符串。 |
+| `confirmation_summary` | `object` | 否 | 人工确认汇总；保存或读取会话确认 JSON 时由后端生成，前端编辑确认状态时也会本地刷新。 |
+| `confirmation_summary.unconfirmed_review_item_count` | `number` | 否 | 未处理审阅项数量；`confirmed/rejected/waived` 都视为已处理。 |
+| `confirmation_summary.error_review_item_count` | `number` | 否 | error 级审阅项数量；即使已确认，正式 Excel 仍保持阻断。 |
 | `export_policy` | `object` | 是 | 基于校验状态推导的预览页导出策略；不表示实际 Excel 是否已经写入。 |
 | `export_policy.manual_confirmation_required` | `boolean` | 是 | 是否存在需要人工处理的审阅项。 |
-| `export_policy.unconfirmed_review_item_count` | `number` | 是 | 默认未确认审阅项数量，等于当前 `review_items` 数量。 |
-| `export_policy.formal_excel.status` | `string` | 是 | 正式 Excel 导出策略，当前为 `allowed/blocked`。 |
+| `export_policy.unconfirmed_review_item_count` | `number` | 是 | 未确认审阅项数量；初始等于当前 `review_items` 数量，确认后会减少。 |
+| `export_policy.formal_excel.status` | `string` | 是 | 正式 Excel 导出策略，当前为 `allowed/allowed_after_confirmation/blocked`。 |
 | `export_policy.formal_excel.reason` | `string` | 是 | 正式 Excel 导出策略原因。 |
 | `export_policy.draft_excel.status` | `string` | 是 | 草稿 Excel 导出策略，当前为 `not_needed/eligible/blocked`。 |
 | `export_policy.draft_excel.reason` | `string` | 是 | 草稿 Excel 导出策略原因。 |

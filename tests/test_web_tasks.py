@@ -1488,9 +1488,11 @@ def test_cosmic_confirmation_can_be_saved_and_loaded(monkeypatch, tmp_path):
     server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
     payload = {
         "project": "测试项目",
+        "status": "review_required",
         "review_items": [
             {
                 "review_id": "item::0::GENERIC_FUNCTION_USER::user::",
+                "severity": "warning",
                 "confirmation": {
                     "status": "confirmed",
                     "decision": "confirmed",
@@ -1507,10 +1509,15 @@ def test_cosmic_confirmation_can_be_saved_and_loaded(monkeypatch, tmp_path):
 
     assert save_resp.status_code == 200
     assert save_resp.json()["filename"] == "cosmic-confirmation.json"
+    assert save_resp.json()["payload"]["export_policy"]["formal_excel"]["status"] == "allowed_after_confirmation"
     assert load_resp.status_code == 200
-    assert load_resp.json()["payload"] == payload
+    saved_payload = load_resp.json()["payload"]
+    assert saved_payload["project"] == payload["project"]
+    assert saved_payload["review_items"] == payload["review_items"]
+    assert saved_payload["confirmation_summary"]["unconfirmed_review_item_count"] == 0
+    assert saved_payload["export_policy"]["formal_excel"]["status"] == "allowed_after_confirmation"
     saved = json.loads((tmp_path / "cosmic-confirmation.json").read_text(encoding="utf-8"))
-    assert saved == payload
+    assert saved == saved_payload
     server.session_manager.cleanup_download(session_id)
 
 
