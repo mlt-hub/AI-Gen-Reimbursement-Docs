@@ -1296,6 +1296,9 @@ prompt_fragments:
         assert "不要只输出界面开发行替代这些处理开发行" in unified
         assert "独立页面、独立业务对象、独立业务流程或独立用户端" in multi_uis
         assert "不要只输出界面开发行替代这些处理开发行" in multi_uis
+        assert "按 EI 识别" in multi_uis
+        assert "按 EI 计量" in multi_uis
+        assert "不要只写“界面开发行”" in multi_uis
         assert "payload_json.agent_review.mapping_judgement.judgements" in mapping_system
         assert "expected_default_rows" in mapping_system
         assert "explicit_backend_rows" in mapping_system
