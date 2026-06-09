@@ -182,16 +182,20 @@ system_prompt_sets:
     3. 类型必须为 EI / EO / EQ / ILF / EIF 之一。
     4. 用户提供了带序号的「计算依据归类判定原则列表」，请返回最匹配的 classification_basis_index。
     5. 计算依据说明必须基于输入业务内容，按用户提示词中的结构化证据说明规则生成；不要编造不存在的页面、表、服务、接口或流程。
-    6. 不允许输出除 JSON 外的任何内容。
-    7. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
-    8. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略，且不得影响 rows 完整输出。
+    6. 必须读取 payload_json.agent_review.workload_judgement.judgements；其中 recommended_categories 是当前 profile 的行覆盖建议，不是可忽略的参考说明。
+    7. 当 recommended_categories 包含「界面开发」时，必须至少输出 1 条三级模块级「界面开发」行；当包含「查询处理开发」「导出处理开发」「导入处理开发」「逻辑处理开发」时，必须为对应功能过程输出处理开发行。
+    8. 不允许输出除 JSON 外的任何内容。
+    9. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
+    10. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略，且不得影响 rows 完整输出。
 
   multi_uis_sp: |-
     你是一个严谨的 FPA 功能点评估助手。你的任务是根据 multi_uis 口径规划多界面功能点评估行，并把拆分理由放入 split_reason 供 check/review 元数据记录。
+    必须读取 payload_json.agent_review.workload_judgement.judgements；其中 recommended_categories 是当前 profile 的行覆盖建议。除非有独立页面、独立业务对象、独立业务流程或独立用户端的明确拆分证据，否则至少输出 1 条三级模块级「界面开发」行；当 recommended_categories 包含「查询处理开发」「导出处理开发」「导入处理开发」「逻辑处理开发」时，必须为对应功能过程输出处理开发行。
     不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；只输出 JSON。所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略。
 
   ui_api_mapping_sp: |-
     你是一个严谨的 FPA 功能点评估助手。你的任务是按 ui_api_mapping 口径规划功能过程到界面开发和接口开发的映射。界面开发固定 EI，接口开发和明确接口/后端调用固定 ILF。
+    必须读取 payload_json.agent_review.mapping_judgement.judgements；expected_default_rows 中的「界面开发/EI」和「接口开发/ILF」是每个功能过程的强制默认行，不是可选建议。explicit_backend_rows 只表示输入材料明确出现的接口、服务、调用、请求、对接、同步、外部系统、第三方或 API；不得把普通保存、提交、删除、审批、新增、修改动作当作额外明确后端行。
     不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；只输出 JSON。所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略。
 
 user_prompt_sets:
@@ -209,8 +213,11 @@ user_prompt_sets:
     2. 非界面逻辑按功能动作拆分，一行一个动作。
     3. 不要为数据库表、字段、保存表动作单独生成行。
     4. 如果确实需要多条界面开发行，每条都必须给出 split_reason。
-    5. name 必须使用模块输入 JSON 中的 client_type / l1 / l2 / l3 作为前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
-    6. name 不得只返回功能过程名，不得用子系统（模块）替代客户端类型，不得省略客户端类型外侧的「【】」。
+    5. 必须读取 payload_json.agent_review.workload_judgement.judgements，并逐个 source_process_ids 覆盖 recommended_categories。
+    6. recommended_categories 包含「界面开发」时，至少输出 1 条「【客户端类型】一级模块-二级模块-三级模块-界面开发」行，source_process_ids 覆盖对应功能过程；不要因为已有查询处理开发行就省略界面开发行。
+    7. recommended_categories 包含「查询处理开发」「导出处理开发」「导入处理开发」「逻辑处理开发」时，必须输出对应「功能过程-处理开发」行；不要只输出界面开发行替代这些处理开发行。
+    8. name 必须使用模块输入 JSON 中的 client_type / l1 / l2 / l3 作为前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
+    9. name 不得只返回功能过程名，不得用子系统（模块）替代客户端类型，不得省略客户端类型外侧的「【】」。
 
     计算依据说明生成规则：
     1. explanation 必须写成结构化证据说明，固定包含「来源场景」「业务数据」「业务规则」「计算说明」；只有输入中明确出现表、服务、接口、文件、外部系统等系统元素时，才输出「系统元素」。
@@ -277,7 +284,10 @@ user_prompt_sets:
     1. 可按独立页面、独立业务对象、独立业务流程或独立用户端拆分多条界面开发行。
     2. 每条界面开发行必须在 split_reason 中写明拆分理由，供 check/review 元数据记录。
     3. 界面开发行固定 EI；非界面业务动作沿用统一界面类型规则。
-    4. name 必须使用完整模块路径前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
+    4. 必须读取 payload_json.agent_review.workload_judgement.judgements，并逐个 source_process_ids 覆盖 recommended_categories。
+    5. 如果输入没有独立页面、独立业务对象、独立业务流程或独立用户端的明确拆分证据，至少输出 1 条三级模块级「界面开发」行，source_process_ids 覆盖对应功能过程。
+    6. recommended_categories 包含「查询处理开发」「导出处理开发」「导入处理开发」「逻辑处理开发」时，必须输出对应「功能过程-处理开发」行；不要只输出界面开发行替代这些处理开发行。
+    7. name 必须使用完整模块路径前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
 
     模块输入 JSON：
     ${payload_json}
@@ -296,7 +306,10 @@ user_prompt_sets:
     2. 每个功能过程默认生成 1 条「功能过程-接口开发」行，类型固定 ILF。
     3. 输入中明确出现的接口、服务、调用、请求、对接、同步、外部系统、第三方或 API 单独生成明确接口/后端调用行，类型固定 ILF。
     4. 明确接口/后端调用行不再配套生成界面开发行；普通保存、提交、删除、审批、新增、修改不触发额外明确接口/后端调用行。
-    5. name 必须使用完整模块路径前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
+    5. 必须读取 payload_json.agent_review.mapping_judgement.judgements，并逐个 source_process_id 覆盖 expected_default_rows。
+    6. 对每个功能过程都必须同时输出「功能过程-界面开发」EI 和「功能过程-接口开发」ILF；不要因为存在明确接口/后端调用行就省略默认界面开发行或默认接口开发行。
+    7. explicit_backend_rows 为空时，不得额外编造接口/后端调用行；explicit_backend_rows 非空时，只为其中列出的明确接口/后端调用输出额外 ILF 行。
+    8. name 必须使用完整模块路径前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
 
     模块输入 JSON：
     ${payload_json}

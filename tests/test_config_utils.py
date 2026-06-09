@@ -943,11 +943,16 @@ class TestLoadFpaUserPromptTemplate:
         copy_default_config_files(tmp_path, source)
 
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            custom = load_fpa_user_prompt_template("unified_ui")
+            unified = load_fpa_user_prompt_template("unified_ui")
+            multi_uis = load_fpa_user_prompt_template("multi_uis")
+            mapping = load_fpa_user_prompt_template("ui_api_mapping")
             strict = load_fpa_user_prompt_template("strict_fpa")
+            unified_system = load_fpa_system_prompt_config("unified_ui").text
+            multi_uis_system = load_fpa_system_prompt_config("multi_uis").text
+            mapping_system = load_fpa_system_prompt_config("ui_api_mapping").text
             strict_system = load_fpa_system_prompt_config("strict_fpa").text
 
-        for template in (custom, strict):
+        for template in (unified, strict):
             assert "计算依据说明生成规则" in template
             assert "来源场景" in template
             assert "业务数据" in template
@@ -976,6 +981,19 @@ class TestLoadFpaUserPromptTemplate:
         assert "payload_json.merge_review.groups" in strict
         assert "agent_review.type_judgement" in strict_system
         assert "不得用 EI 替代 EIF" in strict_system
+        for prompt in (unified_system, multi_uis_system, unified, multi_uis):
+            assert "payload_json.agent_review.workload_judgement.judgements" in prompt
+            assert "recommended_categories" in prompt
+        assert "不要因为已有查询处理开发行就省略界面开发行" in unified
+        assert "不要只输出界面开发行替代这些处理开发行" in unified
+        assert "独立页面、独立业务对象、独立业务流程或独立用户端" in multi_uis
+        assert "不要只输出界面开发行替代这些处理开发行" in multi_uis
+        assert "payload_json.agent_review.mapping_judgement.judgements" in mapping_system
+        assert "expected_default_rows" in mapping_system
+        assert "explicit_backend_rows" in mapping_system
+        assert "逐个 source_process_id 覆盖 expected_default_rows" in mapping
+        assert "不要因为存在明确接口/后端调用行就省略默认界面开发行或默认接口开发行" in mapping
+        assert "explicit_backend_rows 为空时，不得额外编造接口/后端调用行" in mapping
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
         _write_fpa_config(tmp_path)
