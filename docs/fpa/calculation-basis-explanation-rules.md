@@ -245,6 +245,116 @@ Web/API 测试：
 .\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_fpa_profiles.py
 ```
 
+#### 第二阶段任务拆分清单
+
+建议按以下任务推进，保持每个任务可独立验证：
+
+1. 后端诊断 helper
+   - 新增 `diagnose_fpa_user_prompt(profile_name: str)` 或等价 service。
+   - 返回 profile、user prompt 来源、fragment 引用状态、warnings、errors、unresolved placeholders。
+   - 覆盖默认 profile、未引用 fragment、缺失 fragment、profile override、未知占位符等单元测试。
+
+2. 最终 prompt 预览 helper
+   - 新增 `render_fpa_prompt_preview(profile_name, sample_group, sample_judgement_rules)` 或等价 service。
+   - 复用现有 `build_prompt` 渲染逻辑，不复制模板替换规则。
+   - 返回 `rendered_prompt`，并保证无 `${...}` 残留。
+
+3. Web 配置读取接口接入 diagnostics
+   - 在现有 FPA 配置读取接口中附带 profile prompt diagnostics。
+   - 不改变现有配置字段语义。
+   - 如果 diagnostics 有 warning，接口仍返回 200。
+
+4. Web 配置保存接口接入 diagnostics
+   - 保存前执行模板合法性和 fragment 解析检查。
+   - 阻断 errors，允许 warnings。
+   - 返回保存后的 diagnostics，方便前端立即展示。
+
+5. 前端展示 diagnostics
+   - 展示 warning/error 列表。
+   - 展示 fragment 使用状态：未引用、使用 default、使用 profile override、解析失败。
+   - 展示最终 prompt 预览折叠区。
+
+6. 测试补齐
+   - 后端 service 测试覆盖 diagnostics 规则。
+   - Web route/service 测试覆盖读取、保存、错误和 warning。
+   - 前端 smoke 覆盖 warning 和最终 prompt 预览显示。
+
+#### 第二阶段 API 草案
+
+优先复用现有 Web 配置接口。如果需要新增端点，建议使用以下草案。
+
+读取某个 profile 的 prompt diagnostics：
+
+```http
+GET /api/web-config/fpa-prompt-diagnostics?profile=strict_fpa
+```
+
+响应：
+
+```json
+{
+  "profile": "strict_fpa",
+  "user_prompt_source": "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.strict_fpa_up）",
+  "fragments": [
+    {
+      "name": "calculation_explanation_rules",
+      "referenced": true,
+      "resolved": true,
+      "source": "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.default）"
+    }
+  ],
+  "unresolved_placeholders": [],
+  "warnings": [],
+  "errors": []
+}
+```
+
+预览某个 profile 的最终 prompt：
+
+```http
+POST /api/web-config/fpa-prompt-preview
+Content-Type: application/json
+```
+
+请求：
+
+```json
+{
+  "profile": "strict_fpa",
+  "sample_group": {
+    "client_type": "后台",
+    "l1": "业务管理",
+    "l2": "客户管理",
+    "l3": "客户资料维护",
+    "l3_desc": "维护客户基础资料。",
+    "processes": []
+  },
+  "judgement_rules": [
+    "维护业务数据的外部输入，按 EI 识别。"
+  ]
+}
+```
+
+响应：
+
+```json
+{
+  "profile": "strict_fpa",
+  "diagnostics": {
+    "warnings": [],
+    "errors": [],
+    "unresolved_placeholders": []
+  },
+  "rendered_prompt": "..."
+}
+```
+
+错误约定：
+
+- 配置错误使用 400，返回 `errors`。
+- 未知 profile 使用 404 或现有项目统一错误格式。
+- diagnostics warning 不阻断，仍返回 200。
+
 ### 第三阶段实施方案：样例试运行与说明质量预检
 
 第三阶段目标是在用户修改 FPA prompt 后，提供一个低风险的“样例试运行”能力，让用户在正式执行 `gen-fpa` 前看到模型输出是否能解析、是否包含结构化 `计算依据说明`，以及会触发哪些 `_explanation_quality_warnings`。本阶段只做预检，不写正式 Excel，不改变正式 `gen-fpa` 输出链路。
@@ -489,6 +599,141 @@ Web/API 测试：
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_gen_fpa_ai.py
 ```
+
+#### 第三阶段任务拆分清单
+
+建议按以下任务推进：
+
+1. 样例输入 builder
+   - 新增固定内置样例 group。
+   - 新增最小 judgement rules fallback。
+   - 确保样例覆盖 EI、EQ、EO 和可能的数据功能说明证据。
+
+2. 无文件副作用的 FPA AI rows 预处理 helper
+   - 抽取或复用现有 preview/gen-fpa 后处理逻辑。
+   - 输入 AI rows、profile、group、meta、judgement rules。
+   - 输出 normalized rows、warnings、rule hits、quality warnings。
+
+3. 样例试运行 service
+   - 新增 `run_fpa_prompt_sample_preview(...)`。
+   - 先执行 prompt diagnostics；有 errors 时不调用 LLM。
+   - 调用 LLM 后解析 JSON。
+   - 返回 raw response、parse 状态、normalized rows 和 warnings。
+
+4. 样例试运行 API
+   - 新增 `POST /api/web-config/fpa-prompt-sample-run` 或接入现有调试接口。
+   - 无 API Key、prompt 配置错误、模型非 JSON 分别返回清晰状态。
+
+5. 前端样例试运行 UI
+   - 在配置页或调试页增加“试运行当前 prompt”按钮。
+   - 展示 loading、success、error。
+   - 展示 rendered prompt、raw response、样例 FPA 行、quality warnings。
+
+6. 测试补齐
+   - mock LLM 成功、失败、非 JSON、缺 explanation。
+   - prompt diagnostics error 时不调用 LLM。
+   - API 返回结构和前端 smoke。
+
+#### 第三阶段 API 草案
+
+样例试运行：
+
+```http
+POST /api/web-config/fpa-prompt-sample-run
+Content-Type: application/json
+```
+
+请求：
+
+```json
+{
+  "profile": "strict_fpa",
+  "model_config": {
+    "model": "current",
+    "base_url": "current",
+    "api_key_source": "current"
+  }
+}
+```
+
+第一版也可以不接收 `model_config`，直接使用当前任务配置快照或 Web 配置中已有模型设置。
+
+成功响应：
+
+```json
+{
+  "profile": "strict_fpa",
+  "prompt_diagnostics": {
+    "warnings": [],
+    "errors": [],
+    "fragments": [],
+    "unresolved_placeholders": [],
+    "rendered_prompt": "..."
+  },
+  "sample_input": {},
+  "ai_called": true,
+  "parse_ok": true,
+  "raw_response": "{...}",
+  "parsed_rows": [],
+  "normalized_rows": [
+    {
+      "新增/修改功能点": "【后台】业务管理-客户管理-客户资料维护-新增客户",
+      "类型": "EI",
+      "计算依据归类": "维护业务数据的外部输入，按 EI 识别。",
+      "计算依据说明": "来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...",
+      "后处理警告": ""
+    }
+  ],
+  "warnings": [],
+  "quality_warnings": [],
+  "rule_hits": []
+}
+```
+
+prompt 配置错误响应：
+
+```json
+{
+  "profile": "strict_fpa",
+  "prompt_diagnostics": {
+    "errors": [
+      "prompt_fragments.calculation_explanation_rules.default 必须是非空字符串"
+    ],
+    "warnings": []
+  },
+  "ai_called": false,
+  "parse_ok": false,
+  "raw_response": "",
+  "parsed_rows": [],
+  "normalized_rows": [],
+  "warnings": [],
+  "quality_warnings": []
+}
+```
+
+模型非 JSON 响应：
+
+```json
+{
+  "profile": "strict_fpa",
+  "ai_called": true,
+  "parse_ok": false,
+  "raw_response": "模型返回的原文",
+  "parsed_rows": [],
+  "normalized_rows": [],
+  "warnings": [
+    "模型返回无法解析为 JSON，请检查 prompt 是否仍要求只输出 JSON。"
+  ],
+  "quality_warnings": []
+}
+```
+
+错误约定：
+
+- prompt diagnostics error：建议返回 200 + `ai_called=false`，便于前端在同一预览面板展示；也可按现有 Web 配置错误风格返回 400。
+- 无 API Key：返回 400。
+- LLM 调用异常：返回 502 或现有 AI 调用错误格式。
+- parse 失败：返回 200 + `parse_ok=false`，保留 raw response 供用户排查。
 
 后续待办：
 
