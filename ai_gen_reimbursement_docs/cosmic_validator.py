@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dataclass_field
 from typing import Literal
 
 from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
@@ -51,14 +51,15 @@ class CosmicIssue:
     process: str = ""
     movement_order: int | None = None
     scope: str = "item"
+    details: dict[str, object] = dataclass_field(default_factory=dict)
 
 
 @dataclass
 class CosmicValidationResult:
     item: CosmicItem
     status: ValidationStatus
-    issues: list[CosmicIssue] = field(default_factory=list)
-    basis: dict[str, object] = field(default_factory=dict)
+    issues: list[CosmicIssue] = dataclass_field(default_factory=list)
+    basis: dict[str, object] = dataclass_field(default_factory=dict)
 
 
 @dataclass
@@ -67,8 +68,8 @@ class CosmicValidationReport:
     status: ValidationStatus
     results: list[CosmicValidationResult]
     summary: dict[str, int]
-    cfp_basis: dict[str, object] = field(default_factory=dict)
-    issues: list[CosmicIssue] = field(default_factory=list)
+    cfp_basis: dict[str, object] = dataclass_field(default_factory=dict)
+    issues: list[CosmicIssue] = dataclass_field(default_factory=list)
 
 
 def _issue(
@@ -80,6 +81,7 @@ def _issue(
     *,
     item: CosmicItem | None = None,
     scope: str = "item",
+    details: dict[str, object] | None = None,
 ) -> CosmicIssue:
     module_path = ""
     process = ""
@@ -97,6 +99,7 @@ def _issue(
         process=process,
         movement_order=movement_order,
         scope=scope,
+        details=details or {},
     )
 
 
@@ -267,6 +270,13 @@ def _matched_words(text: str, words: set[str]) -> list[str]:
     return sorted(word for word in words if word and word in text)
 
 
+def _finding_details(finding: dict[str, object]) -> dict[str, object]:
+    return {
+        "matched_terms": list(finding.get("matched_terms", [])),
+        "basis_description": str(finding.get("description", "")),
+    }
+
+
 def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
     issues: list[CosmicIssue] = []
     basis = {
@@ -305,7 +315,7 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
         issues.append(_issue(
             "warning", finding["code"],
             "疑似非功能内容或技术改造事项，需确认是否应进入 COSMIC 功能规模",
-            "process", item=item,
+            "process", item=item, details=_finding_details(finding),
         ))
 
     if len(item.movements) < 2:
@@ -345,6 +355,7 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
             issues.append(_issue(
                 "warning", finding["code"], message,
                 f"movements[{index}].sub_process", movement.order, item=item,
+                details=_finding_details(finding),
             ))
         if movement.move_type not in _VALID_MOVE_TYPES:
             issues.append(_issue(
@@ -459,6 +470,7 @@ def _issue_to_dict(issue: CosmicIssue) -> dict:
         "process": issue.process,
         "movement_order": issue.movement_order,
         "scope": issue.scope,
+        "details": issue.details,
     }
 
 
@@ -543,8 +555,8 @@ def write_cosmic_validation_report_md(
     if report.issues:
         lines.extend([
             "### 全局\n\n",
-            "| 级别 | code | 字段 | 数据移动序号 | 说明 |\n",
-            "| --- | --- | --- | --- | --- |\n",
+            "| 级别 | code | 字段 | 数据移动序号 | 说明 | 依据 |\n",
+            "| --- | --- | --- | --- | --- | --- |\n",
         ])
         for issue in report.issues:
             lines.append(_issue_row(issue))
@@ -564,8 +576,8 @@ def write_cosmic_validation_report_md(
         process = result.item.process or "未填写功能过程"
         lines.extend([
             f"### {module_path} / {process}\n\n",
-            "| 级别 | code | 字段 | 数据移动序号 | 说明 |\n",
-            "| --- | --- | --- | --- | --- |\n",
+            "| 级别 | code | 字段 | 数据移动序号 | 说明 | 依据 |\n",
+            "| --- | --- | --- | --- | --- | --- |\n",
         ])
         for issue in result.issues:
             lines.append(_issue_row(issue))
@@ -581,7 +593,25 @@ def write_cosmic_validation_report_md(
 
 def _issue_row(issue: CosmicIssue) -> str:
     order = "" if issue.movement_order is None else str(issue.movement_order)
+    details = _issue_details_text(issue)
     return (
         f"| {issue.severity} | `{issue.code}` | `{issue.field}` | "
-        f"{order} | {issue.message} |\n"
+        f"{order} | {issue.message} | {details} |\n"
     )
+
+
+def _issue_details_text(issue: CosmicIssue) -> str:
+    if not issue.details:
+        return ""
+    matched_terms = issue.details.get("matched_terms") or []
+    basis_description = str(issue.details.get("basis_description", "") or "")
+    parts = []
+    if matched_terms:
+        parts.append("命中：" + "、".join(str(term) for term in matched_terms))
+    if basis_description:
+        parts.append(basis_description)
+    return "<br>".join(_escape_md_table_cell(part) for part in parts)
+
+
+def _escape_md_table_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", "<br>")

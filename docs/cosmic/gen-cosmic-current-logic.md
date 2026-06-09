@@ -625,6 +625,7 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `items[].issues[].message` | `string` | 是 | 面向人的说明。 |
 | `items[].issues[].field` | `string` | 否 | 字段路径，例如 `movements[0].move_type`。 |
 | `items[].issues[].movement_order` | `number|null` | 否 | 问题关联的数据移动序号。 |
+| `items[].issues[].details` | `object` | 是 | 结构化依据。语义 warning 当前包含 `matched_terms` 和 `basis_description`。 |
 | `summary` | `object` | 是 | 汇总数量。 |
 
 JSON 写入必须使用 `ensure_ascii=False` 和稳定缩进，便于人工排查和测试断言。
@@ -778,7 +779,7 @@ md/3.4.gen-cosmic-校验报告.md
 1. 项目名称。
 2. 总体状态汇总。
 3. 按模块路径和功能过程列出的 issue。
-4. 每个 issue 的 `severity`、`code`、字段位置和说明。
+4. 每个 issue 的 `severity`、`code`、字段位置、说明和结构化依据。
 5. 对 Excel 输出策略的说明，例如“存在阻断问题，未写正式 Excel”。
 
 建议报告格式：
@@ -804,9 +805,9 @@ md/3.4.gen-cosmic-校验报告.md
 
 ### 系统管理 > 用户管理 > 用户新增 / 新增用户
 
-| 级别 | code | 字段 | 数据移动序号 | 说明 |
-| --- | --- | --- | --- | --- |
-| error | `FIRST_MOVE_NOT_ENTRY` | `movements[0].move_type` | 1 | 第一个子过程必须为输入 E |
+| 级别 | code | 字段 | 数据移动序号 | 说明 | 依据 |
+| --- | --- | --- | --- | --- | --- |
+| error | `FIRST_MOVE_NOT_ENTRY` | `movements[0].move_type` | 1 | 第一个子过程必须为输入 E |  |
 ```
 
 报告中不使用“功能点类型”“说明详情”等 FPA 禁用同义词。COSMIC 审阅页尚未实现，本阶段报告里的业务对象统一称为“功能过程”“数据移动”“数据移动类型”“计算依据说明”。

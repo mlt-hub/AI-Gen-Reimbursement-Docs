@@ -8,6 +8,7 @@ from ai_gen_reimbursement_docs.cosmic_validator import (
     validate_cosmic_item,
     validate_cosmic_items,
     write_cosmic_validation_json,
+    write_cosmic_validation_report_md,
 )
 
 
@@ -166,6 +167,8 @@ def test_error_confirmation_message_requires_review():
     assert "ERROR_CONFIRMATION_MESSAGE" in _codes(result)
     assert result.status == "review_required"
     assert result.basis["movement_semantics"][0]["code"] == "ERROR_CONFIRMATION_MESSAGE"
+    issue = next(issue for issue in result.issues if issue.code == "ERROR_CONFIRMATION_MESSAGE")
+    assert "错误提示" in issue.details["matched_terms"]
 
 
 def test_internal_technical_boundary_requires_review():
@@ -243,6 +246,55 @@ def test_report_json_is_stable_and_chinese_readable(tmp_path):
     assert payload["cfp_basis"]["source"] == "template_formula"
     assert payload["cfp_basis"]["formula_configured"] is True
     assert payload["items"][0]["basis"]["function_user"]["matched_term"] == "用户注册"
+
+
+def test_report_json_includes_issue_details(tmp_path):
+    message = _movement(2, "X", data_group="错误提示", data_attrs="确认消息")
+    message.sub_process = "输出保存失败错误提示和确认消息"
+    report = validate_cosmic_items(
+        [_item(movements=[
+            _movement(1, "E", data_group="保存请求", data_attrs="业务数据"),
+            message,
+        ])],
+        project_name="测试项目",
+        cfp_formula="IF(L{row}=\"新增\",1,0)",
+    )
+    output = tmp_path / "cosmic.json"
+
+    write_cosmic_validation_json(report, str(output))
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    issue = payload["items"][0]["issues"][0]
+    assert issue["code"] == "ERROR_CONFIRMATION_MESSAGE"
+    assert "错误提示" in issue["details"]["matched_terms"]
+
+
+def test_report_md_includes_issue_details(tmp_path):
+    message = _movement(2, "X", data_group="错误提示", data_attrs="确认消息")
+    message.sub_process = "输出保存失败错误提示和确认消息"
+    report = validate_cosmic_items(
+        [_item(movements=[
+            _movement(1, "E", data_group="保存请求", data_attrs="业务数据"),
+            message,
+        ])],
+        project_name="测试项目",
+        cfp_formula="IF(L{row}=\"新增\",1,0)",
+    )
+    output = tmp_path / "cosmic.md"
+
+    write_cosmic_validation_report_md(
+        report,
+        str(output),
+        formal_excel_written=False,
+        draft_excel_written=True,
+        excel_reason="待审",
+    )
+
+    content = output.read_text(encoding="utf-8")
+    assert "| 级别 | code | 字段 | 数据移动序号 | 说明 | 依据 |" in content
+    assert "命中：" in content
+    assert "确认消息" in content
+    assert "错误提示" in content
 
 
 def test_empty_items_is_global_error():
