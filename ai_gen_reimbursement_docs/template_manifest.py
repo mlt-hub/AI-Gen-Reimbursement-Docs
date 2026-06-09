@@ -596,6 +596,8 @@ def _default_manifest(kind: str, template_path: str) -> dict[str, Any]:
                 "judgement_rules": {
                     "name": "附录1-FPA评估方法说明",
                     "required": True,
+                    "header_row": 1,
+                    "rule_header": "判定原则",
                     "data_start_row": 2,
                     "rule_column": "C",
                     "column": "C",

@@ -55,7 +55,7 @@
 
 - `gen-list` 已使用 `list` manifest 驱动项目需求清单写入：sheet 名、表头行、数据起始行、样式源行、关键列映射和项目概览命名单元格会影响实际输出。
 - `gen-spec` 已使用 Word manifest 驱动占位符替换范围、功能需求锚点、模块清单列配置和样式配置。
-- `gen-fpa` 已使用 `fpa` manifest 驱动 FPA 结果 sheet 名、表头行、数据起始行、样式源行、关键列定位、result sheet 的数据起始和 FPA 工作量汇总命名单元格；模板附录判定原则读取也已支持 `judgement_rules` sheet、列、起始/结束行、最大读取行数和基础锚点配置。
+- `gen-fpa` 已使用 `fpa` manifest 驱动 FPA 结果 sheet 名、表头行、数据起始行、样式源行、关键列定位、result sheet 的数据起始和 FPA 工作量汇总命名单元格；模板附录判定原则读取也已支持 `judgement_rules` sheet、表头定位、列、起始/结束行、最大读取行数和基础锚点配置。
 - `gen-cosmic` 已使用 `cosmic` manifest 驱动 COSMIC 结果 sheet 名、数据起始行、样式源行和结果字段列映射；合并列、warning 标记列、复用度校验列和 CFP 公式列会跟随列映射。
 - pipeline 已支持 `active_output_template_profile` / `output_template_profiles` 基础解析，profile 可直接声明 `templates` 或通过 `template_pack` 指向带 `manifest.yaml` 的模板包目录。
 - Web 配置页已支持输出模板 profile 基础选择能力：读取 `output_template_profiles`、选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。
