@@ -18,28 +18,94 @@ _GENERIC_USER_WORDS = {
     "操作员", "用户", "管理员", "后台管理员", "管理人员", "业务人员",
     "系统管理员", "系统", "外部系统",
 }
-_CONTROL_COMMAND_WORDS = {
-    "上一页", "下一页", "翻页", "分页", "排序", "筛选", "展示菜单",
-    "隐藏菜单", "展开", "收起", "点击确认", "点击确定", "确认前一操作",
-}
-_DATA_OPERATION_WORDS = {
-    "格式化", "校验", "验证", "分析", "统计", "计算", "汇总", "转换",
-    "排序计算", "数据清洗", "连接数据库", "连接服务器", "建立容器",
-}
-_ERROR_CONFIRMATION_WORDS = {
-    "错误提示", "错误消息", "异常提示", "失败提示", "确认消息", "确认提示",
-    "成功提示", "操作成功", "操作失败", "保存成功", "保存失败", "提示信息",
-}
-_INTERNAL_TECHNICAL_BOUNDARY_WORDS = {
-    "前端/后端", "前台/后台", "前端", "后端", "前台", "后台",
-    "内部接口", "临时接口", "接口响应", "接口调用", "微服务", "服务调用",
-    "RPC", "HTTP接口", "API接口",
-}
-_NON_FUNCTIONAL_SCOPE_WORDS = {
-    "非功能", "系统迁移", "数据迁移", "多系统联调", "联调", "前端适配",
-    "软硬件环境", "环境扩容", "服务器扩容", "资源扩容", "架构改造",
-    "组件改造", "组件升级", "性能优化", "安全加固", "部署改造",
-}
+_DEFAULT_GOVERNANCE_RULE_MATRIX = [
+    {
+        "code": "NON_FUNCTIONAL_SCOPE",
+        "target": "process",
+        "severity": "warning",
+        "message": "疑似非功能内容或技术改造事项，需确认是否应进入 COSMIC 功能规模",
+        "scope_policy": "manual_exclude_process",
+        "governance_category": "non_functional_scope",
+        "description": "功能过程或模块路径疑似非功能内容或技术改造事项，通常不应拆成 COSMIC 功能规模",
+        "terms": [
+            "非功能", "系统迁移", "数据迁移", "多系统联调", "联调", "前端适配",
+            "软硬件环境", "环境扩容", "服务器扩容", "资源扩容", "架构改造",
+            "组件改造", "组件升级", "性能优化", "安全加固", "部署改造",
+        ],
+        "suggested_actions": [
+            {"action": "exclude_process", "label": "排除功能过程"},
+        ],
+    },
+    {
+        "code": "CONTROL_COMMAND_MOVEMENT",
+        "target": "movement",
+        "severity": "warning",
+        "message": "控制命令通常不移动兴趣对象数据，需确认是否应计列",
+        "scope_policy": "manual_exclude_or_merge",
+        "governance_category": "control_command",
+        "description": "子过程疑似控制命令，通常不单独计为 COSMIC 数据移动",
+        "terms": [
+            "上一页", "下一页", "翻页", "分页", "排序", "筛选", "展示菜单",
+            "隐藏菜单", "展开", "收起", "点击确认", "点击确定", "确认前一操作",
+        ],
+        "suggested_actions": [
+            {"action": "exclude_movement", "label": "排除计数"},
+            {"action": "merge_movement", "label": "合并到上一条"},
+        ],
+    },
+    {
+        "code": "DATA_OPERATION_ONLY_MOVEMENT",
+        "target": "movement",
+        "severity": "warning",
+        "message": "数据运算或技术操作通常不单独计为数据移动，需确认是否应计列",
+        "scope_policy": "manual_exclude_or_merge",
+        "governance_category": "data_operation_only",
+        "description": "子过程疑似仅为数据运算或技术操作，通常应归入相关数据移动或不单独计列",
+        "terms": [
+            "格式化", "校验", "验证", "分析", "统计", "计算", "汇总", "转换",
+            "排序计算", "数据清洗", "连接数据库", "连接服务器", "建立容器",
+        ],
+        "suggested_actions": [
+            {"action": "exclude_movement", "label": "排除计数"},
+            {"action": "merge_movement", "label": "合并到上一条"},
+        ],
+    },
+    {
+        "code": "ERROR_CONFIRMATION_MESSAGE",
+        "target": "movement",
+        "severity": "warning",
+        "message": "错误或确认消息通常需要按手册规则合并识别，需确认是否重复计列",
+        "scope_policy": "manual_merge_or_exclude",
+        "governance_category": "error_confirmation_message",
+        "description": "子过程疑似错误或确认消息输出，通常需要按手册规则合并识别",
+        "terms": [
+            "错误提示", "错误消息", "异常提示", "失败提示", "确认消息", "确认提示",
+            "成功提示", "操作成功", "操作失败", "保存成功", "保存失败", "提示信息",
+        ],
+        "suggested_actions": [
+            {"action": "exclude_movement", "label": "排除计数"},
+            {"action": "merge_movement", "label": "合并到上一条"},
+        ],
+    },
+    {
+        "code": "INTERNAL_TECHNICAL_BOUNDARY",
+        "target": "movement",
+        "severity": "warning",
+        "message": "内部技术交互通常不构成 COSMIC 有效边界，需确认是否应计列",
+        "scope_policy": "manual_exclude_or_merge",
+        "governance_category": "internal_technical_boundary",
+        "description": "子过程疑似内部技术交互或无效软件边界，需确认是否跨有效 COSMIC 边界",
+        "terms": [
+            "前端/后端", "前台/后台", "前端", "后端", "前台", "后台",
+            "内部接口", "临时接口", "接口响应", "接口调用", "微服务", "服务调用",
+            "RPC", "HTTP接口", "API接口",
+        ],
+        "suggested_actions": [
+            {"action": "exclude_movement", "label": "排除计数"},
+            {"action": "merge_movement", "label": "合并到上一条"},
+        ],
+    },
+]
 
 
 @dataclass
@@ -210,72 +276,105 @@ def is_generic_function_user(item: CosmicItem) -> bool:
     return bool(_function_user_basis(item).get("requires_review"))
 
 
-def _process_semantic_findings(item: CosmicItem) -> list[dict[str, object]]:
+def _governance_rule_matrix(
+    governance_config: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    rules = [dict(rule) for rule in _DEFAULT_GOVERNANCE_RULE_MATRIX]
+    if not isinstance(governance_config, dict):
+        return rules
+    raw_rules = governance_config.get("rule_matrix")
+    if not isinstance(raw_rules, list):
+        return rules
+
+    by_code = {str(rule.get("code") or ""): index for index, rule in enumerate(rules)}
+    for raw_rule in raw_rules:
+        if not isinstance(raw_rule, dict):
+            continue
+        normalized = _normalize_governance_rule(raw_rule)
+        if not normalized:
+            continue
+        code = str(normalized["code"])
+        if code in by_code:
+            rules[by_code[code]] = normalized
+        else:
+            by_code[code] = len(rules)
+            rules.append(normalized)
+    return rules
+
+
+def _normalize_governance_rule(raw_rule: dict[str, object]) -> dict[str, object] | None:
+    code = str(raw_rule.get("code") or "").strip()
+    target = str(raw_rule.get("target") or "").strip()
+    if not code or target not in {"process", "movement"}:
+        return None
+    terms = [
+        str(term).strip()
+        for term in raw_rule.get("terms", [])
+        if str(term or "").strip()
+    ] if isinstance(raw_rule.get("terms"), list) else []
+    if not terms:
+        return None
+    severity = str(raw_rule.get("severity") or "warning").strip()
+    if severity not in {"error", "warning", "info"}:
+        severity = "warning"
+    suggested_actions = raw_rule.get("suggested_actions")
+    if not isinstance(suggested_actions, list):
+        suggested_actions = []
+    return {
+        "code": code,
+        "target": target,
+        "severity": severity,
+        "message": str(raw_rule.get("message") or "命中 COSMIC 治理规则，需人工确认").strip(),
+        "scope_policy": str(raw_rule.get("scope_policy") or "manual_review").strip(),
+        "governance_category": str(raw_rule.get("governance_category") or code.lower()).strip(),
+        "description": str(raw_rule.get("description") or raw_rule.get("message") or "").strip(),
+        "terms": terms,
+        "suggested_actions": [
+            dict(action)
+            for action in suggested_actions
+            if isinstance(action, dict) and str(action.get("action") or "").strip()
+        ],
+    }
+
+
+def _process_semantic_findings(
+    item: CosmicItem,
+    governance_config: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
     text = " ".join([
         item.module_l1 or "",
         item.module_l2 or "",
         item.module_l3 or "",
         item.process or "",
     ])
-    matched = _matched_words(text, _NON_FUNCTIONAL_SCOPE_WORDS)
-    if not matched:
-        return []
-    return [{
-        "code": "NON_FUNCTIONAL_SCOPE",
-        "scope_policy": "manual_exclude_process",
-        "governance_category": "non_functional_scope",
-        "matched_terms": matched,
-        "description": "功能过程或模块路径疑似非功能内容或技术改造事项，通常不应拆成 COSMIC 功能规模",
-    }]
+    findings: list[dict[str, object]] = []
+    for rule in _governance_rule_matrix(governance_config):
+        if rule.get("target") != "process":
+            continue
+        matched = _matched_words(text, set(rule.get("terms", [])))
+        if matched:
+            findings.append(_finding_from_rule(rule, matched))
+    return findings
 
 
-def _movement_semantic_findings(movement) -> list[dict[str, object]]:
+def _movement_semantic_findings(
+    movement,
+    governance_config: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
     text = " ".join([
         str(getattr(movement, "sub_process", "") or ""),
         str(getattr(movement, "data_group", "") or ""),
         str(getattr(movement, "data_attrs", "") or ""),
     ])
     findings: list[dict[str, object]] = []
-    matched = _matched_words(text, _CONTROL_COMMAND_WORDS)
-    if matched:
-        findings.append({
-            "code": "CONTROL_COMMAND_MOVEMENT",
-            "scope_policy": "manual_exclude_or_merge",
-            "governance_category": "control_command",
-            "movement_order": movement.order,
-            "matched_terms": matched,
-            "description": "子过程疑似控制命令，通常不单独计为 COSMIC 数据移动",
-        })
-    matched = _matched_words(text, _DATA_OPERATION_WORDS)
-    if matched:
-        findings.append({
-            "code": "DATA_OPERATION_ONLY_MOVEMENT",
-            "scope_policy": "manual_exclude_or_merge",
-            "governance_category": "data_operation_only",
-            "movement_order": movement.order,
-            "matched_terms": matched,
-            "description": "子过程疑似仅为数据运算或技术操作，通常应归入相关数据移动或不单独计列",
-        })
-    matched = _matched_words(text, _ERROR_CONFIRMATION_WORDS)
-    if matched:
-        findings.append({
-            "code": "ERROR_CONFIRMATION_MESSAGE",
-            "scope_policy": "manual_merge_or_exclude",
-            "governance_category": "error_confirmation_message",
-            "movement_order": movement.order,
-            "matched_terms": matched,
-            "description": "子过程疑似错误或确认消息输出，通常需要按手册规则合并识别",
-        })
-    matched = _matched_words(text, _INTERNAL_TECHNICAL_BOUNDARY_WORDS)
-    if matched:
-        findings.append({
-            "code": "INTERNAL_TECHNICAL_BOUNDARY",
-            "scope_policy": "manual_exclude_or_merge",
-            "governance_category": "internal_technical_boundary",
-            "movement_order": movement.order,
-            "matched_terms": matched,
-            "description": "子过程疑似内部技术交互或无效软件边界，需确认是否跨有效 COSMIC 边界",
-        })
+    for rule in _governance_rule_matrix(governance_config):
+        if rule.get("target") != "movement":
+            continue
+        matched = _matched_words(text, set(rule.get("terms", [])))
+        if matched:
+            finding = _finding_from_rule(rule, matched)
+            finding["movement_order"] = movement.order
+            findings.append(finding)
     return findings
 
 
@@ -283,8 +382,38 @@ def _matched_words(text: str, words: set[str]) -> list[str]:
     return sorted(word for word in words if word and word in text)
 
 
+def _finding_from_rule(rule: dict[str, object], matched_terms: list[str]) -> dict[str, object]:
+    return {
+        "code": str(rule.get("code") or ""),
+        "severity": str(rule.get("severity") or "warning"),
+        "message": str(rule.get("message") or ""),
+        "scope_policy": str(rule.get("scope_policy") or "manual_review"),
+        "governance_category": str(rule.get("governance_category") or ""),
+        "matched_terms": matched_terms,
+        "description": str(rule.get("description") or rule.get("message") or ""),
+        "suggested_actions": [
+            dict(action)
+            for action in rule.get("suggested_actions", [])
+            if isinstance(action, dict)
+        ] if isinstance(rule.get("suggested_actions"), list) else [],
+    }
+
+
+def _finding_severity(finding: dict[str, object]) -> IssueSeverity:
+    severity = str(finding.get("severity") or "warning")
+    if severity in {"error", "warning", "info"}:
+        return severity  # type: ignore[return-value]
+    return "warning"
+
+
+def _finding_message(finding: dict[str, object]) -> str:
+    message = str(finding.get("message") or "").strip()
+    if message:
+        return message
+    return str(finding.get("description") or "命中 COSMIC 治理规则，需人工确认")
+
+
 def _finding_details(finding: dict[str, object]) -> dict[str, object]:
-    code = str(finding.get("code", ""))
     details = {
         "matched_terms": list(finding.get("matched_terms", [])),
         "basis_description": str(finding.get("description", "")),
@@ -292,34 +421,18 @@ def _finding_details(finding: dict[str, object]) -> dict[str, object]:
         "governance_category": str(finding.get("governance_category", "")),
     }
     movement_order = finding.get("movement_order")
-    if code in {
-        "CONTROL_COMMAND_MOVEMENT",
-        "DATA_OPERATION_ONLY_MOVEMENT",
-        "ERROR_CONFIRMATION_MESSAGE",
-        "INTERNAL_TECHNICAL_BOUNDARY",
-    } and isinstance(movement_order, int):
-        details["suggested_actions"] = [
-            {
-                "action": "exclude_movement",
-                "label": "排除计数",
-                "movement_order": movement_order,
-                "reason": details["basis_description"],
-            },
-            {
-                "action": "merge_movement",
-                "label": "合并到上一条",
-                "movement_order": movement_order,
-                "reason": details["basis_description"],
-            },
-        ]
-    elif code == "NON_FUNCTIONAL_SCOPE":
-        details["suggested_actions"] = [
-            {
-                "action": "exclude_process",
-                "label": "排除功能过程",
-                "reason": details["basis_description"],
-            }
-        ]
+    suggested_actions = finding.get("suggested_actions")
+    if isinstance(suggested_actions, list) and suggested_actions:
+        details["suggested_actions"] = []
+        for raw_action in suggested_actions:
+            if not isinstance(raw_action, dict):
+                continue
+            action = dict(raw_action)
+            if isinstance(movement_order, int) and "movement_order" not in action:
+                action["movement_order"] = movement_order
+            if "reason" not in action:
+                action["reason"] = details["basis_description"]
+            details["suggested_actions"].append(action)
     return details
 
 
@@ -372,7 +485,7 @@ def validate_cosmic_item(
     issues: list[CosmicIssue] = []
     basis = {
         "function_user": _function_user_basis(item),
-        "process_semantics": _process_semantic_findings(item),
+        "process_semantics": _process_semantic_findings(item, governance_config),
         "movement_semantics": [],
     }
 
@@ -420,8 +533,8 @@ def validate_cosmic_item(
 
     for finding in basis["process_semantics"]:
         issues.append(_issue(
-            "warning", finding["code"],
-            "疑似非功能内容或技术改造事项，需确认是否应进入 COSMIC 功能规模",
+            _finding_severity(finding), str(finding["code"]),
+            _finding_message(finding),
             "process", item=item, details=_finding_details(finding),
         ))
 
@@ -449,18 +562,10 @@ def validate_cosmic_item(
             ))
 
     for index, movement in enumerate(item.movements):
-        for finding in _movement_semantic_findings(movement):
+        for finding in _movement_semantic_findings(movement, governance_config):
             basis["movement_semantics"].append(finding)
-            if finding["code"] == "CONTROL_COMMAND_MOVEMENT":
-                message = "控制命令通常不移动兴趣对象数据，需确认是否应计列"
-            elif finding["code"] == "DATA_OPERATION_ONLY_MOVEMENT":
-                message = "数据运算或技术操作通常不单独计为数据移动，需确认是否应计列"
-            elif finding["code"] == "ERROR_CONFIRMATION_MESSAGE":
-                message = "错误或确认消息通常需要按手册规则合并识别，需确认是否重复计列"
-            else:
-                message = "内部技术交互通常不构成 COSMIC 有效边界，需确认是否应计列"
             issues.append(_issue(
-                "warning", finding["code"], message,
+                _finding_severity(finding), str(finding["code"]), _finding_message(finding),
                 f"movements[{index}].sub_process", movement.order, item=item,
                 details=_finding_details(finding),
             ))

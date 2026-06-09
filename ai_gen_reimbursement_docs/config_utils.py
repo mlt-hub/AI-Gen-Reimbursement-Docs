@@ -1537,6 +1537,7 @@ def load_gen_cosmic_governance_config() -> dict[str, object]:
         "require_unique_function_user": False,
         "cfp_formula_consistency_check": False,
         "audit_hash_chain": True,
+        "rule_matrix": [],
     }
     yaml_path = config_dir() / "system_config.yaml"
     if not yaml_path.exists():
@@ -1570,9 +1571,60 @@ def load_gen_cosmic_governance_config() -> dict[str, object]:
                 for key, value in raw_role_map.items()
                 if str(key or "").strip() and str(value or "").strip()
             }
+        raw_rule_matrix = raw.get("rule_matrix")
+        if isinstance(raw_rule_matrix, list):
+            values["rule_matrix"] = _normalize_gen_cosmic_rule_matrix(raw_rule_matrix)
         return values
     except Exception:
         return defaults
+
+
+def _normalize_gen_cosmic_rule_matrix(raw_rules: list[object]) -> list[dict[str, object]]:
+    rules: list[dict[str, object]] = []
+    for raw_rule in raw_rules:
+        if not isinstance(raw_rule, dict):
+            continue
+        code = str(raw_rule.get("code") or "").strip()
+        target = str(raw_rule.get("target") or "").strip()
+        if not code or target not in {"process", "movement"}:
+            continue
+        terms = [
+            str(term).strip()
+            for term in raw_rule.get("terms", [])
+            if str(term or "").strip()
+        ] if isinstance(raw_rule.get("terms"), list) else []
+        if not terms:
+            continue
+        actions = []
+        raw_actions = raw_rule.get("suggested_actions")
+        if isinstance(raw_actions, list):
+            actions = [
+                {
+                    str(key): value
+                    for key, value in action.items()
+                    if str(key or "").strip()
+                }
+                for action in raw_actions
+                if isinstance(action, dict) and str(action.get("action") or "").strip()
+            ]
+        normalized = {
+            "code": code,
+            "target": target,
+            "terms": terms,
+            "suggested_actions": actions,
+        }
+        for key in (
+            "severity",
+            "message",
+            "scope_policy",
+            "governance_category",
+            "description",
+        ):
+            value = str(raw_rule.get(key) or "").strip()
+            if value:
+                normalized[key] = value
+        rules.append(normalized)
+    return rules
 
 
 def load_gen_spec_ai_limit() -> int:

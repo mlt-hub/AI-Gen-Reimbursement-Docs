@@ -197,6 +197,55 @@ def test_internal_technical_boundary_requires_review():
     assert result.basis["movement_semantics"][0]["code"] == "INTERNAL_TECHNICAL_BOUNDARY"
 
 
+def test_configured_rule_matrix_adds_custom_movement_rule():
+    movement = _movement(2, "X", data_group="专线响应", data_attrs="状态")
+    movement.sub_process = "通过外部专线返回处理结果"
+    result = validate_cosmic_item(
+        _item(movements=[
+            _movement(1, "E", data_group="处理请求", data_attrs="业务编号"),
+            movement,
+        ]),
+        governance_config={
+            "rule_matrix": [{
+                "code": "CUSTOM_EXTERNAL_LINK",
+                "target": "movement",
+                "severity": "warning",
+                "message": "外部专线边界需确认",
+                "scope_policy": "manual_exclude_or_merge",
+                "governance_category": "external_link_boundary",
+                "description": "子过程命中外部专线",
+                "terms": ["外部专线"],
+                "suggested_actions": [{"action": "exclude_movement", "label": "排除计数"}],
+            }],
+        },
+    )
+
+    issue = next(issue for issue in result.issues if issue.code == "CUSTOM_EXTERNAL_LINK")
+    assert issue.message == "外部专线边界需确认"
+    assert issue.details["governance_category"] == "external_link_boundary"
+    assert issue.details["suggested_actions"][0]["movement_order"] == 2
+
+
+def test_configured_rule_matrix_overrides_default_terms():
+    control = _movement(2, "X", data_group="页面状态", data_attrs="排序状态")
+    control.sub_process = "点击下一页并排序列表"
+    result = validate_cosmic_item(
+        _item(movements=[
+            _movement(1, "E", data_group="查询参数", data_attrs="页码"),
+            control,
+        ]),
+        governance_config={
+            "rule_matrix": [{
+                "code": "CONTROL_COMMAND_MOVEMENT",
+                "target": "movement",
+                "terms": ["不会命中"],
+            }],
+        },
+    )
+
+    assert "CONTROL_COMMAND_MOVEMENT" not in _codes(result)
+
+
 def test_non_functional_scope_requires_review():
     result = validate_cosmic_item(_item(
         module_l3="服务器扩容",

@@ -567,6 +567,7 @@ class TestBooleanLoaders:
         assert result["require_unique_function_user"] is False
         assert result["cfp_formula_consistency_check"] is False
         assert result["audit_hash_chain"] is True
+        assert result["rule_matrix"] == []
 
     def test_load_gen_cosmic_governance_config_nested(self, tmp_path):
         (tmp_path / "system_config.yaml").write_text(
@@ -583,6 +584,18 @@ class TestBooleanLoaders:
                 "    require_unique_function_user: true",
                 "    cfp_formula_consistency_check: true",
                 "    audit_hash_chain: false",
+                "    rule_matrix:",
+                "      - code: CUSTOM_BOUNDARY",
+                "        target: movement",
+                "        severity: warning",
+                "        terms:",
+                "          - 外部专线",
+                "          - ''",
+                "        suggested_actions:",
+                "          - action: exclude_movement",
+                "            label: 排除计数",
+                "      - code: INVALID_NO_TERMS",
+                "        target: movement",
             ]),
             encoding="utf-8",
         )
@@ -598,6 +611,16 @@ class TestBooleanLoaders:
         assert result["require_unique_function_user"] is True
         assert result["cfp_formula_consistency_check"] is True
         assert result["audit_hash_chain"] is False
+        assert result["rule_matrix"] == [{
+            "code": "CUSTOM_BOUNDARY",
+            "target": "movement",
+            "terms": ["外部专线"],
+            "suggested_actions": [{
+                "action": "exclude_movement",
+                "label": "排除计数",
+            }],
+            "severity": "warning",
+        }]
 
     def test_load_fpa_reduced_default(self):
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",

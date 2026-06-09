@@ -395,7 +395,13 @@ def _merge_review_confirmations(payload: dict, confirmations: dict[str, dict]) -
 
 
 def _restore_raw_review_fields(payload: dict, source: dict) -> None:
-    for key in ("review_actions", "review_audit", "cfp_policy", "function_user_role_map"):
+    for key in (
+        "review_actions",
+        "review_audit",
+        "review_audit_hash_chain",
+        "cfp_policy",
+        "function_user_role_map",
+    ):
         value = source.get(key)
         if value is not None:
             payload[key] = value
@@ -410,6 +416,44 @@ def _audit_hash(record: dict, previous_hash: str = "") -> str:
     material["previous_audit_hash"] = previous_hash
     text = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _verify_audit_hash_chain(records: list[dict]) -> dict[str, object]:
+    previous_hash = ""
+    checked = 0
+    for index, record in enumerate(records):
+        if not isinstance(record, dict):
+            continue
+        audit_hash = str(record.get("audit_hash") or "")
+        if not audit_hash:
+            continue
+        checked += 1
+        expected_previous = str(record.get("previous_audit_hash") or "")
+        if expected_previous != previous_hash:
+            return {
+                "algorithm": "sha256-json-v1",
+                "valid": False,
+                "checked_record_count": checked,
+                "failed_index": index,
+                "reason": "previous_audit_hash 不匹配",
+            }
+        expected_hash = _audit_hash(record, previous_hash)
+        if audit_hash != expected_hash:
+            return {
+                "algorithm": "sha256-json-v1",
+                "valid": False,
+                "checked_record_count": checked,
+                "failed_index": index,
+                "reason": "audit_hash 不匹配",
+            }
+        previous_hash = audit_hash
+    return {
+        "algorithm": "sha256-json-v1",
+        "valid": True,
+        "checked_record_count": checked,
+        "failed_index": None,
+        "reason": "",
+    }
 
 
 def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> None:
@@ -437,11 +481,16 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> None:
     records = list(keyed.values())
     governance = load_gen_cosmic_governance_config()
     if governance.get("audit_hash_chain") is not False:
+        payload["review_audit_hash_chain"] = _verify_audit_hash_chain(records)
         previous_hash = ""
         for record in records:
             record["previous_audit_hash"] = previous_hash
             record["audit_hash"] = _audit_hash(record, previous_hash)
             previous_hash = str(record["audit_hash"])
+        payload["review_audit_hash_chain"].update({
+            "record_count": len(records),
+            "final_audit_hash": previous_hash,
+        })
     payload["review_audit"] = records
 
 
@@ -574,13 +623,22 @@ def _cfp_policy_formula_issues(cfp_formula: str, policy: dict[str, float]) -> li
     if not formula:
         return []
     missing_terms: list[str] = []
+    mismatched_terms: list[str] = []
+    parsed_formula_policy = _parse_cfp_policy_from_formula(formula, policy.keys())
     for reuse, value in policy.items():
         if reuse not in formula:
+            continue
+        parsed_value = parsed_formula_policy.get(reuse)
+        if parsed_value is not None:
+            if abs(parsed_value - value) > 0.000001:
+                mismatched_terms.append(
+                    f"{reuse}=policy:{_policy_value_text(value)},formula:{_policy_value_text(parsed_value)}"
+                )
             continue
         value_text = _policy_value_text(value)
         if value_text and value_text not in formula:
             missing_terms.append(f"{reuse}={value_text}")
-    if not missing_terms:
+    if not missing_terms and not mismatched_terms:
         return []
     issue = global_cosmic_issue(
         "warning",
@@ -591,10 +649,49 @@ def _cfp_policy_formula_issues(cfp_formula: str, policy: dict[str, float]) -> li
     issue.details = {
         "policy": policy,
         "formula": formula,
+        "parsed_formula_policy": parsed_formula_policy,
         "missing_policy_terms": missing_terms,
+        "mismatched_policy_terms": mismatched_terms,
         "basis_description": "开启一致性校验后，公式中出现的复用度应能对应有效 CFP policy 数值",
     }
     return [issue]
+
+
+def _parse_cfp_policy_from_formula(formula: str, reuse_names) -> dict[str, float]:
+    parsed: dict[str, float] = {}
+    for reuse in reuse_names:
+        name = str(reuse or "").strip()
+        if not name:
+            continue
+        pattern = re.compile(
+            rf"{re.escape(name)}[\s\S]{{0,80}}?([-+]?\d+(?:\.\d+)?\s*/\s*[-+]?\d+(?:\.\d+)?|[-+]?\d+(?:\.\d+)?)"
+        )
+        match = pattern.search(formula)
+        if not match:
+            continue
+        value = _parse_formula_number(match.group(1))
+        if value is not None:
+            parsed[name] = value
+    return parsed
+
+
+def _parse_formula_number(text: str) -> float | None:
+    value = str(text or "").replace(" ", "")
+    if not value:
+        return None
+    if "/" in value:
+        left, right = value.split("/", 1)
+        try:
+            denominator = float(right)
+            if denominator == 0:
+                return None
+            return float(left) / denominator
+        except ValueError:
+            return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 def _policy_value_text(value: float) -> str:
@@ -605,12 +702,18 @@ def _policy_value_text(value: float) -> str:
 
 
 def _cosmic_governance_effective(governance: dict[str, object]) -> dict[str, object]:
+    rule_matrix = governance.get("rule_matrix")
     return {
         "auto_apply_review_actions": bool(governance.get("auto_apply_review_actions")),
         "auto_apply_issue_codes": list(governance.get("auto_apply_issue_codes", [])),
         "require_unique_function_user": bool(governance.get("require_unique_function_user")),
         "cfp_formula_consistency_check": bool(governance.get("cfp_formula_consistency_check")),
         "audit_hash_chain": governance.get("audit_hash_chain") is not False,
+        "rule_matrix_codes": [
+            str(rule.get("code"))
+            for rule in rule_matrix
+            if isinstance(rule, dict) and str(rule.get("code") or "")
+        ] if isinstance(rule_matrix, list) else [],
         "function_user_role_map_keys": sorted(
             str(key)
             for key in (governance.get("function_user_role_map") or {})
