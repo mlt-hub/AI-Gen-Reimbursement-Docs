@@ -290,3 +290,172 @@ check/debug 输出可补充：
 - 文本明显过短，无法支撑人工审阅。
 
 第一阶段仅记录 warning，不阻断生成。
+
+## 当前 gen-fpa 实现与 profile prompt 抽取讨论
+
+本节记录 2026-06-09 对 `gen-fpa` 中 `计算依据说明`当前实现、各 profile prompt 差异，以及后续抽取为独立 prompt 片段的讨论结论。
+
+### 当前输出链路
+
+`gen-fpa` 当前把内部字段 `explanation` 作为 `计算依据说明` 的主要来源。
+
+AI 生成阶段要求模型在 `rows[].explanation` 中输出说明；后处理阶段在 `ai_gen_reimbursement_docs/gen_fpa.py` 的 `_normalize_ai_fpa_rows_for_l3` 中读取 `raw["explanation"]`，如果没有则尝试读取 `raw["计算依据说明"]`，最终写入输出行的中文列：
+
+```python
+"计算依据说明": explanation
+```
+
+如果 AI 行没有提供 `explanation`，后处理会生成一段简短兜底说明：
+
+```text
+<功能点名称>，具体为以下：
+1、基于该三级模块功能过程完成对应业务能力。
+```
+
+同时记录 `postprocess.explanation_fallback` 警告。
+
+后处理会做两类轻量规范化：
+
+- 当 `来源场景` 需要完整路径时，替换为当前 FPA 行完整功能点路径。
+- 当说明中混入“1 个表”“对应后台数据库变更的 1 个表”等数据库表个数细节时，将这类片段从正式 `计算依据说明` 中移除；这类短依据应保留在 `计算依据归类`，不应作为详细说明。
+
+质量检查由 `_explanation_quality_warnings` 执行，只记录 warning，不阻断生成。当前检查项包括：
+
+- 是否缺少 `来源场景`、`业务数据`、`业务规则`、`计算说明`。
+- `来源场景` 是否使用完整路径。
+- `计算说明` 是否明确当前 FPA 类型。
+- 正式说明中是否出现“未识别到”“未明确说明”“需求未明确说明”等缺失提示。
+- 是否疑似把数据库表个数作为详细计量解释。
+
+规则兜底行的 `生成方式` 为 `fallback`。`fpa_profiles.py` 中 `_structure_fallback_explanations` 会检查 fallback 行的 `计算依据说明` 是否具备四段结构；如果缺失，则由 `_structured_fallback_explanation` 补成：
+
+```text
+来源场景：...
+业务数据：...
+业务规则：...
+计算说明：...
+```
+
+因此当前实现可以概括为：AI 优先按 prompt 生成结构化 `explanation`，后端做路径规范化、表数量细节清理和质量告警；只有缺失或 fallback 规则行不完整时才兜底生成说明。
+
+### 各 profile 的当前 prompt 差异
+
+当前 `config/fpa_config.yaml.example` 中，`strict_fpa` 和 `unified_ui` 已经包含完整的 `计算依据说明生成规则`；`multi_uis` 和 `ui_api_mapping` 主要依赖 system prompt 中“判断理由必须写入 rows[].explanation”的约束，以及 JSON 示例中的四段式格式。
+
+`strict_fpa` 的 system prompt 包含：
+
+```text
+计算依据说明必须基于输入业务内容，按用户提示词中的结构化证据说明规则生成；不要编造不存在的页面、表、服务、接口或流程。
+
+不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
+```
+
+`strict_fpa` 的 user prompt 包含完整规则：
+
+```text
+计算依据说明生成规则：
+1. explanation 必须写成结构化证据说明，固定包含「来源场景」「业务数据」「业务规则」「计算说明」；只有输入中明确出现表、服务、接口、文件、外部系统等系统元素时，才输出「系统元素」。
+2. 来源场景必须使用完整路径；EI/EQ/EO 事务功能使用「【客户端类型】一级模块-二级模块-三级模块-功能点名称」，ILF/EIF 数据功能使用「【客户端类型】一级模块-二级模块-三级模块-数据组名称」，并保留用户动作、系统动作或数据组识别来源。
+3. 业务数据描述业务对象、逻辑数据组、字段或状态；可以合理归纳业务对象，但不得把数据库表直接等同为 ILF。
+4. 系统元素只列出输入中明确出现的表、服务、接口、文件或外部系统；未明确出现时，正式 explanation 中省略「系统元素」，不要写“未识别到”。
+5. 计算说明必须说明为什么纳入 FPA 功能点计量，并明确当前类型 EI / EO / EQ / ILF / EIF。
+6. 计算依据归类中的短依据可以是模板判定原则原文，但 explanation 不要把“按后台数据库变更的表个数计量”“按数据库表个数计量”等归类依据改写成详细计量解释。
+7. 每项 1 句，总体建议 80-180 字；不要为凑字数补充输入中没有的权限、审批、状态流、表名、服务名或接口名。
+```
+
+`unified_ui` 的 system prompt 与 `strict_fpa` 同型，只是 profile 口径不同。它的 user prompt 中 `计算依据说明生成规则` 当前与 `strict_fpa` 完全一致。
+
+`multi_uis` 的 system prompt 当前只有通用输出位置约束：
+
+```text
+不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；只输出 JSON。所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略。
+```
+
+`multi_uis` 的 user prompt 没有展开完整 7 条规则，只在 JSON 格式示例中要求：
+
+```json
+"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：..."
+```
+
+`ui_api_mapping` 的 system prompt 同样只有通用输出位置约束：
+
+```text
+不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；只输出 JSON。所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略。
+```
+
+`ui_api_mapping` 的 user prompt 也没有展开完整 7 条规则，只在 JSON 格式示例中要求：
+
+```json
+"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：..."
+```
+
+### 各 profile 的行为差异
+
+各 profile 的 AI 行最终都走同一个 `_normalize_ai_fpa_rows_for_l3` 后处理函数，因此正式输出层面的 `计算依据说明` 字段和质量检查规则是一致的。profile 差异主要体现在 prompt 约束和 fallback 行生成。
+
+`strict_fpa` 更强调读取 `agent_review.type_judgement`、`merge_review` 和 `process_facts`。fallback 会先识别数据功能行，再识别或合并事务功能行；fallback 原始说明可能是短句，随后由 `_structure_fallback_explanations` 补成四段式。
+
+`unified_ui` 默认使用 `CustomRulesProfile`。fallback 通常生成三级模块级 `界面开发` 行，再按功能过程生成处理行。fallback 的说明来自配置中的 `explanation_template`，如果缺四段结构，会统一补齐。
+
+`multi_uis` 会额外把 `split_reason` 记录进 check/review 元数据，但不直接改变 `计算依据说明`。如果 AI 输出多条界面开发行且缺少 `split_reason`，会合并为三级模块级界面行并记录 warning。
+
+`ui_api_mapping` 固定将 `界面开发` 识别为 `EI`，将 `接口开发` 或明确接口/后端调用识别为 `ILF`。fallback 会为每个功能过程默认生成 `功能过程-界面开发` 和 `功能过程-接口开发`，明确接口/后端调用另补 ILF 行；这些 fallback 短说明也会进入结构化补齐流程。
+
+### 抽取为独立 prompt 片段的建议
+
+建议把各 profile 中关于 `计算依据说明` 的 prompt 抽成独立片段，例如：
+
+```yaml
+prompt_fragments:
+  fpa_calculation_explanation_rules: |-
+    计算依据说明生成规则：
+    1. explanation 必须写成结构化证据说明，固定包含「来源场景」「业务数据」「业务规则」「计算说明」；只有输入中明确出现表、服务、接口、文件、外部系统等系统元素时，才输出「系统元素」。
+    2. 来源场景必须使用完整路径；EI/EQ/EO 事务功能使用「【客户端类型】一级模块-二级模块-三级模块-功能点名称」，ILF/EIF 数据功能使用「【客户端类型】一级模块-二级模块-三级模块-数据组名称」，并保留用户动作、系统动作或数据组识别来源。
+    3. 业务数据描述业务对象、逻辑数据组、字段或状态；可以合理归纳业务对象，但不得把数据库表直接等同为 ILF。
+    4. 系统元素只列出输入中明确出现的表、服务、接口、文件或外部系统；未明确出现时，正式 explanation 中省略「系统元素」，不要写“未识别到”。
+    5. 计算说明必须说明为什么纳入 FPA 功能点计量，并明确当前类型 EI / EO / EQ / ILF / EIF。
+    6. 计算依据归类中的短依据可以是模板判定原则原文，但 explanation 不要把“按后台数据库变更的表个数计量”“按数据库表个数计量”等归类依据改写成详细计量解释。
+    7. 每项 1 句，总体建议 80-180 字；不要为凑字数补充输入中没有的权限、审批、状态流、表名、服务名或接口名。
+```
+
+各 profile 的 user prompt 可以通过占位符复用：
+
+```text
+${calculation_explanation_rules}
+```
+
+实现时需要同步调整 prompt 构建逻辑。当前配置注释说明 user 模板只支持：
+
+```text
+${core_rules}
+${judgement_rules}
+${payload_json}
+```
+
+如果新增 `${calculation_explanation_rules}`，需要更新模板渲染、配置加载和相关测试，避免占位符未替换直接进入最终 prompt。
+
+建议的复用策略：
+
+- `strict_fpa` 和 `unified_ui` 复用同一份完整规则。
+- `multi_uis` 和 `ui_api_mapping` 默认也复用同一份完整规则，补强当前仅靠 JSON 示例约束的问题。
+- 如后续某个 profile 对说明有特殊口径，再增加 profile 专属片段，例如 `multi_uis_calculation_explanation_rules` 或 `ui_api_mapping_calculation_explanation_rules`。
+
+### 拟修改范围与验证
+
+如果实施 prompt 抽取，建议修改范围为：
+
+- `config/fpa_config.yaml.example`：新增 prompt 片段区，替换重复文本，补齐 `multi_uis` 和 `ui_api_mapping`。
+- `ai_gen_reimbursement_docs/fpa_profiles.py`：prompt 构建支持新的 `${calculation_explanation_rules}` 占位符。
+- `ai_gen_reimbursement_docs/config_utils.py`：如配置加载对字段结构有限制，需要同步支持新片段。
+- `tests/test_gen_fpa_ai.py` 和 `tests/test_config_utils.py`：补充 prompt 构建和占位符替换测试。
+
+建议验证命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_gen_fpa_ai.py tests/test_config_utils.py
+```
+
+主要风险：
+
+- 现有模板占位符校验若比较严格，新增占位符可能导致 prompt 未正确渲染或测试失败。
+- `multi_uis` 和 `ui_api_mapping` 补强后，真实模型输出会更稳定一致，但可能改变已有断言或快照预期。
