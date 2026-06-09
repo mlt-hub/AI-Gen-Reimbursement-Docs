@@ -8,6 +8,26 @@
 
 本实施方案的目标是补齐其他 profile 的 harness，并把 Agent Review 从 `strict_fpa` 专属骨架逐步演进为 profile contract 驱动的审阅框架。
 
+## 实施状态
+
+截至 2026-06-09，已完成以下切片：
+
+| 提交 | 内容 |
+|---|---|
+| `1c716ed` | 增加 profile-aware Agent Review contract，标注 `primary` / `debug_only`。 |
+| `f3e868f` | 新增 `unified_ui`、`multi_uis`、`ui_api_mapping` 分层 harness。 |
+| `fdd4e12` | 为 `unified_ui` 增加只读 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。 |
+| `9d03d7d` | 为 `ui_api_mapping` 增加只读 `mapping_judgement`、`mapping_merge_review`、`mapping_quality_review`。 |
+| `43dc38d` | 稳定性报告汇总 profile 专属 quality issue。 |
+| `a96cfc7` | 补充非 strict profile 的 prompt payload contract 覆盖。 |
+
+当前实现约束：
+
+- 非 strict profile 的专属 review 只进入 `agent_review` 和稳定性报告。
+- profile 专属 warning 不阻断、不自动重试、不改写 rows。
+- `strict_fpa` 的 `type_judgement`、`merge_review`、`quality_review` 语义保持不变。
+- 真实模型抽样模板已经提供，但尚未执行真实模型基线。
+
 ## 目标行为
 
 - `strict_fpa` 继续作为 certified 基线，保持现有 EI / EQ / EO / ILF / EIF 类型判断、合并边界和质量审查口径。
@@ -42,7 +62,7 @@ docs/fpa/fpa-multi-profile-real-model-validation.md
 
 ## 分阶段实施
 
-### 第一阶段：标注 Agent Review 适用范围
+### 第一阶段：标注 Agent Review 适用范围（已完成）
 
 目标是先防止语义误用，不改变生成结果。
 
@@ -56,12 +76,12 @@ docs/fpa/fpa-multi-profile-real-model-validation.md
 }
 ```
 
-非 strict profile 先输出：
+非 strict profile 输出：
 
 ```json
 {
   "profile": "unified_ui",
-  "contract": "strict_fpa_legacy_debug",
+  "contract": "unified_ui_contract",
   "applicability": "debug_only"
 }
 ```
@@ -72,11 +92,11 @@ docs/fpa/fpa-multi-profile-real-model-validation.md
 - 非 strict profile 的 payload 能明确标识当前审阅信息只适合作为调试信息。
 - 现有 strict harness 不回退。
 
-### 第二阶段：建立 Profile Contract 数据结构
+### 第二阶段：建立 Profile Contract 数据结构（已完成）
 
 先使用 Python dataclass 或配置对象表达 contract，不急于实现 YAML 表达式引擎。
 
-建议结构：
+当前结构：
 
 ```python
 @dataclass(frozen=True)
@@ -98,9 +118,9 @@ class FpaAgentReviewContract:
 - `unified_ui_contract` 可声明 `workload_judgement`、`unified_merge_review`、`unified_quality_review`，但第一版允许只输出 debug/warning。
 - 自定义 profile 可以继承对应 kind 的默认 contract。
 
-### 第三阶段：补 Profile Harness 分层
+### 第三阶段：补 Profile Harness 分层（已完成基础覆盖）
 
-建议新增目录：
+已新增目录：
 
 ```text
 tests/fpa_profiles/
@@ -109,6 +129,7 @@ tests/fpa_profiles/
   test_multi_uis_harness.py
   test_ui_api_mapping_harness.py
   test_profile_agent_review_contract.py
+  test_profile_prompt_payload_contract.py
 ```
 
 如果暂时不迁移文件，也应在现有测试中按 profile 分组命名，避免 `tests/test_fpa_profiles.py` 继续膨胀。
@@ -143,11 +164,11 @@ ui_api_mapping:
   - 同三级模块同名明确接口合并来源
 ```
 
-### 第四阶段：为 unified_ui 增加专属审阅输出
+### 第四阶段：为 unified_ui 增加专属审阅输出（已完成，只读）
 
 先只增加 warning 和 audit trace，不参与自动重试，不改写 rows。
 
-建议输出：
+当前输出：
 
 ```text
 workload_judgement
@@ -170,12 +191,13 @@ unified_quality_review
 - 不影响正式 Excel 列。
 - 不改变 `strict_fpa` 的 `type_judgement` 输出。
 
-### 第五阶段：为 ui_api_mapping 增加专属审阅输出
+### 第五阶段：为 ui_api_mapping 增加专属审阅输出（已完成，只读）
 
-建议输出：
+当前输出：
 
 ```text
 mapping_judgement
+mapping_merge_review
 mapping_quality_review
 ```
 
@@ -195,7 +217,7 @@ mapping_quality_review
 - 明确接口来源可追溯。
 - 默认接口行和明确接口行不互相去重。
 
-### 第六阶段：真实模型抽样基线
+### 第六阶段：真实模型抽样基线（待执行）
 
 沿用 `docs/fpa/fpa-multi-profile-real-model-validation.md`，但建议新增按日期记录的验证结果：
 
@@ -230,10 +252,11 @@ warning count
 
 ## 验证命令
 
-首轮实施后运行：
+当前 profile contract / harness / stability 汇总建议运行：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests\test_fpa_agent_review.py tests\test_fpa_profiles.py tests\test_gen_fpa_strict_profile.py
+.\.venv\Scripts\python.exe -m pytest tests\fpa_profiles tests\test_fpa_agent_review.py
+.\.venv\Scripts\python.exe -m pytest tests\test_fpa_profiles.py tests\test_fpa_stability_report.py
 ```
 
 如果改动生成主流程，再补跑：
@@ -258,12 +281,11 @@ warning count
 | 新 profile 复制 Python 流程导致分叉 | 新增 profile 优先新增 contract、规则和 fixture |
 | warning 过多影响审阅体验 | 第一版 warning 只进入 audit/check，不阻断正式生成 |
 
-## 推荐提交切片
+## 后续切片
 
-1. Agent Review 增加 profile/applicability 字段，并补 contract 测试。
-2. 整理 profile harness 分层，补 `unified_ui`、`multi_uis`、`ui_api_mapping` golden fixture。
-3. 增加 `unified_ui` workload judgement 和 quality warning。
-4. 增加 `ui_api_mapping` mapping quality warning。
-5. 更新文档和真实模型验证记录模板。
+1. 按 `docs/fpa/validation-runs/multi-profile-run-template.md` 执行真实模型抽样并归档。
+2. 根据真实模型抽样结果判断是否把 `workload_judgement`、`mapping_judgement` 写入 prompt 硬约束。
+3. 如果 `multi_uis` 真实项目需求稳定，评估是否新增独立 `kind: multi_uis` 和独立 contract。
+4. 为自定义 profile 增加继承式 harness 示例。
 
 每个切片都应保持现有生成行为可回归，并按仓库规则单独提交。

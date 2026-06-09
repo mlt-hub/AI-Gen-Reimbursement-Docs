@@ -67,9 +67,9 @@ profile × kind × strategy × rule_set × prompt × model
 | 组合 | 当前等级 | 说明 |
 |---|---|---|
 | `strict_fpa + ai_first + strict_fpa_rs` | `certified` | 已有 golden、validator、确认流、稳定性报告和真实模型 recommended 连续复测。 |
-| `unified_ui + rules_first + unified_ui_rs` | `supported` | 有配置、规则兜底和部分验收测试；缺 profile 级 golden 和真实模型稳定性基线。 |
-| `multi_uis + rules_first + multi_uis_rs` | `supported / experimental` | 多界面同名行和拆分理由已有基础测试，但主要依赖 prompt/rule_set。 |
-| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 规则兜底较清楚；缺 AI 稳定性抽样。 |
+| `unified_ui + rules_first + unified_ui_rs` | `supported` | 有配置、规则兜底、分层 harness 和只读 profile review；缺真实模型稳定性基线。 |
+| `multi_uis + rules_first + multi_uis_rs` | `supported / experimental` | 多界面同名行和拆分理由已有分层 harness，但主要依赖 prompt/rule_set。 |
+| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 规则兜底、固定 EI/ILF harness 和只读 mapping review 较清楚；缺 AI 稳定性抽样。 |
 | 任意 profile + 自定义 rule_set | 视继承关系而定 | 继承推荐 rule_set 时复用 base harness，再补扩展断言。 |
 | 任意 profile + 明显不匹配 rule_set | `experimental / invalid` | 只保证配置错误可见或输出可审计，不承诺业务正确。 |
 

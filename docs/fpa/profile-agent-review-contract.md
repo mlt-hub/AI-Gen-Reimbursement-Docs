@@ -1,5 +1,24 @@
 # Profile Agent Review 契约复用方案
 
+## 当前实施状态
+
+截至 2026-06-09，本文中的最小落地路线已推进到 profile-aware Agent Review 阶段：
+
+- `agent_review` 已增加 `profile`、`profile_kind`、`contract`、`applicability`、`contract_outputs` 和 `categories`。
+- `strict_fpa` 使用 `strict_fpa_contract`，`applicability: primary`，继续以 `type_judgement`、`merge_review`、`quality_review` 作为主审计契约。
+- `unified_ui` 使用 `unified_ui_contract`，`applicability: debug_only`，已输出只读的 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。
+- `ui_api_mapping` 使用 `ui_api_mapping_contract`，`applicability: debug_only`，已输出只读的 `mapping_judgement`、`mapping_merge_review`、`mapping_quality_review`。
+- profile 专属 quality review 只进入 `agent_review` 和稳定性报告，不阻断生成、不触发自动重试、不改写 rows。
+- `tests/fpa_profiles/` 已补充 `unified_ui`、`multi_uis`、`ui_api_mapping` 的分层 harness，以及 prompt payload contract 覆盖。
+- 稳定性报告已新增独立指标 `profile_quality_issue_count` 和 `profile_issue_code_counts`，不混入原 `quality_issue_count`。
+- 真实模型抽样记录模板已新增到 `docs/fpa/validation-runs/multi-profile-run-template.md`。
+
+仍未完成的事项：
+
+- profile 专属 warning 还没有进入 prompt 硬约束。
+- `multi_uis` 仍复用 `unified_ui` kind，尚未新增独立 contract/kind。
+- 真实模型抽样基线需要按模板执行和归档。
+
 ## 背景
 
 当前 `gen-fpa` 已经为 `strict_fpa` 建立了第一版多 Agent 分工骨架。这里的 Agent 不是多个独立 LLM 调用，而是“角色化的确定性中间节点”：
@@ -122,24 +141,24 @@ EI / EQ / EO / ILF / EIF
 
 ## 非 strict Profile 的 Harness 现状
 
-`strict_fpa` 外的 harness 有基础覆盖，但成熟度明显低一档。
+`strict_fpa` 外的 harness 已经补充分层覆盖，但成熟度仍低于 `strict_fpa` 的真实模型基线。
 
 当前非 strict profile 的覆盖重点主要是配置、规则兜底和少量验收行为：
 
 | profile | 当前 harness | 当前成熟度 |
 |---|---|---|
-| `unified_ui` | 配置校验、prompt 渲染、三级模块界面行、非界面过程行、同名非界面行合并等规则/acceptance 测试。 | 基础可用，但缺真实模型稳定性基线。 |
-| `multi_uis` | 多界面同名行保留、拆分理由进入 review/check 元数据。 | 偏薄，主要依赖 prompt/rule_set。 |
-| `ui_api_mapping` | 默认界面 EI、默认接口 ILF、明确后端调用 ILF、多接口行、重复默认行等规则测试。 | 规则 harness 相对清楚，但缺 AI 稳定性抽样。 |
+| `unified_ui` | 配置校验、prompt 渲染、三级模块界面行、非界面过程行、同名非界面行合并、prompt payload contract、`workload_judgement` / `unified_quality_review` 只读审计。 | supported，缺真实模型稳定性基线。 |
+| `multi_uis` | 多界面同名行保留、拆分理由进入 review/check 元数据、非界面业务动作沿用 `unified_ui` harness。 | supported / experimental，主要依赖 prompt/rule_set。 |
+| `ui_api_mapping` | 默认界面 EI、默认接口 ILF、明确后端调用 ILF、多接口行、重复默认行、prompt payload contract、`mapping_judgement` / `mapping_quality_review` 只读审计。 | supported，缺 AI 稳定性抽样。 |
 | 自定义 profile | 主要依赖所复用 kind 和 rule_set 的配置校验与基础规则。 | 需要自行补 profile 级 fixture。 |
 
-这些 profile 目前还没有达到 `strict_fpa` 的 harness 水平：
+这些 profile 目前仍没有达到 `strict_fpa` 的 harness 水平：
 
 - 没有 profile 专属 golden fixture 集合。
 - 没有真实模型 recommended preset。
 - 没有独立质量门定义。
-- 没有适配自身语义的 `workload_judgement` / `unified_quality_review`。
-- 当前 `type_judgement`、`merge_review`、`quality_review` 仍偏 `strict_fpa` 语义。
+- profile 专属 review 仍是只读 warning，没有进入 prompt 硬约束或自动重试。
+- `type_judgement`、`merge_review`、`quality_review` 仍保留为 `strict_fpa` 语义的调试信息。
 
 因此，非 strict profile 可以运行，但不能按 `strict_fpa` 的稳定性结论直接背书。后续应优先补 profile 级 golden fixtures 和行为断言，再考虑把 agent review contract 扩展到各自的工作量口径。
 
@@ -394,7 +413,7 @@ permission_or_config_evidence
 
 不建议一开始就重构全部 profile。推荐分阶段推进。
 
-### 第一步：标注适用范围
+### 第一步：标注适用范围（已完成）
 
 在 `agent_review` 增加 profile/applicability 信息：
 
@@ -416,11 +435,11 @@ permission_or_config_evidence
 
 这样可以避免其它 profile 把 strict 口径误认为硬约束。
 
-### 第二步：抽出 contract 概念
+### 第二步：抽出 contract 概念（已完成）
 
 新增 profile contract 数据结构，但先不追求 YAML 表达式完整通用。
 
-第一版可以用 Python dataclass 或配置对象表达：
+第一版已用 Python dataclass 表达：
 
 ```text
 contract.name
@@ -431,7 +450,7 @@ contract.quality_checks
 contract.prompt_exposure
 ```
 
-### 第三步：为 `unified_ui` 增加 workload judgement
+### 第三步：为 `unified_ui` 增加 workload judgement（已完成，只读）
 
 先只做非破坏式建议，不直接改写 rows：
 
@@ -439,31 +458,33 @@ contract.prompt_exposure
 workload_judgement
   -> 界面开发
   -> 接口开发
-  -> 后台数据库变更
+  -> 逻辑处理开发
   -> 外部系统对接
 ```
 
-### 第四步：为 `unified_ui` 增加 quality review
+### 第四步：为 `unified_ui` 增加 quality review（已完成，只读）
 
 先只做 warning 和 audit trace，不参与自动重试：
 
 ```text
 有界面流程但漏界面开发
 有动作流程但漏接口开发
-有内部数据变更但漏数据库变更
+有内部数据变更但漏逻辑处理开发
 同一类别同一目标重复计数
 source_process_ids 越界
 ```
 
-### 第五步：补 golden fixture
+### 第五步：补 profile harness / fixture（已完成基础分层，真实模型基线待补）
 
-至少补 2 到 3 个 `unified_ui` golden fixtures：
+已补充 `tests/fpa_profiles/` 分层 harness，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的基础行为。后续仍需补真实模型抽样基线。
+
+建议继续补 2 到 3 个 `unified_ui` golden fixtures：
 
 - 查询/新增/编辑/删除同一模块，期望界面和接口计量稳定。
 - 明确保存内部数据，期望数据库变更不漏。
 - 普通外部服务调用，期望外部对接或接口项合理，不误计数据库变更。
 
-### 第六步：再决定是否进入 prompt 硬约束
+### 第六步：再决定是否进入 prompt 硬约束（未开始）
 
 只有当 warning 质量稳定、fixture 通过、真实样例不产生大规模误报后，才让 `unified_ui` prompt 明确消费 `workload_judgement` 和 `unified_quality_review`。
 
