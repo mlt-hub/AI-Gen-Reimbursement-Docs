@@ -148,11 +148,40 @@ tmp_validation_runs\20260609_192310_warning_filter_rerun_final
 
 1. `multi_uis` 输出无 warning，但查询、导出行被模型标为 `EI`，且 `计算依据归类`分别指向 `EQ` / `EO` 规则。后处理已新增 `postprocess.classification_basis_type_conflict`，后续复跑会将这类“类型”和“计算依据归类”不一致写入 warning。
 2. `multi_uis` 和部分 profile 的说明中出现“客户表”，但没有使用 `系统元素：` 标签。后处理已新增正文低置信系统元素检测，后续复跑会将输入未明确提供的疑似表/服务/接口词写入 warning。
-3. `multi_uis` 本轮完整复跑后主要剩余问题变为说明中未明确写出当前 `EI` 类型；下一步更适合通过 profile prompt 强化“界面行计算说明必须显式写出 EI”。
+3. `multi_uis` 本轮完整复跑后主要剩余问题变为说明中未明确写出当前 `EI` 类型；已在后续小节通过 profile prompt 强化并复跑验证。
 
 ## 后续建议
 
 优先级建议：
 
-1. 优先强化 `multi_uis` profile prompt，要求界面拆分行的`计算说明`显式写出当前 `EI` 类型。
-2. 根据真实模型复跑结果，继续治理低置信 warning 误报和 profile 差异化规则。
+1. 后续扩大 `multi_uis` 真实模型样本，观察不同模块下“界面开发行固定 EI”和“查询/导出/逻辑处理开发行按实际类型”的稳定性。
+2. 根据更多真实模型复跑结果，继续治理低置信 warning 误报和 profile 差异化规则。
+
+## multi_uis EI 说明强化后复跑
+
+本轮在临时配置目录中使用仓库最新默认 `fpa_config.yaml.example`，只替换 FPA prompt 配置，不修改用户配置目录。临时结果目录为：
+
+```text
+tmp_validation_runs\20260609_193744_multi_uis_ei_prompt
+```
+
+复跑摘要：
+
+| profile | ai_called | parse_ok | parsed rows | normalized rows | warnings | quality warnings |
+|---|---:|---:|---:|---:|---:|---:|
+| `multi_uis` | yes | yes | 4 | 4 | 0 | 0 |
+
+本轮 prompt 强化：
+
+- `multi_uis` user prompt 新增约束：每条界面开发行的`计算说明`必须明确写出“按 EI 识别”或“按 EI 计量”，不能只写“界面开发行”“用户通过界面输入”等间接表述。
+- 真实模型复跑中，三级模块级界面开发行的`计算说明`已写出“按EI识别”，后处理质量 warning 为 0。
+- 本轮仍记录 `multi_uis.split_reason`，用于保留“无明确独立页面/业务对象/业务流程/用户端拆分证据，按三级模块合并为一条界面开发行”的拆分依据；这是 review 元数据，不是说明质量失败。
+
+复跑后的 4 行：
+
+| 新增/修改功能点 | 类型 | 后处理观察 |
+|---|---|---|
+| `【后台】业务管理-客户管理-客户资料维护-界面开发（客户资料维护界面）` | `EI` | 计算说明写出“按EI识别”；记录 `multi_uis.split_reason` |
+| `【后台】业务管理-客户管理-客户资料维护-查询处理开发（查询客户）` | `EQ` | 无 warning |
+| `【后台】业务管理-客户管理-客户资料维护-导出处理开发（导出客户清单）` | `EO` | 无 warning |
+| `【后台】业务管理-客户管理-客户资料维护-逻辑处理开发（新增客户）` | `EI` | 无 warning |

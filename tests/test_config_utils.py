@@ -19,6 +19,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_cfp_formula,
     load_cosmic_warn_marker,
     load_gen_cosmic_allow_draft_excel_output,
+    load_gen_cosmic_cfp_policy,
     load_fpa_reduced_use_workload,
     load_fpa_adjustment_value_config,
     load_fpa_profile,
@@ -527,6 +528,32 @@ class TestBooleanLoaders:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=tmp_path):
             assert load_gen_cosmic_allow_draft_excel_output() is False
+
+    def test_load_gen_cosmic_cfp_policy_default(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            assert load_gen_cosmic_cfp_policy() == {}
+
+    def test_load_gen_cosmic_cfp_policy_nested_filters_invalid_values(self, tmp_path):
+        (tmp_path / "system_config.yaml").write_text(
+            "\n".join([
+                "gen_cosmic:",
+                "  cfp_policy:",
+                "    新增: 1",
+                "    复用: 0.5",
+                "    利旧: 0",
+                "    非法: bad",
+                "    负数: -1",
+            ]),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=tmp_path):
+            assert load_gen_cosmic_cfp_policy() == {
+                "新增": 1.0,
+                "复用": 0.5,
+                "利旧": 0.0,
+            }
 
     def test_load_fpa_reduced_default(self):
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
@@ -1296,6 +1323,9 @@ prompt_fragments:
         assert "不要只输出界面开发行替代这些处理开发行" in unified
         assert "独立页面、独立业务对象、独立业务流程或独立用户端" in multi_uis
         assert "不要只输出界面开发行替代这些处理开发行" in multi_uis
+        assert "按 EI 识别" in multi_uis
+        assert "按 EI 计量" in multi_uis
+        assert "不要只写“界面开发行”" in multi_uis
         assert "payload_json.agent_review.mapping_judgement.judgements" in mapping_system
         assert "expected_default_rows" in mapping_system
         assert "explicit_backend_rows" in mapping_system

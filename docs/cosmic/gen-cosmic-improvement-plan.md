@@ -333,9 +333,10 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 `MISSING_CFP_FORMULA` 已实现为 error，并会阻断正式输出；但还需要继续处理以下问题：
 
 1. `CosmicItem.total_cfp()` 中 `复用 = 1/3` 不应作为正式业务口径继续扩散。
-2. `复用`、`利旧`、`不涉及修改`、人工覆盖 CFP 的规则需要配置化或模板化。
+2. `复用`、`利旧`、`不涉及修改`、人工覆盖 CFP 的规则需要配置化或模板化；当前确认后 Python CFP 汇总已支持 `gen_cosmic.cfp_policy` 作为组织级默认口径，并允许确认 JSON 的 `cfp_policy` 按项目覆盖。
 3. JSON 草稿已经记录报告级 `cfp_basis`，当前可区分模板公式和未确认；后续可扩展到行级人工覆盖。
 4. `gen-list` 只能读取正式 CFP 总和。
+5. 后续仍需校验 Excel 模板公式、元数据公式和 `cfp_policy_effective` 是否表达一致口径。
 
 ### P1：功能用户规则增强
 

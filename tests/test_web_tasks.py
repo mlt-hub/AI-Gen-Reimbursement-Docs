@@ -1863,6 +1863,65 @@ def test_cosmic_confirmed_export_uses_cfp_policy(monkeypatch, tmp_path):
     server.session_manager.cleanup_download(session_id)
 
 
+def test_cosmic_confirmed_export_uses_configured_cfp_policy(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_export_configured_cfp_policy"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    payload["status"] = "passed"
+    payload["review_items"] = []
+    payload["items"][0]["status"] = "passed"
+    payload["items"][0]["movements"] = [
+        {**payload["items"][0]["movements"][0], "reuse": "新增"},
+        {**payload["items"][0]["movements"][1], "reuse": "复用"},
+    ]
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "cosmic-confirmation.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    template_path = tmp_path / "项目功能点拆分表-输出模板.xlsx"
+    template_path.write_bytes(b"template")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr("web_app.routes.artifacts._cosmic_template_path", lambda *_: template_path)
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_cfp_policy",
+        lambda: {"复用": 0.5},
+    )
+
+    def fake_write_cosmic_xlsx(template, output, report, **kwargs):
+        Path(output).write_bytes(b"xlsx")
+        return output
+
+    monkeypatch.setattr("web_app.routes.artifacts.write_cosmic_xlsx", fake_write_cosmic_xlsx)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+    export_resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert save_resp.status_code == 200
+    assert save_resp.json()["payload"]["cfp_policy_effective"]["复用"] == 0.5
+    assert export_resp.status_code == 200
+    assert export_resp.json()["cfp_total"] == 1.5
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_payload_cfp_policy_overrides_configured_policy(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_payload_cfp_policy_override"
+    payload = _cosmic_export_payload()
+    payload["cfp_policy"] = {"复用": 0.25}
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_cfp_policy",
+        lambda: {"复用": 0.5},
+    )
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    assert save_resp.json()["payload"]["cfp_policy_effective"]["复用"] == 0.25
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_cosmic_review_action_excludes_non_functional_process_and_stamps_audit(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="alice")
     session_id = "cosmic_review_exclude_process"
