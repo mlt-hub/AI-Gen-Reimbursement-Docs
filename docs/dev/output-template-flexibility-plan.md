@@ -412,9 +412,9 @@ template_pack/
 当前边界：
 
 - `list` 需求清单写入器已开始使用 manifest 做 sheet、表头行、数据起始行、样式源行、列映射和项目概览命名单元格写入。
-- FPA 结果写入器已开始使用 manifest 做 result sheet、表头行、数据起始行、样式源行、关键列定位，以及 result sheet 的数据起始和 FPA 工作量汇总命名单元格定位。
+- FPA 结果写入器已开始使用 manifest 做 result sheet、表头行、数据起始行、样式源行、关键列定位，以及 result sheet 的数据起始和 FPA 工作量汇总命名单元格定位；FPA 模板附录判定原则读取已开始使用 `sheets.judgement_rules` 的 sheet、起始行、结束行和规则列配置。
 - COSMIC 写入器已开始使用 manifest 做 result sheet、数据起始行、样式源行和结果字段列映射。
-- COSMIC 等 Excel 写入器尚未全面按 manifest 做复杂锚点或跨 sheet 公式重写。
+- COSMIC/FPA 等 Excel 写入器尚未全面按 manifest 做复杂锚点、复杂样式复制、图片/文本框或跨 sheet 公式重写。
 - 用户自定义模板如果没有同名 manifest，会按对应 kind 的默认契约预检。
 - `gen-basedata` 不生成最终交付物，因此不执行输出模板预检。
 
@@ -434,6 +434,7 @@ template_pack/
   - `load_output_template_profile(...)`：读取当前输出模板 profile，并解析可选模板包。
 - `ai_gen_reimbursement_docs/gen_fpa.py`
   - `generate_fpa_xlsx_from_md(...)`：按 `fpa` manifest 的 result sheet、行号和关键列表头定位写入 FPA 结果。
+  - `_read_fpa_judgement_rules_from_template(...)`：按 `fpa` manifest 的 `sheets.judgement_rules` 读取模板附录判定原则。
 - `ai_gen_reimbursement_docs/cosmic_writer.py`
   - `write_cosmic_xlsx(...)`：按 `cosmic` manifest 的 result sheet、数据起始行和样式源行写入 COSMIC 结果。
 

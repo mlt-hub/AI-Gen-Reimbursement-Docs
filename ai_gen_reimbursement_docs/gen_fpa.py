@@ -655,20 +655,26 @@ def _read_fpa_judgement_rules_from_template(template_path: str = "") -> list[str
     judgement_rules: list[str] = []
     if not template_path:
         return judgement_rules
+    wb = None
     try:
+        manifest, _, _ = load_template_manifest("fpa", template_path)
+        sheet_spec = _fpa_judgement_rules_sheet_spec(manifest)
         wb = openpyxl.load_workbook(template_path, data_only=True)
         from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
-        appendix_sheet = _get_system_config_value('fpa_appendix_sheet', '附录1-FPA评估方法说明')
+        appendix_sheet = _get_system_config_value('fpa_appendix_sheet', sheet_spec["name"])
         ws = wb[appendix_sheet]
-        for row_num in range(2, ws.max_row + 1):
-            val = ws.cell(row_num, 3).value
+        end_row = min(sheet_spec["data_end_row"], ws.max_row) if sheet_spec["data_end_row"] else ws.max_row
+        for row_num in range(sheet_spec["data_start_row"], end_row + 1):
+            val = ws.cell(row_num, sheet_spec["rule_column"]).value
             if val and str(val).strip():
                 judgement_rules.append(str(val).strip())
-        wb.close()
         if judgement_rules:
             logger.debug("从模板附录读取判定原则 %d 条", len(judgement_rules))
     except Exception as e:
         logger.warning("从模板附录读取判定原则失败: %s", e)
+    finally:
+        if wb is not None:
+            wb.close()
     return judgement_rules
 
 
@@ -4134,6 +4140,21 @@ def _as_manifest_int(value: object, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
+def _as_manifest_column(value: object, default: int) -> int:
+    if isinstance(value, int):
+        return value if value > 0 else default
+    text = str(value or "").strip()
+    if not text:
+        return default
+    if text.isdigit():
+        parsed = int(text)
+        return parsed if parsed > 0 else default
+    try:
+        return openpyxl.utils.column_index_from_string(text)
+    except ValueError:
+        return default
+
+
 def _fpa_result_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
     sheets = manifest.get("sheets", {}) or {}
     spec = sheets.get("result", {}) if isinstance(sheets, dict) else {}
@@ -4146,6 +4167,19 @@ def _fpa_result_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
         "style_source_row": _as_manifest_int(spec.get("style_source_row"), 3),
         "columns": spec.get("columns", {}) if isinstance(spec.get("columns", {}), dict) else {},
         "named_cells": spec.get("named_cells", {}) if isinstance(spec.get("named_cells", {}), dict) else {},
+    }
+
+
+def _fpa_judgement_rules_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
+    sheets = manifest.get("sheets", {}) or {}
+    spec = sheets.get("judgement_rules", {}) if isinstance(sheets, dict) else {}
+    if not isinstance(spec, dict):
+        spec = {}
+    return {
+        "name": str(spec.get("name") or "附录1-FPA评估方法说明"),
+        "data_start_row": _as_manifest_int(spec.get("data_start_row"), 2),
+        "data_end_row": _as_manifest_int(spec.get("data_end_row"), 0),
+        "rule_column": _as_manifest_column(spec.get("rule_column"), 3),
     }
 
 
