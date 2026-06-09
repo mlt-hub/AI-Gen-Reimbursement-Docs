@@ -78,6 +78,13 @@ FPA_PROJECT_DESCRIPTION_MAX_CHARS = 5000
 EXPLANATION_TABLE_COUNT_DETAIL_HINTS = ("数据库表个数=", "表个数=", "表数量", "1张表", "1 张表", "1个表", "1 个表")
 EXPLANATION_SYSTEM_ELEMENT_MARKERS = ("表", "服务", "接口", "文件", "系统", "平台")
 EXPLANATION_SYSTEM_ELEMENT_SKIP_HINTS = ("未识别到", "未明确", "无明确", "没有明确")
+BASIS_TYPE_HINTS = {
+    "EI": ("外部输入", "修改或增加界面", "插入、修改、删除", "输入界面"),
+    "EQ": ("外部查询", "查询界面"),
+    "EO": ("外部输出", "输出结果", "报表", "统计"),
+    "ILF": ("后台数据库变更", "内部逻辑文件", "内部逻辑数据"),
+    "EIF": ("外部接口文件", "外部逻辑文件", "外部数据组", "外部系统维护"),
+}
 EXPLANATION_STRUCTURED_LABELS = (
     "来源场景：", "来源场景:",
     "业务数据：", "业务数据:",
@@ -547,6 +554,20 @@ def _read_fpa_judgement_rules(template_path: str = "") -> list[str]:
     return _read_fpa_judgement_rules_from_template(template_path)
 
 
+def _fpa_type_from_classification_basis(basis: str) -> str:
+    text = str(basis or "").strip()
+    if not text:
+        return ""
+    upper_text = text.upper()
+    for fpa_type in ("ILF", "EIF", "EI", "EQ", "EO"):
+        if re.match(rf"^{fpa_type}(?:\b|[:：])", upper_text):
+            return fpa_type
+    for fpa_type, hints in BASIS_TYPE_HINTS.items():
+        if any(hint in text for hint in hints):
+            return fpa_type
+    return ""
+
+
 def _extract_json_obj(resp: str) -> dict[str, Any]:
     from ai_gen_reimbursement_docs.llm_client import strip_markdown_code_block
 
@@ -933,6 +954,21 @@ def _normalize_ai_fpa_rows_for_l3(
         output_name = _normalize_ai_fpa_name_prefix(name, group)
         prefixed_name = output_name
         prefix_changed = prefixed_name != name
+
+        basis_type = _fpa_type_from_classification_basis(basis)
+        if basis_type and basis_type != fpa_type:
+            warning = f"{output_name} 类型={fpa_type} 与计算依据归类指向的类型={basis_type} 不一致: {basis}"
+            warnings.append(warning)
+            row_warnings.append(warning)
+            row_hits.append({
+                "hit_object": output_name,
+                "rule_id": "postprocess.classification_basis_type_conflict",
+                "rule_desc": "计算依据归类应与最终 FPA 类型一致。",
+                "suggested_type": basis_type,
+                "adopted": "否",
+                "warnings": [warning],
+            })
+
         if _explanation_needs_full_source_path(
             group=group,
             name=output_name,
