@@ -513,12 +513,13 @@ replacement_scopes:
 - `{{功能过程详情}}` 可只插入模块和功能过程详情。
 - `module_table.sample_table.marker` 可声明模块清单样例表，生成器会复制样例表样式并移除原样例表。
 - 已新增 Word 模板导入后端基础能力：`import_spec_word_template(...)` 可读取客户 `.docx`，扫描正文、表格、页眉、页脚，替换常见元数据字段为占位符，在功能需求章节附近插入 `{{模块清单表}}` 和 `{{功能过程详情}}`，并生成配套 manifest 与待确认项。
+- Web 已接入 Word 模板导入入口：配置页“模板”分区可以上传 `.docx`，调用 `/api/templates/spec/import` 生成模板草稿，并可将返回的 `spec_out_template` 路径应用到 `out_templates` 映射，仍需用户手动保存配置。
 
 尚未实施：
 
-- Web UI 中的 Word 模板导入向导。
 - 文本框、内容控件、图片文字等复杂 Word 结构识别。
 - 导入后的在线预览、用户确认和保存流程。
+- 已导入模板的列表管理、删除和版本命名。
 
 ### 当前默认 Word manifest
 
@@ -621,6 +622,12 @@ ai_gen_reimbursement_docs/spec_template_importer.py
 import_spec_word_template(source_docx, output_dir)
 ```
 
+Web 入口：
+
+```text
+POST /api/templates/spec/import
+```
+
 导入输出：
 
 ```text
@@ -660,11 +667,11 @@ custom_templates/
 
 ### 下一阶段建议
 
-下一阶段建议接入 Web UI 的 Word 模板导入向导：
+下一阶段建议补齐导入后的确认和管理流程：
 
-1. 上传 `.docx` 后调用 `import_spec_word_template(...)` 生成模板草稿和 manifest。
-2. 展示 `detected_placeholders`、`inserted_anchors`、`pending_confirmations` 和 `warnings`。
-3. 让用户确认功能需求锚点位置和识别字段。
+1. 提供模板草稿预览或下载。
+2. 让用户确认功能需求锚点位置和识别字段。
+3. 支持重命名、删除、选择已导入模板。
 4. 确认后保存到任务或用户自定义模板目录。
 
-这样可以把已完成的后端导入能力接入产品流程，同时继续避免承诺任意 Word 自动完美转换。
+这样可以把已生成的模板草稿纳入完整管理流程，同时继续避免承诺任意 Word 自动完美转换。

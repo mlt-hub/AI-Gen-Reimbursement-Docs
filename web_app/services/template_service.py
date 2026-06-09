@@ -2,6 +2,12 @@ import glob
 import os
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
+
+from ai_gen_reimbursement_docs.spec_template_importer import (
+    SpecTemplateImportResult,
+    import_spec_word_template,
+)
 
 
 async def save_custom_templates_into(
@@ -52,3 +58,26 @@ def build_templates_dict(custom_t_dir: str) -> dict[str, str]:
         if matches:
             templates[key] = matches[0]
     return templates
+
+
+async def import_spec_template_upload(
+    *,
+    upload_file: Any,
+    target_root: Path,
+) -> SpecTemplateImportResult:
+    """导入客户 Word 文档，生成需求说明书输出模板草稿。"""
+    filename = str(getattr(upload_file, "filename", "") or "")
+    if not filename.lower().endswith(".docx"):
+        raise ValueError("仅支持上传 .docx 文件")
+
+    import_id = uuid4().hex[:12]
+    import_dir = target_root / "imported_templates" / "spec" / import_id
+    import_dir.mkdir(parents=True, exist_ok=True)
+    source_path = import_dir / "source.docx"
+    source_path.write_bytes(await upload_file.read())
+
+    return import_spec_word_template(
+        source_path,
+        import_dir,
+        template_id=f"imported_spec_{import_id}",
+    )
