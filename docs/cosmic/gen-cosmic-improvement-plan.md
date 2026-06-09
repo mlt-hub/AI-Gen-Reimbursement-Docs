@@ -316,14 +316,17 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 3. `AI_GENERATION_EMPTY`：AI 调用完成但返回空功能过程列表。
 4. `AI_LIMIT_SKIPPED_ALL`：配置限制导致全部模块或功能过程跳过。
 5. `NO_L3_MODULES`：模块树没有可生成 COSMIC 的三级模块。
-6. `PARTIAL_AI_FAILURE`：部分模块失败但仍有可校验结果。
-7. `NO_COSMIC_ITEMS`：最终没有功能过程。
+6. `AI_L3_LIMIT_PARTIAL_SKIP`：三级模块数量限制导致部分模块跳过。
+7. `AI_PROCESS_LIMIT_PARTIAL_SKIP`：功能过程数量限制导致部分功能过程跳过。
+8. `USER_ABORTED_GENERATION`：交互模式下用户主动终止生成。
+9. `PARTIAL_AI_FAILURE`：部分模块失败但仍有可校验结果。
+10. `NO_COSMIC_ITEMS`：最终没有功能过程。
 
 后续仍可进一步区分：
 
-1. `AI_L3_LIMIT_PARTIAL_SKIP`：三级模块数量限制导致部分模块跳过。
-2. `AI_PROCESS_LIMIT_PARTIAL_SKIP`：功能过程数量限制导致部分功能过程跳过。
-3. `USER_ABORTED_GENERATION`：交互模式下用户主动终止生成。
+1. `AI_LIMIT_PARTIAL_PLACEHOLDER`：限制跳过后生成了空占位功能过程。
+2. `AI_MODULE_PARSE_FAILED`：单个模块响应解析失败。
+3. `AI_RETRY_EXHAUSTED`：重试后仍失败。
 
 ### P1：CFP 口径收口
 

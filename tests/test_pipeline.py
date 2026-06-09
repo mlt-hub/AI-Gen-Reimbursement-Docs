@@ -391,6 +391,85 @@ class TestGenCosmic:
         issue_codes = [issue["code"] for issue in payload["issues"]]
         assert "PARTIAL_AI_FAILURE" in issue_codes
 
+    def test_partial_ai_limit_skips_are_review_required(self, output_dir, test_excel, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
+            lambda **kwargs: CosmicGenerationDiagnostics(
+                items=[
+                    CosmicItem(
+                        project="测试项目",
+                        module_l1="系统管理",
+                        module_l2="用户管理",
+                        module_l3="用户注册",
+                        user="发起者：用户注册|接收者：系统管理",
+                        trigger="用户触发",
+                        process="注册用户",
+                        movements=[
+                            DataMovement(1, "接收注册请求", "E", "用户注册请求", "姓名"),
+                            DataMovement(2, "返回注册结果", "X", "用户注册结果", "结果"),
+                        ],
+                    )
+                ],
+                total_l3_modules=3,
+                ai_called=1,
+                skipped_by_l3_limit=1,
+                skipped_by_process_limit=1,
+            ),
+        )
+
+        result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        assert result.cosmic_status == "review_required"
+        assert result.cosmic_formal_excel_written is False
+        payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
+        issue_codes = [issue["code"] for issue in payload["issues"]]
+        assert "AI_L3_LIMIT_PARTIAL_SKIP" in issue_codes
+        assert "AI_PROCESS_LIMIT_PARTIAL_SKIP" in issue_codes
+
+    def test_user_aborted_generation_is_reported(self, output_dir, test_excel, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
+            lambda **kwargs: CosmicGenerationDiagnostics(
+                items=[
+                    CosmicItem(
+                        project="测试项目",
+                        module_l1="系统管理",
+                        module_l2="用户管理",
+                        module_l3="用户注册",
+                        user="发起者：用户注册|接收者：系统管理",
+                        trigger="用户触发",
+                        process="注册用户",
+                        movements=[
+                            DataMovement(1, "接收注册请求", "E", "用户注册请求", "姓名"),
+                            DataMovement(2, "返回注册结果", "X", "用户注册结果", "结果"),
+                        ],
+                    )
+                ],
+                total_l3_modules=2,
+                ai_called=1,
+                aborted=True,
+            ),
+        )
+
+        result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        assert result.cosmic_status == "review_required"
+        payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
+        issue_codes = [issue["code"] for issue in payload["issues"]]
+        assert "USER_ABORTED_GENERATION" in issue_codes
+
     def test_empty_movements_blocks_formal_excel(self, output_dir, test_excel, monkeypatch):
         monkeypatch.setattr(
             "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",

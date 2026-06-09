@@ -766,6 +766,26 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                     "配置限制导致 COSMIC AI 未处理任何三级模块",
                     "gen_cosmic_limits",
                 ))
+            elif cosmic_items:
+                if cosmic_diagnostics.skipped_by_l3_limit > 0:
+                    cosmic_global_issues.append(global_cosmic_issue(
+                        "warning", "AI_L3_LIMIT_PARTIAL_SKIP",
+                        f"三级模块数量限制导致 {cosmic_diagnostics.skipped_by_l3_limit} 个模块跳过",
+                        "l3_modules_ai__limit",
+                    ))
+                if cosmic_diagnostics.skipped_by_process_limit > 0:
+                    cosmic_global_issues.append(global_cosmic_issue(
+                        "warning", "AI_PROCESS_LIMIT_PARTIAL_SKIP",
+                        f"功能过程数量限制导致 {cosmic_diagnostics.skipped_by_process_limit} 个模块跳过",
+                        "gen_cosmic_ai_limit",
+                    ))
+            if cosmic_diagnostics.aborted:
+                severity = "warning" if cosmic_items else "error"
+                cosmic_global_issues.append(global_cosmic_issue(
+                    severity, "USER_ABORTED_GENERATION",
+                    "用户在交互模式下主动终止 COSMIC AI 生成",
+                    "ai_generation",
+                ))
             if cosmic_diagnostics.failed_modules:
                 severity = "warning" if cosmic_items else "error"
                 cosmic_global_issues.append(global_cosmic_issue(
