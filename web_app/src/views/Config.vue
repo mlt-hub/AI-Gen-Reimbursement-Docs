@@ -291,6 +291,62 @@
           </table>
         </div>
 
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+          <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 class="text-sm font-semibold">FPA Prompt 诊断</h3>
+              <p class="mt-0.5 text-xs text-[var(--color-ink-soft)]">保存或刷新后显示当前 user prompt 的 fragment 解析状态和最终预览。</p>
+            </div>
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', fpaPromptDiagnosticsStatusClass]">{{ fpaPromptDiagnosticsStatusText }}</span>
+          </div>
+
+          <div v-if="fpaPromptDiagnostics.length" class="space-y-3">
+            <div
+              v-for="diagnostic in fpaPromptDiagnostics"
+              :key="diagnostic.profile"
+              class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-3"
+            >
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                  <div class="text-sm font-semibold text-[var(--color-ink)]">{{ profileLabel(diagnostic.profile) }}</div>
+                  <div class="mt-0.5 font-mono text-xs text-[var(--color-ink-soft)]">{{ diagnostic.user_prompt_source || diagnostic.user_prompt_key || diagnostic.profile }}</div>
+                </div>
+                <span :class="['w-fit shrink-0 rounded-md px-2 py-1 text-xs font-semibold', diagnostic.ok ? statusClass.ok : statusClass.warn]">
+                  {{ diagnostic.ok ? '可渲染' : '需处理' }}
+                </span>
+              </div>
+
+              <div class="mt-3 grid gap-2 text-xs md:grid-cols-3">
+                <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1.5">
+                  <div class="font-semibold text-[var(--color-ink-soft)]">fragment 引用</div>
+                  <div class="mt-1 text-[var(--color-ink)]">{{ diagnostic.calculation_explanation_rules.referenced ? '已引用' : '未引用' }}</div>
+                </div>
+                <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1.5">
+                  <div class="font-semibold text-[var(--color-ink-soft)]">解析状态</div>
+                  <div class="mt-1 text-[var(--color-ink)]">{{ diagnostic.calculation_explanation_rules.resolved ? '已解析' : '未解析' }}</div>
+                </div>
+                <div class="rounded-md border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1.5">
+                  <div class="font-semibold text-[var(--color-ink-soft)]">规则来源</div>
+                  <div class="mt-1 truncate text-[var(--color-ink)]" :title="diagnostic.calculation_explanation_rules.source || '-'">{{ fpaPromptFragmentSourceLabel(diagnostic) }}</div>
+                </div>
+              </div>
+
+              <div v-if="diagnostic.errors.length" class="mt-3 space-y-1">
+                <div v-for="error in diagnostic.errors" :key="error" class="rounded-md bg-[var(--color-danger-soft)] px-2 py-1 text-xs text-[var(--color-danger)]">{{ error }}</div>
+              </div>
+              <div v-if="diagnostic.warnings.length" class="mt-3 space-y-1">
+                <div v-for="warning in diagnostic.warnings" :key="warning" class="rounded-md bg-[var(--color-warning-soft)] px-2 py-1 text-xs text-[var(--color-warning)]">{{ warning }}</div>
+              </div>
+
+              <details v-if="diagnostic.final_prompt_preview" class="mt-3">
+                <summary class="cursor-pointer text-xs font-semibold text-[var(--color-ink-soft)]">最终 prompt 预览</summary>
+                <pre class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--color-console)] p-3 text-xs leading-relaxed text-slate-200">{{ diagnostic.final_prompt_preview }}</pre>
+              </details>
+            </div>
+          </div>
+          <p v-else class="text-sm text-[var(--color-ink-soft)]">暂无 prompt 诊断。</p>
+        </div>
+
         <div v-if="fpaPromptSampleError" class="rounded-lg border border-[var(--color-warning)] bg-[var(--color-surface-muted)] p-3 text-sm text-[var(--color-warning)]">
           {{ fpaPromptSampleError }}
         </div>
@@ -1119,6 +1175,9 @@ interface FpaPromptDiagnostics {
     resolved: boolean
     source: string
   }
+  missing_required_placeholders?: string[]
+  unknown_placeholders?: string[]
+  unresolved_placeholders?: string[]
   warnings: string[]
   errors: string[]
   ok: boolean
@@ -1240,7 +1299,14 @@ const { fpaOptions, loadFpaOptions } = useFpaOptions()
 const showUserConfig = computed(() => auth.isRemote)
 const backendOffline = computed(() => configStore.backendStatus === 'offline')
 type ConfigSectionKey = 'common' | 'fpa' | 'templates' | 'advanced' | 'maintenance'
-const activeConfigSection = ref<ConfigSectionKey>('common')
+const configSectionKeys: ConfigSectionKey[] = ['common', 'fpa', 'templates', 'advanced', 'maintenance']
+
+function initialConfigSection(): ConfigSectionKey {
+  const value = new URLSearchParams(window.location.search).get('section') || ''
+  return configSectionKeys.includes(value as ConfigSectionKey) ? value as ConfigSectionKey : 'common'
+}
+
+const activeConfigSection = ref<ConfigSectionKey>(initialConfigSection())
 const configSectionTabs = computed<{ key: ConfigSectionKey; label: string }[]>(() => [
   { key: 'common', label: '常用' },
   ...(!showUserConfig.value ? [{ key: 'fpa' as const, label: 'FPA' }] : []),
@@ -1517,6 +1583,17 @@ const fpaStrategyFormSnapshot = computed(() => JSON.stringify({
 const hasFpaStrategyChanges = computed(() => (
   fpaStrategySnapshot.value !== '' && fpaStrategyFormSnapshot.value !== fpaStrategySnapshot.value
 ))
+const fpaPromptDiagnostics = computed(() => (
+  fpaStrategyForm.profiles
+    .map(profile => profile.prompt_diagnostics)
+    .filter((diagnostic): diagnostic is FpaPromptDiagnostics => Boolean(diagnostic))
+))
+const fpaPromptDiagnosticsHasErrors = computed(() => (
+  fpaPromptDiagnostics.value.some(diagnostic => !diagnostic.ok || diagnostic.errors.length > 0)
+))
+const fpaPromptDiagnosticsHasWarnings = computed(() => (
+  fpaPromptDiagnostics.value.some(diagnostic => diagnostic.warnings.length > 0)
+))
 const fpaJudgementRulesSnapshotCurrent = computed(() => JSON.stringify(
   fpaJudgementRules.value.map(rule => rule.text),
 ))
@@ -1598,6 +1675,17 @@ const fpaStrategyStatusClass = computed(() => {
   if (fpaStrategySaving.value) return statusClass.neutral
   if (fpaStrategyMsg.value && !fpaStrategyOk.value) return statusClass.warn
   if (hasFpaStrategyChanges.value) return statusClass.warn
+  return statusClass.ok
+})
+const fpaPromptDiagnosticsStatusText = computed(() => {
+  if (!fpaPromptDiagnostics.value.length) return '未检测'
+  if (fpaPromptDiagnosticsHasErrors.value) return '存在错误'
+  if (fpaPromptDiagnosticsHasWarnings.value) return '存在提示'
+  return '全部可渲染'
+})
+const fpaPromptDiagnosticsStatusClass = computed(() => {
+  if (!fpaPromptDiagnostics.value.length) return statusClass.neutral
+  if (fpaPromptDiagnosticsHasErrors.value || fpaPromptDiagnosticsHasWarnings.value) return statusClass.warn
   return statusClass.ok
 })
 const fpaJudgementRulesStatusText = computed(() => {
@@ -1705,6 +1793,15 @@ function profileLabel(name: string): string {
 
 function promptDiagnosticsOk(profile: FpaStrategyProfile): boolean {
   return profile.prompt_diagnostics?.ok !== false
+}
+
+function fpaPromptFragmentSourceLabel(diagnostic: FpaPromptDiagnostics): string {
+  const source = diagnostic.calculation_explanation_rules.source
+  if (!diagnostic.calculation_explanation_rules.referenced) return '未引用'
+  if (!diagnostic.calculation_explanation_rules.resolved || !source) return '未解析'
+  if (source.includes(`calculation_explanation_rules.${diagnostic.profile}`)) return 'profile override'
+  if (source.includes('calculation_explanation_rules.default')) return 'default'
+  return source
 }
 
 function configTabId(key: ConfigSectionKey): string {
@@ -1869,7 +1966,11 @@ async function loadFpaStrategySettings() {
 
 function applyFpaStrategySettings(data: FpaStrategySettingsResponse) {
   fpaStrategyForm.defaultProfile = data.default_profile || ''
-  fpaStrategyForm.profiles = (data.profiles || []).map(profile => ({ ...profile }))
+  const diagnosticsByProfile = new Map((data.prompt_diagnostics || []).map(item => [item.profile, item]))
+  fpaStrategyForm.profiles = (data.profiles || []).map(profile => ({
+    ...profile,
+    prompt_diagnostics: profile.prompt_diagnostics || diagnosticsByProfile.get(profile.name),
+  }))
   fpaStrategyForm.ruleSets = (data.rule_sets || []).map(ruleSet => ({ ...ruleSet }))
   fpaStrategyMsg.value = ''
   fpaStrategyOk.value = true
