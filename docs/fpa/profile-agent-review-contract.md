@@ -7,6 +7,7 @@
 - `agent_review` 已增加 `profile`、`profile_kind`、`contract`、`applicability`、`contract_outputs` 和 `categories`。
 - `strict_fpa` 使用 `strict_fpa_contract`，`applicability: primary`，继续以 `type_judgement`、`merge_review`、`quality_review` 作为主审计契约。
 - `unified_ui` 使用 `unified_ui_contract`，`applicability: debug_only`，已输出只读的 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。
+- `multi_uis` 仍复用 `unified_ui` kind，但已使用 `multi_uis_contract` 作为命名 contract 变体，继续输出只读的 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。
 - `ui_api_mapping` 使用 `ui_api_mapping_contract`，`applicability: debug_only`，已输出只读的 `mapping_judgement`、`mapping_merge_review`、`mapping_quality_review`。
 - profile 专属 quality review 只进入 `agent_review` 和稳定性报告，不阻断生成、不触发自动重试、不改写 rows。
 - `tests/fpa_profiles/` 已补充 `unified_ui`、`multi_uis`、`ui_api_mapping` 的分层 harness，以及 prompt payload contract 覆盖。
@@ -16,7 +17,7 @@
 仍未完成的事项：
 
 - profile 专属 warning 还没有进入 prompt 硬约束。
-- `multi_uis` 仍复用 `unified_ui` kind，尚未新增独立 contract/kind。
+- `multi_uis` 仍复用 `unified_ui` kind，尚未新增独立 kind。
 - 真实模型抽样基线需要按模板执行和归档。
 
 ## 背景

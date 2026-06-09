@@ -48,6 +48,16 @@ UNIFIED_UI_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
     applicability="debug_only",
 )
 
+MULTI_UIS_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
+    name="multi_uis_contract",
+    profile_kind="unified_ui",
+    categories=("多界面开发", "查询处理开发", "导出处理开发", "导入处理开发", "逻辑处理开发"),
+    judgement_output_key="workload_judgement",
+    merge_review_output_key="unified_merge_review",
+    quality_review_output_key="unified_quality_review",
+    applicability="debug_only",
+)
+
 UI_API_MAPPING_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
     name="ui_api_mapping_contract",
     profile_kind="ui_api_mapping",
@@ -238,9 +248,12 @@ def resolve_fpa_agent_review_contract(
     profile_name: str = "strict_fpa",
     profile_kind: str = "strict_fpa",
 ) -> FpaAgentReviewContract:
+    name = (profile_name or "").strip()
     kind = (profile_kind or profile_name or "strict_fpa").strip()
     if kind == "strict_fpa":
         return STRICT_FPA_AGENT_REVIEW_CONTRACT
+    if name == "multi_uis":
+        return MULTI_UIS_AGENT_REVIEW_CONTRACT
     if kind == "ui_api_mapping":
         return UI_API_MAPPING_AGENT_REVIEW_CONTRACT
     return UNIFIED_UI_AGENT_REVIEW_CONTRACT

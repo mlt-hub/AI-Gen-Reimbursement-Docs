@@ -1,6 +1,7 @@
 from ai_gen_reimbursement_docs.fpa_agent_review import build_fpa_agent_review
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
+    CustomRulesProfile,
     STRICT_FPA_PROFILE,
     UI_API_MAPPING_PROFILE,
 )
@@ -104,6 +105,22 @@ def test_ui_api_mapping_agent_review_contract_is_debug_only():
     roles = {role["name"]: role for role in review["roles"]}
     assert roles["mapping_judge"]["output_key"] == "mapping_judgement"
     assert roles["mapping_quality_reviewer"]["status"] == "awaiting_rows"
+
+
+def test_multi_uis_agent_review_contract_is_unified_ui_kind_variant():
+    profile = CustomRulesProfile(name="multi_uis")
+    review = build_fpa_agent_review(
+        group=_group(),
+        profile_name=profile.name,
+        profile_kind=profile.agent_review_profile_kind(),
+    )
+
+    assert review["profile"] == "multi_uis"
+    assert review["profile_kind"] == "unified_ui"
+    assert review["contract"] == "multi_uis_contract"
+    assert review["categories"][0] == "多界面开发"
+    assert review["contract_outputs"]["judgement"] == "workload_judgement"
+    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "查询处理开发"]
 
 
 def test_unified_ui_quality_review_warns_without_changing_rows():
