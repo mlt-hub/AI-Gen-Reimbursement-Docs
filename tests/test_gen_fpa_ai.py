@@ -931,6 +931,126 @@ def test_explanation_quality_ignores_development_and_type_wording_as_inline_elem
     )
 
 
+def test_explanation_quality_ignores_list_and_represents_wording_as_inline_elements():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["维护业务数据的外部输入，按 EI 识别。"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "查询客户",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-查询客户"
+                "\n业务数据：客户名称、证件号码。"
+                "\n业务规则：同一三级模块的列表、该行代表查询客户能力。"
+                "\n计算说明：该功能体现外部输入事务，按 EI 识别。"
+            ),
+        }],
+    )
+
+    assert not any("正文疑似提到输入未明确提供" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        and any("列表" in warning or "代表" in warning for warning in hit["warnings"])
+        for row in rows
+        for hit in row["_规则命中详情"]
+    )
+
+
+def test_explanation_quality_ignores_customer_list_wording_as_inline_element():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["查询业务数据且无派生计算，按 EQ 识别。"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "查询客户",
+            "type": "EQ",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-查询客户"
+                "\n业务数据：客户名称、证件号码。"
+                "\n业务规则：按条件展示客户列表，不改变业务数据。"
+                "\n计算说明：该功能体现外部查询事务，按 EQ 识别。"
+            ),
+        }],
+    )
+
+    assert not any("正文疑似提到输入未明确提供" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        and any("客户列表" in warning for warning in hit["warnings"])
+        for row in rows
+        for hit in row["_规则命中详情"]
+    )
+
+
+def test_explanation_quality_ignores_generated_file_action_as_inline_element():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["输出格式化清单或报表，按 EO 识别。"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "导出客户清单",
+            "type": "EO",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-导出客户清单"
+                "\n业务数据：客户清单。"
+                "\n业务规则：导出时触发文件生成。"
+                "\n计算说明：该功能体现外部输出事务，按 EO 识别。"
+            ),
+        }],
+    )
+
+    assert not any("正文疑似提到输入未明确提供" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        and any("触发文件" in warning for warning in hit["warnings"])
+        for row in rows
+        for hit in row["_规则命中详情"]
+    )
+
+
+def test_explanation_quality_ignores_exported_file_output_as_inline_element():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["输出格式化清单或报表，按 EO 识别。"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "导出客户清单",
+            "type": "EO",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-导出客户清单"
+                "\n业务数据：客户清单。"
+                "\n业务规则：导出客户资料为文件。"
+                "\n计算说明：此功能为外部输出，输出客户资料文件，按 EO 计量。"
+            ),
+        }],
+    )
+
+    assert not any("正文疑似提到输入未明确提供" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        and any("客户资料文件" in warning or "客户资料为文件" in warning for warning in hit["warnings"])
+        for row in rows
+        for hit in row["_规则命中详情"]
+    )
+
+
 def test_explanation_quality_accepts_explicit_system_elements_from_input():
     group = _group_rows_by_l3([
         {
