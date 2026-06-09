@@ -131,6 +131,12 @@ def test_build_web_config_view_redacts_api_key_and_marks_global_sources():
                 "max_tokens": "8K",
                 "allow_shared_ai_credentials": True,
                 "out_templates": {"fpa": "data/out_templates/fpa.xlsx"},
+                "active_output_template_profile": "standard_delivery",
+                "output_template_profiles": {
+                    "standard_delivery": {
+                        "template_pack": "data/template_packs/standard_delivery",
+                    },
+                },
             },
         },
         local_mode=True,
@@ -147,6 +153,15 @@ def test_build_web_config_view_redacts_api_key_and_marks_global_sources():
     assert view["ai"]["max_tokens"] == {"value": "8K", "source": "global"}
     assert view["ai"]["allow_shared_ai_credentials"] == {"value": True, "source": "global"}
     assert view["templates"]["out_templates"]["source"] == "global"
+    assert view["templates"]["active_output_template_profile"] == {
+        "value": "standard_delivery",
+        "source": "global",
+    }
+    assert view["templates"]["output_template_profiles"]["value"] == {
+        "standard_delivery": {
+            "template_pack": "data/template_packs/standard_delivery",
+        },
+    }
 
 
 def test_build_web_config_view_uses_personal_overrides_for_remote_user():
@@ -314,6 +329,7 @@ def test_save_web_config_to_dir_encrypts_api_key_and_saves_editable_fields(monke
                 "out_templates": {
                     "value": {"fpa_out_template": "data/out_templates/fpa.xlsx"},
                 },
+                "active_output_template_profile": {"value": "standard_delivery"},
             },
             "run_defaults": {
                 "project_name": {"value": "测试项目"},
@@ -337,8 +353,28 @@ def test_save_web_config_to_dir_encrypts_api_key_and_saves_editable_fields(monke
     assert saved["_system"]["max_tokens"] == "32K"
     assert saved["_system"]["allow_shared_ai_credentials"] is True
     assert saved["_system"]["out_templates"] == {"fpa_out_template": "data/out_templates/fpa.xlsx"}
+    assert saved["_system"]["active_output_template_profile"] == "standard_delivery"
     assert saved["_system"]["project_name"] == "测试项目"
     assert "sk-new-secret" not in system_text
+
+
+def test_save_web_config_to_dir_clears_active_template_profile(tmp_path):
+    (tmp_path / "system_config.yaml").write_text(
+        "active_output_template_profile: standard_delivery\n",
+        encoding="utf-8",
+    )
+
+    asyncio.run(config_service.save_web_config_to_dir(
+        {
+            "templates": {
+                "active_output_template_profile": {"value": ""},
+            },
+        },
+        tmp_path,
+    ))
+
+    saved = config_service.read_config_from_dir(tmp_path)
+    assert "active_output_template_profile" not in saved["_system"]
 
 
 def test_save_web_config_to_dir_preserves_encrypted_key_when_omitted(monkeypatch, tmp_path):

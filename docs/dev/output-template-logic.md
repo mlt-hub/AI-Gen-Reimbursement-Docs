@@ -78,6 +78,8 @@ output_template_profiles:
 
 `templates` 支持 `fpa/spec/cosmic/list` 和 `fpa_out_template/spec_out_template/cosmic_out_template/list_out_template` 两类 key。`template_pack` 指向的目录应包含 `manifest.yaml` 或 `manifest.yml`，其中通过 `templates` 声明模板文件；模板包内的相对路径按模板包目录解析。
 
+Web 配置页的模板配置区已支持基础 profile 选择：页面会读取 `output_template_profiles`，允许选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。当前选择器只负责模板 profile 的显式选择；profile 与 FPA 口径、规则集、生成策略的联动仍作为后续能力推进。
+
 ### 3. 用户配置文件 `out_templates`
 
 如果没有启用 profile，或 profile 中某类模板未配置可用路径，则继续读取 `out_templates` 配置段：

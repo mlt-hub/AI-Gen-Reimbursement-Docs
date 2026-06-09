@@ -479,13 +479,14 @@ manifest 文件命名规则：
 - Web 配置页已支持已导入 Word 模板草稿的列表、下载、应用和删除。
 - Web 配置页已支持已导入 Word 模板草稿的结构预览，展示占位符、功能需求锚点、章节候选和正文/表格/页眉/页脚摘要。
 - Web 配置页已支持已导入 Word 模板草稿的名称、版本备注和确认状态管理。
+- Web 配置页已支持输出模板 profile 基础选择能力：展示 `output_template_profiles` 列表，选择或清空 `active_output_template_profile`，并显示所选 profile 的 `template_pack` 和 `templates` key。
 
 默认 Word 模板文件已使用 `{{模块清单表}}` 和 `{{功能过程详情}}` 作为功能需求章节拆分插入点。`{{功能需求详情}}` 仍作为历史自定义模板的兼容锚点保留。
 
 当前仍未落地：
 
 - 导入后模板草稿的版式渲染预览、锚点/字段在线调整和正式版本发布。
-- Web UI 中的模板 profile/模板包选择器，以及 profile 与 FPA 口径、规则集、生成策略的联动。
+- profile 与 FPA 口径、规则集、生成策略的联动。
 - FPA/COSMIC 等 Excel 写入器按 manifest 做列映射、锚点定位和样式复制。
 - 文本框、内容控件、图片文字等复杂 Word 结构识别。
 

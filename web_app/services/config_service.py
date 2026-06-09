@@ -17,6 +17,8 @@ DEFAULT_WEB_CONFIG = {
     "max_tokens": "",
     "allow_shared_ai_credentials": False,
     "out_templates": {},
+    "active_output_template_profile": "",
+    "output_template_profiles": {},
     "project_name": "",
     "fpa_profile": "strict_fpa",
     "fpa_strategy": "",
@@ -460,6 +462,18 @@ def build_web_config_view(
                 global_system,
                 "out_templates",
                 DEFAULT_WEB_CONFIG["out_templates"],
+            ),
+            "active_output_template_profile": _pick_system_field(
+                user_system,
+                global_system,
+                "active_output_template_profile",
+                DEFAULT_WEB_CONFIG["active_output_template_profile"],
+            ),
+            "output_template_profiles": _pick_system_field(
+                user_system,
+                global_system,
+                "output_template_profiles",
+                DEFAULT_WEB_CONFIG["output_template_profiles"],
             ),
         },
         "run_defaults": {
@@ -1791,7 +1805,7 @@ async def save_config_to_dir(data: dict, target_dir: Path, *, preserve_existing_
             lines.append(f"{k}={v}")
         _atomic_write_text(target_dir / ".env", "\n".join(lines) + "\n")
 
-    if "_system" in data and data["_system"]:
+    if "_system" in data:
         import yaml
 
         _atomic_write_text(
@@ -1859,6 +1873,14 @@ async def save_web_config_to_dir(
     if out_templates is not None:
         system["out_templates"] = out_templates if isinstance(out_templates, dict) else {}
         changed_fields.append("templates.out_templates")
+    active_output_template_profile = _editable_value(payload, "templates", "active_output_template_profile")
+    if active_output_template_profile is not None:
+        active_profile = str(active_output_template_profile).strip()
+        if active_profile:
+            system["active_output_template_profile"] = active_profile
+        else:
+            system.pop("active_output_template_profile", None)
+        changed_fields.append("templates.active_output_template_profile")
 
     run_defaults = payload.get("run_defaults") if isinstance(payload.get("run_defaults"), dict) else {}
     for key in ("project_name", "fpa_profile", "fpa_strategy", "fpa_rule_set", "fpa_confirmation_mode"):
