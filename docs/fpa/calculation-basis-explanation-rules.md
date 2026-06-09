@@ -28,11 +28,13 @@
 
 ## 执行进度
 
-截至 2026-06-03，本规范已进入执行状态。
+截至 2026-06-09，本规范已进入执行状态，且第一阶段 prompt fragment 抽取已落地。
 
 已完成：
 
 - 已更新默认 FPA prompt：`config/fpa_config.yaml.example` 中 `unified_ui` 和 `strict_fpa` 的用户提示词均已加入结构化`计算依据说明`生成规则。
+- 已抽取公共 prompt fragment：`config/fpa_config.yaml.example` 中新增 `prompt_fragments.calculation_explanation_rules.default`，`strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping` 四个默认用户提示词均引用 `${calculation_explanation_rules}`。
+- 已支持 profile override：运行时渲染按 `prompt_fragments.calculation_explanation_rules.<profile>` 优先、`default` 回退；自定义 prompt 不引用 `${calculation_explanation_rules}` 时仍可按旧的三个核心占位符渲染。
 - 已实现后处理质量检查：`ai_gen_reimbursement_docs/gen_fpa.py` 中 `postprocess.explanation_quality` 会检查结构化项、来源场景完整路径、FPA 类型、正式输出缺失提示、以及“按后台数据库变更的表个数计量”等归类依据误入说明的问题。
 - 已区分事务功能和数据功能来源路径：`EI/EQ/EO` 检查 `【客户端类型】一级模块-二级模块-三级模块-功能点名称`，`ILF/EIF` 检查 `【客户端类型】一级模块-二级模块-三级模块-数据组名称`。
 - 已保持非阻断策略：质量问题只记录 warning，进入`后处理警告`、`Warnings` 和规则命中详情，不阻断 gen-fpa 生成。
@@ -45,6 +47,7 @@
 - `9a6fbb3`：检查“按后台数据库变更的表个数计量”等归类依据误入`计算依据说明`。
 - `13c5204`：补齐 prompt 和文档中的 `ILF/EIF` 数据功能来源路径规则。
 - `41b4fc7`：补充决策摘要和`垂直行业数据组`示例。
+- `17c104e`：抽取 FPA `calculation_explanation_rules` prompt fragment，补齐四个默认 profile 的引用、配置校验、渲染和测试。
 
 已验证：
 
@@ -55,7 +58,7 @@
 最近一次全量结果：
 
 ```text
-413 passed, 2 skipped
+760 passed, 2 skipped
 ```
 
 后续待办：
@@ -613,13 +616,13 @@ warnings.extend(profile.explanation_quality_warnings(...))
 
 阶段性建议仍是先保留 common quality gate。profile prompt 负责表达口径差异，公共 `_explanation_quality_warnings` 负责保证说明可审。只有当真实运行样本证明公共质量门太宽或太窄时，再增量添加 profile-specific checks。
 
-### 第一阶段实施方案：抽取 `calculation_explanation_rules`
+### 第一阶段落地状态：抽取 `calculation_explanation_rules`
 
-第一阶段目标是把 `计算依据说明生成规则` 从各 profile 的 user prompt 中抽成一个可复用 prompt fragment，并补齐 `multi_uis`、`ui_api_mapping` 当前缺少完整细则的问题。第一阶段只做这一件事，不抽取其它 prompt fragments。
+第一阶段已完成。`计算依据说明生成规则` 已从各 profile 的 user prompt 中抽成可复用 prompt fragment，并补齐 `multi_uis`、`ui_api_mapping` 原先缺少完整细则的问题。第一阶段只做这一件事，未抽取其它 prompt fragments。
 
 #### 实施范围
 
-本阶段实施：
+本阶段已实施：
 
 - 新增 `prompt_fragments.calculation_explanation_rules` 配置。
 - 支持 `default + profile override`。
@@ -628,7 +631,7 @@ warnings.extend(profile.explanation_quality_warnings(...))
 - 保持 `_explanation_quality_warnings` 公共质量门不变。
 - 更新默认配置、配置校验、prompt 渲染和测试。
 
-本阶段不实施：
+本阶段未实施：
 
 - 不抽取 `json_output_contract`、`row_planning_rules`、`agent_review_rules`、`row_output_schema`、`fpa_name_path_rules`。
 - 不增加用户专属 harness。
@@ -638,7 +641,7 @@ warnings.extend(profile.explanation_quality_warnings(...))
 
 #### 配置 schema
 
-默认配置建议新增：
+默认配置已新增：
 
 ```yaml
 prompt_fragments:
@@ -662,17 +665,17 @@ prompt_fragments:
       # 可选。缺省时回退 default。
 ```
 
-`default` 为必填非空字符串。profile override 为可选；为空、缺失或只包含空白时均回退 `default`。第一阶段默认配置可以只提供 `default`，等确有差异需要时再补 profile override。
+`default` 为必填非空字符串。profile override 为可选；为空、缺失或只包含空白时均回退 `default`。第一阶段默认配置只提供 `default`，等确有差异需要时再补 profile override。
 
 #### user prompt 模板
 
-四个默认 user prompt 都应引用：
+四个默认 user prompt 已引用：
 
 ```text
 ${calculation_explanation_rules}
 ```
 
-示例位置建议放在行规划规则之后、`模块输入 JSON` 之前：
+当前引用位置在行规划规则之后、`模块输入 JSON` 之前：
 
 ```text
 ...
@@ -698,24 +701,24 @@ ${payload_json}
 
 #### 配置校验规则
 
-`FPA_USER_PROMPT_PLACEHOLDERS` 需要允许：
+`FPA_USER_PROMPT_PLACEHOLDERS` 已允许：
 
 ```python
 {"core_rules", "judgement_rules", "payload_json", "calculation_explanation_rules"}
 ```
 
-必填占位符建议分为两类：
+必填占位符已分为两类：
 
 - 强制必填：`${core_rules}`、`${judgement_rules}`、`${payload_json}`。
 - 推荐引用：`${calculation_explanation_rules}`。
 
-如果继续沿用“所有允许占位符都必须出现”的旧逻辑，会导致用户自定义 prompt 必须引用 fragment，不符合运行时自定义边界。因此建议把 `calculation_explanation_rules` 设计为允许但非强制；默认配置测试再单独断言四个官方 profile 都引用并渲染该 fragment。
+如果继续沿用“所有允许占位符都必须出现”的旧逻辑，会导致用户自定义 prompt 必须引用 fragment，不符合运行时自定义边界。因此当前已把 `calculation_explanation_rules` 设计为允许但非强制；默认配置测试单独断言四个官方 profile 都引用并渲染该 fragment。
 
 如果 prompt 引用了 `${calculation_explanation_rules}`，但 fragment 缺失或解析为空，应阻断并给出明确错误。
 
 #### 代码修改点
 
-建议修改：
+已修改：
 
 - `config/fpa_config.yaml.example`
   - 新增 `prompt_fragments.calculation_explanation_rules.default`。
@@ -745,12 +748,11 @@ ${payload_json}
   - 增加 profile override 生效测试。
 
 - `tests/fpa_profiles/test_profile_prompt_payload_contract.py` 和 `tests/fpa_profiles/test_custom_profile_harness.py`
-  - 如测试 fixture 引用 `${calculation_explanation_rules}`，补 `prompt_fragments`。
-  - 如不引用，应确认最小配置仍能构建 payload，不被 fragment 机制强制阻断。
+  - 现有测试 fixture 不引用 `${calculation_explanation_rules}`，已通过聚焦测试确认最小配置仍能构建 payload，不被 fragment 机制强制阻断。
 
 #### 验收标准
 
-第一阶段完成后应满足：
+第一阶段已满足：
 
 - 默认 `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping` prompt 都能渲染成功。
 - 四个默认 profile 的最终 prompt 都包含 `计算依据说明生成规则`。
@@ -763,8 +765,26 @@ ${payload_json}
 - prompt 引用了 `${calculation_explanation_rules}` 但 fragment 缺失或 default 为空时，给出明确配置错误。
 - `_explanation_quality_warnings` 行为不变，check Excel warning 逻辑不受 prompt fragment 抽取影响。
 
-建议验证命令：
+已执行验证命令：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_fpa_profiles.py tests/fpa_profiles/test_profile_prompt_payload_contract.py tests/fpa_profiles/test_custom_profile_harness.py tests/test_gen_fpa_ai.py
+```
+
+结果：
+
+```text
+207 passed
+```
+
+并已执行全量回归：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+结果：
+
+```text
+760 passed, 2 skipped
 ```
