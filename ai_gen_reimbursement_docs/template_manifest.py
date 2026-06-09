@@ -487,6 +487,9 @@ def _default_manifest(kind: str, template_path: str) -> dict[str, Any]:
                 "judgement_rules": {
                     "name": "附录1-FPA评估方法说明",
                     "required": True,
+                    "data_start_row": 2,
+                    "column": "C",
+                    "anchor": {"cell": "C1", "offset_rows": 1, "column": "C"},
                     "required_cells": [{"cell": "C1", "contains": "判定原则"}],
                 },
             },

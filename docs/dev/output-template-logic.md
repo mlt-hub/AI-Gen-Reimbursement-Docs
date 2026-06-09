@@ -153,7 +153,17 @@ FPA 结果写入器当前会读取 `fpa` manifest 的 `sheets.result`：
 - `named_cells.data_start`：可用 Excel 命名单元格定位数据起始行，优先级高于 `data_start_row`。
 - `named_cells.summary_total`：可用 Excel 命名单元格定位 FPA 工作量汇总公式写入位置，配置后接管默认 FPA 工作量汇总单元格。
 
-公式列会按当前模板表头定位，生成公式和汇总公式会跟随数据起始行变化。当前命名单元格仅覆盖 result sheet 的数据起始和 FPA 工作量汇总位置；FPA 附录读取、其他复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 写入行为。
+公式列会按当前模板表头定位，生成公式和汇总公式会跟随数据起始行变化。当前命名单元格仅覆盖 result sheet 的数据起始和 FPA 工作量汇总位置；其他复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 写入行为。
+
+当 `judgement_rules_source: template` 时，FPA 判定原则会从模板附录读取。读取器当前会使用 `sheets.judgement_rules`：
+
+- `name`：判定原则附录 sheet 名。
+- `data_start_row`：默认规则读取起始行。
+- `column`：规则文本列，支持列号或 Excel 列字母。
+- `anchor.cell` 或 `anchor.contains`：定位规则标题所在单元格。
+- `anchor.offset_rows` 和 `anchor.column`：从锚点定位第一条规则的位置。
+
+没有 manifest 的自定义模板仍使用旧契约：`附录1-FPA评估方法说明` 的 C 列第 2 行起。
 
 ### COSMIC 功能点拆分表
 

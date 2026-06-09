@@ -651,17 +651,72 @@ def _build_fpa_rule_rows(
     return fpa_rows
 
 
+def _fpa_judgement_rules_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
+    sheets = manifest.get("sheets", {}) or {}
+    spec = sheets.get("judgement_rules", {}) if isinstance(sheets, dict) else {}
+    if isinstance(spec, str):
+        spec = {"name": spec}
+    if not isinstance(spec, dict):
+        spec = {}
+    return {
+        "name": str(spec.get("name") or "附录1-FPA评估方法说明"),
+        "data_start_row": _as_manifest_int(spec.get("data_start_row"), 2),
+        "column": _fpa_judgement_rules_column(spec.get("column"), 3),
+        "anchor": spec.get("anchor", {}) if isinstance(spec.get("anchor", {}), (dict, str)) else {},
+    }
+
+
+def _fpa_judgement_rules_column(value: object, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        if isinstance(value, str) and value.strip().isalpha():
+            return openpyxl.utils.column_index_from_string(value.strip())
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _fpa_judgement_rules_anchor_start(ws, spec: dict[str, Any]) -> tuple[int, int]:
+    anchor = spec.get("anchor", {}) or {}
+    if not anchor:
+        return int(spec["data_start_row"]), int(spec["column"])
+    if isinstance(anchor, str):
+        anchor = {"contains": anchor}
+    if not isinstance(anchor, dict):
+        return int(spec["data_start_row"]), int(spec["column"])
+
+    offset_rows = _as_manifest_int(anchor.get("offset_rows"), 1)
+    column = _fpa_judgement_rules_column(anchor.get("column"), int(spec["column"]))
+    cell_ref = str(anchor.get("cell", "") or "").strip()
+    contains = str(anchor.get("contains", "") or "").strip()
+
+    if cell_ref:
+        cell = ws[cell_ref]
+        return cell.row + offset_rows, column
+    if contains:
+        for row in ws.iter_rows():
+            for cell in row:
+                if contains in str(cell.value or ""):
+                    return cell.row + offset_rows, column
+    return int(spec["data_start_row"]), int(spec["column"])
+
+
 def _read_fpa_judgement_rules_from_template(template_path: str = "") -> list[str]:
     judgement_rules: list[str] = []
     if not template_path:
         return judgement_rules
     try:
+        manifest, _, _ = load_template_manifest("fpa", template_path)
+        sheet_spec = _fpa_judgement_rules_sheet_spec(manifest)
         wb = openpyxl.load_workbook(template_path, data_only=True)
         from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
-        appendix_sheet = _get_system_config_value('fpa_appendix_sheet', '附录1-FPA评估方法说明')
+        appendix_sheet = _get_system_config_value('fpa_appendix_sheet', sheet_spec["name"])
         ws = wb[appendix_sheet]
-        for row_num in range(2, ws.max_row + 1):
-            val = ws.cell(row_num, 3).value
+        start_row, column = _fpa_judgement_rules_anchor_start(ws, sheet_spec)
+        for row_num in range(start_row, ws.max_row + 1):
+            val = ws.cell(row_num, column).value
             if val and str(val).strip():
                 judgement_rules.append(str(val).strip())
         wb.close()
