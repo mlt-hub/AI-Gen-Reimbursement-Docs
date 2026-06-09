@@ -378,6 +378,65 @@ def test_invalid_index_warns_and_leaves_basis_empty():
     assert any("越界" in warning for hit in rule_hits for warning in hit["warnings"])
 
 
+def test_classification_basis_type_conflict_warns():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[
+            "EI: 修改或增加界面的个数",
+            "EQ: 提供查询界面输入并展示返回结果",
+        ],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "添加垂直行业",
+            "type": "EI",
+            "classification_basis_index": 2,
+            "explanation": _structured_explanation("添加垂直行业", "EI"),
+        }],
+    )
+
+    assert rows[0]["类型"] == "EI"
+    assert rows[0]["计算依据归类"].startswith("EQ:")
+    assert any("计算依据归类指向的类型=EQ" in warning for warning in warnings)
+    hit = next(
+        hit
+        for hit in rows[0]["_规则命中详情"]
+        if hit["rule_id"] == "postprocess.classification_basis_type_conflict"
+    )
+    assert hit["suggested_type"] == "EQ"
+    assert hit["adopted"] == "否"
+
+
+def test_classification_basis_type_match_does_not_warn():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[
+            "EI: 修改或增加界面的个数",
+            "EQ: 提供查询界面输入并展示返回结果",
+        ],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "查询垂直行业",
+            "type": "EQ",
+            "classification_basis_index": 2,
+            "explanation": _structured_explanation("查询垂直行业", "EQ"),
+        }],
+    )
+
+    assert rows[0]["类型"] == "EQ"
+    assert rows[0]["计算依据归类"].startswith("EQ:")
+    assert not any("计算依据归类指向的类型" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.classification_basis_type_conflict"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
 def test_structured_explanation_passes_quality_check():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(

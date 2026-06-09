@@ -43,6 +43,7 @@
 - 已新增 FPA prompt 样例试运行：`POST /api/web-config/fpa-prompt-sample-run` 使用内置样例模块调用当前 profile prompt，返回 prompt diagnostics、raw response、解析状态、后处理后的 FPA 行、普通 warning、`计算依据说明`质量 warning 和规则命中详情；prompt 配置错误时不调用模型。
 - Web 配置页 FPA 策略区已支持逐 profile 触发“试运行当前 prompt”，并展示最终 prompt、模型原始返回、样例 FPA 行、后处理 warning 和`计算依据说明` warning。
 - 已补充疑似编造系统元素检测：正式`计算依据说明`中的`系统元素`如包含输入未明确出现的表、服务、接口、文件或外部系统/平台，会通过 `postprocess.explanation_quality` 记录 warning；支持同行说明和多行列表写法；输入中明确出现的系统元素不报 warning。
+- 已补充`类型`与`计算依据归类`一致性检查：当`计算依据归类`明确指向的 FPA 类型与最终`类型`不一致时，记录 `postprocess.classification_basis_type_conflict` warning，不自动改写最终类型。
 
 已提交：
 
@@ -989,6 +990,7 @@ check/debug 输出可补充：
 - 缺少`来源场景`、`业务数据`、`业务规则`或`计算说明`。
 - `来源场景`未使用完整路径格式。
 - `计算说明`未出现当前 FPA 类型。
+- `类型`与`计算依据归类`明确指向的 FPA 类型不一致。（已落地为 warning）
 - 正式输出中出现“未识别到”“未明确说明”等缺失提示。
 - `计算依据说明`中出现“数据库表个数=...”“表数量...”等把表数量作为详细计量依据的表述。一句归类式短语可作为 FPA 类型判定说明保留，真正的短依据仍优先放在`计算依据归类`。
 - `系统元素`中出现输入未明确提供的疑似表名、服务名、接口名、文件名或外部系统/平台名。（已落地为 warning）
