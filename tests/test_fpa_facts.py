@@ -52,6 +52,21 @@ def test_extract_process_facts_uses_name_and_description_before_input_type():
     assert delete["changes_internal_data"] is True
 
 
+def test_extract_process_facts_marks_import_operation_as_internal_change():
+    facts = extract_fpa_process_facts({
+        "l3": "客户名单导入",
+        "processes": [{
+            "process_id": "p1",
+            "process_name": "导入客户名单",
+            "description": "上传 Excel 文件，校验手机号并保存有效记录。",
+            "type": "新增",
+        }],
+    })
+
+    assert facts[0]["operation"] == "import"
+    assert facts[0]["changes_internal_data"] is True
+
+
 def test_extract_process_facts_marks_ordinary_external_service_without_eif_evidence():
     facts = extract_fpa_process_facts({
         "l3": "短信通知",
