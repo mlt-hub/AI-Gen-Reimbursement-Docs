@@ -542,7 +542,14 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
       "code": "MISSING_CFP_FORMULA",
       "severity": "error",
       "message": "未配置 CFP计算公式，不能生成正式 CFP 总和",
-      "details": {}
+      "details": {},
+      "confirmation": {
+        "status": "unconfirmed",
+        "decision": "",
+        "note": "",
+        "confirmed_by": "",
+        "confirmed_at": ""
+      }
     }
   ],
   "items": [
@@ -619,6 +626,12 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `review_items` | `array` | 是 | 扁平审阅 issue 列表，包含全局 issue 和功能过程 issue；供预览页、筛选、人工确认列表直接消费。 |
 | `review_items[].review_id` | `string` | 是 | 稳定审阅项 ID，由 scope、item_index、code、field、movement_order 组成，用于前端保存人工确认状态；组成段内的 `:` 和 `\` 会转义。 |
 | `review_items[].item_index` | `number|null` | 是 | 对应 `items` 的 0 基序号；全局 issue 为 `null`。 |
+| `review_items[].confirmation` | `object` | 是 | 人工确认状态占位，默认 `status=unconfirmed`，供预览页按 `review_id` 持久化确认结果。 |
+| `review_items[].confirmation.status` | `string` | 是 | 默认 `unconfirmed`；后续预览页可扩展为 `accepted/rejected/overridden` 等人工确认状态。 |
+| `review_items[].confirmation.decision` | `string` | 是 | 人工确认决定，默认空字符串。 |
+| `review_items[].confirmation.note` | `string` | 是 | 人工备注，默认空字符串。 |
+| `review_items[].confirmation.confirmed_by` | `string` | 是 | 确认人，默认空字符串。 |
+| `review_items[].confirmation.confirmed_at` | `string` | 是 | 确认时间，默认空字符串；后续建议使用 ISO 8601 字符串。 |
 | `items` | `array` | 是 | COSMIC 功能过程列表。 |
 | `items[].module_l1` | `string` | 是 | 一级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
 | `items[].module_l2` | `string` | 是 | 二级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |

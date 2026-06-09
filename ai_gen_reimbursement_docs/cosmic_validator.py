@@ -564,7 +564,18 @@ def _review_item_to_dict(
     data = _issue_to_dict(issue)
     data["item_index"] = item_index
     data["review_id"] = _review_item_id(issue, item_index=item_index)
+    data["confirmation"] = _default_review_confirmation()
     return data
+
+
+def _default_review_confirmation() -> dict[str, str]:
+    return {
+        "status": "unconfirmed",
+        "decision": "",
+        "note": "",
+        "confirmed_by": "",
+        "confirmed_at": "",
+    }
 
 
 def _review_item_id(

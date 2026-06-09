@@ -297,6 +297,13 @@ def test_report_json_includes_flat_review_items(tmp_path):
     assert review_items[1]["item_index"] == 0
     assert review_items[1]["review_id"] == "item::0::GENERIC_FUNCTION_USER::user::"
     assert review_items[1]["details"]["match_source"] == "generic_only"
+    assert review_items[1]["confirmation"] == {
+        "status": "unconfirmed",
+        "decision": "",
+        "note": "",
+        "confirmed_by": "",
+        "confirmed_at": "",
+    }
 
 
 def test_review_id_escapes_separator_characters(tmp_path):
