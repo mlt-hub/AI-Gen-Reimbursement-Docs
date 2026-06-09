@@ -119,6 +119,9 @@
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="previewLoadingId === item.id" @click="loadPreview(item)">
                   {{ previewLoadingId === item.id ? '预览中' : '预览' }}
                 </button>
+                <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="layoutLoadingId === item.id" @click="loadLayoutPreview(item)">
+                  {{ layoutLoadingId === item.id ? '渲染中' : '版式' }}
+                </button>
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" @click="toggleMetadataEditor(item)">命名</button>
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="metadataSavingId === item.id" @click="setDraftConfirmed(item, !item.confirmed)">
                   {{ item.confirmed ? '取消确认' : '确认' }}
@@ -267,6 +270,63 @@
                 </div>
               </details>
             </div>
+
+            <div v-if="activeLayoutId === item.id && activeLayout" class="mt-3 space-y-3 border-t border-[var(--color-rule)] pt-3">
+              <div class="grid gap-2 text-xs text-[var(--color-ink-muted)] sm:grid-cols-3">
+                <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
+                  页面：{{ activeLayout.page.orientation === 'landscape' ? '横向' : '纵向' }}
+                </div>
+                <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
+                  内容块：{{ activeLayout.summary.body_block_count }}
+                </div>
+                <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
+                  占位符：{{ activeLayout.summary.placeholder_count }}
+                </div>
+              </div>
+
+              <div class="overflow-auto rounded border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
+                <div
+                  class="mx-auto bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                  :style="layoutPageStyle(activeLayout)"
+                >
+                  <div class="border-b border-dashed border-slate-200 pb-2 text-[10px] text-slate-500">
+                    <div v-for="block in activeLayout.headers" :key="'h-' + block.kind + block.index" class="truncate">
+                      {{ layoutBlockText(block) }}
+                    </div>
+                  </div>
+                  <div class="space-y-2 py-3">
+                    <template v-for="block in activeLayout.body" :key="'b-' + block.kind + block.index">
+                      <p
+                        v-if="block.kind === 'paragraph'"
+                        class="text-xs leading-5"
+                        :class="block.placeholders.length ? 'font-mono text-emerald-700' : ''"
+                        :style="layoutParagraphStyle(block)"
+                      >
+                        {{ block.text }}
+                      </p>
+                      <table v-else class="w-full border-collapse text-[10px]">
+                        <tbody>
+                          <tr v-for="(row, rowIndex) in (block.rows || [])" :key="rowIndex">
+                            <td v-for="(cell, cellIndex) in row" :key="cellIndex" class="border border-slate-300 px-1 py-0.5 align-top">
+                              {{ cell }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </template>
+                  </div>
+                  <div class="border-t border-dashed border-slate-200 pt-2 text-[10px] text-slate-500">
+                    <div v-for="block in activeLayout.footers" :key="'f-' + block.kind + block.index" class="truncate">
+                      {{ layoutBlockText(block) }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <ul class="list-disc space-y-1 pl-5 text-xs text-[var(--color-ink-muted)]">
+                <li v-for="item in activeLayout.limitations" :key="item">{{ item }}</li>
+              </ul>
+            </div>
           </div>
         </div>
         <p v-else-if="!draftsLoading" class="mt-3 text-xs text-[var(--color-ink-soft)]">暂无已导入草稿。</p>
@@ -276,7 +336,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, type CSSProperties } from 'vue'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 interface ImportPlaceholder {
@@ -396,6 +456,46 @@ interface ImportedDraftPreview {
   scopes: PreviewScope[]
 }
 
+interface LayoutBlock {
+  kind: 'paragraph' | 'table'
+  scope: string
+  index: number
+  text?: string
+  style?: string
+  alignment?: string
+  left_indent_pt?: number
+  row_count?: number
+  column_count?: number
+  rows?: string[][]
+  placeholders: string[]
+}
+
+interface ImportedLayoutPreview {
+  id: string
+  render_mode: string
+  ok: boolean
+  page: {
+    width_pt: number
+    height_pt: number
+    margin_top_pt: number
+    margin_right_pt: number
+    margin_bottom_pt: number
+    margin_left_pt: number
+    orientation: string
+  }
+  summary: {
+    body_block_count: number
+    header_block_count: number
+    footer_block_count: number
+    placeholder_count: number
+    truncated: boolean
+  }
+  headers: LayoutBlock[]
+  body: LayoutBlock[]
+  footers: LayoutBlock[]
+  limitations: string[]
+}
+
 interface AdjustmentResponse {
   changed_fields: string[]
   preview: ImportedDraftPreview
@@ -416,8 +516,11 @@ const draftsMessage = ref('')
 const draftsOk = ref(true)
 const deletingId = ref('')
 const previewLoadingId = ref('')
+const layoutLoadingId = ref('')
 const activePreviewId = ref('')
 const activePreview = ref<ImportedDraftPreview | null>(null)
+const activeLayoutId = ref('')
+const activeLayout = ref<ImportedLayoutPreview | null>(null)
 const metadataEditorId = ref('')
 const metadataSavingId = ref('')
 const publishingId = ref('')
@@ -637,6 +740,30 @@ async function loadPreview(item: ImportedDraft) {
   }
 }
 
+async function loadLayoutPreview(item: ImportedDraft) {
+  if (activeLayoutId.value === item.id && activeLayout.value) {
+    activeLayoutId.value = ''
+    activeLayout.value = null
+    return
+  }
+  layoutLoadingId.value = item.id
+  draftsMessage.value = ''
+  try {
+    activeLayout.value = await apiFetch<ImportedLayoutPreview>(
+      `/api/templates/spec/imported/${encodeURIComponent(item.id)}/layout-preview`,
+    )
+    activeLayoutId.value = item.id
+    draftsOk.value = true
+  } catch (error) {
+    activeLayout.value = null
+    activeLayoutId.value = ''
+    draftsOk.value = false
+    draftsMessage.value = normalizeApiError(error)
+  } finally {
+    layoutLoadingId.value = ''
+  }
+}
+
 async function saveAdjustments(item: ImportedDraft) {
   adjustmentSavingId.value = item.id
   draftsMessage.value = ''
@@ -728,6 +855,29 @@ function formatBytes(value: number) {
   if (!Number.isFinite(value)) return '-'
   if (value < 1024) return `${value} B`
   return `${(value / 1024).toFixed(1)} KB`
+}
+
+function layoutPageStyle(layout: ImportedLayoutPreview) {
+  const maxWidth = 520
+  const width = Math.min(maxWidth, Math.max(280, layout.page.width_pt * 0.62))
+  const ratio = layout.page.height_pt > 0 ? layout.page.height_pt / layout.page.width_pt : 1.414
+  return {
+    width: `${width}px`,
+    minHeight: `${Math.min(760, Math.max(360, width * ratio))}px`,
+    padding: `${Math.max(18, layout.page.margin_top_pt * 0.22)}px ${Math.max(18, layout.page.margin_right_pt * 0.22)}px ${Math.max(18, layout.page.margin_bottom_pt * 0.22)}px ${Math.max(18, layout.page.margin_left_pt * 0.22)}px`,
+  }
+}
+
+function layoutParagraphStyle(block: LayoutBlock): CSSProperties {
+  return {
+    textAlign: (block.alignment || 'left') as CSSProperties['textAlign'],
+    marginLeft: `${Math.min(block.left_indent_pt || 0, 36)}px`,
+  }
+}
+
+function layoutBlockText(block: LayoutBlock) {
+  if (block.kind === 'table') return `表格 ${block.row_count || 0} x ${block.column_count || 0}`
+  return block.text || ''
 }
 
 loadDrafts()

@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from web_app.dependencies import config_dir, is_local_mode, require_auth
 from web_app.services.template_service import (
     adjust_imported_spec_template,
+    build_imported_spec_template_layout_preview,
     build_imported_spec_template_preview,
     delete_imported_spec_template,
     import_spec_template_upload,
@@ -132,6 +133,23 @@ async def preview_imported_spec_template(
         raise HTTPException(404, "模板草稿不存在")
     except Exception as exc:
         raise HTTPException(400, f"模板草稿预览失败: {exc}") from exc
+
+
+@router.get("/api/templates/spec/imported/{import_id}/layout-preview")
+async def layout_preview_imported_spec_template(
+    request: Request,
+    import_id: str,
+    _user: str = Depends(require_auth),
+):
+    """预览已导入需求说明书模板草稿的页面版式骨架。"""
+    if not is_local_mode(request):
+        raise HTTPException(403, "Word 模板草稿只能由本机管理员管理")
+    try:
+        return build_imported_spec_template_layout_preview(config_dir(), import_id)
+    except FileNotFoundError:
+        raise HTTPException(404, "模板草稿不存在")
+    except Exception as exc:
+        raise HTTPException(400, f"模板草稿版式预览失败: {exc}") from exc
 
 
 @router.put("/api/templates/spec/imported/{import_id}/metadata")

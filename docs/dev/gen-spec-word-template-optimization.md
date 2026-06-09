@@ -519,6 +519,7 @@ replacement_scopes:
 - Web 已支持已导入模板草稿的确认信息管理：可设置模板名称、版本备注和“已确认”状态，列表和预览接口会返回确认状态。
 - Web 已支持将已确认且预检通过的导入模板草稿发布为正式用户模板版本，并将正式模板路径应用到 `spec_out_template`。
 - Web 已支持已导入模板草稿的基础在线调整：可根据结构预览移动 `{{模块清单表}}` / `{{功能过程详情}}` 锚点，也可将指定段落文本替换为 `{{字段名}}` 占位符；调整后会重置确认/发布状态。
+- Web 已支持已导入模板草稿的基础版式渲染预览：后端提供页面尺寸、边距、页眉/正文/页脚、段落/表格、样式名和占位符的浏览器可渲染 layout model，配置页草稿列表可打开页面式预览。
 - pipeline 已支持输出模板 profile/模板包基础解析：`system_config.yaml` 可通过 `active_output_template_profile` 选择 `output_template_profiles`，profile 可直接声明模板路径或通过 `template_pack` 指向带 `manifest.yaml` 的模板包目录。
 - Web 配置页已支持输出模板 profile 基础选择能力：读取 `output_template_profiles`、选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。
 - Web/API 保存 `active_output_template_profile` 时已支持联动 profile 中的 FPA 口径、规则集、生成策略和确认模式。
@@ -528,7 +529,7 @@ replacement_scopes:
 尚未实施：
 
 - 文本框、内容控件、图片文字等复杂 Word 结构识别。
-- 导入后的版式渲染预览。
+- Office 级 Word 像素还原预览。
 
 ### 当前默认 Word manifest
 
@@ -638,6 +639,7 @@ POST /api/templates/spec/import
 GET /api/templates/spec/imported
 GET /api/templates/spec/imported/{import_id}/{filename}
 GET /api/templates/spec/imported/{import_id}/preview
+GET /api/templates/spec/imported/{import_id}/layout-preview
 PUT /api/templates/spec/imported/{import_id}/metadata
 DELETE /api/templates/spec/imported/{import_id}
 ```
@@ -683,9 +685,8 @@ custom_templates/
 
 下一阶段建议补齐导入后的确认和管理流程：
 
-1. 提供模板草稿版式渲染预览。
-2. 让用户在线调整功能需求锚点位置和识别字段。
-3. 支持确认后发布为正式模板版本。
-4. 将正式模板版本保存到任务或用户自定义模板目录。
+1. 评估是否需要 Office/LibreOffice 支撑的像素级 Word 渲染预览。
+2. 扩展文本框、内容控件等复杂 Word 结构识别。
+3. 继续增强导入草稿的在线调整能力，例如表格字段和样例表选择。
 
 这样可以把已生成的模板草稿纳入完整管理流程，同时继续避免承诺任意 Word 自动完美转换。
