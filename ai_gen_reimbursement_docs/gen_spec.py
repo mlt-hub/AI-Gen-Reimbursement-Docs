@@ -159,6 +159,7 @@ def _generate_section4_content(doc: Document, tree: list[dict], rows: list[dict]
         insert_before_elem,
         table_style=module_table.get("style") or styles.get("module_table", "Table Grid"),
         columns=_module_table_columns(module_table),
+        sample_table_marker=_module_table_sample_marker(module_table),
     )
 
     # 插入详细模块内容
@@ -183,6 +184,7 @@ def _generate_module_table_content(
         insert_before_elem,
         table_style=module_table.get("style") or styles.get("module_table", "Table Grid"),
         columns=_module_table_columns(module_table),
+        sample_table_marker=_module_table_sample_marker(module_table),
     )
 
 
@@ -215,11 +217,27 @@ def _insert_module_table(
     insert_before_elem,
     table_style: str = "Table Grid",
     columns: list[dict[str, object]] | None = None,
+    sample_table_marker: str = "",
 ):
     """插入模块清单表，合并相同内容的单元格。表头加粗，所有单元格居中。"""
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    def _set_cell_text(cell, text: str):
+        """替换单元格文字，同时尽量保留样例表中的段落和 run 样式。"""
+        if not cell.paragraphs:
+            cell.add_paragraph()
+        first = cell.paragraphs[0]
+        if first.runs:
+            first.runs[0].text = text
+            for run in first.runs[1:]:
+                run.text = ""
+        else:
+            first.add_run(text)
+        for p in cell.paragraphs[1:]:
+            for run in p.runs:
+                run.text = ""
 
     def _set_cell_style(cell):
         """设置单元格：水平居中 + 垂直居中。"""
@@ -237,34 +255,69 @@ def _insert_module_table(
         valign.set(qn('w:val'), 'center')
 
     columns = columns or _module_table_columns({})
-    table = doc.add_table(rows=1, cols=len(columns))
-    _apply_table_style(doc, table, table_style, "Table Grid")
-    hdr = table.rows[0].cells
-    for i, column in enumerate(columns):
-        t = str(column.get("header", ""))
-        hdr[i].text = t
-        for p in hdr[i].paragraphs:
-            for run in p.runs:
-                run.bold = True
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _set_cell_style(hdr[i])
-
+    unique_modules = []
     seen = set()
     for m in tree:
         key = (m["入口"], m["一级模块"], m["二级模块"], m["三级模块"])
         if key not in seen:
             seen.add(key)
-            row = table.add_row().cells
-            for i, column in enumerate(columns):
-                row[i].text = _module_table_value(m, str(column.get("field", "")))
+            unique_modules.append(m)
+
+    sample_table = _find_table_containing_text(doc, sample_table_marker) if sample_table_marker else None
+    sample_table_to_remove = sample_table
+    table = None
+    preserve_sample_style = False
+    if sample_table is not None:
+        if len(sample_table.columns) == len(columns):
+            table = _clone_module_sample_table(doc, sample_table, len(unique_modules))
+            preserve_sample_style = True
+        else:
+            logger.warning(
+                "模块清单样例表列数与 manifest.module_table.columns 不一致，已回退为新建表格: "
+                "marker=%s, sample_columns=%s, configured_columns=%s",
+                sample_table_marker,
+                len(sample_table.columns),
+                len(columns),
+            )
+
+    if table is None:
+        table = doc.add_table(rows=1, cols=len(columns))
+        _apply_table_style(doc, table, table_style, "Table Grid")
+
+    hdr = table.rows[0].cells
+    for i, column in enumerate(columns):
+        t = str(column.get("header", ""))
+        if preserve_sample_style:
+            _set_cell_text(hdr[i], t)
+        else:
+            hdr[i].text = t
+            for p in hdr[i].paragraphs:
+                for run in p.runs:
+                    run.bold = True
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _set_cell_style(hdr[i])
+
+    row_index = 1
+    for m in unique_modules:
+        row = table.rows[row_index].cells if preserve_sample_style else table.add_row().cells
+        for i, column in enumerate(columns):
+            value = _module_table_value(m, str(column.get("field", "")))
+            if preserve_sample_style:
+                _set_cell_text(row[i], value)
+            else:
+                row[i].text = value
+        if not preserve_sample_style:
             for c in row:
                 for p in c.paragraphs:
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 _set_cell_style(c)
+        row_index += 1
 
     # 合并单元格：对 入口(0)、一级(1)、二级(2) 列中连续相同值的行进行合并
     if len(table.rows) <= 2:
         insert_before_elem.addprevious(table._tbl)
+        if sample_table_to_remove is not None:
+            _remove_table(sample_table_to_remove)
         return
 
     # 从第2行开始（跳过表头），逐列合并
@@ -299,6 +352,48 @@ def _insert_module_table(
             start_row = end_row + 1
 
     insert_before_elem.addprevious(table._tbl)
+    if sample_table_to_remove is not None:
+        _remove_table(sample_table_to_remove)
+
+
+def _module_table_sample_marker(module_table: dict | None) -> str:
+    if not isinstance(module_table, dict):
+        return ""
+    sample_table = module_table.get("sample_table")
+    if isinstance(sample_table, str):
+        return sample_table.strip()
+    if isinstance(sample_table, dict):
+        return str(sample_table.get("marker", "") or "").strip()
+    return ""
+
+
+def _find_table_containing_text(doc: Document, text: str):
+    if not text:
+        return None
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if text in cell.text:
+                    return table
+    return None
+
+
+def _clone_module_sample_table(doc: Document, sample_table, data_row_count: int):
+    from docx.table import Table
+
+    cloned = Table(deepcopy(sample_table._tbl), doc)
+    style_row = deepcopy(sample_table.rows[1]._tr if len(sample_table.rows) > 1 else sample_table.rows[0]._tr)
+    while len(cloned.rows) > 1:
+        cloned._tbl.remove(cloned.rows[-1]._tr)
+    for _ in range(data_row_count):
+        cloned._tbl.append(deepcopy(style_row))
+    return cloned
+
+
+def _remove_table(table) -> None:
+    parent = table._tbl.getparent()
+    if parent is not None:
+        parent.remove(table._tbl)
 
 
 def _module_table_columns(module_table: dict) -> list[dict[str, object]]:

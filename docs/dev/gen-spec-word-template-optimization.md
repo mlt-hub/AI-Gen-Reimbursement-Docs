@@ -242,7 +242,22 @@ module_table:
 
 代码复制样式源行填充模块数据。
 
-方案 B 对客户定制格式更友好，但实现复杂度更高。
+方案 B 对客户定制格式更友好，当前已支持通过 marker 定位样例表：
+
+```yaml
+module_table:
+  sample_table:
+    marker: "{{模块清单表示例}}"
+  columns:
+    - field: module_l1
+      header: 一级模块
+      merge: true
+    - field: module_l3
+      header: 三级模块
+      merge: false
+```
+
+生成器会复制包含 marker 的样例表，保留表格样式、列宽、边框和样式源行的单元格文本样式，再用 `columns` 配置写入表头和模块数据。原样例表会从输出文档中移除。样例表列数必须与 `module_table.columns` 一致；不一致时会回退为新建表格并记录 warning。
 
 ## 章节内容可组合
 
@@ -496,6 +511,7 @@ replacement_scopes:
 - `{{功能需求章节}}` 可插入完整功能需求章节。
 - `{{模块清单表}}` 可只插入模块清单表。
 - `{{功能过程详情}}` 可只插入模块和功能过程详情。
+- `module_table.sample_table.marker` 可声明模块清单样例表，生成器会复制样例表样式并移除原样例表。
 
 尚未实施：
 
@@ -566,6 +582,8 @@ styles:
 ```yaml
 module_table:
   style: Table Grid
+  sample_table:
+    marker: "{{模块清单表示例}}"
   columns:
     - field: entry
       header: 入口
@@ -583,15 +601,16 @@ module_table:
 
 `field` 当前支持 `entry`、`module_l1`、`module_l2`、`module_l3`、`client_type`、`description`，也可以直接填写模块树中的中文字段名。`merge` 控制该列是否合并连续相同值。
 
+`sample_table` 是可选配置。只有 manifest 明确提供 marker 且模板中存在包含该 marker 的表格时，才会启用样例表复制；默认内置 Word 模板目前仍使用 `style` 新建模块清单表。
+
 这里保留 `{{功能需求详情}}` 是为了兼容现有内置 Word 模板。新自定义模板可以直接使用 `{{功能需求章节}}`，或用 `{{模块清单表}}` 和 `{{功能过程详情}}` 分别控制模块清单表与功能过程详情的位置。
 
 ### 下一阶段建议
 
-下一阶段建议先做模块清单表样例表复制，而不是直接做上传导入向导：
+下一阶段建议先让默认 Word 模板文件自身采用新拆分锚点，而不是直接做上传导入向导：
 
-1. 为模块清单表支持样例表复制。
-2. 将内置 Word 模板文件中的旧锚点替换为新拆分锚点。
-3. 增加 Web/CLI 对当前 Word 锚点模式的展示。
-4. 再实现 Word 模板导入向导。
+1. 将内置 Word 模板文件中的旧锚点替换为新拆分锚点。
+2. 增加 Web/CLI 对当前 Word 锚点模式和样例表能力的展示。
+3. 再实现 Word 模板导入向导。
 
 这样可以先让默认模板和自定义模板的生成位置真正受 manifest 控制，再处理上传 Word 自动识别的复杂场景。

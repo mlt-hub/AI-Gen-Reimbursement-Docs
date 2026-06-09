@@ -127,6 +127,54 @@ def _write_split_anchor_manifest(path: Path) -> None:
     )
 
 
+def _write_sample_table_template(path: Path) -> None:
+    doc = Document()
+    doc.add_paragraph("正文：{{文档标题}}")
+    doc.add_paragraph("{{模块清单表}}")
+    sample_table = doc.add_table(rows=2, cols=2)
+    sample_table.style = "Light Shading"
+    sample_table.cell(0, 0).text = "{{模块清单表示例}}"
+    sample_table.cell(0, 1).text = "样例表头"
+    sample_table.cell(1, 0).text = "样例数据"
+    sample_table.cell(1, 1).text = "样例数据"
+    for cell in sample_table.rows[1].cells:
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.italic = True
+    doc.save(path)
+
+
+def _write_sample_table_manifest(path: Path) -> None:
+    path.with_suffix(".manifest.yaml").write_text(
+        "\n".join(
+            [
+                "template_id: spec_sample_table_test_v1",
+                "kind: spec",
+                "version: 1",
+                f"file: {path.name}",
+                "placeholders:",
+                '  title: {token: "{{文档标题}}", required: true}',
+                '  module_table: {token: "{{模块清单表}}", required: true}',
+                "anchors:",
+                '  module_table: "{{模块清单表}}"',
+                "module_table:",
+                "  sample_table:",
+                '    marker: "{{模块清单表示例}}"',
+                "  columns:",
+                "    - field: module_l1",
+                "      header: 一级模块",
+                "      merge: true",
+                "    - field: module_l3",
+                "      header: 三级模块",
+                "      merge: false",
+                "replacement_scopes:",
+                "  - body",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_generate_spec_uses_manifest_replacement_scopes_and_table_style(tmp_path):
     template = tmp_path / "spec-template.docx"
     output = tmp_path / "spec-output.docx"
@@ -191,3 +239,27 @@ def test_generate_spec_supports_split_requirement_anchors(tmp_path):
     assert len(module_table.columns) == 3
     assert [cell.text for cell in module_table.rows[0].cells] == ["一级模块", "三级模块", "客户端"]
     assert [cell.text for cell in module_table.rows[1].cells] == ["用户管理", "账号维护", "PC"]
+
+
+def test_generate_spec_copies_module_sample_table(tmp_path):
+    template = tmp_path / "spec-template.docx"
+    output = tmp_path / "spec-output.docx"
+    meta = tmp_path / "meta.md"
+    tree = tmp_path / "tree.md"
+    _write_sample_table_template(template)
+    _write_sample_table_manifest(template)
+    _write_meta_md(meta)
+    _write_tree_md(tree)
+
+    generate_spec_docx_from_md(str(template), str(output), str(meta), str(tree))
+
+    doc = Document(output)
+    all_table_text = "\n".join(cell.text for table in doc.tables for row in table.rows for cell in row.cells)
+    assert "{{模块清单表示例}}" not in all_table_text
+    module_table = next(table for table in doc.tables if table.cell(0, 0).text == "一级模块")
+    assert "Light Shading" in module_table.style.name
+    assert len(module_table.columns) == 2
+    assert len(module_table.rows) == 2
+    assert [cell.text for cell in module_table.rows[0].cells] == ["一级模块", "三级模块"]
+    assert [cell.text for cell in module_table.rows[1].cells] == ["用户管理", "账号维护"]
+    assert module_table.cell(1, 0).paragraphs[0].runs[0].italic is True
