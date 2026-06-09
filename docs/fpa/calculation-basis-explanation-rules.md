@@ -61,6 +61,190 @@
 760 passed, 2 skipped
 ```
 
+### 第二阶段实施方案：运行时配置校验与最终 prompt 预览
+
+第二阶段目标是把 fragment 机制从“默认配置和仓库 harness 能正确渲染”推进到“用户在系统中修改 FPA prompt 时能看见、能校验、能定位问题”。本阶段不改变 `gen-fpa` 生成逻辑，不改变 `_explanation_quality_warnings` 质量门，只补运行时配置诊断和最终 prompt 展示能力。
+
+#### 实施目标
+
+本阶段实施：
+
+- 在 Web 配置保存或预检时返回 FPA prompt 诊断信息。
+- 对 `${calculation_explanation_rules}` 的引用状态给出明确诊断。
+- 提供最终 prompt 预览，展示 fragment 展开后的完整 user prompt。
+- 检查最终 prompt 是否仍有 `${...}` 未替换。
+- 明确区分“配置错误”和“质量 warning”。
+- 增加后端和前端测试，覆盖用户改 prompt 的主要风险。
+
+本阶段不实施：
+
+- 不为用户自定义 prompt 增加仓库 harness。
+- 不强制用户 prompt 必须引用 `${calculation_explanation_rules}`。
+- 不让 prompt 自定义 `_explanation_quality_warnings`。
+- 不新增 fragment 版本字段。
+- 不做真实模型样例试运行；样例试运行可作为后续阶段。
+
+#### 后端诊断模型
+
+建议新增一个轻量诊断结构，用于配置保存、配置页预览和调试接口复用：
+
+```json
+{
+  "profile": "strict_fpa",
+  "user_prompt_source": "用户配置（配置目录/fpa_config.yaml: user_prompt_sets.strict_fpa_up）",
+  "fragments": [
+    {
+      "name": "calculation_explanation_rules",
+      "referenced": true,
+      "resolved": true,
+      "source": "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.default）"
+    }
+  ],
+  "unresolved_placeholders": [],
+  "warnings": [],
+  "errors": [],
+  "rendered_prompt": "..."
+}
+```
+
+字段说明：
+
+- `profile`：当前诊断的 FPA profile 名称。
+- `user_prompt_source`：当前 user prompt 模板来源。
+- `fragments[].name`：fragment 名称，第一阶段只有 `calculation_explanation_rules`。
+- `fragments[].referenced`：user prompt 是否引用 `${calculation_explanation_rules}`。
+- `fragments[].resolved`：引用后是否成功解析到 profile override 或 default。
+- `fragments[].source`：实际使用的 fragment 来源；未引用或未解析时为空。
+- `unresolved_placeholders`：最终 prompt 中残留的 `${...}`。
+- `warnings`：非阻断提示，例如未引用推荐 fragment。
+- `errors`：阻断错误，例如引用了 fragment 但缺失 default。
+- `rendered_prompt`：最终展开后的 user prompt。若存在阻断错误，可为空或返回已知部分渲染结果。
+
+#### 诊断规则
+
+配置错误，必须阻断保存或运行：
+
+- user prompt 包含非法模板变量语法。
+- user prompt 使用未知占位符。
+- user prompt 缺少强制占位符：`${core_rules}`、`${judgement_rules}`、`${payload_json}`。
+- user prompt 引用了 `${calculation_explanation_rules}`，但 `prompt_fragments.calculation_explanation_rules.default` 缺失或为空。
+- 最终 prompt 渲染失败。
+- 最终 prompt 中仍有 `${...}` 残留。
+
+配置 warning，不阻断保存：
+
+- user prompt 未引用 `${calculation_explanation_rules}`。
+- user prompt 引用了 `${calculation_explanation_rules}`，但当前 profile 没有 override，已回退 default。
+- profile override 存在但为空白，已回退 default。
+
+质量 warning，不在保存时判断：
+
+- `计算依据说明` 缺少 `来源场景`、`业务数据`、`业务规则` 或 `计算说明`。
+- 说明中出现“未识别到”“未明确说明”等缺失提示。
+- 说明中混入表个数计量细节。
+
+这些仍由 `gen-fpa` 运行后的 `_explanation_quality_warnings` 写入 check Excel。
+
+#### 后端实现建议
+
+建议在 `ai_gen_reimbursement_docs/config_utils.py` 中新增纯函数或 helper：
+
+```python
+def diagnose_fpa_user_prompt(profile_name: str) -> dict[str, object]:
+    ...
+```
+
+该函数负责：
+
+- 读取 profile 绑定的 user prompt template。
+- 读取 core rules、judgement rules 占位符所需的最小展示值；若没有实际 judgement rules，可使用空列表或示例规则进行渲染预览。
+- 解析模板 identifiers。
+- 判断是否引用 `calculation_explanation_rules`。
+- 如果引用，调用 `load_fpa_calculation_explanation_rules(profile_name)`。
+- 渲染最终 prompt。
+- 收集 unresolved placeholders、warnings、errors。
+
+也可以把诊断拆成两个层次：
+
+- `validate_fpa_prompt_template_config(profile_name)`：只做保存前校验，不需要真实 payload。
+- `render_fpa_prompt_preview(profile_name, sample_group, sample_judgement_rules)`：生成完整预览 prompt。
+
+如果现有 Web 配置服务已经有 FPA 配置读取/保存入口，优先在该服务层调用诊断 helper，避免把 Web 路由直接耦合到 YAML 细节。
+
+#### Web/API 展示建议
+
+配置页或调试页应展示：
+
+- 当前 profile。
+- 原始 user prompt template。
+- fragment 引用状态。
+- fragment 实际来源：profile override 或 default。
+- warning 列表。
+- error 列表。
+- 最终渲染 prompt。
+
+文案建议：
+
+```text
+当前 prompt 未引用 calculation_explanation_rules，计算依据说明可能不受统一规则约束。
+```
+
+```text
+当前 prompt 引用了 calculation_explanation_rules，已使用 default 规则。
+```
+
+```text
+当前 prompt 引用了 calculation_explanation_rules，但 prompt_fragments.calculation_explanation_rules.default 缺失或为空。
+```
+
+```text
+最终 prompt 中仍存在未替换占位符：${xxx}
+```
+
+前端不需要理解 fragment 解析细节，只展示后端返回的 `warnings`、`errors`、`fragments` 和 `rendered_prompt`。
+
+#### 测试建议
+
+后端测试：
+
+- 默认四个 profile 的诊断都返回 `referenced=true`、`resolved=true`、无 unresolved placeholders。
+- 用户 prompt 不引用 `${calculation_explanation_rules}` 时，诊断返回 warning，不阻断。
+- prompt 引用 `${calculation_explanation_rules}` 但缺少 fragment default 时，诊断返回 error。
+- profile override 存在时，诊断 source 指向 profile override。
+- profile override 为空白时，诊断 source 回退 default，并返回 warning。
+- prompt 含未知占位符时，诊断返回 error。
+
+Web/API 测试：
+
+- 配置读取接口返回 prompt diagnostics。
+- 保存非法 prompt 时返回 400 和明确错误。
+- 保存未引用推荐 fragment 的 prompt 时允许保存，并返回 warning。
+- prompt 预览接口返回展开后的 `rendered_prompt`，且无 `${...}` 残留。
+
+前端测试或 smoke：
+
+- 配置页面能展示 warning。
+- 配置页面能展示最终 prompt 预览。
+- error 状态下保存按钮或错误提示行为符合现有配置页模式。
+
+#### 验收标准
+
+第二阶段完成后应满足：
+
+- 用户能在界面或调试接口看到最终展开后的 FPA user prompt。
+- 用户能看到 `${calculation_explanation_rules}` 是否被引用、是否解析成功、使用 default 还是 profile override。
+- 未引用 `${calculation_explanation_rules}` 只提示 warning，不阻断。
+- 引用了 `${calculation_explanation_rules}` 但 fragment 缺失或为空时阻断，并给出明确错误。
+- 最终 prompt 不允许残留 `${...}`。
+- check Excel 质量 warning 逻辑不变。
+- 仓库 harness 仍只覆盖默认配置和官方测试 fixture，不读取用户运行时配置。
+
+建议验证命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_fpa_profiles.py
+```
+
 后续待办：
 
 - 用真实模型对典型模块进行抽样验证，观察 AI 是否稳定按结构输出`计算依据说明`。
