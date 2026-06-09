@@ -23,6 +23,23 @@ def _group():
     }
 
 
+def _mapping_group():
+    return {
+        "client_type": "业务端",
+        "l1": "销售管理",
+        "l2": "合同中心",
+        "l3": "合同管理",
+        "processes": [
+            {
+                "process_id": "m1_p1",
+                "process_name": "提交合同审批",
+                "description": "提交合同审批，调用 OA 审批接口。",
+                "type": "新增",
+            }
+        ],
+    }
+
+
 def test_strict_fpa_agent_review_contract_is_primary():
     review = build_fpa_agent_review(
         group=_group(),
@@ -64,7 +81,7 @@ def test_unified_ui_agent_review_contract_is_debug_only():
 
 def test_ui_api_mapping_agent_review_contract_is_debug_only():
     review = build_fpa_agent_review(
-        group=_group(),
+        group=_mapping_group(),
         profile_name=UI_API_MAPPING_PROFILE.name,
         profile_kind=UI_API_MAPPING_PROFILE.agent_review_profile_kind(),
     )
@@ -78,6 +95,15 @@ def test_ui_api_mapping_agent_review_contract_is_debug_only():
     assert review["contract_outputs"]["quality_review"] == "mapping_quality_review"
     assert "workload_judgement" not in review
     assert "unified_quality_review" not in review
+    judgement = review["mapping_judgement"]["judgements"][0]
+    assert judgement["expected_default_rows"] == [
+        {"suffix": "界面开发", "type": "EI"},
+        {"suffix": "接口开发", "type": "ILF"},
+    ]
+    assert judgement["explicit_backend_rows"] == [{"name": "OA 审批接口", "type": "ILF"}]
+    roles = {role["name"]: role for role in review["roles"]}
+    assert roles["mapping_judge"]["output_key"] == "mapping_judgement"
+    assert roles["mapping_quality_reviewer"]["status"] == "awaiting_rows"
 
 
 def test_unified_ui_quality_review_warns_without_changing_rows():
@@ -126,3 +152,63 @@ def test_unified_ui_quality_review_accepts_expected_ui_and_process_rows():
     assert review["unified_quality_review"]["summary"]["issue_count"] == 0
     roles = {role["name"]: role for role in review["roles"]}
     assert roles["unified_quality_reviewer"]["status"] == "completed"
+
+
+def test_ui_api_mapping_quality_review_accepts_expected_rows():
+    rows = [
+        {
+            "新增/修改功能点": "【业务端】销售管理-合同中心-合同管理-提交合同审批-界面开发",
+            "类型": "EI",
+            "源功能过程": "提交合同审批",
+        },
+        {
+            "新增/修改功能点": "【业务端】销售管理-合同中心-合同管理-提交合同审批-接口开发",
+            "类型": "ILF",
+            "源功能过程": "提交合同审批",
+        },
+        {
+            "新增/修改功能点": "【业务端】销售管理-合同中心-合同管理-OA 审批接口",
+            "类型": "ILF",
+            "源功能过程": "提交合同审批",
+        },
+    ]
+
+    review = build_fpa_agent_review(
+        group=_mapping_group(),
+        rows=rows,
+        profile_name=UI_API_MAPPING_PROFILE.name,
+        profile_kind=UI_API_MAPPING_PROFILE.agent_review_profile_kind(),
+    )
+
+    assert review["mapping_quality_review"]["summary"]["issue_count"] == 0
+    roles = {role["name"]: role for role in review["roles"]}
+    assert roles["mapping_quality_reviewer"]["status"] == "completed"
+
+
+def test_ui_api_mapping_quality_review_warns_for_missing_and_wrong_type_rows():
+    rows = [
+        {
+            "新增/修改功能点": "【业务端】销售管理-合同中心-合同管理-提交合同审批-界面开发",
+            "类型": "ILF",
+            "源功能过程": "提交合同审批",
+        },
+        {
+            "新增/修改功能点": "【业务端】销售管理-合同中心-合同管理-OA 审批接口",
+            "类型": "EI",
+            "源功能过程": "",
+        },
+    ]
+
+    review = build_fpa_agent_review(
+        group=_mapping_group(),
+        rows=rows,
+        profile_name=UI_API_MAPPING_PROFILE.name,
+        profile_kind=UI_API_MAPPING_PROFILE.agent_review_profile_kind(),
+    )
+
+    issue_codes = {issue["code"] for issue in review["mapping_quality_review"]["issues"]}
+    assert "ui_api_mapping.wrong_default_ui_type" in issue_codes
+    assert "ui_api_mapping.missing_default_api_row" in issue_codes
+    assert "ui_api_mapping.wrong_explicit_backend_type" in issue_codes
+    assert "ui_api_mapping.explicit_backend_missing_source" in issue_codes
+    assert review["summary"]["profile_quality_issue_count"] >= 4
