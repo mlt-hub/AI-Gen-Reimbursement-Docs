@@ -137,6 +137,12 @@ def test_control_command_movement_requires_review():
     assert result.status == "review_required"
     assert result.basis["movement_semantics"][0]["code"] == "CONTROL_COMMAND_MOVEMENT"
     assert result.basis["movement_semantics"][0]["movement_order"] == 3
+    issue = next(issue for issue in result.issues if issue.code == "CONTROL_COMMAND_MOVEMENT")
+    assert issue.details["governance_category"] == "control_command"
+    assert [action["action"] for action in issue.details["suggested_actions"]] == [
+        "exclude_movement",
+        "merge_movement",
+    ]
 
 
 def test_data_operation_only_movement_requires_review():
@@ -169,6 +175,11 @@ def test_error_confirmation_message_requires_review():
     assert result.basis["movement_semantics"][0]["code"] == "ERROR_CONFIRMATION_MESSAGE"
     issue = next(issue for issue in result.issues if issue.code == "ERROR_CONFIRMATION_MESSAGE")
     assert "错误提示" in issue.details["matched_terms"]
+    assert issue.details["scope_policy"] == "manual_merge_or_exclude"
+    assert [action["action"] for action in issue.details["suggested_actions"]] == [
+        "exclude_movement",
+        "merge_movement",
+    ]
 
 
 def test_internal_technical_boundary_requires_review():
@@ -197,6 +208,9 @@ def test_non_functional_scope_requires_review():
     assert result.status == "review_required"
     assert result.basis["process_semantics"][0]["code"] == "NON_FUNCTIONAL_SCOPE"
     assert "系统迁移" in result.basis["process_semantics"][0]["matched_terms"]
+    issue = next(issue for issue in result.issues if issue.code == "NON_FUNCTIONAL_SCOPE")
+    assert issue.details["governance_category"] == "non_functional_scope"
+    assert issue.details["suggested_actions"][0]["action"] == "exclude_process"
 
 
 def test_error_wins_over_warning():

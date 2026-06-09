@@ -1790,6 +1790,36 @@ def test_cosmic_review_action_applies_function_user_and_revalidates(monkeypatch,
     server.session_manager.cleanup_download(session_id)
 
 
+def test_cosmic_review_action_applies_function_user_role_map(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_review_function_user_role_map"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    payload["items"][0]["module_l3"] = "客户资料"
+    payload["items"][0]["user"] = "发起者：操作员|接收者：系统"
+    payload["function_user_role_map"] = {
+        "客户资料": "发起者：客户资料经办|接收者：客户资料经办",
+    }
+    payload["review_actions"] = [{
+        "action": "apply_function_user",
+        "item_index": 0,
+        "review_id": "item::0::GENERIC_FUNCTION_USER::user::",
+    }]
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["items"][0]["user"] == "发起者：客户资料经办|接收者：客户资料经办"
+    assert saved_payload["status"] == "passed"
+    assert "GENERIC_FUNCTION_USER" not in saved_payload["issue_codes"]
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_cosmic_confirmed_export_uses_cfp_policy(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="alice")
     session_id = "cosmic_export_cfp_policy"
@@ -1830,6 +1860,57 @@ def test_cosmic_confirmed_export_uses_cfp_policy(monkeypatch, tmp_path):
 
     assert resp.status_code == 200
     assert resp.json()["cfp_total"] == 1.5
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_review_action_excludes_non_functional_process_and_stamps_audit(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_review_exclude_process"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    non_functional = json.loads(json.dumps(payload["items"][0], ensure_ascii=False))
+    non_functional["module_l3"] = "服务器扩容"
+    non_functional["process"] = "完成系统迁移和架构改造"
+    non_functional["user"] = "发起者：服务器扩容|接收者：服务器扩容"
+    payload["items"].append(non_functional)
+    payload["review_actions"] = [{
+        "action": "exclude_process",
+        "item_index": 1,
+        "review_id": "item::1::NON_FUNCTIONAL_SCOPE::process::",
+        "reason": "非功能事项不进入 COSMIC 功能规模",
+    }]
+    payload["cfp_policy"] = {"新增": 1, "复用": "bad", "利旧": -1}
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    template_path = tmp_path / "项目功能点拆分表-输出模板.xlsx"
+    template_path.write_bytes(b"template")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr("web_app.routes.artifacts._cosmic_template_path", lambda *_: template_path)
+
+    def fake_write_cosmic_xlsx(template, output, report, **kwargs):
+        assert len(report.results) == 1
+        assert report.results[0].item.process == payload["items"][0]["process"]
+        Path(output).write_bytes(b"xlsx")
+        return output
+
+    monkeypatch.setattr("web_app.routes.artifacts.write_cosmic_xlsx", fake_write_cosmic_xlsx)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+    export_resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["items"][1]["excluded_from_cfp"] is True
+    assert saved_payload["items"][1]["movements"][0]["excluded_from_cfp"] is True
+    assert saved_payload["review_audit"][0]["confirmed_by"] == "alice"
+    assert saved_payload["review_audit"][0]["applied_by"] == "alice"
+    assert "applied_at" in saved_payload["review_audit"][0]
+    assert saved_payload["cfp_policy_effective"]["新增"] == 1.0
+    assert saved_payload["cfp_policy_effective"]["复用"] == 1.0 / 3.0
+    assert saved_payload["cfp_policy_effective"]["利旧"] == 0.0
+    assert export_resp.status_code == 200
+    assert export_resp.json()["cfp_total"] == 2.0
     server.session_manager.cleanup_download(session_id)
 
 

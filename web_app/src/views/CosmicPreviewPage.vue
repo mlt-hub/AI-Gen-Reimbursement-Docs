@@ -185,7 +185,7 @@
                                   </option>
                                 </select>
                                 <p v-if="movement.excluded_from_cfp" class="mt-1 text-[11px] text-[var(--color-warning)]">
-                                  {{ movement.review_action === 'merge_movement' ? `合并到第 ${movement.merged_into_order || movement.order - 1} 条` : '已排除计数' }}
+                                  {{ movement.review_action === 'merge_movement' ? `合并到第 ${movement.merged_into_order || movement.order - 1} 条` : movement.review_action === 'exclude_process' ? '功能过程已排除' : '已排除计数' }}
                                 </p>
                               </td>
                               <td class="detail-cell">
@@ -283,6 +283,8 @@ interface CosmicItem {
   trigger: string
   process: string
   status?: string
+  excluded_from_cfp?: boolean
+  review_action?: string
   movements: CosmicMovement[]
   basis?: Record<string, unknown>
   issues?: unknown[]
@@ -330,6 +332,9 @@ interface CosmicReviewAction {
   review_id?: string
   reason?: string
   created_at?: string
+  confirmed_by?: string
+  applied_by?: string
+  applied_at?: string
 }
 
 interface CosmicReport {
@@ -357,6 +362,8 @@ interface CosmicReport {
   review_actions?: CosmicReviewAction[]
   review_audit?: CosmicReviewAction[]
   cfp_policy?: Record<string, number>
+  cfp_policy_effective?: Record<string, number>
+  function_user_role_map?: Record<string, string>
 }
 
 interface CosmicJsonResponse {
@@ -493,6 +500,8 @@ function normalizeReport(value: unknown): CosmicReport {
     review_actions: Array.isArray(data.review_actions) ? data.review_actions : [],
     review_audit: Array.isArray(data.review_audit) ? data.review_audit : [],
     cfp_policy: data.cfp_policy,
+    cfp_policy_effective: data.cfp_policy_effective,
+    function_user_role_map: data.function_user_role_map,
   }
 }
 
@@ -602,8 +611,8 @@ async function saveSessionConfirmation() {
         body: JSON.stringify(report.value),
       },
     )
-    report.value.export_policy = response.payload.export_policy
-    report.value.confirmation_summary = response.payload.confirmation_summary
+    report.value = normalizeReport(response.payload)
+    confirmationStoreKey.value = buildConfirmationStoreKey(report.value)
     backendSyncStatus.value = '已保存到会话'
   } catch (err) {
     backendSyncError.value = normalizeApiError(err)
@@ -661,6 +670,8 @@ function normalizeCosmicItem(item: CosmicItem): CosmicItem {
     trigger: String(item.trigger || ''),
     process: String(item.process || ''),
     status: String(item.status || ''),
+    excluded_from_cfp: item.excluded_from_cfp === true,
+    review_action: item.review_action ? String(item.review_action) : undefined,
     basis: item.basis && typeof item.basis === 'object' ? item.basis : undefined,
     movements: Array.isArray(item.movements)
       ? item.movements.map((movement, index) => normalizeMovement(movement, index))
@@ -809,6 +820,16 @@ function applySuggestedAction(item: CosmicReviewItem, action: Record<string, unk
     if (!target) return
     target.user = record.suggested_user
     syncPreviewRow(itemIndex)
+  } else if (actionType === 'exclude_process') {
+    const target = itemForRow(itemIndex)
+    if (!target) return
+    target.excluded_from_cfp = true
+    target.review_action = actionType
+    target.movements.forEach(movement => {
+      movement.excluded_from_cfp = true
+      movement.review_action = actionType
+    })
+    syncPreviewRow(itemIndex)
   } else if (actionType === 'exclude_movement' || actionType === 'merge_movement') {
     const movementOrder = Number(action.movement_order || item.movement_order || 0)
     if (!movementOrder) return
@@ -851,6 +872,7 @@ function suggestedActions(item: CosmicReviewItem): Record<string, unknown>[] {
 function actionLabel(action: string): string {
   if (action === 'exclude_movement') return '已排除计数'
   if (action === 'merge_movement') return '已合并到上一条'
+  if (action === 'exclude_process') return '已排除功能过程'
   if (action === 'apply_function_user') return '已采用候选功能用户'
   return action
 }

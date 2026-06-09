@@ -222,6 +222,8 @@ def _process_semantic_findings(item: CosmicItem) -> list[dict[str, object]]:
         return []
     return [{
         "code": "NON_FUNCTIONAL_SCOPE",
+        "scope_policy": "manual_exclude_process",
+        "governance_category": "non_functional_scope",
         "matched_terms": matched,
         "description": "功能过程或模块路径疑似非功能内容或技术改造事项，通常不应拆成 COSMIC 功能规模",
     }]
@@ -238,6 +240,8 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     if matched:
         findings.append({
             "code": "CONTROL_COMMAND_MOVEMENT",
+            "scope_policy": "manual_exclude_or_merge",
+            "governance_category": "control_command",
             "movement_order": movement.order,
             "matched_terms": matched,
             "description": "子过程疑似控制命令，通常不单独计为 COSMIC 数据移动",
@@ -246,6 +250,8 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     if matched:
         findings.append({
             "code": "DATA_OPERATION_ONLY_MOVEMENT",
+            "scope_policy": "manual_exclude_or_merge",
+            "governance_category": "data_operation_only",
             "movement_order": movement.order,
             "matched_terms": matched,
             "description": "子过程疑似仅为数据运算或技术操作，通常应归入相关数据移动或不单独计列",
@@ -254,6 +260,8 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     if matched:
         findings.append({
             "code": "ERROR_CONFIRMATION_MESSAGE",
+            "scope_policy": "manual_merge_or_exclude",
+            "governance_category": "error_confirmation_message",
             "movement_order": movement.order,
             "matched_terms": matched,
             "description": "子过程疑似错误或确认消息输出，通常需要按手册规则合并识别",
@@ -262,6 +270,8 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     if matched:
         findings.append({
             "code": "INTERNAL_TECHNICAL_BOUNDARY",
+            "scope_policy": "manual_exclude_or_merge",
+            "governance_category": "internal_technical_boundary",
             "movement_order": movement.order,
             "matched_terms": matched,
             "description": "子过程疑似内部技术交互或无效软件边界，需确认是否跨有效 COSMIC 边界",
@@ -278,11 +288,14 @@ def _finding_details(finding: dict[str, object]) -> dict[str, object]:
     details = {
         "matched_terms": list(finding.get("matched_terms", [])),
         "basis_description": str(finding.get("description", "")),
+        "scope_policy": str(finding.get("scope_policy", "manual_review")),
+        "governance_category": str(finding.get("governance_category", "")),
     }
     movement_order = finding.get("movement_order")
     if code in {
         "CONTROL_COMMAND_MOVEMENT",
         "DATA_OPERATION_ONLY_MOVEMENT",
+        "ERROR_CONFIRMATION_MESSAGE",
         "INTERNAL_TECHNICAL_BOUNDARY",
     } and isinstance(movement_order, int):
         details["suggested_actions"] = [
@@ -298,6 +311,14 @@ def _finding_details(finding: dict[str, object]) -> dict[str, object]:
                 "movement_order": movement_order,
                 "reason": details["basis_description"],
             },
+        ]
+    elif code == "NON_FUNCTIONAL_SCOPE":
+        details["suggested_actions"] = [
+            {
+                "action": "exclude_process",
+                "label": "排除功能过程",
+                "reason": details["basis_description"],
+            }
         ]
     return details
 

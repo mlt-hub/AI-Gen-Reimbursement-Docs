@@ -2,7 +2,7 @@ import os
 import json
 import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -182,6 +182,27 @@ def _review_actions(payload: dict) -> list[dict]:
     return [action for action in actions if isinstance(action, dict)]
 
 
+def _function_user_role_map(payload: dict) -> dict[str, str]:
+    role_map = payload.get("function_user_role_map")
+    if not isinstance(role_map, dict):
+        return {}
+    values: dict[str, str] = {}
+    for key, value in role_map.items():
+        module_name = str(key or "").strip()
+        user_value = str(value or "").strip()
+        if module_name and user_value:
+            values[module_name] = user_value
+    return values
+
+
+def _role_mapped_user(item: dict, role_map: dict[str, str]) -> str:
+    for key in ("module_l3", "module_l2", "module_l1"):
+        module_name = str(item.get(key) or "").strip()
+        if module_name and module_name in role_map:
+            return role_map[module_name]
+    return ""
+
+
 def _movement_action_matches(raw_movement: dict, action: dict, movement_index: int) -> bool:
     if not isinstance(raw_movement, dict):
         return False
@@ -197,6 +218,7 @@ def _apply_review_actions(payload: dict) -> dict:
     items = data.get("items")
     if not isinstance(items, list):
         return data
+    role_map = _function_user_role_map(data)
     for action in _review_actions(data):
         action_type = str(action.get("action") or "")
         item_index = action.get("item_index")
@@ -206,9 +228,24 @@ def _apply_review_actions(payload: dict) -> dict:
         if not isinstance(item, dict):
             continue
         if action_type == "apply_function_user":
-            suggested_user = str(action.get("suggested_user") or action.get("value") or "").strip()
+            suggested_user = str(
+                action.get("suggested_user")
+                or action.get("value")
+                or _role_mapped_user(item, role_map)
+                or ""
+            ).strip()
             if suggested_user:
                 item["user"] = suggested_user
+            continue
+        if action_type == "exclude_process":
+            item["excluded_from_cfp"] = True
+            item["review_action"] = action_type
+            movements = item.get("movements")
+            if isinstance(movements, list):
+                for raw_movement in movements:
+                    if isinstance(raw_movement, dict):
+                        raw_movement["excluded_from_cfp"] = True
+                        raw_movement["review_action"] = action_type
             continue
         if action_type not in {"exclude_movement", "merge_movement"}:
             continue
@@ -235,6 +272,8 @@ def _cosmic_items_from_payload(payload: dict, *, include_excluded: bool) -> list
     cosmic_items: list[CosmicItem] = []
     for raw_item in items:
         if not isinstance(raw_item, dict):
+            continue
+        if not include_excluded and raw_item.get("excluded_from_cfp") is True:
             continue
         movements: list[DataMovement] = []
         for movement_index, raw_movement in enumerate(raw_item.get("movements") or []):
@@ -294,16 +333,51 @@ def _merge_review_confirmations(payload: dict, confirmations: dict[str, dict]) -
 
 
 def _restore_raw_review_fields(payload: dict, source: dict) -> None:
-    for key in ("review_actions", "review_audit", "cfp_policy"):
+    for key in ("review_actions", "review_audit", "cfp_policy", "function_user_role_map"):
         value = source.get(key)
         if value is not None:
             payload[key] = value
 
 
-def _revalidate_cosmic_payload(payload: dict, *, cfp_formula: str = "") -> dict:
+def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> None:
+    actions = payload.get("review_actions")
+    if not isinstance(actions, list):
+        actions = []
+    audit = payload.get("review_audit")
+    if not isinstance(audit, list):
+        audit = []
+    keyed: dict[tuple, dict] = {}
+    for raw_record in audit:
+        if isinstance(raw_record, dict):
+            keyed[_review_action_key(raw_record)] = raw_record
+    for raw_action in actions:
+        if not isinstance(raw_action, dict):
+            continue
+        record = dict(raw_action)
+        if reviewer and not record.get("confirmed_by"):
+            record["confirmed_by"] = reviewer
+        if reviewer and not record.get("applied_by"):
+            record["applied_by"] = reviewer
+        if not record.get("applied_at"):
+            record["applied_at"] = record.get("created_at") or datetime.now(timezone.utc).isoformat()
+        keyed[_review_action_key(record)] = record
+    payload["review_audit"] = list(keyed.values())
+
+
+def _review_action_key(action: dict) -> tuple:
+    return (
+        str(action.get("action") or ""),
+        action.get("item_index"),
+        action.get("movement_order"),
+        str(action.get("review_id") or ""),
+    )
+
+
+def _revalidate_cosmic_payload(payload: dict, *, cfp_formula: str = "", reviewer: str = "") -> dict:
     if not isinstance(payload.get("items"), list):
         return apply_cosmic_confirmation_export_policy(payload)
     acted = _apply_review_actions(payload)
+    _stamp_review_audit(acted, reviewer=reviewer)
     confirmations = _confirmation_by_review_id(acted)
     report = validate_cosmic_items(
         _cosmic_items_from_payload(acted, include_excluded=False),
@@ -327,6 +401,7 @@ def _revalidate_cosmic_payload(payload: dict, *, cfp_formula: str = "") -> dict:
     else:
         data["items"] = report_items if isinstance(report_items, list) else []
     _merge_review_confirmations(data, confirmations)
+    data["cfp_policy_effective"] = _cfp_policy_from_payload(acted)
     _restore_raw_review_fields(data, acted)
     return apply_cosmic_confirmation_export_policy(data)
 
@@ -394,9 +469,11 @@ def _cfp_policy_from_payload(payload: dict) -> dict[str, float]:
     if isinstance(raw_policy, dict):
         for key, value in raw_policy.items():
             try:
-                policy[str(key)] = float(value)
+                number = float(value)
             except (TypeError, ValueError):
                 continue
+            if number >= 0:
+                policy[str(key)] = number
     return policy
 
 
@@ -679,7 +756,7 @@ def create_router(session_manager: SessionManager, *, base_dir: Path | None = No
         if not cfp_formula:
             from ai_gen_reimbursement_docs.config_utils import load_cfp_formula
             cfp_formula = load_cfp_formula()
-        payload = _revalidate_cosmic_payload(payload, cfp_formula=cfp_formula)
+        payload = _revalidate_cosmic_payload(payload, cfp_formula=cfp_formula, reviewer=user)
         path = _cosmic_confirmation_path(session_manager, session_id)
         path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
