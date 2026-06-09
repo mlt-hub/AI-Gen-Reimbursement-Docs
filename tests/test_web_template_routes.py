@@ -122,6 +122,19 @@ def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp
     assert any(item["scope"] == "footers" and item["token"] == "{{文档标题}}" for item in preview["placeholders"])
     assert any(item["scope"] == "tables" and item["token"] == "{{需求部门}}" for item in preview["placeholders"])
 
+    layout_resp = client.get(f"/api/templates/spec/imported/{import_id}/layout-preview")
+    assert layout_resp.status_code == 200
+    layout = layout_resp.json()
+    assert layout["id"] == import_id
+    assert layout["render_mode"] == "docx_layout_model"
+    assert layout["page"]["orientation"] == "portrait"
+    assert layout["page"]["width_pt"] > 0
+    assert layout["summary"]["body_block_count"] >= 3
+    assert layout["summary"]["placeholder_count"] >= 6
+    assert any(block["scope"] == "headers" and "{{项目名称}}" in block["placeholders"] for block in layout["headers"])
+    assert any(block["kind"] == "table" and "{{需求部门}}" in block["placeholders"] for block in layout["body"])
+    assert any("像素级分页" in item for item in layout["limitations"])
+
     publish_resp = client.post(f"/api/templates/spec/imported/{import_id}/publish")
     assert publish_resp.status_code == 200
     published = publish_resp.json()
@@ -252,6 +265,7 @@ def test_imported_spec_template_management_rejects_remote_mode(monkeypatch, tmp_
 
     assert client.get("/api/templates/spec/imported").status_code == 403
     assert client.get("/api/templates/spec/imported/abc/preview").status_code == 403
+    assert client.get("/api/templates/spec/imported/abc/layout-preview").status_code == 403
     assert client.put("/api/templates/spec/imported/abc/metadata", json={"confirmed": True}).status_code == 403
     assert client.put("/api/templates/spec/imported/abc/adjustments", json={}).status_code == 403
     assert client.post("/api/templates/spec/imported/abc/publish").status_code == 403

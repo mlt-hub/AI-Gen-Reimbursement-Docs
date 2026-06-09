@@ -498,6 +498,84 @@ def build_imported_spec_template_preview(target_root: Path, import_id: str) -> d
     }
 
 
+def build_imported_spec_template_layout_preview(target_root: Path, import_id: str) -> dict[str, Any]:
+    """Build a browser-renderable layout preview model for an imported Word draft.
+
+    This is intentionally a layout approximation rather than a pixel-perfect Word
+    renderer. It exposes page geometry, header/footer text, paragraph/table order,
+    styles, and placeholder positions without requiring Office or LibreOffice.
+    """
+    template_path = resolve_imported_spec_template_file(
+        target_root,
+        import_id,
+        "项目需求说明书-输出模板.docx",
+    )
+    metadata = read_imported_spec_template_metadata(target_root, import_id)
+    validation = validate_output_template("spec", str(template_path))
+    doc = Document(str(template_path))
+
+    page = _word_page_preview(doc)
+    header_blocks = _layout_blocks_from_paragraphs_and_tables(
+        [
+            paragraph
+            for section in doc.sections
+            for paragraph in section.header.paragraphs
+        ],
+        [
+            table
+            for section in doc.sections
+            for table in section.header.tables
+        ],
+        scope="headers",
+        max_blocks=24,
+    )
+    footer_blocks = _layout_blocks_from_paragraphs_and_tables(
+        [
+            paragraph
+            for section in doc.sections
+            for paragraph in section.footer.paragraphs
+        ],
+        [
+            table
+            for section in doc.sections
+            for table in section.footer.tables
+        ],
+        scope="footers",
+        max_blocks=24,
+    )
+    body_blocks = _layout_body_blocks(doc, max_blocks=120)
+    placeholder_count = sum(len(block.get("placeholders", [])) for block in body_blocks)
+    placeholder_count += sum(len(block.get("placeholders", [])) for block in header_blocks)
+    placeholder_count += sum(len(block.get("placeholders", [])) for block in footer_blocks)
+
+    return {
+        "id": import_id,
+        "metadata": metadata,
+        "template_path": str(template_path),
+        "ok": validation.ok,
+        "errors": [issue.message for issue in validation.errors],
+        "warnings": [issue.message for issue in validation.warnings],
+        "render_mode": "docx_layout_model",
+        "summary": {
+            "page_width_pt": page["width_pt"],
+            "page_height_pt": page["height_pt"],
+            "body_block_count": len(body_blocks),
+            "header_block_count": len(header_blocks),
+            "footer_block_count": len(footer_blocks),
+            "placeholder_count": placeholder_count,
+            "truncated": len(doc.paragraphs) + len(doc.tables) > len(body_blocks),
+        },
+        "page": page,
+        "headers": header_blocks,
+        "body": body_blocks,
+        "footers": footer_blocks,
+        "limitations": [
+            "当前版式预览为浏览器可渲染的 Word 结构近似，不等同于 Word/Office 像素级分页结果。",
+            "暂不渲染文本框、内容控件、图片文字和复杂浮动对象。",
+        ],
+    }
+
+
 def _collect_word_preview_scopes(doc: Document) -> list[dict[str, Any]]:
     return [
         {
@@ -636,3 +714,137 @@ def _find_tokens(text: str) -> list[str]:
 
 def _compact_text(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()
+
+
+def _word_page_preview(doc: Document) -> dict[str, Any]:
+    section = doc.sections[0]
+    width_pt = _length_pt(section.page_width, default=595.3)
+    height_pt = _length_pt(section.page_height, default=841.9)
+    return {
+        "width_pt": width_pt,
+        "height_pt": height_pt,
+        "margin_top_pt": _length_pt(section.top_margin, default=72.0),
+        "margin_right_pt": _length_pt(section.right_margin, default=72.0),
+        "margin_bottom_pt": _length_pt(section.bottom_margin, default=72.0),
+        "margin_left_pt": _length_pt(section.left_margin, default=72.0),
+        "header_distance_pt": _length_pt(section.header_distance, default=36.0),
+        "footer_distance_pt": _length_pt(section.footer_distance, default=36.0),
+        "orientation": "landscape" if width_pt > height_pt else "portrait",
+    }
+
+
+def _layout_body_blocks(doc: Document, *, max_blocks: int) -> list[dict[str, Any]]:
+    tables = iter(doc.tables)
+    blocks: list[dict[str, Any]] = []
+    paragraph_index = 0
+    table_index = 0
+    for child in doc.element.body.iterchildren():
+        tag = child.tag.rsplit("}", 1)[-1]
+        if tag == "p":
+            paragraph = Paragraph(child, doc)
+            block = _layout_paragraph_block(paragraph, scope="body", index=paragraph_index)
+            paragraph_index += 1
+        elif tag == "tbl":
+            try:
+                table = next(tables)
+            except StopIteration:
+                continue
+            block = _layout_table_block(table, scope="tables", index=table_index)
+            table_index += 1
+        else:
+            continue
+        if block:
+            blocks.append(block)
+        if len(blocks) >= max_blocks:
+            break
+    return blocks
+
+
+def _layout_blocks_from_paragraphs_and_tables(
+    paragraphs,
+    tables,
+    *,
+    scope: str,
+    max_blocks: int,
+) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for index, paragraph in enumerate(paragraphs):
+        block = _layout_paragraph_block(paragraph, scope=scope, index=index)
+        if block:
+            blocks.append(block)
+        if len(blocks) >= max_blocks:
+            return blocks
+    for index, table in enumerate(tables):
+        block = _layout_table_block(table, scope=scope, index=index)
+        if block:
+            blocks.append(block)
+        if len(blocks) >= max_blocks:
+            return blocks
+    return blocks
+
+
+def _layout_paragraph_block(paragraph: Paragraph, *, scope: str, index: int) -> dict[str, Any] | None:
+    text = _compact_text(paragraph.text)
+    if not text:
+        return None
+    fmt = paragraph.paragraph_format
+    return {
+        "kind": "paragraph",
+        "scope": scope,
+        "index": index,
+        "text": text,
+        "style": str(paragraph.style.name if paragraph.style else ""),
+        "alignment": _alignment_name(paragraph.alignment),
+        "left_indent_pt": _length_pt(fmt.left_indent, default=0.0),
+        "first_line_indent_pt": _length_pt(fmt.first_line_indent, default=0.0),
+        "space_before_pt": _length_pt(fmt.space_before, default=0.0),
+        "space_after_pt": _length_pt(fmt.space_after, default=0.0),
+        "bold": any(bool(run.bold) for run in paragraph.runs),
+        "italic": any(bool(run.italic) for run in paragraph.runs),
+        "placeholders": _find_tokens(text),
+    }
+
+
+def _layout_table_block(table, *, scope: str, index: int) -> dict[str, Any] | None:
+    rows: list[list[str]] = []
+    placeholders: set[str] = set()
+    for row in table.rows[:8]:
+        values = [_compact_text(cell.text) for cell in row.cells[:8]]
+        if any(values):
+            rows.append(values)
+            for value in values:
+                placeholders.update(_find_tokens(value))
+    if not rows:
+        return None
+    return {
+        "kind": "table",
+        "scope": scope,
+        "index": index,
+        "style": str(table.style.name if table.style else ""),
+        "row_count": len(table.rows),
+        "column_count": len(table.columns),
+        "rows": rows,
+        "placeholders": sorted(placeholders),
+    }
+
+
+def _alignment_name(value: Any) -> str:
+    if value is None:
+        return "left"
+    raw = str(value).lower()
+    if "center" in raw:
+        return "center"
+    if "right" in raw:
+        return "right"
+    if "justify" in raw or "distributed" in raw:
+        return "justify"
+    return "left"
+
+
+def _length_pt(value: Any, *, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        return round(float(value.pt), 2)
+    except Exception:
+        return default
