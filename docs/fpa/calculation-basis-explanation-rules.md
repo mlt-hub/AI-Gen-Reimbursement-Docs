@@ -440,6 +440,75 @@ ${payload_json}
 - `multi_uis` 和 `ui_api_mapping` 默认也复用同一份完整规则，补强当前仅靠 JSON 示例约束的问题。
 - 如后续某个 profile 对说明有特殊口径，再增加 profile 专属片段，例如 `multi_uis_calculation_explanation_rules` 或 `ui_api_mapping_calculation_explanation_rules`。
 
+### profile 专属 prompt 与输出差异
+
+如果只抽取一个公共 `${calculation_explanation_rules}` 给所有 profile 复用，主要收益是统一 `计算依据说明` 的格式和质量要求。它会让所有 profile 更稳定地产生四段式说明，但不会单独保证“不同 profile 输出不同风格或不同重点的说明”。profile 差异仍主要来自行规划口径、类型规则、输入上下文和 fallback 行生成逻辑。
+
+如果目标是让不同 profile 稳定输出不同侧重点的 `计算依据说明`，建议使用 `default + profile override` 结构：
+
+```yaml
+prompt_fragments:
+  calculation_explanation_rules:
+    default: |-
+      通用计算依据说明生成规则...
+    strict_fpa: |-
+      strict_fpa 专属规则...
+    unified_ui: |-
+      unified_ui 专属规则...
+    multi_uis: |-
+      multi_uis 专属规则...
+    ui_api_mapping: |-
+      ui_api_mapping 专属规则...
+```
+
+构建 prompt 时按当前 profile 取专属片段；如果没有专属片段，则回退 `default`。
+
+建议的 profile 差异重点：
+
+- `strict_fpa`：突出标准 FPA 口径、数据功能和事务功能边界、合并依据，以及 `agent_review.type_judgement` 和 `merge_review` 的硬约束证据。
+- `unified_ui`：突出三级模块级界面能力、非界面处理开发行覆盖，以及同一页面内列表、查询条件、按钮、弹窗和状态组件的合并依据。
+- `multi_uis`：突出独立页面、独立业务对象、独立业务流程或独立用户端的拆分证据；`split_reason` 用于记录拆分理由，`explanation` 用于说明该行为什么纳入 FPA 计量。
+- `ui_api_mapping`：突出界面开发固定 `EI`、接口开发和明确接口/后端调用固定 `ILF` 的映射依据，避免把普通保存、提交、审批等动作扩写成额外接口或后端调用。
+
+因此，公共 prompt 用于统一质量；profile 专属 prompt 加默认回退，才用于稳定表达不同 profile 的说明重点。
+
+### 其他可候选抽取的 prompt fragments
+
+除 `calculation_explanation_rules` 外，后续还可以考虑抽取以下片段，但不建议第一阶段全部实施。
+
+`json_output_contract`：抽取 JSON-only 输出约束，例如“不允许输出 JSON 外文本”“不要输出 reasoning、分析过程、Markdown”“所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason”。这类约束机械重复、语义稳定，适合作为第二优先级。
+
+`classification_basis_selection_rules`：抽取 `classification_basis_index` 选择规则，例如“计算依据归类判定原则列表只能返回最匹配的序号，序号从 1 开始”。这类规则也较稳定，但与 user prompt 中的 `judgement_rules` 展示位置相关，抽取时要保证可读性。
+
+`fpa_name_path_rules`：抽取完整路径命名规则，例如 `name` 必须使用 `【客户端类型】一级模块-二级模块-三级模块-功能点名称`，不得只返回功能过程名，不得用子系统（模块）替代客户端类型。该规则重复度较高，但也会与 profile 行规划语义交织。
+
+`row_output_schema`：抽取 rows JSON 示例。多数 profile 的 schema 相似，但 `ui_api_mapping` 的类型范围和 `multi_uis` 的 `split_reason` 要求不同，适合做 `default + profile override`，不宜只做一个全局 schema。
+
+`agent_review_rules`：抽取前置 agent review 读取约束。不同 profile 读取不同证据：`strict_fpa` 读取 `type_judgement`、`merge_review`、`process_facts`；`unified_ui` 和 `multi_uis` 读取 `workload_judgement`；`ui_api_mapping` 读取 `mapping_judgement`。这类片段接近 profile 业务语义，抽取前需要先定清楚命名和覆盖策略。
+
+`row_planning_rules`：抽取 profile 行规划规则。例如 `strict_fpa` 不按开发工作项拆分，`unified_ui` 默认三级模块级界面开发行，`multi_uis` 可按独立页面或业务对象拆分，`ui_api_mapping` 每个功能过程默认界面开发 `EI` 和接口开发 `ILF`。这类规则是 profile 的核心，不建议过早抽取。
+
+### 复杂度控制建议
+
+prompt fragment 抽取有收益，也会引入模板系统复杂度。若一次抽取过多，配置会从“按 profile 读一段完整 prompt”变成“跨多个 fragment 拼装 prompt”，维护者需要在多个位置跳转，反而可能降低可读性。
+
+第一阶段建议只抽取：
+
+- `calculation_explanation_rules`
+
+可选第二阶段再抽取：
+
+- `json_output_contract`
+
+暂不建议抽取：
+
+- `row_planning_rules`
+- `agent_review_rules`
+- `row_output_schema`
+- `fpa_name_path_rules`
+
+阶段性原则是：先抽当前痛点最明确、重复最多、收益最高的 `计算依据说明` 规则，并支持 `default + profile override`。保留 profile 主 prompt 的完整上下文，避免把 profile 的业务语义拆得过碎。只有当后续真实维护中持续出现重复修改或不一致问题时，再抽第二块。
+
 ### 拟修改范围与验证
 
 如果实施 prompt 抽取，建议修改范围为：
