@@ -54,6 +54,17 @@ FPA_STABILITY_SAMPLE_PRESETS = {
             "blocking_retry_count": 0,
         },
     },
+    "multi-uis-real-model-recommended": {
+        "suite": "real-model-recommended",
+        "profiles": "multi_uis",
+        "strategies": "ai_first",
+        "rule_sets": "multi_uis_rs",
+        "thresholds": {
+            "profile_quality_issue_count": 0,
+            "retryable_quality_issue_count": 0,
+            "blocking_retry_count": 0,
+        },
+    },
     "multi-profile-real-model": {
         "suite": "standard",
         "configs": (

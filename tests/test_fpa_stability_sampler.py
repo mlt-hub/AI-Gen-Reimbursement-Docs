@@ -87,6 +87,20 @@ def test_resolve_strict_real_model_recommended_preset():
     }
 
 
+def test_resolve_multi_uis_real_model_recommended_preset():
+    preset = resolve_fpa_stability_sample_preset("multi-uis-real-model-recommended")
+
+    assert preset["suite"] == "real-model-recommended"
+    assert preset["profiles"] == "multi_uis"
+    assert preset["strategies"] == "ai_first"
+    assert preset["rule_sets"] == "multi_uis_rs"
+    assert preset["thresholds"] == {
+        "profile_quality_issue_count": 0,
+        "retryable_quality_issue_count": 0,
+        "blocking_retry_count": 0,
+    }
+
+
 def test_resolve_multi_profile_real_model_preset_uses_explicit_configs():
     preset = resolve_fpa_stability_sample_preset("multi-profile-real-model")
     configs = resolve_fpa_stability_sample_configs(preset=preset)

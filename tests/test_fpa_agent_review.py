@@ -97,6 +97,100 @@ def test_multi_uis_quality_accepts_ui_row_name_without_development_suffix():
     assert "unified_ui.missing_ui_row" not in codes
 
 
+def test_multi_uis_quality_accepts_ai_split_ei_rows_as_multi_ui_evidence():
+    rows = [
+        {
+            "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业维护",
+            "类型": "EI",
+            "生成方式": "ai",
+            "源功能过程": "添加垂直行业、编辑垂直行业",
+            "split_reason": "按独立业务对象拆分：垂直行业为独立业务对象，需独立界面开发行。",
+        },
+        {
+            "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业查询",
+            "类型": "EQ",
+            "生成方式": "ai",
+            "源功能过程": "查询垂直行业数据",
+            "split_reason": "按独立业务流程拆分：查询流程与维护流程独立。",
+        },
+    ]
+
+    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="unified_ui")
+
+    codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
+    assert "unified_ui.missing_ui_row" not in codes
+
+
+def test_multi_uis_quality_accepts_ai_ei_row_with_source_process_as_ui_evidence():
+    rows = [
+        {
+            "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业维护",
+            "类型": "EI",
+            "生成方式": "ai",
+            "源功能过程": "添加垂直行业、编辑垂直行业",
+            "计算依据说明": "来源场景：垂直行业维护。\n业务数据：垂直行业。\n业务规则：维护。\n计算说明：按 EI 识别。",
+        },
+        {
+            "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-添加垂直行业-逻辑处理开发",
+            "类型": "EI",
+            "生成方式": "rules_fallback",
+            "源功能过程": "添加垂直行业",
+            "计算依据说明": "来源场景：添加垂直行业。\n业务数据：垂直行业。\n业务规则：新增。\n计算说明：按 EI 识别。",
+        },
+        {
+            "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-编辑垂直行业-逻辑处理开发",
+            "类型": "EI",
+            "生成方式": "rules_fallback",
+            "源功能过程": "编辑垂直行业",
+            "计算依据说明": "来源场景：编辑垂直行业。\n业务数据：垂直行业。\n业务规则：修改。\n计算说明：按 EI 识别。",
+        },
+    ]
+
+    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="unified_ui")
+
+    codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
+    assert "unified_ui.missing_ui_row" not in codes
+
+
+def test_unified_workload_judgement_recommends_import_process_row():
+    group = {
+        "client_type": "地市后台",
+        "l1": "客户运营",
+        "l2": "客户数据管理",
+        "l3": "客户名单导入",
+        "processes": [
+            {
+                "process_id": "p1",
+                "process_name": "导入客户名单",
+                "description": "上传 Excel 文件，校验手机号并保存有效记录。",
+                "type": "新增",
+            },
+        ],
+    }
+    rows = [
+        {
+            "新增/修改功能点": "【地市后台】客户运营-客户数据管理-客户名单导入-导入客户名单",
+            "类型": "EI",
+            "生成方式": "ai",
+            "源功能过程": "导入客户名单",
+            "split_reason": "独立业务流程：导入客户名单具备独立界面和业务意图。",
+        },
+        {
+            "新增/修改功能点": "【地市后台】客户运营-客户数据管理-客户名单导入-导入客户名单-导入处理开发",
+            "类型": "EI",
+            "生成方式": "rules_fallback",
+            "源功能过程": "导入客户名单",
+        },
+    ]
+
+    review = build_fpa_agent_review(group=group, rows=rows, profile_name="multi_uis", profile_kind="unified_ui")
+
+    judgement = review["workload_judgement"]["judgements"][0]
+    assert "导入处理开发" in judgement["recommended_categories"]
+    codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
+    assert "unified_ui.missing_process_row" not in codes
+
+
 def test_ui_api_mapping_default_api_row_is_not_unexpected_explicit_backend_row():
     group = {
         "client_type": "地市后台",

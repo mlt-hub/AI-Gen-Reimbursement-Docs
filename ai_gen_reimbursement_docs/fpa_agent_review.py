@@ -107,6 +107,7 @@ def build_fpa_agent_review(
             rows=rows,
             process_facts=process_facts,
             workload_judgement=workload_judgement,
+            contract_name=contract.name,
         )
         if contract.profile_kind == "unified_ui"
         else {}
@@ -369,6 +370,8 @@ def _build_unified_workload_judgement(process_facts: list[dict[str, object]]) ->
             categories.append("查询处理开发")
         elif operation == "output":
             categories.append("导出处理开发")
+        elif operation == "import":
+            categories.append("导入处理开发")
         elif bool(fact.get("changes_internal_data")):
             categories.append("逻辑处理开发")
         if bool(fact.get("ordinary_external_service")) or str(fact.get("external_data_group_evidence", "") or ""):
@@ -402,6 +405,8 @@ def _unified_workload_reason(operation: str, categories: list[str]) -> str:
         return "查询类功能过程建议保留统一界面行，并补充查询处理开发审计建议。"
     if operation == "output":
         return "输出类功能过程建议保留统一界面行，并补充导出处理开发审计建议。"
+    if operation == "import":
+        return "导入类功能过程建议保留统一界面行，并补充导入处理开发审计建议。"
     if "外部系统对接" in categories:
         return "存在外部服务或外部数据证据，建议在统一界面口径下审查外部系统对接表达。"
     return "维护或处理类功能过程建议保留统一界面行，并补充逻辑处理开发审计建议。"
@@ -460,12 +465,13 @@ def _build_unified_quality_review(
     rows: list[dict[str, object]] | None,
     process_facts: list[dict[str, object]],
     workload_judgement: dict[str, object],
+    contract_name: str = "",
 ) -> dict[str, object]:
     if rows is None:
         return {}
     issues: list[dict[str, object]] = []
     row_names = [str(row.get("新增/修改功能点", "") or row.get("name", "") or "") for row in rows]
-    if process_facts and not any("界面" in name for name in row_names):
+    if process_facts and not _has_unified_ui_evidence(rows, contract_name=contract_name):
         issues.append(_unified_issue(
             code="unified_ui.missing_ui_row",
             severity="warning",
@@ -499,6 +505,28 @@ def _build_unified_quality_review(
             "blocking_count": 0,
         },
     }
+
+
+def _has_unified_ui_evidence(rows: list[dict[str, object]], *, contract_name: str = "") -> bool:
+    for row in rows:
+        name = str(row.get("新增/修改功能点", "") or row.get("name", "") or "")
+        if "界面" in name:
+            return True
+        if contract_name == "multi_uis_contract" and _is_multi_uis_ui_row(row):
+            return True
+    return False
+
+
+def _is_multi_uis_ui_row(row: dict[str, object]) -> bool:
+    row_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
+    if row_type != "EI":
+        return False
+    generation = str(row.get("生成方式", "") or row.get("generation", "") or "").strip()
+    split_reason = str(row.get("split_reason", "") or row.get("拆分理由", "") or "").strip()
+    source_processes = str(row.get("源功能过程", "") or row.get("source_processes", "") or "").strip()
+    if generation != "ai":
+        return False
+    return bool(split_reason or source_processes)
 
 
 def _unified_issue(

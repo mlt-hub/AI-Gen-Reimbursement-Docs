@@ -106,6 +106,33 @@ def test_fpa_stability_ci_script_dry_run_shows_recommended_real_model_preset(cap
     assert payload["will_call_model"] is True
 
 
+def test_fpa_stability_ci_script_dry_run_shows_multi_uis_recommended_real_model_preset(capsys, tmp_path):
+    script = _load_script()
+    exit_code = script.main([
+        "--dry-run",
+        "--preset",
+        "multi-uis-real-model-recommended",
+        "--output-dir",
+        str(tmp_path),
+    ])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["suite"] == "real-model-recommended"
+    assert len(payload["fixture_paths"]) == 10
+    assert payload["configs"] == [{
+        "profile": "multi_uis",
+        "strategy": "ai_first",
+        "rule_set": "multi_uis_rs",
+    }]
+    assert payload["thresholds"] == {
+        "profile_quality_issue_count": 0,
+        "retryable_quality_issue_count": 0,
+        "blocking_retry_count": 0,
+    }
+    assert payload["will_call_model"] is True
+
+
 def test_fpa_stability_ci_script_dry_run_shows_multi_profile_real_model_preset(capsys, tmp_path):
     script = _load_script()
     exit_code = script.main([

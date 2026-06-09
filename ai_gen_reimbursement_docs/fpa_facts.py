@@ -15,6 +15,7 @@ UPDATE_KEYWORDS = ("编辑", "修改", "更新", "调整", "保存", "维护", "
 DELETE_KEYWORDS = ("删除", "移除", "作废")
 ENABLE_KEYWORDS = ("启用", "停用", "上架", "下架", "生效", "失效")
 OUTPUT_KEYWORDS = ("导出", "报表", "下载", "统计", "汇总", "生成文件")
+IMPORT_KEYWORDS = ("导入", "上传")
 EXTERNAL_SERVICE_HINTS = ("调用", "校验", "认证", "鉴权", "权限", "短信", "支付", "OCR", "消息推送")
 EXTERNAL_DATA_EVIDENCE = (
     "外部系统维护", "外部应用维护", "第三方系统维护", "外部维护",
@@ -87,7 +88,7 @@ def _extract_process_fact(
     query_only = operation == "query" and not _has_any(text, LOCAL_CHANGE_HINTS)
     produces_output = operation == "output"
     ordinary_service = _has_any(text, EXTERNAL_SERVICE_HINTS) and not external_evidence
-    changes_internal = operation in {"create", "update", "delete", "enable_disable", "maintain"}
+    changes_internal = operation in {"create", "update", "delete", "enable_disable", "import", "maintain"}
     evidence = [item for item in [operation_evidence, external_evidence] if item]
     if input_type and input_type not in evidence:
         evidence.append(f"input_type={input_type}")
@@ -111,6 +112,7 @@ def _operation(text: str) -> tuple[str, str]:
     for operation, keywords in (
         ("output", OUTPUT_KEYWORDS),
         ("query", QUERY_KEYWORDS),
+        ("import", IMPORT_KEYWORDS),
         ("delete", DELETE_KEYWORDS),
         ("create", CREATE_KEYWORDS),
         ("update", UPDATE_KEYWORDS),

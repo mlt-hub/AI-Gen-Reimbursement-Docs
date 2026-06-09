@@ -235,9 +235,10 @@ Web UI 检查全部通过
 
 当前不建议直接新增大功能。剩余工作应以真实模型样本和最小增量规则为主：
 
-1. 扩大 `multi_uis` 真实模型样本，覆盖界面开发、查询、导出、逻辑处理、多页面拆分等典型模块。
-2. 根据样本结果决定是否补少量 profile-specific quality checks；优先在公共质量门后追加小检查，不复制整套 `_explanation_quality_warnings`。
-3. 如果后续维护中持续出现 JSON-only 输出约束重复修改，再评估抽取 `json_output_contract` fragment。
+1. 已补充 `multi-uis-real-model-recommended` 稳定性 preset，使用 10 个 recommended fixture 扩大 `multi_uis` 真实模型样本，覆盖界面开发、查询、导出、导入、逻辑处理、多页面拆分等典型模块。
+2. 推荐样本复跑结果记录在 [`validation-runs/2026-06-09-multi-uis-real-model-recommended.md`](validation-runs/2026-06-09-multi-uis-real-model-recommended.md)，最终通过质量门：`profile_quality_issue_count=0`、`retryable_quality_issue_count=0`、`blocking_retry_count=0`。
+3. 本轮发现的问题集中在 deterministic review 口径，已通过 `multi_uis` 多界面证据识别和导入类 workload 分类修复，不新增 profile-specific `_explanation_quality_warnings`。
+4. 当前没有新增 `json_output_contract` fragment；如果后续维护中持续出现 JSON-only 输出约束重复修改，再评估抽取。
 
 ## 正式输出规则
 
