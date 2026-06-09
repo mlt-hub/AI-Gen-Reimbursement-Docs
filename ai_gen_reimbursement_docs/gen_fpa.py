@@ -4145,6 +4145,7 @@ def _fpa_result_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
         "data_start_row": _as_manifest_int(spec.get("data_start_row"), 3),
         "style_source_row": _as_manifest_int(spec.get("style_source_row"), 3),
         "columns": spec.get("columns", {}) if isinstance(spec.get("columns", {}), dict) else {},
+        "named_cells": spec.get("named_cells", {}) if isinstance(spec.get("named_cells", {}), dict) else {},
     }
 
 
@@ -4185,6 +4186,68 @@ def _fpa_column_by_header(
         if header and header in headers:
             return headers[header]
     return fallback_col
+
+
+def _fpa_manifest_named_cell(sheet_spec: dict[str, Any], key: str) -> str:
+    named_cells = sheet_spec.get("named_cells", {}) or {}
+    if not isinstance(named_cells, dict):
+        return ""
+    spec = named_cells.get(key, "")
+    if isinstance(spec, str):
+        return spec.strip()
+    if isinstance(spec, dict):
+        return str(spec.get("name", "") or "").strip()
+    return ""
+
+
+def _fpa_named_cell_target(wb, name: str, *, expected_sheet: str) -> tuple[str, int, int] | None:
+    if not name:
+        return None
+    defined_name = wb.defined_names.get(name)
+    if defined_name is None:
+        logger.warning("fpa manifest named_cells 指向的命名单元格不存在: %s", name)
+        return None
+    try:
+        destinations = list(defined_name.destinations)
+    except Exception as exc:
+        logger.warning("fpa manifest named_cells 无法解析命名单元格 %s: %s", name, exc)
+        return None
+    if len(destinations) != 1:
+        logger.warning("fpa manifest named_cells 仅支持单一目标命名单元格: %s", name)
+        return None
+    sheet_name, coord = destinations[0]
+    if sheet_name != expected_sheet:
+        logger.warning(
+            "fpa manifest named_cells 命名单元格 %s 指向 sheet %s，期望 %s",
+            name,
+            sheet_name,
+            expected_sheet,
+        )
+        return None
+    try:
+        min_col, min_row, max_col, max_row = openpyxl.utils.cell.range_boundaries(str(coord))
+    except ValueError:
+        logger.warning("fpa manifest named_cells 命名单元格 %s 坐标无效: %s", name, coord)
+        return None
+    if min_col != max_col or min_row != max_row:
+        logger.warning("fpa manifest named_cells 仅支持单个单元格目标: %s -> %s", name, coord)
+        return None
+    return sheet_name, min_row, min_col
+
+
+def _fpa_named_cell_row(wb, ws, sheet_spec: dict[str, Any], key: str, fallback: int) -> int:
+    name = _fpa_manifest_named_cell(sheet_spec, key)
+    target = _fpa_named_cell_target(wb, name, expected_sheet=ws.title) if name else None
+    return target[1] if target else fallback
+
+
+def _fpa_named_cell_address(wb, ws, sheet_spec: dict[str, Any], key: str) -> tuple[int, int] | None:
+    name = _fpa_manifest_named_cell(sheet_spec, key)
+    target = _fpa_named_cell_target(wb, name, expected_sheet=ws.title) if name else None
+    if target is None:
+        return None
+    _sheet_name, row, col = target
+    return row, col
 
 
 def _replace_fpa_formula_refs(formula: str, *, row: int, columns: dict[str, int]) -> str:
@@ -4249,7 +4312,7 @@ def generate_fpa_xlsx_from_md(
     _fpa_sheet = _get_system_config_value('fpa_sheet', sheet_spec["name"])
     ws = wb[_fpa_sheet if _fpa_sheet in wb.sheetnames else sheet_spec["name"]]
     header_row = sheet_spec["header_row"]
-    data_start_row = sheet_spec["data_start_row"]
+    data_start_row = _fpa_named_cell_row(wb, ws, sheet_spec, "data_start", sheet_spec["data_start_row"])
     style_source_row = sheet_spec["style_source_row"]
     headers = _fpa_header_map(ws, header_row)
     fpa_columns = {
@@ -4354,13 +4417,26 @@ def generate_fpa_xlsx_from_md(
                     c.alignment = fmt['alignment']
 
     last_data_row = data_start_row + len(fpa_rows) - 1
-    for col_idx in [
+    summary_total = _fpa_named_cell_address(wb, ws, sheet_spec, "summary_total")
+    summary_columns = [
         fpa_columns["formula_base"],
         fpa_columns["adjust"],
         fpa_columns["elements"],
         fpa_columns["formula_workload"],
         FPA_TOTAL_COLS - 1,
-    ]:
+    ]
+    if summary_total is not None:
+        summary_row, summary_col = summary_total
+        ws.cell(summary_row, summary_col).value = (
+            f"=SUM({openpyxl.utils.get_column_letter(fpa_columns['formula_workload'])}"
+            f"{data_start_row}:{openpyxl.utils.get_column_letter(fpa_columns['formula_workload'])}{last_data_row})"
+        )
+        summary_columns = [
+            col_idx
+            for col_idx in summary_columns
+            if col_idx not in {summary_col, fpa_columns["formula_workload"]}
+        ]
+    for col_idx in summary_columns:
         cell = ws.cell(1, col_idx)
         col_letter = openpyxl.utils.get_column_letter(col_idx)
         cell.value = f"=SUM({col_letter}{data_start_row}:{col_letter}{last_data_row})"
