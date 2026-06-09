@@ -150,8 +150,10 @@ FPA 结果写入器当前会读取 `fpa` manifest 的 `sheets.result`：
 - `data_start_row`：数据写入起始行。
 - `style_source_row`：生成行复制样式的来源行。
 - `columns`：按 manifest header 或模板表头定位关键列。
+- `named_cells.data_start`：可用 Excel 命名单元格定位数据起始行，优先级高于 `data_start_row`。
+- `named_cells.summary_total`：可用 Excel 命名单元格定位 FPA 工作量汇总公式写入位置，配置后接管默认 FPA 工作量汇总单元格。
 
-公式列会按当前模板表头定位，生成公式和汇总公式会跟随数据起始行变化。FPA 附录读取、命名单元格、复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 写入行为。
+公式列会按当前模板表头定位，生成公式和汇总公式会跟随数据起始行变化。当前命名单元格仅覆盖 result sheet 的数据起始和 FPA 工作量汇总位置；FPA 附录读取、其他复杂锚点、图片/文本框和跨 sheet 公式重写仍不是当前 manifest 写入行为。
 
 ### COSMIC 功能点拆分表
 
