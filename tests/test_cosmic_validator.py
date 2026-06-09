@@ -4,6 +4,7 @@ import json
 
 from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.cosmic_validator import (
+    global_cosmic_issue,
     validate_cosmic_item,
     validate_cosmic_items,
     write_cosmic_validation_json,
@@ -169,6 +170,28 @@ def test_empty_items_is_global_error():
 
     assert report.status == "blocked"
     assert [issue.code for issue in report.issues] == ["NO_COSMIC_ITEMS"]
+
+
+def test_generation_global_issue_is_preserved():
+    report = validate_cosmic_items(
+        [],
+        project_name="测试项目",
+        cfp_formula="x",
+        global_issues=[
+            global_cosmic_issue(
+                "error", "NO_API_KEY",
+                "未设置 API Key，未调用 AI 生成 COSMIC 拆分数据",
+                "api_key",
+            )
+        ],
+    )
+
+    assert report.status == "blocked"
+    assert [issue.code for issue in report.issues] == [
+        "NO_API_KEY",
+        "NO_COSMIC_ITEMS",
+    ]
+    assert report.summary["global_errors"] == 2
 
 
 def test_missing_cfp_formula_is_global_error():

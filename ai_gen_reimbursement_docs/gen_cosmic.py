@@ -17,6 +17,7 @@ from ai_gen_reimbursement_docs.cosmic_md import (
     export_empty_md, export_filled_md, fill_md_with_ai,
 )
 from ai_gen_reimbursement_docs.cosmic_validator import (
+    CosmicIssue,
     CosmicValidationReport,
     validate_cosmic_items,
     write_cosmic_validation_json,
@@ -142,6 +143,7 @@ def generate_cosmic_artifacts(
     modules: list | None = None,
     review_md_path: str = "",
     allow_draft_excel_output: bool = False,
+    global_issues: list[CosmicIssue] | None = None,
 ) -> CosmicGenerationResult:
     """Generate structured COSMIC draft, validation report and gated Excel outputs."""
     logger.info("第3.4步：校验 COSMIC 结构化草稿...")
@@ -150,6 +152,7 @@ def generate_cosmic_artifacts(
         items,
         project_name=project_name,
         cfp_formula=cfp_formula,
+        global_issues=global_issues,
     )
 
     validation_json_path = (

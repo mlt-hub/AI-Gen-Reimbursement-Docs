@@ -76,6 +76,15 @@ def _issue(
     )
 
 
+def global_cosmic_issue(
+    severity: IssueSeverity,
+    code: str,
+    message: str,
+    field: str = "",
+) -> CosmicIssue:
+    return _issue(severity, code, message, field, scope="global")
+
+
 def _status_from_issues(issues: list[CosmicIssue]) -> ValidationStatus:
     if any(issue.severity == "error" for issue in issues):
         return "blocked"
@@ -191,8 +200,9 @@ def validate_cosmic_items(
     *,
     project_name: str = "",
     cfp_formula: str = "",
+    global_issues: list[CosmicIssue] | None = None,
 ) -> CosmicValidationReport:
-    issues: list[CosmicIssue] = []
+    issues: list[CosmicIssue] = list(global_issues or [])
     if not items:
         issues.append(_issue(
             "error", "NO_COSMIC_ITEMS", "没有可送审的 COSMIC 功能过程",

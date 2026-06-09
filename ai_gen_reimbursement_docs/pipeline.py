@@ -717,6 +717,8 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     _, _cosmic_modules = init_cosmic_template_md(tree_md, project, init_md_path)
 
     cosmic_items = []
+    cosmic_global_issues = []
+    from ai_gen_reimbursement_docs.cosmic_validator import global_cosmic_issue
     if api_key:
         _activity("cosmic", "正在调用 AI 生成 COSMIC 拆分数据")
         from ai_gen_reimbursement_docs.cosmic_ai import (
@@ -725,16 +727,36 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
         user_cfg: dict = {}
         if meta_md and os.path.exists(meta_md):
             user_cfg = load_user_config_from_meta(meta_md)
-        cosmic_items = generate_cosmic_items(
-            modules=_cosmic_modules,
-            project_name=project,
-            api_key=api_key,
-            model=model,
-            base_url=base_url,
-            **user_cfg,
-        )
+        try:
+            cosmic_items = generate_cosmic_items(
+                modules=_cosmic_modules,
+                project_name=project,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                **user_cfg,
+            )
+        except Exception as exc:
+            logger.warning("COSMIC AI 生成失败: %s", exc)
+            cosmic_items = []
+            cosmic_global_issues.append(global_cosmic_issue(
+                "error", "AI_GENERATION_FAILED",
+                f"COSMIC AI 生成失败：{exc}",
+                "ai_generation",
+            ))
+        if not cosmic_items:
+            cosmic_global_issues.append(global_cosmic_issue(
+                "error", "AI_GENERATION_EMPTY",
+                "COSMIC AI 未返回可校验的功能过程",
+                "items",
+            ))
     else:
         logger.warning("未设置 API Key，无法生成 COSMIC 拆分数据")
+        cosmic_global_issues.append(global_cosmic_issue(
+            "error", "NO_API_KEY",
+            "未设置 API Key，未调用 AI 生成 COSMIC 拆分数据",
+            "api_key",
+        ))
 
     _cosmic_cfp = _read_cfp_formula_from_meta_md(meta_md)
     from ai_gen_reimbursement_docs.config_utils import (
@@ -752,6 +774,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
         modules=_cosmic_modules,
         review_md_path=filled_md_path,
         allow_draft_excel_output=load_gen_cosmic_allow_draft_excel_output(),
+        global_issues=cosmic_global_issues,
     )
 
     result.cosmic_xlsx = generation.formal_excel_path

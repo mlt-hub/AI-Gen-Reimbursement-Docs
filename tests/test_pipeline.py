@@ -271,6 +271,36 @@ class TestGenCosmic:
         assert os.path.exists(result.cosmic_validation_json)
         assert os.path.exists(result.cosmic_validation_report)
         assert result.cfp_total == 0
+        payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
+        issue_codes = [issue["code"] for issue in payload["issues"]]
+        assert "NO_API_KEY" in issue_codes
+        assert "NO_COSMIC_ITEMS" in issue_codes
+
+    def test_ai_generation_exception_is_reported(self, output_dir, test_excel, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
+
+        def raise_generation_error(**kwargs):
+            raise RuntimeError("mock cosmic failure")
+
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
+            raise_generation_error,
+        )
+
+        result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        assert result.cosmic_status == "blocked"
+        assert result.cosmic_formal_excel_written is False
+        payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
+        issue_codes = [issue["code"] for issue in payload["issues"]]
+        assert "AI_GENERATION_FAILED" in issue_codes
+        assert "AI_GENERATION_EMPTY" in issue_codes
+        assert "NO_COSMIC_ITEMS" in issue_codes
 
     def test_empty_movements_blocks_formal_excel(self, output_dir, test_excel, monkeypatch):
         monkeypatch.setattr(
