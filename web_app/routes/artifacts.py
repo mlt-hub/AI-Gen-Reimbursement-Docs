@@ -10,6 +10,17 @@ from fastapi.responses import FileResponse
 from ai_gen_reimbursement_docs.cosmic_confirmation import (
     apply_cosmic_confirmation_export_policy,
 )
+from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
+from ai_gen_reimbursement_docs.cosmic_validator import (
+    CosmicIssue,
+    CosmicValidationReport,
+    CosmicValidationResult,
+)
+from ai_gen_reimbursement_docs.cosmic_writer import write_cosmic_xlsx
+from ai_gen_reimbursement_docs.pipeline import (
+    _read_cfp_formula_from_meta_md,
+    _resolve_templates,
+)
 from web_app.dependencies import require_auth, require_local
 from web_app.services.artifact_service import find_log_dir
 from web_app.services.session_access import require_session_access
@@ -111,6 +122,116 @@ def _cosmic_draft_json_path(session_manager: SessionManager, session_id: str) ->
         return None
     matches = sorted(path for path in output_dir.rglob(standard_name) if path.is_file())
     return matches[0] if matches else None
+
+
+def _cosmic_template_path(session_manager: SessionManager, session_id: str) -> Path | None:
+    state = session_manager.get(session_id)
+    if state is None:
+        return None
+    custom_roots = [
+        root / "custom_templates"
+        for root in (state.output_dir, state.work_dir)
+        if root is not None
+    ]
+    for root in custom_roots:
+        candidate = root / "项目功能点拆分表-输出模板.xlsx"
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    default = _resolve_templates("", None).get("cosmic", "")
+    return Path(default) if default and Path(default).exists() else None
+
+
+def _cosmic_md_dir_from_draft(path: Path) -> Path:
+    return path.parent
+
+
+def _cosmic_doc_dir_from_draft(path: Path) -> Path:
+    return _cosmic_md_dir_from_draft(path).parent / "cosmic文档"
+
+
+def _cosmic_meta_md_path(md_dir: Path) -> Path:
+    filled = md_dir / "0.4.gen-basedata-AI填充-录入文档元数据.md"
+    if filled.exists():
+        return filled
+    return md_dir / "0.2.gen-basedata-录入文档元数据-模板.md"
+
+
+def _issue_from_dict(data: dict) -> CosmicIssue:
+    return CosmicIssue(
+        severity=str(data.get("severity") or "info"),
+        code=str(data.get("code") or ""),
+        message=str(data.get("message") or ""),
+        field=str(data.get("field") or ""),
+        module_path=str(data.get("module_path") or ""),
+        process=str(data.get("process") or ""),
+        movement_order=data.get("movement_order") if isinstance(data.get("movement_order"), int) else None,
+        scope=str(data.get("scope") or "item"),
+        details=data.get("details") if isinstance(data.get("details"), dict) else {},
+    )
+
+
+def _cosmic_report_from_payload(payload: dict) -> CosmicValidationReport:
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise HTTPException(400, "COSMIC JSON 缺少 items")
+
+    review_items = payload.get("review_items")
+    if not isinstance(review_items, list):
+        review_items = []
+    issues_by_item: dict[int, list[CosmicIssue]] = {}
+    global_issues: list[CosmicIssue] = []
+    for raw_issue in review_items:
+        if not isinstance(raw_issue, dict):
+            continue
+        issue = _issue_from_dict(raw_issue)
+        item_index = raw_issue.get("item_index")
+        if isinstance(item_index, int):
+            issues_by_item.setdefault(item_index, []).append(issue)
+        else:
+            global_issues.append(issue)
+
+    results: list[CosmicValidationResult] = []
+    for index, raw_item in enumerate(items):
+        if not isinstance(raw_item, dict):
+            continue
+        movements = [
+            DataMovement(
+                order=int(raw_movement.get("order") or movement_index + 1),
+                sub_process=str(raw_movement.get("sub_process") or ""),
+                move_type=str(raw_movement.get("move_type") or ""),
+                data_group=str(raw_movement.get("data_group") or ""),
+                data_attrs=str(raw_movement.get("data_attrs") or ""),
+                reuse=str(raw_movement.get("reuse") or "新增"),
+            )
+            for movement_index, raw_movement in enumerate(raw_item.get("movements") or [])
+            if isinstance(raw_movement, dict)
+        ]
+        item = CosmicItem(
+            project=str(raw_item.get("project") or payload.get("project") or ""),
+            module_l1=str(raw_item.get("module_l1") or ""),
+            module_l2=str(raw_item.get("module_l2") or ""),
+            module_l3=str(raw_item.get("module_l3") or ""),
+            user=str(raw_item.get("user") or ""),
+            trigger=str(raw_item.get("trigger") or ""),
+            process=str(raw_item.get("process") or ""),
+            movements=movements,
+        )
+        results.append(CosmicValidationResult(
+            item=item,
+            status=str(raw_item.get("status") or "passed"),
+            issues=issues_by_item.get(index, []),
+            basis=raw_item.get("basis") if isinstance(raw_item.get("basis"), dict) else {},
+        ))
+
+    return CosmicValidationReport(
+        project=str(payload.get("project") or ""),
+        status=str(payload.get("status") or ""),
+        results=results,
+        summary=payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+        issue_codes=payload.get("issue_codes") if isinstance(payload.get("issue_codes"), dict) else {},
+        cfp_basis=payload.get("cfp_basis") if isinstance(payload.get("cfp_basis"), dict) else {},
+        issues=global_issues,
+    )
 
 
 def _record_function_points(record: dict) -> list[str]:
@@ -387,6 +508,63 @@ def create_router(session_manager: SessionManager) -> APIRouter:
             "session_id": session_id,
             "filename": path.name,
             "payload": payload,
+        }
+
+    @router.post("/api/sessions/{session_id}/cosmic/export-confirmed")
+    async def export_confirmed_cosmic_excel(
+        session_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        """按已确认 COSMIC JSON 再导出 Excel，不覆盖原生成产物。"""
+        require_session_access(session_manager, session_id, request, user)
+        draft_path = _cosmic_draft_json_path(session_manager, session_id)
+        if draft_path is None:
+            raise HTTPException(404, "COSMIC JSON 草稿尚未生成")
+
+        confirmation_path = _cosmic_confirmation_path(session_manager, session_id)
+        source_path = confirmation_path if confirmation_path.exists() else draft_path
+        try:
+            payload = json.loads(source_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(500, "COSMIC 确认 JSON 损坏") from exc
+        payload = apply_cosmic_confirmation_export_policy(payload)
+        formal_policy = payload.get("export_policy", {}).get("formal_excel", {})
+        formal_status = str(formal_policy.get("status") or "")
+        if formal_status not in {"allowed", "allowed_after_confirmation"}:
+            raise HTTPException(409, str(formal_policy.get("reason") or "COSMIC 确认状态不允许导出正式 Excel"))
+
+        template_path = _cosmic_template_path(session_manager, session_id)
+        if template_path is None:
+            raise HTTPException(404, "未找到 COSMIC Excel 输出模板")
+        report = _cosmic_report_from_payload(payload)
+        md_dir = _cosmic_md_dir_from_draft(draft_path)
+        doc_dir = _cosmic_doc_dir_from_draft(draft_path)
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        output_path = doc_dir / "项目功能点拆分表-确认后.xlsx"
+        cfp_formula = _read_cfp_formula_from_meta_md(str(_cosmic_meta_md_path(md_dir)))
+        saved_path = Path(write_cosmic_xlsx(
+            str(template_path),
+            str(output_path),
+            report,
+            cfp_formula=cfp_formula,
+        ))
+        file_info = {
+            "label": "项目功能点拆分表（确认后）",
+            "path": str(saved_path),
+            "size_kb": round(saved_path.stat().st_size / 1024),
+            "is_temp": "_TEMP" in saved_path.name,
+        }
+        state = session_manager.get(session_id)
+        if state is not None and not any(item.get("path") == file_info["path"] for item in state.done_files):
+            session_manager.set_done_files(session_id, [*state.done_files, file_info])
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "filename": saved_path.name,
+            "path": str(saved_path),
+            "file": file_info,
+            "export_policy": payload.get("export_policy", {}),
         }
 
     return router

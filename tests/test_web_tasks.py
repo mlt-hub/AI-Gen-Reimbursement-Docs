@@ -1543,6 +1543,118 @@ def test_cosmic_confirmation_get_missing_returns_404(monkeypatch, tmp_path):
     server.session_manager.cleanup_download(session_id)
 
 
+def _cosmic_export_payload(*, confirmation_status: str = "confirmed") -> dict:
+    return {
+        "project": "测试项目",
+        "status": "review_required",
+        "summary": {},
+        "issue_codes": {},
+        "items": [
+            {
+                "project": "测试项目",
+                "module_l1": "业务",
+                "module_l2": "管理",
+                "module_l3": "客户",
+                "user": "发起者：客户|接收者：客户",
+                "trigger": "用户触发",
+                "process": "维护客户",
+                "status": "review_required",
+                "movements": [
+                    {
+                        "order": 1,
+                        "sub_process": "提交客户信息",
+                        "move_type": "E",
+                        "data_group": "客户信息",
+                        "data_attrs": "客户名称",
+                        "reuse": "新增",
+                    },
+                    {
+                        "order": 2,
+                        "sub_process": "保存客户信息",
+                        "move_type": "W",
+                        "data_group": "客户信息",
+                        "data_attrs": "客户名称",
+                        "reuse": "新增",
+                    },
+                ],
+            }
+        ],
+        "review_items": [
+            {
+                "review_id": "item::0::GENERIC_FUNCTION_USER::user::",
+                "scope": "item",
+                "item_index": 0,
+                "severity": "warning",
+                "code": "GENERIC_FUNCTION_USER",
+                "message": "功能用户待确认",
+                "field": "user",
+                "confirmation": {
+                    "status": confirmation_status,
+                    "decision": confirmation_status if confirmation_status != "unconfirmed" else "",
+                    "note": "",
+                    "confirmed_by": "",
+                    "confirmed_at": "2026-06-09T00:00:00Z" if confirmation_status != "unconfirmed" else "",
+                },
+            }
+        ],
+    }
+
+
+def test_cosmic_confirmed_export_writes_formal_excel(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_export_confirmed"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    draft_path.write_text(json.dumps(_cosmic_export_payload(), ensure_ascii=False), encoding="utf-8")
+    confirmation_path = tmp_path / "cosmic-confirmation.json"
+    confirmation_path.write_text(json.dumps(_cosmic_export_payload(), ensure_ascii=False), encoding="utf-8")
+    template_path = tmp_path / "项目功能点拆分表-输出模板.xlsx"
+    template_path.write_bytes(b"template")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    def fake_write_cosmic_xlsx(template, output, report, *, meta=None, cfp_formula=""):
+        assert template == str(template_path)
+        assert report.project == "测试项目"
+        Path(output).write_bytes(b"xlsx")
+        return output
+
+    monkeypatch.setattr("web_app.routes.artifacts._cosmic_template_path", lambda *_: template_path)
+    monkeypatch.setattr("web_app.routes.artifacts.write_cosmic_xlsx", fake_write_cosmic_xlsx)
+
+    resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["filename"] == "项目功能点拆分表-确认后.xlsx"
+    assert Path(data["path"]).exists()
+    assert data["export_policy"]["formal_excel"]["status"] == "allowed_after_confirmation"
+    state = server.session_manager.get(session_id)
+    assert state is not None
+    assert any(item["label"] == "项目功能点拆分表（确认后）" for item in state.done_files)
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_confirmed_export_blocks_unconfirmed_items(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_export_unconfirmed"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    draft_path.write_text(json.dumps(_cosmic_export_payload(confirmation_status="unconfirmed"), ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "cosmic-confirmation.json").write_text(
+        json.dumps(_cosmic_export_payload(confirmation_status="unconfirmed"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert resp.status_code == 409
+    assert "未确认" in resp.json()["detail"]
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_cosmic_draft_can_be_loaded_from_session_artifact(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="alice")
     session_id = "cosmic_draft_artifact"
@@ -1642,4 +1754,114 @@ def test_cosmic_draft_requires_session_access(monkeypatch, tmp_path):
     resp = client.get(f"/api/sessions/{session_id}/cosmic/draft")
 
     assert resp.status_code == 404
+    server.session_manager.cleanup_download(session_id)
+
+
+def _cosmic_preview_payload(*, confirmation_status: str) -> dict:
+    return {
+        "project": "测试项目",
+        "status": "review_required",
+        "summary": {"review_required": 1},
+        "issue_codes": {"GENERIC_FUNCTION_USER": 1},
+        "review_items": [
+            {
+                "review_id": "item::0::GENERIC_FUNCTION_USER::user::",
+                "scope": "item",
+                "item_index": 0,
+                "severity": "warning",
+                "code": "GENERIC_FUNCTION_USER",
+                "message": "功能用户待确认",
+                "field": "user",
+                "confirmation": {
+                    "status": confirmation_status,
+                    "decision": confirmation_status if confirmation_status != "unconfirmed" else "",
+                    "note": "",
+                    "confirmed_by": "",
+                    "confirmed_at": "",
+                },
+            }
+        ],
+        "preview_rows": [],
+        "items": [
+            {
+                "project": "测试项目",
+                "module_l1": "业务",
+                "module_l2": "管理",
+                "module_l3": "客户管理",
+                "user": "发起者：操作员|接收者：客户管理",
+                "trigger": "用户提交",
+                "process": "维护客户",
+                "status": "review_required",
+                "movements": [
+                    {
+                        "order": 1,
+                        "sub_process": "提交客户信息",
+                        "move_type": "E",
+                        "data_group": "客户信息",
+                        "data_attrs": "客户名称",
+                        "reuse": "新增",
+                    },
+                    {
+                        "order": 2,
+                        "sub_process": "保存客户信息",
+                        "move_type": "W",
+                        "data_group": "客户信息",
+                        "data_attrs": "客户名称",
+                        "reuse": "新增",
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def test_cosmic_confirmed_export_writes_excel_and_done_file(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_export_confirmed"
+    work_dir = tmp_path
+    md_dir = work_dir / "output" / "md"
+    md_dir.mkdir(parents=True)
+    draft_path = md_dir / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    payload = _cosmic_preview_payload(confirmation_status="confirmed")
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    (work_dir / "cosmic-confirmation.json").write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=work_dir)
+
+    resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    output_path = Path(data["path"])
+    assert output_path.name == "项目功能点拆分表-确认后.xlsx"
+    assert output_path.exists()
+    state = server.session_manager.get(session_id)
+    assert state is not None
+    assert any(item["path"] == str(output_path) for item in state.done_files)
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_confirmed_export_blocks_unconfirmed_payload(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_export_unconfirmed"
+    work_dir = tmp_path
+    md_dir = work_dir / "output" / "md"
+    md_dir.mkdir(parents=True)
+    payload = _cosmic_preview_payload(confirmation_status="unconfirmed")
+    (md_dir / "3.3.gen-cosmic-AI填充-COSMIC.json").write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (work_dir / "cosmic-confirmation.json").write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=work_dir)
+
+    resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert resp.status_code == 409
+    assert not (work_dir / "output" / "cosmic文档" / "项目功能点拆分表-确认后.xlsx").exists()
     server.session_manager.cleanup_download(session_id)

@@ -21,7 +21,7 @@
 6. 根据 `passed/review_required/blocked` 决定是否写正式 Excel 或草稿 Excel。
 7. 只有正式 Excel 写入成功时，才写入 CFP 总和，供后续 `gen-list` 使用。
 
-批处理阶段不再用“目标 Excel 路径已设置”表示 COSMIC 成功。`/preview/cosmic` 已提供基于结构化 JSON 的最小审阅页；会话页 `/sessions/:sessionId/cosmic/preview` 会自动读取生成任务产出的 COSMIC JSON 草稿，并可手动读取和保存确认 JSON。当前已能根据确认状态刷新 `export_policy`，但尚未实际执行确认后的 Excel 再导出动作。
+批处理阶段不再用“目标 Excel 路径已设置”表示 COSMIC 成功。`/preview/cosmic` 已提供基于结构化 JSON 的最小审阅页；会话页 `/sessions/:sessionId/cosmic/preview` 会自动读取生成任务产出的 COSMIC JSON 草稿，并可手动读取和保存确认 JSON。当前已能根据确认状态刷新 `export_policy`，并在策略允许时通过会话端点导出 `项目功能点拆分表-确认后.xlsx`，不覆盖原生成产物。
 
 ## 流水线入口
 
@@ -268,11 +268,11 @@ AI 调用限制：
 1. 边界识别不足：prompt 已加入送审口径硬约束，内部技术交互、控制命令、部分纯数据运算、错误/确认消息和部分非功能事项已有待审 warning；但复杂边界和复杂非功能事项仍主要依赖 AI 自觉和后续人工确认。
 2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；但尚未自动修复到最小颗粒度模块，也未接入业务角色映射表。
 3. CFP 口径仍需配置化：缺公式已阻断，但 `复用`、`利旧`、优化未改子过程填 `0` 仍未完整工程化。
-4. 预览导出闭环未完成：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口和确认 JSON 接口；确认状态会刷新导出策略，但确认后的 Excel 再导出动作尚未执行化。
+4. 预览导出闭环仍需继续增强：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口、确认 JSON 接口和确认后 Excel 再导出接口；后续仍需把确认后产物下载、历史记录和正式 CFP 汇总更新策略进一步产品化。
 5. 解析格式敏感：`parse_md_to_items` 仍保留给兼容或排查场景，不适合承载复杂人工编辑。
 6. 送审规则未完整工程化：软评填报参考手册中的启发式规则尚未完整进入 prompt、结构化校验和结果状态。
 
-后续如果继续推进 COSMIC 审阅，应优先把确认后的 Excel 再导出动作串成闭环；更复杂的人工编辑和自动过滤仍应基于当前结构化 JSON 契约扩展。
+后续如果继续推进 COSMIC 审阅，应优先把确认后产物下载、历史记录和正式 CFP 汇总更新策略串成闭环；更复杂的人工编辑和自动过滤仍应基于当前结构化 JSON 契约扩展。
 
 ## 第一阶段实施状态
 
@@ -898,7 +898,7 @@ md/3.4.gen-cosmic-校验报告.md
 | error | `FIRST_MOVE_NOT_ENTRY` | `movements[0].move_type` | 1 | 第一个子过程必须为输入 E |  |
 ```
 
-报告中不使用“功能点类型”“说明详情”等 FPA 禁用同义词。`/preview/cosmic` 已提供基于结构化 JSON 的最小审阅页，用户可加载 COSMIC JSON 草稿、查看功能过程/数据移动/审阅项、编辑人工确认状态和备注，并导出带确认结果的 JSON。浏览器会按当前项目和 `review_id` 集合本地恢复确认状态；后端 session 接口 `GET /api/sessions/{session_id}/cosmic/draft` 会读取任务输出目录内的 COSMIC JSON 草稿，`GET/PUT /api/sessions/{session_id}/cosmic/confirmation` 可保存和读取 `cosmic-confirmation.json`。会话预览页会自动读取任务草稿，并按 `review_id` 合并已保存确认。页面用户可见文案必须遵循 [`docs/fpa/result-review-terminology.md`](../fpa/result-review-terminology.md) 中的 COSMIC 审阅术语映射。
+报告中不使用“功能点类型”“说明详情”等 FPA 禁用同义词。`/preview/cosmic` 已提供基于结构化 JSON 的最小审阅页，用户可加载 COSMIC JSON 草稿、查看功能过程/数据移动/审阅项、编辑人工确认状态和备注，并导出带确认结果的 JSON。浏览器会按当前项目和 `review_id` 集合本地恢复确认状态；后端 session 接口 `GET /api/sessions/{session_id}/cosmic/draft` 会读取任务输出目录内的 COSMIC JSON 草稿，`GET/PUT /api/sessions/{session_id}/cosmic/confirmation` 可保存和读取 `cosmic-confirmation.json`，`POST /api/sessions/{session_id}/cosmic/export-confirmed` 会在 `export_policy.formal_excel.status=allowed/allowed_after_confirmation` 时写出 `cosmic文档/项目功能点拆分表-确认后.xlsx`。会话预览页会自动读取任务草稿，并按 `review_id` 合并已保存确认。页面用户可见文案必须遵循 [`docs/fpa/result-review-terminology.md`](../fpa/result-review-terminology.md) 中的 COSMIC 审阅术语映射。
 
 ### CFP 处理
 

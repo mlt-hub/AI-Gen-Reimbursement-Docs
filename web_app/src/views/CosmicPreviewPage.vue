@@ -16,6 +16,9 @@
           <button v-if="sessionId" class="btn-secondary" type="button" :disabled="!report || backendSaving" @click="saveSessionConfirmation">
             {{ backendSaving ? '保存中...' : '保存到会话' }}
           </button>
+          <button v-if="sessionId" class="btn-secondary" type="button" :disabled="!canExportConfirmedExcel || backendExporting" @click="exportConfirmedExcel">
+            {{ backendExporting ? '导出中...' : '导出确认后 Excel' }}
+          </button>
           <button class="btn-secondary" type="button" :disabled="!report" @click="exportReport">导出确认 JSON</button>
           <button class="btn-secondary" type="button" :disabled="!report" @click="clearReport">清空</button>
         </div>
@@ -244,6 +247,13 @@ interface CosmicJsonResponse {
   payload: CosmicReport
 }
 
+interface CosmicExportResponse {
+  ok: boolean
+  filename: string
+  path: string
+  export_policy?: CosmicReport['export_policy']
+}
+
 const route = useRoute()
 const report = ref<CosmicReport | null>(null)
 const error = ref('')
@@ -252,6 +262,7 @@ const backendSyncStatus = ref('')
 const backendSyncError = ref('')
 const backendLoading = ref(false)
 const backendSaving = ref(false)
+const backendExporting = ref(false)
 
 const sessionId = computed(() => {
   const routeSession = route.params.sessionId
@@ -278,6 +289,11 @@ const confirmationSummaryText = computed(() => {
   const unconfirmed = summary?.unconfirmed_review_item_count ?? report.value?.export_policy?.unconfirmed_review_item_count ?? total
   if (!total) return '不需要'
   return unconfirmed ? `未确认 ${unconfirmed}/${total}` : `已处理 ${total}/${total}`
+})
+
+const canExportConfirmedExcel = computed(() => {
+  const status = report.value?.export_policy?.formal_excel?.status || ''
+  return status === 'allowed' || status === 'allowed_after_confirmation'
 })
 
 onMounted(() => {
@@ -454,6 +470,27 @@ async function saveSessionConfirmation() {
     backendSyncError.value = normalizeApiError(err)
   } finally {
     backendSaving.value = false
+  }
+}
+
+async function exportConfirmedExcel() {
+  if (!sessionId.value || !report.value) return
+  backendExporting.value = true
+  backendSyncError.value = ''
+  backendSyncStatus.value = ''
+  try {
+    const response = await apiFetch<CosmicExportResponse>(
+      `/api/sessions/${encodeURIComponent(sessionId.value)}/cosmic/export-confirmed`,
+      { method: 'POST' },
+    )
+    if (response.export_policy) {
+      report.value.export_policy = response.export_policy
+    }
+    backendSyncStatus.value = `已导出 ${response.filename}`
+  } catch (err) {
+    backendSyncError.value = normalizeApiError(err)
+  } finally {
+    backendExporting.value = false
   }
 }
 
