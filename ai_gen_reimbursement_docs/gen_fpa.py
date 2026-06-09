@@ -78,7 +78,7 @@ FPA_PROJECT_DESCRIPTION_MAX_CHARS = 5000
 EXPLANATION_TABLE_COUNT_DETAIL_HINTS = ("数据库表个数=", "表个数=", "表数量", "1张表", "1 张表", "1个表", "1 个表")
 EXPLANATION_SYSTEM_ELEMENT_MARKERS = ("表", "服务", "接口", "文件", "系统", "平台")
 EXPLANATION_INLINE_SYSTEM_ELEMENT_MARKERS = ("表", "服务", "接口", "文件", "平台")
-EXPLANATION_SYSTEM_ELEMENT_SKIP_HINTS = ("未识别到", "未明确", "无明确", "没有明确")
+EXPLANATION_SYSTEM_ELEMENT_SKIP_HINTS = ("未识别到", "未明确", "无明确", "没有明确", "未涉及")
 EXPLANATION_INLINE_SYSTEM_ELEMENT_SKIP_HINTS = (
     "按后台数据库变更的表个数计量",
     "按数据库表个数计量",
@@ -87,6 +87,15 @@ EXPLANATION_INLINE_SYSTEM_ELEMENT_SKIP_HINTS = (
     "输出格式化文件",
     "内部逻辑文件",
     "外部接口文件",
+    "接口开发行",
+    "界面开发行",
+)
+BROAD_SYSTEM_ELEMENT_CANDIDATES = (
+    "服务或外部系统",
+    "外部接口",
+    "外部文件",
+    "接口开发",
+    "界面开发",
 )
 BASIS_TYPE_HINTS = {
     "EI": ("外部输入", "修改或增加界面", "插入、修改、删除", "输入界面"),
@@ -327,12 +336,30 @@ def _candidate_system_elements(system_element_text: str) -> list[str]:
         item = re.sub(r"(?:用于|支撑|完成|返回|提供).*$", "", item).strip(" 。.：:（）()[]【】")
         cn_match = re.search(r"[\u4e00-\u9fffA-Za-z0-9_（）()·-]{2,40}(?:表|服务|接口|文件|系统|平台)", item)
         if cn_match:
-            candidates.append(cn_match.group(0).strip())
+            candidate = _normalize_system_element_candidate(cn_match.group(0))
+            if candidate:
+                candidates.append(candidate)
             continue
         latin_match = re.search(r"[A-Za-z][A-Za-z0-9_./-]{1,}", item)
         if latin_match:
-            candidates.append(latin_match.group(0))
+            candidate = _normalize_system_element_candidate(latin_match.group(0))
+            if candidate:
+                candidates.append(candidate)
     return list(dict.fromkeys(candidates))
+
+
+def _normalize_system_element_candidate(candidate: str) -> str:
+    clean = str(candidate or "").strip(" 。.：:（）()[]【】")
+    if not clean:
+        return ""
+    clean = re.sub(r"[、,，/]*(?:EI|EQ|EO|ILF|EIF)\b.*$", "", clean, flags=re.IGNORECASE).strip(" 、,，/。.")
+    if not clean or clean.upper() in VALID_FPA_TYPES:
+        return ""
+    if any(hint in clean for hint in BROAD_SYSTEM_ELEMENT_CANDIDATES):
+        return ""
+    if "或" in clean and any(marker in clean for marker in EXPLANATION_SYSTEM_ELEMENT_MARKERS):
+        return ""
+    return clean
 
 
 def _non_system_element_lines(explanation: str) -> list[str]:
@@ -376,11 +403,15 @@ def _candidate_inline_system_elements(explanation_text: str) -> list[str]:
             item,
         )
         if cn_match:
-            candidates.append(cn_match.group(0).strip())
+            candidate = _normalize_system_element_candidate(cn_match.group(0))
+            if candidate:
+                candidates.append(candidate)
             continue
         latin_match = re.search(r"[A-Za-z][A-Za-z0-9_./-]{1,}", item)
         if latin_match:
-            candidates.append(latin_match.group(0))
+            candidate = _normalize_system_element_candidate(latin_match.group(0))
+            if candidate:
+                candidates.append(candidate)
     return list(dict.fromkeys(candidates))
 
 
@@ -822,6 +853,13 @@ def _normalize_ai_fpa_name_prefix(name: str, group: dict[str, object]) -> str:
     return f"{prefix}-{suffix}" if suffix else prefix
 
 
+def _normalize_ai_fpa_name_connectors(name: str) -> str:
+    clean_name = str(name or "").strip()
+    if not clean_name:
+        return clean_name
+    return re.sub(r"_(?=(?:界面开发|接口开发)$)", "-", clean_name)
+
+
 def _normalize_ai_fpa_rows_for_l3(
     *,
     group: dict[str, object],
@@ -872,6 +910,20 @@ def _normalize_ai_fpa_rows_for_l3(
         row_warnings: list[str] = []
         row_hits: list[dict[str, object]] = []
         explanation = str(raw.get("explanation", "") or raw.get("计算依据说明", "") or "").strip()
+        connector_normalized_name = _normalize_ai_fpa_name_connectors(name)
+        if connector_normalized_name != name:
+            warning = f"{_group_tag(group)} AI 行名称连接符已规范化: {name} -> {connector_normalized_name}"
+            warnings.append(warning)
+            row_warnings.append(warning)
+            row_hits.append({
+                "hit_object": name,
+                "rule_id": "postprocess.ai_name_connector",
+                "rule_desc": "FPA 行名称中界面开发/接口开发后缀前应使用短横线连接。",
+                "suggested_type": "",
+                "adopted": "是",
+                "warnings": [warning],
+            })
+            name = connector_normalized_name
         normalized_name = profile.normalize_output_name(name, explanation)
         if normalized_name != name:
             warning = f"{_group_tag(group)} AI 行名称不符合 {profile.name} 口径，已规范化: {name} -> {normalized_name}"
