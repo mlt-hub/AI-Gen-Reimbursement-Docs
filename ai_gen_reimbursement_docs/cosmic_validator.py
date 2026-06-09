@@ -25,6 +25,11 @@ _DATA_OPERATION_WORDS = {
     "格式化", "校验", "验证", "分析", "统计", "计算", "汇总", "转换",
     "排序计算", "数据清洗", "连接数据库", "连接服务器", "建立容器",
 }
+_NON_FUNCTIONAL_SCOPE_WORDS = {
+    "非功能", "系统迁移", "数据迁移", "多系统联调", "联调", "前端适配",
+    "软硬件环境", "环境扩容", "服务器扩容", "资源扩容", "架构改造",
+    "组件改造", "组件升级", "性能优化", "安全加固", "部署改造",
+}
 
 
 @dataclass
@@ -190,6 +195,23 @@ def is_generic_function_user(item: CosmicItem) -> bool:
     return bool(_function_user_basis(item).get("requires_review"))
 
 
+def _process_semantic_findings(item: CosmicItem) -> list[dict[str, object]]:
+    text = " ".join([
+        item.module_l1 or "",
+        item.module_l2 or "",
+        item.module_l3 or "",
+        item.process or "",
+    ])
+    matched = _matched_words(text, _NON_FUNCTIONAL_SCOPE_WORDS)
+    if not matched:
+        return []
+    return [{
+        "code": "NON_FUNCTIONAL_SCOPE",
+        "matched_terms": matched,
+        "description": "功能过程或模块路径疑似非功能内容或技术改造事项，通常不应拆成 COSMIC 功能规模",
+    }]
+
+
 def _movement_semantic_findings(movement) -> list[dict[str, object]]:
     text = " ".join([
         str(getattr(movement, "sub_process", "") or ""),
@@ -224,6 +246,7 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
     issues: list[CosmicIssue] = []
     basis = {
         "function_user": _function_user_basis(item),
+        "process_semantics": _process_semantic_findings(item),
         "movement_semantics": [],
     }
 
@@ -251,6 +274,13 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
             "warning", "GENERIC_FUNCTION_USER",
             "功能用户未能对应三级模块、最小颗粒度模块或元数据规则结果",
             "user", item=item,
+        ))
+
+    for finding in basis["process_semantics"]:
+        issues.append(_issue(
+            "warning", finding["code"],
+            "疑似非功能内容或技术改造事项，需确认是否应进入 COSMIC 功能规模",
+            "process", item=item,
         ))
 
     if len(item.movements) < 2:

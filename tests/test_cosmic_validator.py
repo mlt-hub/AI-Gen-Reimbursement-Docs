@@ -153,6 +153,19 @@ def test_data_operation_only_movement_requires_review():
     assert result.basis["movement_semantics"][0]["code"] == "DATA_OPERATION_ONLY_MOVEMENT"
 
 
+def test_non_functional_scope_requires_review():
+    result = validate_cosmic_item(_item(
+        module_l3="服务器扩容",
+        process="完成系统迁移和架构改造",
+        user="发起者：服务器扩容|接收者：系统管理",
+    ))
+
+    assert "NON_FUNCTIONAL_SCOPE" in _codes(result)
+    assert result.status == "review_required"
+    assert result.basis["process_semantics"][0]["code"] == "NON_FUNCTIONAL_SCOPE"
+    assert "系统迁移" in result.basis["process_semantics"][0]["matched_terms"]
+
+
 def test_error_wins_over_warning():
     result = validate_cosmic_item(
         _item(trigger="", movements=[_movement(1, "E", data_attrs=""), _movement(2, "X")])
