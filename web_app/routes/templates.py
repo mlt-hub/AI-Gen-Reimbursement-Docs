@@ -9,6 +9,7 @@ from web_app.services.template_service import (
     delete_imported_spec_template,
     import_spec_template_upload,
     list_imported_spec_templates,
+    update_imported_spec_template_metadata,
     resolve_imported_spec_template_file,
 )
 
@@ -129,6 +130,25 @@ async def preview_imported_spec_template(
         raise HTTPException(404, "模板草稿不存在")
     except Exception as exc:
         raise HTTPException(400, f"模板草稿预览失败: {exc}") from exc
+
+
+@router.put("/api/templates/spec/imported/{import_id}/metadata")
+async def update_imported_spec_template_metadata_route(
+    request: Request,
+    import_id: str,
+    payload: dict,
+    _user: str = Depends(require_auth),
+):
+    """更新已导入需求说明书模板草稿的名称、备注和确认状态。"""
+    if not is_local_mode(request):
+        raise HTTPException(403, "Word 模板草稿只能由本机管理员管理")
+    try:
+        metadata = update_imported_spec_template_metadata(config_dir(), import_id, payload)
+    except FileNotFoundError:
+        raise HTTPException(404, "模板草稿不存在")
+    except Exception as exc:
+        raise HTTPException(400, f"模板草稿元数据更新失败: {exc}") from exc
+    return {"id": import_id, "metadata": metadata}
 
 
 @router.get("/api/templates/spec/imported/{import_id}/{filename}")

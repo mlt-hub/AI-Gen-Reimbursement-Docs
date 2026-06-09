@@ -1,7 +1,9 @@
 import glob
+import json
 import os
 import re
 import shutil
+import time
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -106,9 +108,15 @@ def list_imported_spec_templates(target_root: Path) -> list[dict[str, Any]]:
             continue
 
         validation = validate_output_template("spec", str(template_path))
+        metadata = read_imported_spec_template_metadata(target_root, item_dir.name)
         stat = template_path.stat()
         items.append({
             "id": item_dir.name,
+            "display_name": metadata.get("display_name") or item_dir.name,
+            "note": metadata.get("note", ""),
+            "confirmed": bool(metadata.get("confirmed", False)),
+            "confirmed_at": metadata.get("confirmed_at", ""),
+            "updated_at": metadata.get("updated_at", ""),
             "template_path": str(template_path),
             "manifest_path": str(manifest_path),
             "template_filename": template_path.name,
@@ -126,13 +134,81 @@ def list_imported_spec_templates(target_root: Path) -> list[dict[str, Any]]:
     return items
 
 
+def read_imported_spec_template_metadata(target_root: Path, import_id: str) -> dict[str, Any]:
+    item_dir = _resolve_imported_spec_template_dir(target_root, import_id)
+    metadata_path = item_dir / "metadata.json"
+    if not metadata_path.exists():
+        return _default_imported_spec_template_metadata(import_id)
+    try:
+        data = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception:
+        return _default_imported_spec_template_metadata(import_id)
+    if not isinstance(data, dict):
+        return _default_imported_spec_template_metadata(import_id)
+    default = _default_imported_spec_template_metadata(import_id)
+    default.update({
+        key: data.get(key, default[key])
+        for key in default
+    })
+    return default
+
+
+def update_imported_spec_template_metadata(
+    target_root: Path,
+    import_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    item_dir = _resolve_imported_spec_template_dir(target_root, import_id)
+    current = read_imported_spec_template_metadata(target_root, import_id)
+    now = str(int(time.time()))
+
+    if "display_name" in payload:
+        display_name = str(payload.get("display_name") or "").strip()
+        current["display_name"] = display_name or import_id
+    if "note" in payload:
+        current["note"] = str(payload.get("note") or "").strip()
+    if "confirmed" in payload:
+        confirmed = bool(payload.get("confirmed"))
+        previous = bool(current.get("confirmed", False))
+        current["confirmed"] = confirmed
+        if confirmed and not previous:
+            current["confirmed_at"] = now
+        if not confirmed:
+            current["confirmed_at"] = ""
+
+    current["updated_at"] = now
+    (item_dir / "metadata.json").write_text(
+        json.dumps(current, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return current
+
+
+def _default_imported_spec_template_metadata(import_id: str) -> dict[str, Any]:
+    return {
+        "display_name": import_id,
+        "note": "",
+        "confirmed": False,
+        "confirmed_at": "",
+        "updated_at": "",
+    }
+
+
+def _resolve_imported_spec_template_dir(target_root: Path, import_id: str) -> Path:
+    root = imported_spec_templates_root(target_root).resolve()
+    path = (root / import_id).resolve()
+    if path.parent != root or not path.exists() or not path.is_dir():
+        raise FileNotFoundError(import_id)
+    return path
+
+
 def resolve_imported_spec_template_file(target_root: Path, import_id: str, filename: str) -> Path:
     """Resolve an imported spec template file while preventing path traversal."""
     if filename not in {"项目需求说明书-输出模板.docx", "项目需求说明书-输出模板.manifest.yaml"}:
         raise FileNotFoundError(filename)
-    root = imported_spec_templates_root(target_root).resolve()
-    path = (root / import_id / filename).resolve()
-    if path.parent.parent != root:
+    item_dir = _resolve_imported_spec_template_dir(target_root, import_id)
+    path = (item_dir / filename).resolve()
+    if path.parent != item_dir:
         raise FileNotFoundError(filename)
     if not path.exists():
         raise FileNotFoundError(filename)
@@ -140,9 +216,9 @@ def resolve_imported_spec_template_file(target_root: Path, import_id: str, filen
 
 
 def delete_imported_spec_template(target_root: Path, import_id: str) -> bool:
-    root = imported_spec_templates_root(target_root).resolve()
-    path = (root / import_id).resolve()
-    if path.parent != root or not path.exists() or not path.is_dir():
+    try:
+        path = _resolve_imported_spec_template_dir(target_root, import_id)
+    except FileNotFoundError:
         return False
     shutil.rmtree(path)
     return True
@@ -157,6 +233,7 @@ def build_imported_spec_template_preview(target_root: Path, import_id: str) -> d
     )
     manifest, manifest_path, manifest_source = load_template_manifest("spec", str(template_path))
     validation = validate_output_template("spec", str(template_path))
+    metadata = read_imported_spec_template_metadata(target_root, import_id)
     doc = Document(str(template_path))
 
     scopes = _collect_word_preview_scopes(doc)
@@ -170,6 +247,7 @@ def build_imported_spec_template_preview(target_root: Path, import_id: str) -> d
 
     return {
         "id": import_id,
+        "metadata": metadata,
         "template_path": str(template_path),
         "manifest_path": manifest_path,
         "manifest_source": manifest_source,
