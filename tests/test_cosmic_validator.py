@@ -250,6 +250,10 @@ def test_report_json_is_stable_and_chinese_readable(tmp_path):
     assert payload["issue_codes"] == {}
     assert payload["cfp_basis"]["source"] == "template_formula"
     assert payload["cfp_basis"]["formula_configured"] is True
+    assert payload["export_policy"]["manual_confirmation_required"] is False
+    assert payload["export_policy"]["unconfirmed_review_item_count"] == 0
+    assert payload["export_policy"]["formal_excel"]["status"] == "allowed"
+    assert payload["export_policy"]["draft_excel"]["status"] == "not_needed"
     assert payload["items"][0]["basis"]["function_user"]["matched_term"] == "用户注册"
 
 
@@ -303,6 +307,33 @@ def test_report_json_includes_flat_review_items(tmp_path):
         "note": "",
         "confirmed_by": "",
         "confirmed_at": "",
+    }
+    assert payload["export_policy"]["manual_confirmation_required"] is True
+    assert payload["export_policy"]["unconfirmed_review_item_count"] == 2
+    assert payload["export_policy"]["formal_excel"]["status"] == "blocked"
+    assert payload["export_policy"]["draft_excel"]["status"] == "blocked"
+
+
+def test_review_required_export_policy_allows_configured_draft(tmp_path):
+    report = validate_cosmic_items(
+        [_item(movements=[_movement(1, "E", data_attrs=""), _movement(2, "X")])],
+        project_name="测试项目",
+        cfp_formula="IF(L{row}=\"新增\",1,0)",
+    )
+    output = tmp_path / "cosmic.json"
+
+    write_cosmic_validation_json(report, str(output))
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["status"] == "review_required"
+    assert payload["export_policy"]["manual_confirmation_required"] is True
+    assert payload["export_policy"]["formal_excel"]["status"] == "blocked"
+    assert "人工确认" in payload["export_policy"]["formal_excel"]["reason"]
+    assert payload["export_policy"]["draft_excel"] == {
+        "status": "eligible",
+        "reason": "存在待审问题，可在配置开启后写草稿 Excel",
+        "requires_config": True,
+        "config_key": "gen_cosmic.allow_draft_excel_output",
     }
 
 

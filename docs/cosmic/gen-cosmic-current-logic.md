@@ -552,6 +552,20 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
       }
     }
   ],
+  "export_policy": {
+    "manual_confirmation_required": true,
+    "unconfirmed_review_item_count": 2,
+    "formal_excel": {
+      "status": "blocked",
+      "reason": "存在阻断问题，未写正式 Excel"
+    },
+    "draft_excel": {
+      "status": "blocked",
+      "reason": "存在阻断问题，不能写草稿 Excel",
+      "requires_config": false,
+      "config_key": "gen_cosmic.allow_draft_excel_output"
+    }
+  },
   "items": [
     {
       "module_l1": "...",
@@ -632,6 +646,15 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `review_items[].confirmation.note` | `string` | 是 | 人工备注，默认空字符串。 |
 | `review_items[].confirmation.confirmed_by` | `string` | 是 | 确认人，默认空字符串。 |
 | `review_items[].confirmation.confirmed_at` | `string` | 是 | 确认时间，默认空字符串；后续建议使用 ISO 8601 字符串。 |
+| `export_policy` | `object` | 是 | 基于校验状态推导的预览页导出策略；不表示实际 Excel 是否已经写入。 |
+| `export_policy.manual_confirmation_required` | `boolean` | 是 | 是否存在需要人工处理的审阅项。 |
+| `export_policy.unconfirmed_review_item_count` | `number` | 是 | 默认未确认审阅项数量，等于当前 `review_items` 数量。 |
+| `export_policy.formal_excel.status` | `string` | 是 | 正式 Excel 导出策略，当前为 `allowed/blocked`。 |
+| `export_policy.formal_excel.reason` | `string` | 是 | 正式 Excel 导出策略原因。 |
+| `export_policy.draft_excel.status` | `string` | 是 | 草稿 Excel 导出策略，当前为 `not_needed/eligible/blocked`。 |
+| `export_policy.draft_excel.reason` | `string` | 是 | 草稿 Excel 导出策略原因。 |
+| `export_policy.draft_excel.requires_config` | `boolean` | 是 | 草稿导出是否依赖 `gen_cosmic.allow_draft_excel_output`。 |
+| `export_policy.draft_excel.config_key` | `string` | 是 | 草稿导出配置键，固定为 `gen_cosmic.allow_draft_excel_output`。 |
 | `items` | `array` | 是 | COSMIC 功能过程列表。 |
 | `items[].module_l1` | `string` | 是 | 一级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
 | `items[].module_l2` | `string` | 是 | 二级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |

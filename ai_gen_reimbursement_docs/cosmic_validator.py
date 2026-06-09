@@ -513,13 +513,15 @@ def _movement_to_dict(movement) -> dict:
 
 
 def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
+    review_items = _review_items_to_dict(report)
     return {
         "project": report.project,
         "status": report.status,
         "cfp_basis": report.cfp_basis,
         "issues": [_issue_to_dict(issue) for issue in report.issues],
         "issue_codes": report.issue_codes,
-        "review_items": _review_items_to_dict(report),
+        "review_items": review_items,
+        "export_policy": _export_policy_to_dict(report, review_items),
         "items": [
             {
                 "project": result.item.project,
@@ -540,6 +542,53 @@ def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
             for result in report.results
         ],
         "summary": report.summary,
+    }
+
+
+def _export_policy_to_dict(
+    report: CosmicValidationReport,
+    review_items: list[dict],
+) -> dict[str, object]:
+    manual_confirmation_required = bool(review_items)
+    if report.status == "passed":
+        formal_excel = {
+            "status": "allowed",
+            "reason": "校验通过，可写正式 Excel",
+        }
+        draft_excel = {
+            "status": "not_needed",
+            "reason": "校验通过，不需要草稿 Excel",
+            "requires_config": False,
+            "config_key": "gen_cosmic.allow_draft_excel_output",
+        }
+    elif report.status == "review_required":
+        formal_excel = {
+            "status": "blocked",
+            "reason": "存在待审问题，正式 Excel 需人工确认后再导出",
+        }
+        draft_excel = {
+            "status": "eligible",
+            "reason": "存在待审问题，可在配置开启后写草稿 Excel",
+            "requires_config": True,
+            "config_key": "gen_cosmic.allow_draft_excel_output",
+        }
+    else:
+        formal_excel = {
+            "status": "blocked",
+            "reason": "存在阻断问题，未写正式 Excel",
+        }
+        draft_excel = {
+            "status": "blocked",
+            "reason": "存在阻断问题，不能写草稿 Excel",
+            "requires_config": False,
+            "config_key": "gen_cosmic.allow_draft_excel_output",
+        }
+
+    return {
+        "manual_confirmation_required": manual_confirmation_required,
+        "unconfirmed_review_item_count": len(review_items),
+        "formal_excel": formal_excel,
+        "draft_excel": draft_excel,
     }
 
 
