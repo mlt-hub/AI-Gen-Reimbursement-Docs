@@ -858,6 +858,79 @@ def test_explanation_quality_accepts_inline_system_elements_from_input():
     )
 
 
+def test_explanation_quality_ignores_generic_missing_system_element_wording():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["维护业务数据的外部输入，按 EI 识别。"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "新增客户",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-新增客户"
+                "\n业务数据：客户名称、证件号码。"
+                "\n业务规则：后台用户提交客户资料后系统保存。"
+                "\n系统元素：未涉及明确的服务或外部系统。"
+                "\n计算说明：该功能体现外部输入事务，按 EI 识别。"
+            ),
+        }],
+    )
+
+    assert not any("系统元素疑似包含输入未明确提供" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_explanation_quality_ignores_development_and_type_wording_as_inline_elements():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["接口开发映射为 ILF", "按输出的票据、报表、统计、文件个数计量"],
+        start_seq=1,
+        profile=UI_API_MAPPING_PROFILE,
+        ai_rows=[
+            {
+                "name": "新增客户-接口开发",
+                "type": "ILF",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-新增客户-接口开发"
+                    "\n业务数据：客户资料。"
+                    "\n业务规则：接口开发行按 ILF 识别。"
+                    "\n计算说明：该接口开发行固定按 ILF 识别。"
+                ),
+            },
+            {
+                "name": "导出客户清单",
+                "type": "EO",
+                "classification_basis_index": 2,
+                "explanation": (
+                    "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-导出客户清单"
+                    "\n业务数据：客户清单。"
+                    "\n业务规则：系统将客户记录整理为文件。"
+                    "\n计算说明：输出的票据、报表、统计、文件，按 EO 识别。"
+                ),
+            },
+        ],
+    )
+
+    assert not any("接口开发行" in warning for warning in warnings)
+    assert not any("外部文件" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        and any("接口开发行" in warning or "外部文件" in warning for warning in hit["warnings"])
+        for row in rows
+        for hit in row["_规则命中详情"]
+    )
+
+
 def test_explanation_quality_accepts_explicit_system_elements_from_input():
     group = _group_rows_by_l3([
         {
@@ -961,6 +1034,106 @@ def test_ui_api_mapping_keeps_default_ui_rows_without_split_reason():
         "【后台】业务管理-客户管理-客户资料维护-查询客户-界面开发",
     ]
     assert not any("AI 输出多条界面开发行但缺少 split_reason" in warning for warning in warnings)
+
+
+def test_ui_api_mapping_normalizes_development_suffix_connectors():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "后台",
+            "一级模块": "业务管理",
+            "二级模块": "客户管理",
+            "三级模块": "客户资料维护",
+            "三级模块整体功能描述": "维护客户基础资料。",
+            "功能过程": "新增客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "录入客户资料。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["修改或增加界面的个数", "接口开发映射为 ILF"],
+        start_seq=1,
+        profile=UI_API_MAPPING_PROFILE,
+        ai_rows=[
+            {
+                "name": "新增客户_界面开发",
+                "type": "EI",
+                "classification_basis_index": 1,
+                "explanation": (
+                    "来源场景：【后台】业务管理-客户管理-客户资料维护-新增客户-界面开发\n"
+                    "业务数据：客户资料。\n"
+                    "业务规则：用户录入客户资料。\n"
+                    "计算说明：该界面开发行按 EI 识别。"
+                ),
+                "source_process_ids": ["m1_p1"],
+            },
+            {
+                "name": "新增客户_接口开发",
+                "type": "ILF",
+                "classification_basis_index": 2,
+                "explanation": (
+                    "来源场景：【后台】业务管理-客户管理-客户资料维护-新增客户-接口开发\n"
+                    "业务数据：客户资料。\n"
+                    "业务规则：系统保存客户资料。\n"
+                    "计算说明：该接口开发行按 ILF 识别。"
+                ),
+                "source_process_ids": ["m1_p1"],
+            },
+        ],
+    )
+
+    assert [row["新增/修改功能点"] for row in rows] == [
+        "【后台】业务管理-客户管理-客户资料维护-新增客户-界面开发",
+        "【后台】业务管理-客户管理-客户资料维护-新增客户-接口开发",
+    ]
+    assert any("AI 行名称连接符已规范化" in warning and "新增客户_界面开发" in warning for warning in warnings)
+    assert any("AI 行名称连接符已规范化" in warning and "新增客户_接口开发" in warning for warning in warnings)
+    assert all(
+        any(hit["rule_id"] == "postprocess.ai_name_connector" for hit in row["_规则命中详情"])
+        for row in rows
+    )
+
+
+def test_ui_api_mapping_keeps_hyphen_development_suffix_connectors():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "后台",
+            "一级模块": "业务管理",
+            "二级模块": "客户管理",
+            "三级模块": "客户资料维护",
+            "三级模块整体功能描述": "维护客户基础资料。",
+            "功能过程": "新增客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "录入客户资料。",
+        },
+    ])[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["修改或增加界面的个数"],
+        start_seq=1,
+        profile=UI_API_MAPPING_PROFILE,
+        ai_rows=[{
+            "name": "新增客户-界面开发",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【后台】业务管理-客户管理-客户资料维护-新增客户-界面开发\n"
+                "业务数据：客户资料。\n"
+                "业务规则：用户录入客户资料。\n"
+                "计算说明：该界面开发行按 EI 识别。"
+            ),
+            "source_process_ids": ["m1_p1"],
+        }],
+    )
+
+    assert rows[0]["新增/修改功能点"] == "【后台】业务管理-客户管理-客户资料维护-新增客户-界面开发"
+    assert not any("AI 行名称连接符已规范化" in warning for warning in warnings)
+    assert not any(
+        hit["rule_id"] == "postprocess.ai_name_connector"
+        for hit in rows[0]["_规则命中详情"]
+    )
 
 
 def test_explanation_accepts_official_measurement_wording_as_type_evidence():
