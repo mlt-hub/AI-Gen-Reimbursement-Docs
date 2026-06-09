@@ -35,6 +35,7 @@ ard-v*
 ~$*
 .cache/
 tmp_fpa_stability_ci*/
+tmp_fpa_runtime_config*/
 
 # 数据保护发行方敏感材料
 .ard-keys/
