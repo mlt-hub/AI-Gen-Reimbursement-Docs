@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 
 from web_app.dependencies import config_dir, is_local_mode, require_auth
 from web_app.services.template_service import (
+    adjust_imported_spec_template,
     build_imported_spec_template_preview,
     delete_imported_spec_template,
     import_spec_template_upload,
@@ -150,6 +151,26 @@ async def update_imported_spec_template_metadata_route(
     except Exception as exc:
         raise HTTPException(400, f"模板草稿元数据更新失败: {exc}") from exc
     return {"id": import_id, "metadata": metadata}
+
+
+@router.put("/api/templates/spec/imported/{import_id}/adjustments")
+async def adjust_imported_spec_template_route(
+    request: Request,
+    import_id: str,
+    payload: dict,
+    _user: str = Depends(require_auth),
+):
+    """在线调整已导入需求说明书模板草稿中的字段和功能需求锚点。"""
+    if not is_local_mode(request):
+        raise HTTPException(403, "Word 模板草稿只能由本机管理员管理")
+    try:
+        return adjust_imported_spec_template(config_dir(), import_id, payload)
+    except FileNotFoundError:
+        raise HTTPException(404, "模板草稿不存在")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(400, f"模板草稿调整失败: {exc}") from exc
 
 
 @router.get("/api/templates/spec/imported/{import_id}/{filename}")

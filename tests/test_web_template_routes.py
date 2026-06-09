@@ -167,6 +167,62 @@ def test_imported_spec_template_publish_requires_confirmation(monkeypatch, tmp_p
     assert "尚未确认" in publish_resp.json()["detail"]
 
 
+def test_imported_spec_template_adjustments_update_placeholders_and_anchors(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+    doc = Document(source)
+    doc.add_paragraph("联系人电话：13800138000")
+    doc.save(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    import_id = Path(import_resp.json()["template_path"]).parent.name
+    metadata_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/metadata",
+        json={"confirmed": True},
+    )
+    assert metadata_resp.status_code == 200
+
+    preview = client.get(f"/api/templates/spec/imported/{import_id}/preview").json()
+    phone = next(
+        item for scope in preview["scopes"] for item in scope["paragraphs"]
+        if "13800138000" in item["text"]
+    )
+    adjust_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/adjustments",
+        json={
+            "anchors": {
+                "module_table": "after:paragraph:0",
+                "module_details": "after:paragraph:0",
+            },
+            "placeholders": [
+                {
+                    "scope": "body",
+                    "location": f"paragraph:{phone['index']}",
+                    "text": "13800138000",
+                    "token": "{{联系电话}}",
+                },
+            ],
+        },
+    )
+
+    assert adjust_resp.status_code == 200
+    adjusted = adjust_resp.json()
+    assert "placeholders" in adjusted["changed_fields"]
+    assert "anchors.module_table" in adjusted["changed_fields"]
+    assert any(item["token"] == "{{联系电话}}" for item in adjusted["preview"]["placeholders"])
+    module_table = next(item for item in adjusted["preview"]["anchors"] if item["key"] == "module_table")
+    module_details = next(item for item in adjusted["preview"]["anchors"] if item["key"] == "module_details")
+    assert module_table["location"] == "paragraph:1"
+    assert module_details["location"] == "paragraph:2"
+    assert adjusted["preview"]["metadata"]["confirmed"] is False
+    assert adjusted["preview"]["metadata"]["published"] is False
+
+
 def test_import_spec_template_route_rejects_non_docx(monkeypatch, tmp_path):
     client = _client(monkeypatch, tmp_path)
 
@@ -197,5 +253,6 @@ def test_imported_spec_template_management_rejects_remote_mode(monkeypatch, tmp_
     assert client.get("/api/templates/spec/imported").status_code == 403
     assert client.get("/api/templates/spec/imported/abc/preview").status_code == 403
     assert client.put("/api/templates/spec/imported/abc/metadata", json={"confirmed": True}).status_code == 403
+    assert client.put("/api/templates/spec/imported/abc/adjustments", json={}).status_code == 403
     assert client.post("/api/templates/spec/imported/abc/publish").status_code == 403
     assert client.delete("/api/templates/spec/imported/abc").status_code == 403
