@@ -10,7 +10,7 @@
 - `multi_uis` 仍复用 `unified_ui` kind，但已使用 `multi_uis_contract` 作为命名 contract 变体，继续输出只读的 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。
 - `ui_api_mapping` 使用 `ui_api_mapping_contract`，`applicability: debug_only`，已输出只读的 `mapping_judgement`、`mapping_merge_review`、`mapping_quality_review`。
 - profile 专属 quality review 只进入 `agent_review` 和稳定性报告，不阻断生成、不触发自动重试、不改写 rows。
-- `tests/fpa_profiles/` 已补充 `unified_ui`、`multi_uis`、`ui_api_mapping` 的分层 harness，以及 prompt payload contract 覆盖。
+- `tests/fpa_profiles/` 已补充 `unified_ui`、`multi_uis`、`ui_api_mapping` 的分层 harness、自定义 profile 继承式 harness，以及 prompt payload contract 覆盖。
 - 稳定性报告已新增独立指标 `profile_quality_issue_count` 和 `profile_issue_code_counts`，不混入原 `quality_issue_count`。
 - 真实模型抽样记录模板已新增到 `docs/fpa/validation-runs/multi-profile-run-template.md`。
 
@@ -475,9 +475,9 @@ workload_judgement
 source_process_ids 越界
 ```
 
-### 第五步：补 profile harness / fixture（已完成基础分层，真实模型基线待补）
+### 第五步：补 profile harness / fixture（已完成基础分层和自定义 profile 继承示例，真实模型基线待补）
 
-已补充 `tests/fpa_profiles/` 分层 harness，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的基础行为。后续仍需补真实模型抽样基线。
+已补充 `tests/fpa_profiles/` 分层 harness，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的基础行为，并通过配置解析路径覆盖自定义 `kind: unified_ui` / `kind: ui_api_mapping` profile 的继承式 harness。后续仍需补真实模型抽样基线。
 
 建议继续补 2 到 3 个 `unified_ui` golden fixtures：
 

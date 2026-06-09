@@ -1931,6 +1931,7 @@ class UiApiMappingProfile(CustomRulesProfile):
         for pattern in primary_patterns:
             for match in re.finditer(pattern, text, re.IGNORECASE):
                 value = match.group(1).strip(" 的。；，、")
+                value = re.sub(r"^(?:调用|请求|对接)\s*", "", value).strip(" 的。；，、")
                 if value and value not in candidates:
                     candidates.append(value)
         if candidates:

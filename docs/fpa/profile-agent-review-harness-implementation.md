@@ -20,6 +20,10 @@
 | `9d03d7d` | 为 `ui_api_mapping` 增加只读 `mapping_judgement`、`mapping_merge_review`、`mapping_quality_review`。 |
 | `43dc38d` | 稳定性报告汇总 profile 专属 quality issue。 |
 | `a96cfc7` | 补充非 strict profile 的 prompt payload contract 覆盖。 |
+| `12c6abd` | 覆盖自定义 `unified_ui` / `ui_api_mapping` profile 的 prompt contract 继承。 |
+| `96687da` | 为 `multi_uis` 增加独立 contract 变体。 |
+| `854cdc2` | 真实模型验证模板补齐 profile 专属质量指标。 |
+| 当前切片 | 增加自定义 profile 继承式 harness 示例，并对齐 `ui_api_mapping` 显式后端行提取与审阅口径。 |
 
 当前实现约束：
 
@@ -125,6 +129,7 @@ class FpaAgentReviewContract:
 ```text
 tests/fpa_profiles/
   test_strict_fpa_harness.py
+  test_custom_profile_harness.py
   test_unified_ui_harness.py
   test_multi_uis_harness.py
   test_ui_api_mapping_harness.py
@@ -162,6 +167,11 @@ ui_api_mapping:
   - 明确接口 / 服务 / 调用生成额外 ILF
   - 普通保存、提交、审批不触发额外明确接口行
   - 同三级模块同名明确接口合并来源
+
+custom profile:
+  - 自定义 `kind: unified_ui` 继承统一界面口径的生成规则和 `unified_ui_contract`
+  - 自定义 `kind: ui_api_mapping` 继承界面接口映射口径的生成规则和 `ui_api_mapping_contract`
+  - 通过配置解析路径进入 harness，不直接手工构造 profile 对象
 ```
 
 ### 第四阶段：为 unified_ui 增加专属审阅输出（已完成，只读）
@@ -286,6 +296,5 @@ warning count
 1. 按 `docs/fpa/validation-runs/multi-profile-run-template.md` 执行真实模型抽样并归档。
 2. 根据真实模型抽样结果判断是否把 `workload_judgement`、`mapping_judgement` 写入 prompt 硬约束。
 3. 如果 `multi_uis` 真实项目需求稳定，评估是否新增独立 `kind: multi_uis` 和独立 contract。
-4. 为自定义 profile 增加继承式 harness 示例。
 
 每个切片都应保持现有生成行为可回归，并按仓库规则单独提交。
