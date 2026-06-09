@@ -25,6 +25,10 @@ _DATA_OPERATION_WORDS = {
     "格式化", "校验", "验证", "分析", "统计", "计算", "汇总", "转换",
     "排序计算", "数据清洗", "连接数据库", "连接服务器", "建立容器",
 }
+_ERROR_CONFIRMATION_WORDS = {
+    "错误提示", "错误消息", "异常提示", "失败提示", "确认消息", "确认提示",
+    "成功提示", "操作成功", "操作失败", "保存成功", "保存失败", "提示信息",
+}
 _NON_FUNCTIONAL_SCOPE_WORDS = {
     "非功能", "系统迁移", "数据迁移", "多系统联调", "联调", "前端适配",
     "软硬件环境", "环境扩容", "服务器扩容", "资源扩容", "架构改造",
@@ -235,6 +239,14 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
             "matched_terms": matched,
             "description": "子过程疑似仅为数据运算或技术操作，通常应归入相关数据移动或不单独计列",
         })
+    matched = _matched_words(text, _ERROR_CONFIRMATION_WORDS)
+    if matched:
+        findings.append({
+            "code": "ERROR_CONFIRMATION_MESSAGE",
+            "movement_order": movement.order,
+            "matched_terms": matched,
+            "description": "子过程疑似错误或确认消息输出，通常需要按手册规则合并识别",
+        })
     return findings
 
 
@@ -311,8 +323,10 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
             basis["movement_semantics"].append(finding)
             if finding["code"] == "CONTROL_COMMAND_MOVEMENT":
                 message = "控制命令通常不移动兴趣对象数据，需确认是否应计列"
-            else:
+            elif finding["code"] == "DATA_OPERATION_ONLY_MOVEMENT":
                 message = "数据运算或技术操作通常不单独计为数据移动，需确认是否应计列"
+            else:
+                message = "错误或确认消息通常需要按手册规则合并识别，需确认是否重复计列"
             issues.append(_issue(
                 "warning", finding["code"], message,
                 f"movements[{index}].sub_process", movement.order, item=item,

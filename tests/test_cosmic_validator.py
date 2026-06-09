@@ -153,6 +153,21 @@ def test_data_operation_only_movement_requires_review():
     assert result.basis["movement_semantics"][0]["code"] == "DATA_OPERATION_ONLY_MOVEMENT"
 
 
+def test_error_confirmation_message_requires_review():
+    message = _movement(2, "X", data_group="错误提示", data_attrs="确认消息")
+    message.sub_process = "输出保存失败错误提示和确认消息"
+    result = validate_cosmic_item(
+        _item(movements=[
+            _movement(1, "E", data_group="保存请求", data_attrs="业务数据"),
+            message,
+        ])
+    )
+
+    assert "ERROR_CONFIRMATION_MESSAGE" in _codes(result)
+    assert result.status == "review_required"
+    assert result.basis["movement_semantics"][0]["code"] == "ERROR_CONFIRMATION_MESSAGE"
+
+
 def test_non_functional_scope_requires_review():
     result = validate_cosmic_item(_item(
         module_l3="服务器扩容",
