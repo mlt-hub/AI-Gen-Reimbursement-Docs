@@ -350,9 +350,34 @@ def _validate_excel_template(
         if style_source_row is not None and int(style_source_row) > ws.max_row:
             issues.append(TemplateIssue(kind, "error", f"sheet {name} 样式源行不存在: {style_source_row}", template_path))
         issues.extend(_validate_sheet_columns(kind, template_path, ws, name, manifest, sheet_key, sheet_spec))
+        issues.extend(_validate_sheet_rule_header(kind, template_path, ws, name, sheet_spec, required))
         issues.extend(_validate_named_cells(kind, template_path, wb, name, sheet_spec))
         issues.extend(_validate_required_cells(kind, template_path, ws, name, sheet_spec))
     return issues
+
+
+def _validate_sheet_rule_header(
+    kind: str,
+    template_path: str,
+    ws,
+    sheet_name: str,
+    sheet_spec: dict[str, Any],
+    required: bool,
+) -> list[TemplateIssue]:
+    rule_header = str(sheet_spec.get("rule_header", "") or "").strip()
+    if not rule_header:
+        return []
+    header_row = sheet_spec.get("header_row")
+    if header_row is None:
+        return [TemplateIssue(kind, "error", f"sheet {sheet_name} rule_header 需要声明 header_row", template_path)]
+    header_row_int = int(header_row)
+    if header_row_int > ws.max_row:
+        return []
+    header_values = [str(cell.value or "").strip() for cell in ws[header_row_int]]
+    if rule_header in header_values:
+        return []
+    severity = "error" if required else "warning"
+    return [TemplateIssue(kind, severity, f"sheet {sheet_name} 缺少规则表头: {rule_header}", template_path)]
 
 
 def _named_cell_spec(raw_spec: object) -> dict[str, Any]:

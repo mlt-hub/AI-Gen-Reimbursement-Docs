@@ -62,6 +62,62 @@ def test_excel_template_preflight_reports_missing_required_header(tmp_path):
         validate_output_templates({"list": str(template)}, required_kinds=("list",))
 
 
+def test_excel_template_preflight_reports_missing_required_rule_header(tmp_path):
+    template = tmp_path / "bad-fpa-appendix.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "客户附录"
+    ws.append(["说明", "其他表头"])
+    ws.append(["说明内容", "规则内容"])
+    wb.save(template)
+    wb.close()
+    template.with_suffix(".manifest.yaml").write_text(
+        "\n".join([
+            "kind: fpa",
+            "sheets:",
+            "  judgement_rules:",
+            "    name: 客户附录",
+            "    required: true",
+            "    header_row: 1",
+            "    rule_header: 判定原则",
+        ]),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TemplateError, match="缺少规则表头: 判定原则"):
+        validate_output_templates({"fpa": str(template)}, required_kinds=("fpa",))
+
+
+def test_excel_template_preflight_warns_for_optional_rule_header(tmp_path):
+    template = tmp_path / "optional-fpa-appendix.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "客户附录"
+    ws.append(["说明", "其他表头"])
+    ws.append(["说明内容", "规则内容"])
+    wb.save(template)
+    wb.close()
+    template.with_suffix(".manifest.yaml").write_text(
+        "\n".join([
+            "kind: fpa",
+            "sheets:",
+            "  judgement_rules:",
+            "    name: 客户附录",
+            "    required: false",
+            "    header_row: 1",
+            "    rule_header: 判定原则",
+        ]),
+        encoding="utf-8",
+    )
+
+    result = validate_output_template("fpa", str(template))
+
+    assert result.ok
+    assert [issue.message for issue in result.warnings] == [
+        "sheet 客户附录 缺少规则表头: 判定原则"
+    ]
+
+
 def test_excel_template_preflight_validates_required_named_cells(tmp_path):
     template = tmp_path / "named-list.xlsx"
     wb = openpyxl.Workbook()
