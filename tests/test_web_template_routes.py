@@ -76,8 +76,31 @@ def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp
     items = list_resp.json()["templates"]
     assert len(items) == 1
     assert items[0]["id"] == import_id
+    assert items[0]["display_name"] == import_id
+    assert items[0]["confirmed"] is False
     assert items[0]["ok"] is True
     assert items[0]["out_templates_patch"] == {"spec_out_template": imported["template_path"]}
+
+    metadata_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/metadata",
+        json={
+            "display_name": "客户A需求说明书模板 v1",
+            "note": "功能需求锚点已确认",
+            "confirmed": True,
+        },
+    )
+    assert metadata_resp.status_code == 200
+    metadata = metadata_resp.json()["metadata"]
+    assert metadata["display_name"] == "客户A需求说明书模板 v1"
+    assert metadata["note"] == "功能需求锚点已确认"
+    assert metadata["confirmed"] is True
+    assert metadata["confirmed_at"]
+
+    list_resp = client.get("/api/templates/spec/imported")
+    items = list_resp.json()["templates"]
+    assert items[0]["display_name"] == "客户A需求说明书模板 v1"
+    assert items[0]["note"] == "功能需求锚点已确认"
+    assert items[0]["confirmed"] is True
 
     download_resp = client.get(f"/api/templates/spec/imported/{import_id}/项目需求说明书-输出模板.manifest.yaml")
     assert download_resp.status_code == 200
@@ -87,6 +110,8 @@ def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp
     assert preview_resp.status_code == 200
     preview = preview_resp.json()
     assert preview["id"] == import_id
+    assert preview["metadata"]["display_name"] == "客户A需求说明书模板 v1"
+    assert preview["metadata"]["confirmed"] is True
     assert preview["ok"] is True
     assert preview["summary"]["placeholder_count"] >= 6
     assert preview["summary"]["anchor_count"] == 2
@@ -139,4 +164,5 @@ def test_imported_spec_template_management_rejects_remote_mode(monkeypatch, tmp_
 
     assert client.get("/api/templates/spec/imported").status_code == 403
     assert client.get("/api/templates/spec/imported/abc/preview").status_code == 403
+    assert client.put("/api/templates/spec/imported/abc/metadata", json={"confirmed": True}).status_code == 403
     assert client.delete("/api/templates/spec/imported/abc").status_code == 403

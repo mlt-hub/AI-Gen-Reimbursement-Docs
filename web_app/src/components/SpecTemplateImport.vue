@@ -90,12 +90,17 @@
             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm font-semibold text-[var(--color-ink)]">{{ item.display_name || item.id }}</span>
                   <span class="font-mono text-xs text-[var(--color-ink-muted)]">{{ item.id }}</span>
                   <span :class="['status-badge', item.ok ? 'status-badge--success' : 'status-badge--warning']">
                     {{ item.ok ? '预检通过' : '需检查' }}
                   </span>
+                  <span :class="['status-badge', item.confirmed ? 'status-badge--success' : 'status-badge--neutral']">
+                    {{ item.confirmed ? '已确认' : '未确认' }}
+                  </span>
                   <span class="text-xs text-[var(--color-ink-soft)]">{{ formatBytes(item.size_bytes) }}</span>
                 </div>
+                <p v-if="item.note" class="mt-1 text-xs text-[var(--color-ink-muted)]">{{ item.note }}</p>
                 <p class="mt-1 break-all font-mono text-xs text-[var(--color-ink-soft)]">{{ item.template_path }}</p>
                 <p v-if="item.capabilities?.anchor_mode" class="mt-1 text-xs text-[var(--color-ink-muted)]">
                   {{ anchorModeLabel(item.capabilities.anchor_mode) }} / 模块表 {{ moduleColumnCount(item) }} 列
@@ -113,10 +118,39 @@
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="previewLoadingId === item.id" @click="loadPreview(item)">
                   {{ previewLoadingId === item.id ? '预览中' : '预览' }}
                 </button>
+                <button class="btn-secondary min-h-0 px-2 py-1 text-xs" @click="toggleMetadataEditor(item)">命名</button>
+                <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="metadataSavingId === item.id" @click="setDraftConfirmed(item, !item.confirmed)">
+                  {{ item.confirmed ? '取消确认' : '确认' }}
+                </button>
                 <button class="btn-primary min-h-0 px-2 py-1 text-xs" @click="applyDraft(item)">应用</button>
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="deletingId === item.id" @click="deleteDraft(item)">
                   {{ deletingId === item.id ? '删除中' : '删除' }}
                 </button>
+              </div>
+            </div>
+
+            <div v-if="metadataEditorId === item.id" class="mt-3 grid gap-3 border-t border-[var(--color-rule)] pt-3 md:grid-cols-2">
+              <div>
+                <label class="field-label text-xs">模板名称</label>
+                <input v-model.trim="draftEdits[item.id].display_name" type="text" class="field-control" />
+              </div>
+              <div>
+                <label class="field-label text-xs">版本备注</label>
+                <input v-model.trim="draftEdits[item.id].note" type="text" class="field-control" />
+              </div>
+              <label class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)] md:col-span-2">
+                <input
+                  v-model="draftEdits[item.id].confirmed"
+                  type="checkbox"
+                  class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+                />
+                确认字段和功能需求锚点位置可用于生成
+              </label>
+              <div class="flex flex-wrap gap-2 md:col-span-2">
+                <button class="btn-primary min-h-0 px-2 py-1 text-xs" :disabled="metadataSavingId === item.id" @click="saveDraftMetadata(item)">
+                  {{ metadataSavingId === item.id ? '保存中' : '保存确认信息' }}
+                </button>
+                <button class="btn-secondary min-h-0 px-2 py-1 text-xs" @click="metadataEditorId = ''">收起</button>
               </div>
             </div>
 
@@ -220,6 +254,11 @@ interface ImportResult {
 
 interface ImportedDraft {
   id: string
+  display_name: string
+  note: string
+  confirmed: boolean
+  confirmed_at: string
+  updated_at: string
   template_path: string
   manifest_path: string
   template_filename: string
@@ -280,6 +319,13 @@ interface PreviewCandidate {
 
 interface ImportedDraftPreview {
   id: string
+  metadata: {
+    display_name: string
+    note: string
+    confirmed: boolean
+    confirmed_at: string
+    updated_at: string
+  }
   ok: boolean
   summary: {
     body_paragraph_count: number
@@ -312,6 +358,9 @@ const deletingId = ref('')
 const previewLoadingId = ref('')
 const activePreviewId = ref('')
 const activePreview = ref<ImportedDraftPreview | null>(null)
+const metadataEditorId = ref('')
+const metadataSavingId = ref('')
+const draftEdits = ref<Record<string, { display_name: string; note: string; confirmed: boolean }>>({})
 
 const statusText = computed(() => {
   if (loading.value) return '导入中'
@@ -368,6 +417,7 @@ async function loadDrafts() {
   try {
     const data = await apiFetch<ImportedDraftsResponse>('/api/templates/spec/imported')
     drafts.value = data.templates || []
+    syncDraftEdits()
     draftsOk.value = true
   } catch (error) {
     drafts.value = []
@@ -376,6 +426,18 @@ async function loadDrafts() {
   } finally {
     draftsLoading.value = false
   }
+}
+
+function syncDraftEdits() {
+  const next: Record<string, { display_name: string; note: string; confirmed: boolean }> = {}
+  for (const item of drafts.value) {
+    next[item.id] = draftEdits.value[item.id] || {
+      display_name: item.display_name || item.id,
+      note: item.note || '',
+      confirmed: Boolean(item.confirmed),
+    }
+  }
+  draftEdits.value = next
 }
 
 function applyDraft(item: ImportedDraft) {
@@ -401,6 +463,48 @@ async function deleteDraft(item: ImportedDraft) {
     draftsMessage.value = normalizeApiError(error)
   } finally {
     deletingId.value = ''
+  }
+}
+
+function toggleMetadataEditor(item: ImportedDraft) {
+  if (!draftEdits.value[item.id]) {
+    draftEdits.value[item.id] = {
+      display_name: item.display_name || item.id,
+      note: item.note || '',
+      confirmed: Boolean(item.confirmed),
+    }
+  }
+  metadataEditorId.value = metadataEditorId.value === item.id ? '' : item.id
+}
+
+async function setDraftConfirmed(item: ImportedDraft, confirmed: boolean) {
+  if (!draftEdits.value[item.id]) {
+    toggleMetadataEditor(item)
+    metadataEditorId.value = ''
+  }
+  draftEdits.value[item.id].confirmed = confirmed
+  await saveDraftMetadata(item)
+}
+
+async function saveDraftMetadata(item: ImportedDraft) {
+  const edit = draftEdits.value[item.id]
+  if (!edit) return
+  metadataSavingId.value = item.id
+  draftsMessage.value = ''
+  try {
+    await apiFetch(`/api/templates/spec/imported/${encodeURIComponent(item.id)}/metadata`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(edit),
+    })
+    draftsOk.value = true
+    draftsMessage.value = '模板确认信息已保存'
+    await loadDrafts()
+  } catch (error) {
+    draftsOk.value = false
+    draftsMessage.value = normalizeApiError(error)
+  } finally {
+    metadataSavingId.value = ''
   }
 }
 
