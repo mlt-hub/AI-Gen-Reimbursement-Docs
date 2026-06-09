@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
@@ -13,6 +14,18 @@ from ai_gen_reimbursement_docs.models import FunctionModule
 from ai_gen_reimbursement_docs.module_utils import get_module_by_name
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_ai')
+
+
+@dataclass
+class CosmicGenerationDiagnostics:
+    """Structured generation result plus diagnostics for validation reports."""
+    items: list[CosmicItem] = field(default_factory=list)
+    total_l3_modules: int = 0
+    ai_called: int = 0
+    skipped_by_l3_limit: int = 0
+    skipped_by_process_limit: int = 0
+    failed_modules: list[tuple[str, str, str, str]] = field(default_factory=list)
+    aborted: bool = False
 
 # Fuzzy matching for common move_type variations
 _MOVE_TYPE_FUZZY = {
@@ -508,7 +521,7 @@ def _summarize_cosmic_results(
         logger.info("所有模块数据正常，无异常")
 
 
-def generate_cosmic_items(
+def generate_cosmic_items_with_diagnostics(
     modules: list[FunctionModule],
     project_name: str = "",
     api_key: Optional[str] = None,
@@ -519,8 +532,8 @@ def generate_cosmic_items(
     user_default_receiver: str = "",
     user_initiator_rules: list[tuple[str, str]] | None = None,
     user_receiver_rules: list[tuple[str, str]] | None = None,
-) -> list[CosmicItem]:
-    """Generate COSMIC decompositions for all L3 modules using Claude API."""
+) -> CosmicGenerationDiagnostics:
+    """Generate COSMIC decompositions and return structured diagnostics."""
     api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise ConfigError(
@@ -533,7 +546,7 @@ def generate_cosmic_items(
     l3_modules = [m for m in modules if m.level == 3]
     if not l3_modules:
         logger.warning("No L3 modules found in the module tree.")
-        return []
+        return CosmicGenerationDiagnostics(items=[], total_l3_modules=0)
 
     from ai_gen_reimbursement_docs.config_utils import (
         load_max_tokens, load_flow_max_ai, load_gen_cosmic_ai_limit,
@@ -558,6 +571,7 @@ def generate_cosmic_items(
     _skip_ai_limit = 0
     _skip_proc_limit = 0
     _ai_called = 0
+    _aborted = False
 
     for idx, l3 in enumerate(l3_modules, 1):
         l1_name, l2_name = _resolve_l1_l2(l3, modules)
@@ -600,6 +614,7 @@ def generate_cosmic_items(
             logger.warning(
                 f"用户选择结束，已处理 {idx}/{total} 个模块"
             )
+            _aborted = True
             break
 
     _deduplicate_data_groups(all_items)
@@ -610,7 +625,42 @@ def generate_cosmic_items(
         max_ai_l3, _skip_ai_limit,
         _cosmic_proc_limit, _skip_proc_limit,
     )
-    return all_items
+    return CosmicGenerationDiagnostics(
+        items=all_items,
+        total_l3_modules=total,
+        ai_called=_ai_called,
+        skipped_by_l3_limit=_skip_ai_limit,
+        skipped_by_process_limit=_skip_proc_limit,
+        failed_modules=error_modules,
+        aborted=_aborted,
+    )
+
+
+def generate_cosmic_items(
+    modules: list[FunctionModule],
+    project_name: str = "",
+    api_key: Optional[str] = None,
+    model: str = "",
+    base_url: Optional[str] = None,
+    interactive: bool = False,
+    user_default_initiator: str = "",
+    user_default_receiver: str = "",
+    user_initiator_rules: list[tuple[str, str]] | None = None,
+    user_receiver_rules: list[tuple[str, str]] | None = None,
+) -> list[CosmicItem]:
+    """Generate COSMIC decompositions for all L3 modules using Claude API."""
+    return generate_cosmic_items_with_diagnostics(
+        modules=modules,
+        project_name=project_name,
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+        interactive=interactive,
+        user_default_initiator=user_default_initiator,
+        user_default_receiver=user_default_receiver,
+        user_initiator_rules=user_initiator_rules,
+        user_receiver_rules=user_receiver_rules,
+    ).items
 
 
 def _save_ai_prompt(l3: str, l2: str, l1: str, text: str,

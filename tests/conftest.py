@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
+from ai_gen_reimbursement_docs.cosmic_ai import CosmicGenerationDiagnostics
 from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.excel_source import parse_module_tree_md
 
@@ -65,8 +66,8 @@ def mock_ai():
         shutil.copy2(template_md, output_md)
         return output_md
 
-    def _cosmic_items(*args, **kwargs):
-        return [
+    def _cosmic_diagnostics(*args, **kwargs):
+        items = [
             CosmicItem(
                 project=kwargs.get("project_name", "测试项目"),
                 module_l1="系统管理",
@@ -81,6 +82,11 @@ def mock_ai():
                 ],
             )
         ]
+        return CosmicGenerationDiagnostics(
+            items=items,
+            total_l3_modules=1,
+            ai_called=1,
+        )
 
     with patch("ai_gen_reimbursement_docs.pipeline.plan_fpa_md_from_tree",
                side_effect=_copy_fpa_template) as m1b, \
@@ -90,6 +96,6 @@ def mock_ai():
                return_value="/fake/meta.md") as m3, \
          patch("ai_gen_reimbursement_docs.excel_source._call_llm_once",
                return_value="AI填充内容") as m4, \
-         patch("ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
-               side_effect=_cosmic_items) as m5:
+         patch("ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
+               side_effect=_cosmic_diagnostics) as m5:
         yield {"fpa_plan": m1b, "spec": m2, "meta": m3, "llm": m4, "cosmic": m5}

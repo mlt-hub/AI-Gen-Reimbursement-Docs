@@ -722,13 +722,13 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     if api_key:
         _activity("cosmic", "正在调用 AI 生成 COSMIC 拆分数据")
         from ai_gen_reimbursement_docs.cosmic_ai import (
-            generate_cosmic_items, load_user_config_from_meta,
+            generate_cosmic_items_with_diagnostics, load_user_config_from_meta,
         )
         user_cfg: dict = {}
         if meta_md and os.path.exists(meta_md):
             user_cfg = load_user_config_from_meta(meta_md)
         try:
-            cosmic_items = generate_cosmic_items(
+            cosmic_diagnostics = generate_cosmic_items_with_diagnostics(
                 modules=_cosmic_modules,
                 project_name=project,
                 api_key=api_key,
@@ -736,6 +736,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                 base_url=base_url,
                 **user_cfg,
             )
+            cosmic_items = cosmic_diagnostics.items
         except Exception as exc:
             logger.warning("COSMIC AI 生成失败: %s", exc)
             cosmic_items = []
@@ -744,12 +745,40 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                 f"COSMIC AI 生成失败：{exc}",
                 "ai_generation",
             ))
-        if not cosmic_items:
-            cosmic_global_issues.append(global_cosmic_issue(
-                "error", "AI_GENERATION_EMPTY",
-                "COSMIC AI 未返回可校验的功能过程",
-                "items",
-            ))
+        else:
+            if cosmic_diagnostics.total_l3_modules == 0:
+                cosmic_global_issues.append(global_cosmic_issue(
+                    "error", "NO_L3_MODULES",
+                    "模块树中没有可生成 COSMIC 的三级模块",
+                    "modules",
+                ))
+            skipped_total = (
+                cosmic_diagnostics.skipped_by_l3_limit
+                + cosmic_diagnostics.skipped_by_process_limit
+            )
+            if (
+                cosmic_diagnostics.total_l3_modules > 0
+                and cosmic_diagnostics.ai_called == 0
+                and skipped_total > 0
+            ):
+                cosmic_global_issues.append(global_cosmic_issue(
+                    "error", "AI_LIMIT_SKIPPED_ALL",
+                    "配置限制导致 COSMIC AI 未处理任何三级模块",
+                    "gen_cosmic_limits",
+                ))
+            if cosmic_diagnostics.failed_modules:
+                severity = "warning" if cosmic_items else "error"
+                cosmic_global_issues.append(global_cosmic_issue(
+                    severity, "PARTIAL_AI_FAILURE" if cosmic_items else "AI_GENERATION_FAILED",
+                    f"COSMIC AI 有 {len(cosmic_diagnostics.failed_modules)} 个模块生成失败",
+                    "ai_generation",
+                ))
+            if not cosmic_items:
+                cosmic_global_issues.append(global_cosmic_issue(
+                    "error", "AI_GENERATION_EMPTY",
+                    "COSMIC AI 未返回可校验的功能过程",
+                    "items",
+                ))
     else:
         logger.warning("未设置 API Key，无法生成 COSMIC 拆分数据")
         cosmic_global_issues.append(global_cosmic_issue(

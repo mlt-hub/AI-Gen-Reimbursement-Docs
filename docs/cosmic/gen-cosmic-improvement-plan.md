@@ -307,20 +307,23 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 
 ### 部分完成：空结果和失败状态工程化
 
-无 API Key、AI 生成异常、AI 调用后返回空结果、AI 超限导致全为空、结构化结果为空，当前都会进入结构化全局 issue。阶段可以完成，但结果状态会是 `blocked`，不会写正式 Excel。
+无 API Key、AI 生成异常、AI 调用后返回空结果、AI 超限导致全为空、模块树没有三级模块、部分模块失败、结构化结果为空，当前都会进入结构化全局 issue。阶段可以完成，但问题状态会进入 `blocked` 或 `review_required`，不会被登记为无问题正式结果。
 
 当前已区分：
 
 1. `NO_API_KEY`：未设置 API Key。
 2. `AI_GENERATION_FAILED`：AI 调用或解析全部失败。
 3. `AI_GENERATION_EMPTY`：AI 调用完成但返回空功能过程列表。
-4. `NO_COSMIC_ITEMS`：最终没有功能过程。
+4. `AI_LIMIT_SKIPPED_ALL`：配置限制导致全部模块或功能过程跳过。
+5. `NO_L3_MODULES`：模块树没有可生成 COSMIC 的三级模块。
+6. `PARTIAL_AI_FAILURE`：部分模块失败但仍有可校验结果。
+7. `NO_COSMIC_ITEMS`：最终没有功能过程。
 
 后续仍可进一步区分：
 
-1. `PARTIAL_AI_FAILURE`：部分模块失败但仍有可校验结果。
-2. `AI_LIMIT_SKIPPED_ALL`：配置限制导致全部模块或功能过程跳过。
-3. `NO_L3_MODULES`：模块树没有可生成 COSMIC 的三级模块。
+1. `AI_L3_LIMIT_PARTIAL_SKIP`：三级模块数量限制导致部分模块跳过。
+2. `AI_PROCESS_LIMIT_PARTIAL_SKIP`：功能过程数量限制导致部分功能过程跳过。
+3. `USER_ABORTED_GENERATION`：交互模式下用户主动终止生成。
 
 ### P1：CFP 口径收口
 

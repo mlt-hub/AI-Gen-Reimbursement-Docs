@@ -6,6 +6,7 @@ from pathlib import Path
 
 import openpyxl
 import pytest
+from ai_gen_reimbursement_docs.cosmic_ai import CosmicGenerationDiagnostics
 from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.pipeline import run_pipeline, PipelineResult
 
@@ -286,7 +287,7 @@ class TestGenCosmic:
             raise RuntimeError("mock cosmic failure")
 
         monkeypatch.setattr(
-            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
             raise_generation_error,
         )
 
@@ -299,8 +300,96 @@ class TestGenCosmic:
         payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
         issue_codes = [issue["code"] for issue in payload["issues"]]
         assert "AI_GENERATION_FAILED" in issue_codes
+        assert "NO_COSMIC_ITEMS" in issue_codes
+
+    def test_no_l3_modules_is_reported(self, output_dir, test_excel, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
+            lambda **kwargs: CosmicGenerationDiagnostics(
+                items=[],
+                total_l3_modules=0,
+                ai_called=0,
+            ),
+        )
+
+        result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        assert result.cosmic_status == "blocked"
+        payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
+        issue_codes = [issue["code"] for issue in payload["issues"]]
+        assert "NO_L3_MODULES" in issue_codes
+        assert "NO_COSMIC_ITEMS" in issue_codes
+
+    def test_all_skipped_by_ai_limit_is_reported(self, output_dir, test_excel, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
+            lambda **kwargs: CosmicGenerationDiagnostics(
+                items=[],
+                total_l3_modules=2,
+                ai_called=0,
+                skipped_by_l3_limit=2,
+            ),
+        )
+
+        result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        assert result.cosmic_status == "blocked"
+        payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
+        issue_codes = [issue["code"] for issue in payload["issues"]]
+        assert "AI_LIMIT_SKIPPED_ALL" in issue_codes
         assert "AI_GENERATION_EMPTY" in issue_codes
         assert "NO_COSMIC_ITEMS" in issue_codes
+
+    def test_partial_ai_failure_is_review_required(self, output_dir, test_excel, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
+            lambda **kwargs: CosmicGenerationDiagnostics(
+                items=[
+                    CosmicItem(
+                        project="测试项目",
+                        module_l1="系统管理",
+                        module_l2="用户管理",
+                        module_l3="用户注册",
+                        user="发起者：用户注册|接收者：系统管理",
+                        trigger="用户触发",
+                        process="注册用户",
+                        movements=[
+                            DataMovement(1, "接收注册请求", "E", "用户注册请求", "姓名"),
+                            DataMovement(2, "返回注册结果", "X", "用户注册结果", "结果"),
+                        ],
+                    )
+                ],
+                total_l3_modules=2,
+                ai_called=2,
+                failed_modules=[("系统管理", "用户管理", "用户删除", "")],
+            ),
+        )
+
+        result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        assert result.cosmic_status == "review_required"
+        assert result.cosmic_formal_excel_written is False
+        payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
+        issue_codes = [issue["code"] for issue in payload["issues"]]
+        assert "PARTIAL_AI_FAILURE" in issue_codes
 
     def test_empty_movements_blocks_formal_excel(self, output_dir, test_excel, monkeypatch):
         monkeypatch.setattr(
@@ -308,19 +397,23 @@ class TestGenCosmic:
             lambda meta_md: 'IF(L{row}="新增",1,0)',
         )
         monkeypatch.setattr(
-            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
-            lambda **kwargs: [
-                CosmicItem(
-                    project="测试项目",
-                    module_l1="系统管理",
-                    module_l2="用户管理",
-                    module_l3="用户注册",
-                    user="发起者：用户注册|接收者：系统管理",
-                    trigger="用户触发",
-                    process="注册用户",
-                    movements=[],
-                )
-            ],
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
+            lambda **kwargs: CosmicGenerationDiagnostics(
+                items=[
+                    CosmicItem(
+                        project="测试项目",
+                        module_l1="系统管理",
+                        module_l2="用户管理",
+                        module_l3="用户注册",
+                        user="发起者：用户注册|接收者：系统管理",
+                        trigger="用户触发",
+                        process="注册用户",
+                        movements=[],
+                    )
+                ],
+                total_l3_modules=1,
+                ai_called=1,
+            ),
         )
 
         result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
@@ -346,22 +439,26 @@ class TestGenCosmic:
             lambda meta_md: 'IF(L{row}="新增",1,0)',
         )
         monkeypatch.setattr(
-            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
-            lambda **kwargs: [
-                CosmicItem(
-                    project="测试项目",
-                    module_l1="系统管理",
-                    module_l2="用户管理",
-                    module_l3="用户注册",
-                    user="发起者：用户注册|接收者：系统管理",
-                    trigger="用户触发",
-                    process="注册用户",
-                    movements=[
-                        DataMovement(1, "接收注册请求", "E", "用户注册请求", ""),
-                        DataMovement(2, "返回注册结果", "X", "用户注册结果", "结果状态"),
-                    ],
-                )
-            ],
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items_with_diagnostics",
+            lambda **kwargs: CosmicGenerationDiagnostics(
+                items=[
+                    CosmicItem(
+                        project="测试项目",
+                        module_l1="系统管理",
+                        module_l2="用户管理",
+                        module_l3="用户注册",
+                        user="发起者：用户注册|接收者：系统管理",
+                        trigger="用户触发",
+                        process="注册用户",
+                        movements=[
+                            DataMovement(1, "接收注册请求", "E", "用户注册请求", ""),
+                            DataMovement(2, "返回注册结果", "X", "用户注册结果", "结果状态"),
+                        ],
+                    )
+                ],
+                total_l3_modules=1,
+                ai_called=1,
+            ),
         )
 
         result = run_pipeline(mode="gen-cosmic", file_path=test_excel,

@@ -5,6 +5,7 @@ from ai_gen_reimbursement_docs.cosmic_ai import (
     _clean_json,
     parse_user_rules,
     _build_trigger,
+    generate_cosmic_items_with_diagnostics,
 )
 from ai_gen_reimbursement_docs.models import FunctionModule
 
@@ -115,3 +116,18 @@ class TestBuildTrigger:
         m = FunctionModule(name="报表生成", level=3,
                            description="定时批量生成报表")
         assert _build_trigger(m) == "定时触发"
+
+
+class TestGenerateCosmicDiagnostics:
+    def test_no_l3_modules_returns_diagnostics_without_ai_call(self):
+        modules = [FunctionModule(name="系统管理", level=1)]
+
+        result = generate_cosmic_items_with_diagnostics(
+            modules=modules,
+            project_name="测试项目",
+            api_key="sk-test",
+        )
+
+        assert result.items == []
+        assert result.total_l3_modules == 0
+        assert result.ai_called == 0
