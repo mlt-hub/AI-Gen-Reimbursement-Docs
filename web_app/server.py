@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI生成项目报账文档", lifespan=lifespan)
-app.include_router(create_artifacts_router(session_manager))
+app.include_router(create_artifacts_router(session_manager, base_dir=BASE_DIR))
 app.include_router(auth_router)
 app.include_router(config_router)
 app.include_router(create_logging_router(_handler))

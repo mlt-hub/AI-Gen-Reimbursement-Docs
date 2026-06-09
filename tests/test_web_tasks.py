@@ -1818,6 +1818,8 @@ def _cosmic_preview_payload(*, confirmation_status: str) -> dict:
 
 
 def test_cosmic_confirmed_export_writes_excel_and_done_file(monkeypatch, tmp_path):
+    history_db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.service_history_path", lambda base_dir: history_db)
     client = _client(monkeypatch, user="alice")
     session_id = "cosmic_export_confirmed"
     work_dir = tmp_path
@@ -1834,6 +1836,17 @@ def test_cosmic_confirmed_export_writes_excel_and_done_file(monkeypatch, tmp_pat
     zip_path = work_dir / f"交付物_{session_id}.zip"
     shutil.make_archive(str(zip_path.with_suffix("")), "zip", str(work_dir / "output"))
     server.session_manager.set_zip(session_id, zip_path)
+    run_history_service.finish_web_run(
+        base_dir=tmp_path,
+        session_id=session_id,
+        mode="remote",
+        task_mode="from-excel-gen-cosmic",
+        input_path=str(work_dir / "input.xlsx"),
+        owner_id="alice",
+        owner_label="alice",
+        zip_path=str(zip_path),
+        done_files=[],
+    )
 
     resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
 
@@ -1848,6 +1861,16 @@ def test_cosmic_confirmed_export_writes_excel_and_done_file(monkeypatch, tmp_pat
     assert any(item["path"] == str(output_path) for item in state.done_files)
     with zipfile.ZipFile(zip_path) as archive:
         assert "cosmic文档/项目功能点拆分表-确认后.xlsx" in archive.namelist()
+    history = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id=session_id,
+        local_mode=False,
+        owner_id="alice",
+    )
+    assert history is not None
+    assert history["zip_path"] == str(zip_path)
+    assert history["done_files"][0]["label"] == "项目功能点拆分表（确认后）"
+    assert history["done_files"][0]["relative_path"] == "项目功能点拆分表-确认后.xlsx"
     server.session_manager.cleanup_download(session_id)
 
 

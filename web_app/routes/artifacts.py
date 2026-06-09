@@ -24,6 +24,7 @@ from ai_gen_reimbursement_docs.pipeline import (
 )
 from web_app.dependencies import require_auth, require_local
 from web_app.services.artifact_service import find_log_dir
+from web_app.services.run_history_service import append_done_file_to_history
 from web_app.services.session_access import require_session_access
 from web_app.services.session_manager import SessionManager
 
@@ -320,7 +321,7 @@ def _build_structured_fpa_debug_records(log_dir: Path) -> list[dict]:
     return records
 
 
-def create_router(session_manager: SessionManager) -> APIRouter:
+def create_router(session_manager: SessionManager, *, base_dir: Path | None = None) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/download/{session_id}")
@@ -563,6 +564,14 @@ def create_router(session_manager: SessionManager) -> APIRouter:
             output_dir = _session_output_dir(session_manager, session_id)
             if output_dir is not None and output_dir.exists():
                 shutil.make_archive(str(state.zip_path.with_suffix("")), "zip", str(output_dir))
+        if state is not None and base_dir is not None:
+            append_done_file_to_history(
+                base_dir=base_dir,
+                session_id=session_id,
+                mode=state.mode,
+                done_file=file_info,
+                zip_path=str(state.zip_path) if state.zip_path else "",
+            )
         return {
             "ok": True,
             "session_id": session_id,

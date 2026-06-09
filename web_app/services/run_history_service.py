@@ -171,6 +171,41 @@ def finish_web_run(
         logger.warning("运行历史写入失败: %s", exc)
 
 
+def append_done_file_to_history(
+    *,
+    base_dir: Path,
+    session_id: str,
+    mode: str,
+    done_file: dict[str, Any],
+    zip_path: str = "",
+) -> None:
+    path = _history_path(base_dir=base_dir, mode=mode)
+    try:
+        record = get_run(session_id, path)
+        if record is None:
+            return
+        files = record.get("done_files")
+        if not isinstance(files, list):
+            files = []
+        done_key = Path(str(done_file.get("path") or done_file.get("relative_path") or done_file.get("name") or "")).name
+        merged = []
+        for item in files:
+            item_key = Path(str(item.get("path") or item.get("relative_path") or item.get("name") or "")).name
+            if item_key != done_key:
+                merged.append(item)
+        merged.append(done_file)
+        record = {
+            **record,
+            "done_files": merged,
+            "updated_at": now_iso(),
+        }
+        if mode == "remote" and zip_path:
+            record["zip_path"] = zip_path
+        upsert_run(record, path)
+    except Exception as exc:
+        logger.warning("运行历史更新确认后产物失败: %s", exc)
+
+
 def list_history(
     *,
     base_dir: Path,
