@@ -81,7 +81,7 @@
 - `复用`：每次数据移动按 `1/3` CFP。
 - 其他值：每次数据移动按 `1` CFP。
 
-第一阶段新链路不再依赖 `CosmicItem.total_cfp()` 计算正式 CFP。正式 Excel 中的 CFP 仍以模板公式为准；Python 侧只在正式 Excel 写入成功时写入 CFP 总和。
+第一阶段新链路不再依赖 `CosmicItem.total_cfp()` 计算正式 CFP。正式 Excel 中的 CFP 仍以模板公式为准；Python 侧只在正式 Excel 写入成功时写入 CFP 总和。JSON 草稿会在顶层 `cfp_basis` 中记录 CFP 来源：有公式时为 `template_formula`，缺公式时为 `unconfirmed`。
 
 ## AI 生成逻辑
 
@@ -515,6 +515,11 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 {
   "project": "...",
   "status": "blocked",
+  "cfp_basis": {
+    "source": "unconfirmed",
+    "formula_configured": false,
+    "description": "未配置 CFP计算公式，正式 CFP 来源未确认"
+  },
   "issues": [],
   "items": [
     {
@@ -547,6 +552,7 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | --- | --- | --- | --- |
 | `project` | `string` | 是 | 项目名称。 |
 | `status` | `string` | 是 | 报告总状态，`passed/review_required/blocked`。 |
+| `cfp_basis` | `object` | 是 | CFP 来源说明，`source` 当前为 `template_formula/unconfirmed`。 |
 | `issues` | `array` | 是 | 全局 issue，例如无 AI 输出、无功能过程、缺 CFP 公式。 |
 | `items` | `array` | 是 | COSMIC 功能过程列表。 |
 | `items[].module_l1` | `string` | 是 | 一级模块，允许为空但会触发 `MISSING_MODULE_PATH`。 |
@@ -756,7 +762,7 @@ md/3.4.gen-cosmic-校验报告.md
 
 1. 如果存在 `blocked`，不得更新供 `gen-list` 使用的正式 CFP 总和。
 2. 如果模板未配置 `CFP计算公式`，必须记录 `MISSING_CFP_FORMULA` error，报告总状态为 `blocked`，不能静默留空后继续汇总。
-3. `CosmicItem.total_cfp()` 中 `复用 = 1/3` 的逻辑不得继续扩散到新链路；新链路应记录 CFP 来源为模板公式、人工覆盖或未确认。
+3. `CosmicItem.total_cfp()` 中 `复用 = 1/3` 的逻辑不得继续扩散到新链路；新链路已经在 JSON 草稿和校验报告中记录 CFP 来源为模板公式或未确认。
 4. 正式 Excel 中的 CFP 仍以模板公式为准，Python 侧只负责结构化记录和异常提示。
 
 ### 验收标准

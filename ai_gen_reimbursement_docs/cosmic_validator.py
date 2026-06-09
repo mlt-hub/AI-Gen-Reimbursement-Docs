@@ -44,6 +44,7 @@ class CosmicValidationReport:
     status: ValidationStatus
     results: list[CosmicValidationResult]
     summary: dict[str, int]
+    cfp_basis: dict[str, object] = field(default_factory=dict)
     issues: list[CosmicIssue] = field(default_factory=list)
 
 
@@ -216,13 +217,14 @@ def validate_cosmic_items(
         ))
 
     results = [validate_cosmic_item(item) for item in items]
-    return _build_report(project_name, results, issues)
+    return _build_report(project_name, results, issues, cfp_formula)
 
 
 def _build_report(
     project_name: str,
     results: list[CosmicValidationResult],
     issues: list[CosmicIssue],
+    cfp_formula: str,
 ) -> CosmicValidationReport:
     summary = {
         "passed": sum(1 for result in results if result.status == "passed"),
@@ -254,8 +256,23 @@ def _build_report(
         status=status,
         results=results,
         summary=summary,
+        cfp_basis=_build_cfp_basis(cfp_formula),
         issues=issues,
     )
+
+
+def _build_cfp_basis(cfp_formula: str) -> dict[str, object]:
+    if cfp_formula:
+        return {
+            "source": "template_formula",
+            "formula_configured": True,
+            "description": "正式 Excel CFP 以模板或元数据中的 CFP计算公式为准",
+        }
+    return {
+        "source": "unconfirmed",
+        "formula_configured": False,
+        "description": "未配置 CFP计算公式，正式 CFP 来源未确认",
+    }
 
 
 def _issue_to_dict(issue: CosmicIssue) -> dict:
@@ -286,6 +303,7 @@ def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
     return {
         "project": report.project,
         "status": report.status,
+        "cfp_basis": report.cfp_basis,
         "issues": [_issue_to_dict(issue) for issue in report.issues],
         "items": [
             {
@@ -340,6 +358,7 @@ def write_cosmic_validation_report_md(
         f"- 阻断：{report.summary.get('blocked', 0)}\n",
         f"- error：{report.summary.get('errors', 0) + report.summary.get('global_errors', 0)}\n",
         f"- warning：{report.summary.get('warnings', 0) + report.summary.get('global_warnings', 0)}\n",
+        f"- CFP 来源：{report.cfp_basis.get('description', '')}\n",
         f"- 正式 Excel 输出：{'已写入' if formal_excel_written else '未写入'}\n",
         f"- 草稿 Excel 输出：{'已写入' if draft_excel_written else '未写入'}\n",
         f"- 原因：{excel_reason}\n\n",

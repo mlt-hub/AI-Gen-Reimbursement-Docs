@@ -163,6 +163,8 @@ def test_report_json_is_stable_and_chinese_readable(tmp_path):
     assert "\\u6d4b" not in content
     payload = json.loads(content)
     assert payload["summary"]["passed"] == 1
+    assert payload["cfp_basis"]["source"] == "template_formula"
+    assert payload["cfp_basis"]["formula_configured"] is True
 
 
 def test_empty_items_is_global_error():
@@ -199,6 +201,8 @@ def test_missing_cfp_formula_is_global_error():
 
     assert report.status == "blocked"
     assert [issue.code for issue in report.issues] == ["MISSING_CFP_FORMULA"]
+    assert report.cfp_basis["source"] == "unconfirmed"
+    assert report.cfp_basis["formula_configured"] is False
 
 
 def test_generic_function_user_is_warning():

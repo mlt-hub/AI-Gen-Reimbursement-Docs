@@ -260,6 +260,8 @@ class TestGenCosmic:
         assert os.path.exists(result.cosmic_validation_json)
         assert os.path.exists(result.cosmic_validation_report)
         assert result.cfp_total > 0
+        payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
+        assert payload["cfp_basis"]["source"] == "template_formula"
 
     def test_no_api_key_sets_path_but_no_file(self, output_dir, test_excel):
         result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
