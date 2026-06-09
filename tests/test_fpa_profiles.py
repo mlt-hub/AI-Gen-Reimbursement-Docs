@@ -1,7 +1,9 @@
 import json
 import pytest
+from pathlib import Path
 from unittest.mock import patch
 
+from ai_gen_reimbursement_docs.config_utils import copy_default_config_files
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
@@ -655,6 +657,64 @@ def test_fpa_user_prompt_template_can_be_loaded_from_separate_config(tmp_path):
     assert "1) 规则一" in prompt
     assert '"l3": "客户管理"' in prompt
     assert "${" not in prompt
+
+
+def test_default_prompt_fragment_is_rendered_without_placeholder(tmp_path):
+    source = Path(__file__).resolve().parents[1] / "config"
+    copy_default_config_files(tmp_path, source)
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        prompt = STRICT_FPA_PROFILE.build_prompt(
+            {
+                "client_type": "后台",
+                "l1": "业务",
+                "l2": "管理",
+                "l3": "客户管理",
+                "l3_desc": "维护客户信息。",
+                "processes": [],
+            },
+            ["规则一"],
+        )
+
+    assert "计算依据说明生成规则" in prompt
+    assert "来源场景" in prompt
+    assert "业务数据" in prompt
+    assert "系统元素" in prompt
+    assert "${calculation_explanation_rules}" not in prompt
+    assert "${" not in prompt
+
+
+def test_profile_prompt_uses_calculation_explanation_override(tmp_path):
+    _write_fpa_config(tmp_path)
+    content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+    content = content.replace(
+        "    RULES:\n    ${judgement_rules}",
+        "    RULES:\n    ${judgement_rules}\n    ${calculation_explanation_rules}",
+    )
+    content += """
+prompt_fragments:
+  calculation_explanation_rules:
+    default: DEFAULT EXPLANATION RULES
+    strict_fpa: STRICT EXPLANATION RULES
+"""
+    (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        prompt = STRICT_FPA_PROFILE.build_prompt(
+            {
+                "client_type": "后台",
+                "l1": "业务",
+                "l2": "管理",
+                "l3": "客户管理",
+                "l3_desc": "维护客户信息。",
+                "processes": [],
+            },
+            ["规则一"],
+        )
+
+    assert "STRICT EXPLANATION RULES" in prompt
+    assert "DEFAULT EXPLANATION RULES" not in prompt
+    assert "${calculation_explanation_rules}" not in prompt
 
 
 def test_prompt_payload_includes_extracted_process_facts(tmp_path):

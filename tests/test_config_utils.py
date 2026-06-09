@@ -24,6 +24,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_strategy,
     load_fpa_check_columns,
     load_fpa_core_rules_config,
+    load_fpa_calculation_explanation_rules,
     load_fpa_judgement_rules_config,
     load_fpa_judgement_rules_source,
     load_fpa_rule_sets_config,
@@ -967,24 +968,29 @@ class TestLoadFpaUserPromptTemplate:
             multi_uis = load_fpa_user_prompt_template("multi_uis")
             mapping = load_fpa_user_prompt_template("ui_api_mapping")
             strict = load_fpa_user_prompt_template("strict_fpa")
+            explanation_rules = load_fpa_calculation_explanation_rules("strict_fpa")
             unified_system = load_fpa_system_prompt_config("unified_ui").text
             multi_uis_system = load_fpa_system_prompt_config("multi_uis").text
             mapping_system = load_fpa_system_prompt_config("ui_api_mapping").text
             strict_system = load_fpa_system_prompt_config("strict_fpa").text
 
-        for template in (unified, strict):
-            assert "计算依据说明生成规则" in template
-            assert "来源场景" in template
-            assert "业务数据" in template
-            assert "业务规则" in template
-            assert "系统元素" in template
-            assert "计算说明" in template
-            assert "不得把数据库表直接等同为 ILF" in template
-            assert "不要写“未识别到”" in template
-            assert "按后台数据库变更的表个数计量" in template
-            assert "不要把" in template
-            assert "ILF/EIF 数据功能使用" in template
-            assert "数据组名称" in template
+        for template in (unified, strict, multi_uis, mapping):
+            assert "${calculation_explanation_rules}" in template
+        assert "计算依据说明生成规则" in explanation_rules.text
+        assert "来源场景" in explanation_rules.text
+        assert "业务数据" in explanation_rules.text
+        assert "业务规则" in explanation_rules.text
+        assert "系统元素" in explanation_rules.text
+        assert "计算说明" in explanation_rules.text
+        assert "不得把数据库表直接等同为 ILF" in explanation_rules.text
+        assert "不要写“未识别到”" in explanation_rules.text
+        assert "按后台数据库变更的表个数计量" in explanation_rules.text
+        assert "不要把" in explanation_rules.text
+        assert "ILF/EIF 数据功能使用" in explanation_rules.text
+        assert "数据组名称" in explanation_rules.text
+        assert explanation_rules.source_label == (
+            "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.default）"
+        )
         assert "功能过程类型只能作为参考" in strict
         assert "不是功能点计数单位" in strict
         assert "必须合并为一个维护类 EI" in strict
@@ -1014,6 +1020,40 @@ class TestLoadFpaUserPromptTemplate:
         assert "逐个 source_process_id 覆盖 expected_default_rows" in mapping
         assert "不要因为存在明确接口/后端调用行就省略默认界面开发行或默认接口开发行" in mapping
         assert "explicit_backend_rows 为空时，不得额外编造接口/后端调用行" in mapping
+
+    def test_calculation_explanation_rules_profile_override(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content += """
+prompt_fragments:
+  calculation_explanation_rules:
+    default: DEFAULT RULES
+    strict_fpa: STRICT OVERRIDE RULES
+"""
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            strict = load_fpa_calculation_explanation_rules("strict_fpa")
+            unified = load_fpa_calculation_explanation_rules("unified_ui")
+
+        assert strict.text == "STRICT OVERRIDE RULES"
+        assert strict.source_label == (
+            "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.strict_fpa）"
+        )
+        assert unified.text == "DEFAULT RULES"
+
+    def test_prompt_using_calculation_explanation_rules_requires_fragment(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${calculation_explanation_rules} ${payload_json}",
+        )
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"prompt_fragments"):
+                load_fpa_user_prompt_template("strict_fpa")
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):
         _write_fpa_config(tmp_path)

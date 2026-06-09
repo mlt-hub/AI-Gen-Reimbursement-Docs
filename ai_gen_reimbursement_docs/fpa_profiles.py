@@ -524,11 +524,16 @@ def _render_configured_fpa_prompt(
     domain_context: dict[str, object] | None = None,
 ) -> str:
     import json
-    from ai_gen_reimbursement_docs.config_utils import load_fpa_core_rules_config, load_fpa_user_prompt_template
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_fpa_calculation_explanation_rules,
+        load_fpa_core_rules_config,
+        load_fpa_user_prompt_template,
+    )
 
     template = load_fpa_user_prompt_template(profile_name)
     configured_core_rules = load_fpa_core_rules_config(profile_name).text
-    return Template(template).substitute({
+    prompt_template = Template(template)
+    values = {
         "core_rules": configured_core_rules or core_rules,
         "judgement_rules": _numbered_judgement_rules(judgement_rules),
         "payload_json": json.dumps(
@@ -536,7 +541,10 @@ def _render_configured_fpa_prompt(
             ensure_ascii=False,
             indent=2,
         ),
-    })
+    }
+    if "calculation_explanation_rules" in set(prompt_template.get_identifiers()):
+        values["calculation_explanation_rules"] = load_fpa_calculation_explanation_rules(profile_name).text
+    return prompt_template.substitute(values)
 
 
 def _external_rule_from_dict(item: dict[str, object]) -> ExternalDataGroupRule | None:

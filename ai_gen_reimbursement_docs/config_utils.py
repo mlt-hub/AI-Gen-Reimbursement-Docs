@@ -413,7 +413,9 @@ VALID_FPA_ADJUSTMENT_METHODS = {"legacy_workload", "standard_fpa"}
 VALID_FPA_COMPLEXITY_SOURCES = {"ai", "default"}
 VALID_FPA_COMPLEXITIES = {"low", "medium", "high"}
 VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
-FPA_USER_PROMPT_PLACEHOLDERS = frozenset({"core_rules", "judgement_rules", "payload_json"})
+FPA_REQUIRED_USER_PROMPT_PLACEHOLDERS = frozenset({"core_rules", "judgement_rules", "payload_json"})
+FPA_OPTIONAL_USER_PROMPT_PLACEHOLDERS = frozenset({"calculation_explanation_rules"})
+FPA_USER_PROMPT_PLACEHOLDERS = FPA_REQUIRED_USER_PROMPT_PLACEHOLDERS | FPA_OPTIONAL_USER_PROMPT_PLACEHOLDERS
 
 
 def fpa_config_dir() -> Path:
@@ -815,7 +817,7 @@ def _validate_fpa_user_prompt_template(template_text: str, key_path: str) -> Non
     if not template.is_valid():
         raise FpaConfigError(
             f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 包含非法占位符，"
-            "请使用 ${core_rules} / ${judgement_rules} / ${payload_json}"
+            "请使用 ${core_rules} / ${judgement_rules} / ${payload_json} / ${calculation_explanation_rules}"
         )
     identifiers = set(template.get_identifiers())
     unknown = sorted(identifiers - FPA_USER_PROMPT_PLACEHOLDERS)
@@ -824,12 +826,45 @@ def _validate_fpa_user_prompt_template(template_text: str, key_path: str) -> Non
             f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 包含未知占位符: "
             f"{', '.join('${' + name + '}' for name in unknown)}"
         )
-    missing = sorted(FPA_USER_PROMPT_PLACEHOLDERS - identifiers)
+    missing = sorted(FPA_REQUIRED_USER_PROMPT_PLACEHOLDERS - identifiers)
     if missing:
         raise FpaConfigError(
             f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 必须包含占位符: "
             f"{', '.join('${' + name + '}' for name in missing)}"
         )
+
+
+def _validate_fpa_prompt_fragments(raw: object) -> None:
+    if raw is None:
+        return
+    fragments = _require_mapping(raw, "prompt_fragments")
+    known_fragments = {"calculation_explanation_rules"}
+    unknown = sorted(str(key) for key in fragments if str(key) not in known_fragments)
+    if unknown:
+        raise FpaConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 prompt_fragments 包含未知片段: "
+            f"{', '.join(unknown)}"
+        )
+    if "calculation_explanation_rules" not in fragments:
+        return
+    rules = _require_mapping(
+        fragments.get("calculation_explanation_rules"),
+        "prompt_fragments.calculation_explanation_rules",
+    )
+    _require_non_empty_string(
+        rules.get("default"),
+        "prompt_fragments.calculation_explanation_rules.default",
+    )
+    for key, value in rules.items():
+        if str(key) == "default":
+            continue
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 "
+                f"prompt_fragments.calculation_explanation_rules.{key} 必须是字符串"
+            )
 
 
 def _validate_number(value: object, key_path: str) -> None:
@@ -963,6 +998,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     system_prompt_sets = _require_mapping(cfg.get("system_prompt_sets"), "system_prompt_sets")
     user_prompt_sets = _require_mapping(cfg.get("user_prompt_sets"), "user_prompt_sets")
     rule_sets = _require_mapping(cfg.get("rule_sets"), "rule_sets")
+    _validate_fpa_prompt_fragments(cfg.get("prompt_fragments"))
 
     profile = _require_non_empty_string(cfg.get("default-profile"), "default-profile")
     if profile not in profiles:
@@ -976,10 +1012,23 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         prompt_path = _fpa_key_path("system_prompt_sets", prompt_name)
         _require_non_empty_string(prompt_text, prompt_path)
 
+    uses_calculation_explanation_rules = False
     for prompt_name, prompt_text in user_prompt_sets.items():
         prompt_path = _fpa_key_path("user_prompt_sets", prompt_name)
         user_template = _require_non_empty_string(prompt_text, prompt_path)
         _validate_fpa_user_prompt_template(user_template, prompt_path)
+        if "calculation_explanation_rules" in set(Template(user_template).get_identifiers()):
+            uses_calculation_explanation_rules = True
+    if uses_calculation_explanation_rules:
+        fragments = _require_mapping(cfg.get("prompt_fragments"), "prompt_fragments")
+        rules = _require_mapping(
+            fragments.get("calculation_explanation_rules"),
+            "prompt_fragments.calculation_explanation_rules",
+        )
+        _require_non_empty_string(
+            rules.get("default"),
+            "prompt_fragments.calculation_explanation_rules.default",
+        )
 
     for rule_set_name, rule_set in rule_sets.items():
         rule_set_path = _fpa_key_path("rule_sets", rule_set_name)
@@ -1461,6 +1510,42 @@ def load_fpa_user_prompt_config(profile_name: str) -> PromptConfig:
 def load_fpa_user_prompt_template(profile_name: str) -> str:
     """从 fpa_config.yaml 读取 FPA 用户提示词模板。"""
     return load_fpa_user_prompt_config(profile_name).text
+
+
+def load_fpa_calculation_explanation_rules(profile_name: str) -> PromptConfig:
+    """读取当前 profile 的计算依据说明 prompt fragment。"""
+    cfg = load_fpa_config()
+    fragments = cfg.get("prompt_fragments")
+    if not isinstance(fragments, dict):
+        raise FpaPromptConfigError(
+            "FPA 配置无效：配置目录/fpa_config.yaml 中的 prompt_fragments.calculation_explanation_rules.default 必须是非空字符串"
+        )
+    rules = fragments.get("calculation_explanation_rules")
+    if not isinstance(rules, dict):
+        raise FpaPromptConfigError(
+            "FPA 配置无效：配置目录/fpa_config.yaml 中的 prompt_fragments.calculation_explanation_rules.default 必须是非空字符串"
+        )
+    profile_value = rules.get(profile_name)
+    if isinstance(profile_value, str) and profile_value.strip():
+        return PromptConfig(
+            text=profile_value,
+            source_label=_user_config_key_source_label(
+                FPA_CONFIG_FILENAME,
+                f"prompt_fragments.calculation_explanation_rules.{profile_name}",
+            ),
+        )
+    default_value = rules.get("default")
+    if not isinstance(default_value, str) or not default_value.strip():
+        raise FpaPromptConfigError(
+            "FPA 配置无效：配置目录/fpa_config.yaml 中的 prompt_fragments.calculation_explanation_rules.default 必须是非空字符串"
+        )
+    return PromptConfig(
+        text=default_value,
+        source_label=_user_config_key_source_label(
+            FPA_CONFIG_FILENAME,
+            "prompt_fragments.calculation_explanation_rules.default",
+        ),
+    )
 
 
 def migrate_config() -> None:
