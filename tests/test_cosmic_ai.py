@@ -5,6 +5,7 @@ from ai_gen_reimbursement_docs.cosmic_ai import (
     _clean_json,
     parse_user_rules,
     _build_trigger,
+    _build_module_prompt,
     generate_cosmic_items_with_diagnostics,
 )
 from ai_gen_reimbursement_docs.models import FunctionModule
@@ -116,6 +117,29 @@ class TestBuildTrigger:
         m = FunctionModule(name="报表生成", level=3,
                            description="定时批量生成报表")
         assert _build_trigger(m) == "定时触发"
+
+
+class TestBuildModulePrompt:
+    def test_includes_cosmic_submission_rules(self):
+        modules = [
+            FunctionModule(name="系统管理", level=1),
+            FunctionModule(name="用户管理", level=2, parent="系统管理"),
+            FunctionModule(
+                name="用户注册",
+                level=3,
+                parent="用户管理",
+                description="用户提交注册信息并接收结果",
+                children=["提交注册信息"],
+            ),
+        ]
+
+        prompt = _build_module_prompt(modules[2], modules)
+
+        assert "功能用户的发起者或接收者之一必须对应三级模块" in prompt
+        assert "上一页、下一页、排序、展示或隐藏菜单、点击确认" in prompt
+        assert "校验、分析、统计、格式化、连接数据库" in prompt
+        assert "非功能内容不得拆成 COSMIC 功能过程" in prompt
+        assert "## 模块：系统管理 > 用户管理 > 用户注册" in prompt
 
 
 class TestGenerateCosmicDiagnostics:

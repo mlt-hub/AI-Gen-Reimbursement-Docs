@@ -158,6 +158,16 @@ def _build_trigger(module: FunctionModule) -> str:
     return "用户触发"
 
 
+_COSMIC_SUBMISSION_RULES = """### COSMIC 送审口径硬约束
+1. 功能用户的发起者或接收者之一必须对应三级模块或最小颗粒度模块。
+2. 前端/后端、前台/后台交互不识别为 COSMIC 边界。
+3. 上一页、下一页、排序、展示或隐藏菜单、点击确认等控制命令不计列为数据移动。
+4. 校验、分析、统计、格式化、连接数据库、连接服务器、建立容器等通常不单独作为数据移动。
+5. 非功能内容不得拆成 COSMIC 功能过程。
+6. 每个功能过程必须由触发事件启动，且至少包含两个数据移动。
+"""
+
+
 def _build_module_prompt(l3_module: FunctionModule,
                          modules: list[FunctionModule]) -> str:
     """Build the prompt for a single L3 module."""
@@ -178,6 +188,7 @@ def _build_module_prompt(l3_module: FunctionModule,
 
     prompt = f"## 模块：{parent}{l3_module.name}\n"
     prompt += f"### 功能描述\n{l3_module.description}\n\n"
+    prompt += _COSMIC_SUBMISSION_RULES + "\n"
 
     if l3_module.children:
         prompt += "### 功能过程列表（需为每个过程生成COSMIC数据移动链）\n"
