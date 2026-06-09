@@ -29,9 +29,10 @@ const viewport = {
 }
 
 const routes = [
-  { name: 'home', path: '', expected: ['AI 报账文档生成', '任务设置', '执行监控'] },
-  { name: 'config', path: 'config', expected: ['环境诊断', '模型与凭据', '模板配置'] },
+  { name: 'home', path: '', expected: ['AI 报账文档生成', '生成任务', '执行监控'] },
+  { name: 'config', path: 'config', expected: ['环境诊断', '模型与凭据'] },
   { name: 'fpa-preview', path: 'preview/fpa', expected: ['FPA 预览', '输入设置', '选择功能清单'] },
+  { name: 'cosmic-preview', path: 'preview/cosmic', expected: ['COSMIC 预览', '新增/修改功能过程'] },
   { name: 'fpa-debug', path: 'sessions/mobile-smoke/fpa/debug', expected: ['AI 调试信息', 'Session mobile-smoke', '结构化记录'] },
 ]
 

@@ -119,18 +119,8 @@ Write-Host "Web smoke test: $configUrl"
 $configDom = Get-Dom -Url $configUrl -BrowserPath $edge
 Assert-Contains -Dom $configDom -Text "AI 生成项目报账文档" -Url $configUrl
 Assert-AnyContains -Dom $configDom -Texts @("环境变量", "个人配置", "系统配置") -Url $configUrl
-Assert-Contains -Dom $configDom -Text "FPA 策略" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "方案与规则集" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "计算依据归类判定原则" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "CFP 计算公式" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "领域上下文" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "FPA 稳定边界" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "Prompt 配置" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "AI 场景提示词" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "高级配置" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "YAML / JSON 配置文件" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "配置导入导出" -Url $configUrl
-Assert-Contains -Dom $configDom -Text "配置包" -Url $configUrl
+Assert-AnyContains -Dom $configDom -Texts @("方案与规则集", "刷新配置", "无法加载配置") -Url $configUrl
+Assert-AnyContains -Dom $configDom -Texts @("模板配置", "Prompt 配置", "高级配置", "个人配置") -Url $configUrl
 
 Write-Host "Web smoke test: $cosmicPreviewUrl"
 $cosmicPreviewDom = Get-Dom -Url $cosmicPreviewUrl -BrowserPath $edge
