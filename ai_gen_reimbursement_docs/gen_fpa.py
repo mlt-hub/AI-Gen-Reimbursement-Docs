@@ -1240,11 +1240,14 @@ def _build_agent_review_for_l3(
     group: dict[str, object],
     rows: list[dict[str, object]] | None = None,
     confirmed_decisions: object | None = None,
+    profile: CustomRulesProfile = FPA_PROFILE,
 ) -> dict[str, object]:
     return build_fpa_agent_review(
         group=group,
         rows=rows,
         confirmed_decisions=confirmed_decisions,
+        profile_name=profile.name,
+        profile_kind=profile.agent_review_profile_kind(),
     )
 
 
@@ -1451,7 +1454,7 @@ def _build_fpa_audit_report(
         raw_rows=list(raw_rows or []),
         raw_warnings=list(raw_warnings or []),
         rule_hits=list(rule_hits or []),
-        agent_review=_build_agent_review_for_l3(group=group, rows=fpa_rows),
+        agent_review=_build_agent_review_for_l3(group=group, rows=fpa_rows, profile=profile),
     )
 
 
@@ -2117,6 +2120,7 @@ def _plan_fpa_rows_with_execution(
                 group=group,
                 rows=group_rows,
                 confirmed_decisions=confirmed_decisions,
+                profile=profile,
             )
             all_rows.extend(group_rows)
             seq += len(group_rows)
@@ -2176,6 +2180,7 @@ def _plan_fpa_rows_with_execution(
                     group=group,
                     rows=rules_first_rows,
                     confirmed_decisions=confirmed_decisions,
+                    profile=profile,
                 )
                 logger.info("  FPA rules_first 使用规则结果 [%d/%d] %s", idx, len(groups), _group_tag(group))
                 all_rows.extend(rules_first_rows)
@@ -2202,6 +2207,7 @@ def _plan_fpa_rows_with_execution(
                     group=group,
                     rows=rules_first_rows,
                     confirmed_decisions=confirmed_decisions,
+                    profile=profile,
                 )
                 logger.warning("FPA rules_first 未调用 AI [%s]: %s", _group_tag(group), warning)
                 all_rows.extend(rules_first_rows)
@@ -2242,6 +2248,7 @@ def _plan_fpa_rows_with_execution(
                 group=group,
                 rows=group_rows,
                 confirmed_decisions=confirmed_decisions,
+                profile=profile,
             )
             audit_modules.append({
                 "module": _group_tag(group),
@@ -2316,6 +2323,7 @@ def _plan_fpa_rows_with_execution(
                         group=group,
                         rows=group_rows,
                         confirmed_decisions=confirmed_decisions,
+                        profile=profile,
                     )
                     cache_hits += 1
                     success += 1
@@ -2477,6 +2485,7 @@ def _plan_fpa_rows_with_execution(
                 group=group,
                 rows=group_rows,
                 confirmed_decisions=confirmed_decisions,
+                profile=profile,
             )
             confirmation_questions = build_fpa_confirmation_questions(
                 group=group,
@@ -2555,6 +2564,7 @@ def _plan_fpa_rows_with_execution(
                         group=group,
                         rows=group_rows,
                         confirmed_decisions=confirmed_decisions,
+                        profile=profile,
                     )
                 else:
                     warnings.append(f"{_group_tag(group)} 未收到 FPA 计量口径确认，保留当前生成结果")
@@ -2613,6 +2623,7 @@ def _plan_fpa_rows_with_execution(
                 group=group,
                 rows=group_rows,
                 confirmed_decisions=confirmed_decisions,
+                profile=profile,
             )
             audit_modules.append({
                 "module": _group_tag(group),
@@ -3685,6 +3696,7 @@ def preview_fpa_module(
             group=group,
             rows=fpa_rows,
             confirmed_decisions=normalized_decisions,
+            profile=profile,
         )
         debug["agent_review"] = agent_review
         debug["quality_review"] = quality_review

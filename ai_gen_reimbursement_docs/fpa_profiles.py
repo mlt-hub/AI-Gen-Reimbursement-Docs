@@ -434,6 +434,8 @@ def _fallback_business_data(point_name: str, fpa_type: str, source_processes: st
 def _prompt_payload(
     group: dict[str, object],
     domain_context: dict[str, object] | None = None,
+    profile_name: str = "strict_fpa",
+    profile_kind: str = "strict_fpa",
 ) -> dict[str, object]:
     from ai_gen_reimbursement_docs.config_utils import load_fpa_adjustment_value_config
     from ai_gen_reimbursement_docs.fpa_agent_review import build_fpa_agent_review
@@ -447,7 +449,11 @@ def _prompt_payload(
     process_facts = extract_fpa_process_facts(group)
     merge_review = build_fpa_merge_review(group)
     type_judgement = build_fpa_type_judgement(group)
-    agent_review = build_fpa_agent_review(group=group)
+    agent_review = build_fpa_agent_review(
+        group=group,
+        profile_name=profile_name,
+        profile_kind=profile_kind,
+    )
     return {
         "module": {
             "client_type": group.get("client_type", ""),
@@ -511,6 +517,7 @@ def _numbered_judgement_rules(judgement_rules: list[str]) -> str:
 
 def _render_configured_fpa_prompt(
     profile_name: str,
+    profile_kind: str,
     core_rules: str,
     group: dict[str, object],
     judgement_rules: list[str],
@@ -524,7 +531,11 @@ def _render_configured_fpa_prompt(
     return Template(template).substitute({
         "core_rules": configured_core_rules or core_rules,
         "judgement_rules": _numbered_judgement_rules(judgement_rules),
-        "payload_json": json.dumps(_prompt_payload(group, domain_context), ensure_ascii=False, indent=2),
+        "payload_json": json.dumps(
+            _prompt_payload(group, domain_context, profile_name, profile_kind),
+            ensure_ascii=False,
+            indent=2,
+        ),
     })
 
 
@@ -1091,7 +1102,17 @@ class CustomRulesProfile:
         judgement_rules: list[str],
         domain_context: dict[str, object] | None = None,
     ) -> str:
-        return _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
+        return _render_configured_fpa_prompt(
+            self.name,
+            self.agent_review_profile_kind(),
+            self.core_rules,
+            group,
+            judgement_rules,
+            domain_context,
+        )
+
+    def agent_review_profile_kind(self) -> str:
+        return "unified_ui"
 
     def _configured_keyword_rules(self) -> tuple[KeywordTypeRule, ...]:
         current_rule_set = current_fpa_rule_set_config()
@@ -1479,7 +1500,17 @@ class StrictFpaProfile(CustomRulesProfile):
         judgement_rules: list[str],
         domain_context: dict[str, object] | None = None,
     ) -> str:
-        return _render_configured_fpa_prompt(self.name, self.core_rules, group, judgement_rules, domain_context)
+        return _render_configured_fpa_prompt(
+            self.name,
+            self.agent_review_profile_kind(),
+            self.core_rules,
+            group,
+            judgement_rules,
+            domain_context,
+        )
+
+    def agent_review_profile_kind(self) -> str:
+        return "strict_fpa"
 
     def _is_external_data_group(self, text: str) -> bool:
         if any(k in text for k in EXTERNAL_DATA_NEGATION_HINTS):
@@ -1796,6 +1827,9 @@ class UiApiMappingProfile(CustomRulesProfile):
     version: str = "1"
     description: str = "界面接口映射口径：每个功能过程生成界面开发和接口开发行，显式接口/后端调用单独补充。"
     core_rules: str = UI_API_MAPPING_CORE_RULES
+
+    def agent_review_profile_kind(self) -> str:
+        return "ui_api_mapping"
 
     def infer_type(self, name: str, desc: str = "") -> tuple[str, str]:
         if "界面开发" in name:

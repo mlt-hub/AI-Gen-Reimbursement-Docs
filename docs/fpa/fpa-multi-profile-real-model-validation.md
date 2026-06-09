@@ -80,6 +80,8 @@ ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile ui_api_mapping --fpa-
 
 ## 记录模板
 
+可直接复制 [`validation-runs/multi-profile-run-template.md`](validation-runs/multi-profile-run-template.md) 作为单次验证记录。
+
 ```text
 样例：
 输入：
