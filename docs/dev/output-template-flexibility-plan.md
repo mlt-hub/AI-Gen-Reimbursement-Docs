@@ -452,5 +452,16 @@ manifest 文件命名规则：
 已覆盖的测试：
 
 - `tests/test_template_manifest.py`
+- `tests/test_gen_spec_manifest.py`
 - `tests/test_pipeline_units.py`
 - `tests/test_pipeline.py`
+
+### 第二阶段推进状态
+
+`gen-spec` 已开始使用 Word manifest：
+
+- `replacement_scopes` 控制正文、表格、页眉、页脚的占位符替换范围。
+- 页眉和页脚中的普通占位符可被替换。
+- `styles` 中的模块表、标题、正文样式会用于生成内容；样式缺失时回退到当前默认样式。
+
+这一步仍未改变锚点粒度。默认 Word 模板继续使用 `{{功能需求详情}}` 作为功能需求章节插入点。

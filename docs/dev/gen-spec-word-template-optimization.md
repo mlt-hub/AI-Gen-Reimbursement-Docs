@@ -485,15 +485,17 @@ replacement_scopes:
 
 ## 当前实施状态
 
-`gen-spec` 已接入第一阶段的 Word manifest 预检：
+`gen-spec` 已接入 Word manifest 预检，并开始使用 manifest 驱动部分生成行为：
 
 - 默认 Word 模板配套 `项目需求说明书-输出模板.manifest.yaml`。
 - 预检会检查正文、表格、页眉、页脚中的必要占位符。
 - 当前默认模板的功能需求章节锚点仍为 `{{功能需求详情}}`。
+- `replacement_scopes` 会控制正文、表格、页眉、页脚中的占位符替换范围。
+- 页眉、页脚中的普通 `{{占位符}}` 已支持替换。
+- 模块清单表、章节标题、正文段落开始使用 manifest 中的 `styles` 配置；样式不存在时记录 warning 并回退。
 
 尚未实施：
 
-- 用 manifest 样式名驱动章节和表格生成。
 - 将默认锚点迁移为 `{{功能需求章节}}`、`{{模块清单表}}`、`{{功能过程详情}}`。
 - Word 模板导入向导。
 
@@ -523,16 +525,29 @@ placeholders:
     required: true
 ```
 
+当前支持的样式配置：
+
+```yaml
+styles:
+  heading_1: Heading 1
+  heading_2: Heading 2
+  heading_3: Heading 3
+  heading_4: Heading 4
+  process_heading: Normal
+  body: Normal
+  body_indent: Body Text Indent
+  module_table: Table Grid
+```
+
 这里保留 `{{功能需求详情}}` 是为了匹配现有 `generate_spec_docx_from_md(...)` 的插入逻辑。后续迁移到 `{{功能需求章节}}`、`{{模块清单表}}`、`{{功能过程详情}}` 时，需要同步修改模板、manifest、生成器和测试。
 
 ### 下一阶段建议
 
-下一阶段建议先做 Word 生成器内部的 manifest 使用，而不是直接做上传导入向导：
+下一阶段建议继续拆分 Word 锚点，而不是直接做上传导入向导：
 
-1. 读取 `spec` manifest 中的 `styles` 和 `replacement_scopes`。
-2. 将占位符替换从当前正文/表格扩展到页眉、页脚。
-3. 用 manifest 声明的样式名驱动模块清单表和功能需求章节。
-4. 再拆分 `{{功能需求详情}}` 为更细粒度锚点。
-5. 最后实现 Word 模板导入向导。
+1. 将 `{{功能需求详情}}` 拆成 `{{功能需求章节}}`、`{{模块清单表}}`、`{{功能过程详情}}`。
+2. 让 manifest 显式声明各锚点及其生成内容。
+3. 为模块清单表支持样例表复制或更细的列配置。
+4. 再实现 Word 模板导入向导。
 
-这样可以先让默认模板和自定义模板的生成能力真正受 manifest 控制，再处理上传 Word 自动识别的复杂场景。
+这样可以先让默认模板和自定义模板的生成位置真正受 manifest 控制，再处理上传 Word 自动识别的复杂场景。

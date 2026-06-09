@@ -12,11 +12,13 @@ from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.style import WD_STYLE_TYPE
 
 from ai_gen_reimbursement_docs.excel_source import (
     replace_placeholders, strip_ai_marker, parse_module_tree_md,
 )
 from ai_gen_reimbursement_docs.md_table import parse_md_table_row
+from ai_gen_reimbursement_docs.template_manifest import load_template_manifest
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_spec')
 
@@ -143,18 +145,30 @@ def _find_paragraph_by_text(doc: Document, text_fragment: str, start_idx: int = 
 def _generate_section4_content(doc: Document, tree: list[dict], rows: list[dict],
                                  insert_before_elem, meta: dict,
                                  filled_sections: dict[str, str] | None = None,
-                                 filled_proc_descs: dict[str, str] | None = None):
+                                 filled_proc_descs: dict[str, str] | None = None,
+                                 styles: dict[str, str] | None = None):
     """在指定元素前插入 Section 4 内容（模块清单表 + 详细描述）。"""
+    styles = styles or {}
     # 插入模块清单表
     module_tree = _build_module_tree(rows)
-    _insert_module_table(doc, module_tree, insert_before_elem)
+    _insert_module_table(
+        doc,
+        module_tree,
+        insert_before_elem,
+        table_style=styles.get("module_table", "Table Grid"),
+    )
 
     # 插入详细模块内容
     _insert_module_details(doc, tree, rows, insert_before_elem, meta,
-                           filled_sections, filled_proc_descs)
+                           filled_sections, filled_proc_descs, styles)
 
 
-def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
+def _insert_module_table(
+    doc: Document,
+    tree: list[dict],
+    insert_before_elem,
+    table_style: str = "Table Grid",
+):
     """插入模块清单表，合并相同内容的单元格。表头加粗，所有单元格居中。"""
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
@@ -176,7 +190,7 @@ def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
         valign.set(qn('w:val'), 'center')
 
     table = doc.add_table(rows=1, cols=4)
-    table.style = 'Table Grid'
+    _apply_table_style(doc, table, table_style, "Table Grid")
     hdr = table.rows[0].cells
     for i, t in enumerate(["入口", "一级功能模块", "二级功能模块", "三级功能模块"]):
         hdr[i].text = t
@@ -240,13 +254,15 @@ def _insert_module_table(doc: Document, tree: list[dict], insert_before_elem):
 def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
                             insert_before_elem, meta: dict,
                             filled_sections: dict[str, str] | None = None,
-                            filled_proc_descs: dict[str, str] | None = None):
+                            filled_proc_descs: dict[str, str] | None = None,
+                            styles: dict[str, str] | None = None):
     """插入模块详细内容：按入口→一级→二级→三级→功能过程，分层级编号输出。
 
     功能过程描述优先取 AI 填充的 spec MD（filled_proc_descs），无则用 Excel 原文。
     """
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
+    styles = styles or {}
 
     def _set_outline_lvl(para, lvl: int):
         """设置段落的大纲级别。lvl: 0=heading1, 1=heading2, 2=heading3, 3=heading4"""
@@ -287,7 +303,7 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
 
             # L1 标题：4.x. 一级模块
             p_l1 = doc.add_paragraph(f"4.{l1_seq}. {l1_name}")
-            p_l1.style = doc.styles['Normal']
+            _apply_paragraph_style(doc, p_l1, styles.get("heading_2", "Normal"), "Normal")
             _set_outline_lvl(p_l1, 1)  # heading 2
             insert_before_elem.addprevious(p_l1._element)
 
@@ -302,7 +318,7 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
 
                 # L2 标题：4.x.x. 二级模块
                 p_l2 = doc.add_paragraph(f"4.{l1_seq}.{l2_seq}. {l2_name}")
-                p_l2.style = doc.styles['Normal']
+                _apply_paragraph_style(doc, p_l2, styles.get("heading_3", "Normal"), "Normal")
                 _set_outline_lvl(p_l2, 2)  # heading 3
                 insert_before_elem.addprevious(p_l2._element)
 
@@ -315,7 +331,7 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
 
                     # L3 标题：4.x.x.x. 三级模块
                     p_l3 = doc.add_paragraph(f"4.{l1_seq}.{l2_seq}.{l3_seq}. {l3_name}")
-                    p_l3.style = doc.styles['Normal']
+                    _apply_paragraph_style(doc, p_l3, styles.get("heading_4", "Normal"), "Normal")
                     _set_outline_lvl(p_l3, 3)  # heading 4
                     insert_before_elem.addprevious(p_l3._element)
 
@@ -326,12 +342,12 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
                         ai_desc = filled_sections.get(section_key, "")
                     if ai_desc:
                         p_desc = doc.add_paragraph(f"功能描述：{ai_desc}")
-                        p_desc.style = doc.styles['Body Text']
+                        _apply_paragraph_style(doc, p_desc, styles.get("body", "Body Text"), "Normal")
                         insert_before_elem.addprevious(p_desc._element)
 
                     if not procs:
                         p_empty = doc.add_paragraph("（该模块无明确功能过程）")
-                        p_empty.style = doc.styles['Normal']
+                        _apply_paragraph_style(doc, p_empty, styles.get("body", "Normal"), "Normal")
                         insert_before_elem.addprevious(p_empty._element)
                         continue
 
@@ -348,35 +364,197 @@ def _insert_module_details(doc: Document, groups: list[dict], rows: list[dict],
 
                         # 功能过程标题：4.x.x.x.x. 功能过程
                         p_proc = doc.add_paragraph(f"4.{l1_seq}.{l2_seq}.{l3_seq}.{proc_seq}. {proc_name}")
-                        p_proc.style = doc.styles['Normal']
+                        _apply_paragraph_style(doc, p_proc, styles.get("process_heading", "Normal"), "Normal")
                         insert_before_elem.addprevious(p_proc._element)
 
                         if proc_desc:
                             p_desc2 = doc.add_paragraph(proc_desc)
-                            p_desc2.style = doc.styles['Body Text Indent']
+                            _apply_paragraph_style(doc, p_desc2, styles.get("body_indent", "Body Text Indent"), "Normal")
                             insert_before_elem.addprevious(p_desc2._element)
 
 
-def _replace_paragraph_text(doc: Document, text_fragment: str, new_text: str):
-    """替换段落中的 {{占位符}} 部分，保留周围文字。跳过目录（TOC）段落。"""
-    import re
-    for p in doc.paragraphs:
-        if text_fragment in p.text:
-            if p.style and 'toc' in p.style.name.lower():
-                continue
-            # 只替换 {{占位符}} 部分，保留周围文字
-            old_full = p.text
-            new_full = re.sub(r'\{\{[^}]+\}\}', new_text, old_full, count=1)
-            if old_full == new_full:
-                continue
-            for run in p.runs:
-                run.text = ""
-            if p.runs:
-                p.runs[0].text = new_full
-            else:
-                p.add_run(new_full)
-            return True
-    return False
+def _style_exists(doc: Document, style_name: str, style_type=None) -> bool:
+    if not style_name:
+        return False
+    try:
+        style = doc.styles[style_name]
+        return style_type is None or style.type == style_type
+    except KeyError:
+        return False
+
+
+def _apply_paragraph_style(
+    doc: Document,
+    paragraph,
+    style_name: str,
+    fallback_style: str = "Normal",
+) -> None:
+    if _style_exists(doc, style_name, WD_STYLE_TYPE.PARAGRAPH):
+        paragraph.style = doc.styles[style_name]
+        return
+    if style_name and style_name != fallback_style:
+        logger.warning("Word 段落样式不存在，使用 fallback: %s -> %s", style_name, fallback_style)
+    if _style_exists(doc, fallback_style, WD_STYLE_TYPE.PARAGRAPH):
+        paragraph.style = doc.styles[fallback_style]
+
+
+def _apply_table_style(
+    doc: Document,
+    table,
+    style_name: str,
+    fallback_style: str = "Table Grid",
+) -> None:
+    if _style_exists(doc, style_name, WD_STYLE_TYPE.TABLE):
+        table.style = style_name
+        return
+    if style_name and style_name != fallback_style:
+        logger.warning("Word 表格样式不存在，使用 fallback: %s -> %s", style_name, fallback_style)
+    if _style_exists(doc, fallback_style, WD_STYLE_TYPE.TABLE):
+        table.style = fallback_style
+
+
+def _replace_paragraph_placeholder(paragraph, new_text: str) -> bool:
+    """替换段落中的首个 {{占位符}}，保留周围文字。"""
+    if paragraph.style and 'toc' in paragraph.style.name.lower():
+        return False
+    old_full = paragraph.text
+    new_full = re.sub(r'\{\{[^}]+\}\}', new_text, old_full, count=1)
+    if old_full == new_full:
+        return False
+    for run in paragraph.runs:
+        run.text = ""
+    if paragraph.runs:
+        paragraph.runs[0].text = new_full
+    else:
+        paragraph.add_run(new_full)
+    return True
+
+
+def _replace_cell_placeholder(cell, new_text: str) -> bool:
+    """替换单元格中的首个 {{占位符}}，保留第一个段落的基础 run 样式。"""
+    if not cell.paragraphs:
+        return False
+    old_full = cell.text
+    new_full = re.sub(r'\{\{[^}]+\}\}', new_text, old_full, count=1)
+    if old_full == new_full:
+        return False
+    first_paragraph = cell.paragraphs[0]
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            run.text = ""
+    if first_paragraph.runs:
+        first_paragraph.runs[0].text = new_full
+    else:
+        first_paragraph.add_run(new_full)
+    return True
+
+
+def _render_spec_placeholder_value(
+    placeholder: str,
+    *,
+    meta: dict[str, str],
+    filled_sections: dict[str, str],
+    project_info: dict[str, str],
+    fpa_meta: dict[str, str],
+    all_l3_names: list[str],
+    all_module_descs: list[str],
+    all_proc_descs: list[str],
+) -> str:
+    raw_val = filled_sections.get(placeholder, "") or meta.get(placeholder, "")
+    if not raw_val:
+        return ""
+
+    if placeholder == "文档日期" and raw_val.isdigit():
+        from datetime import datetime, timedelta
+        dt = datetime(1899, 12, 30) + timedelta(days=int(raw_val))
+        raw_val = dt.strftime("%Y年%m月")
+
+    raw_val = replace_placeholders(raw_val, project_info, fpa_meta)
+    raw_val = raw_val.replace("【三级模块整体功能描述】", "；".join(all_module_descs))
+    raw_val = raw_val.replace("${三级模块整体功能描述}", "；".join(all_module_descs))
+    raw_val = raw_val.replace("【三级模块】", "、".join(all_l3_names))
+    raw_val = raw_val.replace("${三级模块}", "、".join(all_l3_names))
+    raw_val = raw_val.replace("【功能过程描述】", "；".join(all_proc_descs))
+    raw_val = raw_val.replace("${功能过程描述}", "；".join(all_proc_descs))
+    final_val, _ = strip_ai_marker(raw_val)
+    return final_val
+
+
+def _replace_spec_placeholders_in_paragraphs(
+    paragraphs,
+    *,
+    meta: dict[str, str],
+    filled_sections: dict[str, str],
+    project_info: dict[str, str],
+    fpa_meta: dict[str, str],
+    all_l3_names: list[str],
+    all_module_descs: list[str],
+    all_proc_descs: list[str],
+) -> None:
+    ph_pattern = re.compile(r'\{\{([^}]+)\}\}')
+    for para in list(paragraphs):
+        text = para.text
+        if '{{' not in text:
+            continue
+        match = ph_pattern.search(text)
+        if not match:
+            continue
+        placeholder = match.group(1)
+        value = _render_spec_placeholder_value(
+            placeholder,
+            meta=meta,
+            filled_sections=filled_sections,
+            project_info=project_info,
+            fpa_meta=fpa_meta,
+            all_l3_names=all_l3_names,
+            all_module_descs=all_module_descs,
+            all_proc_descs=all_proc_descs,
+        )
+        if value and _replace_paragraph_placeholder(para, value):
+            logger.info("占位符 [{{%s}}] → %s 字", placeholder, len(value))
+
+
+def _replace_spec_placeholders_in_tables(
+    tables,
+    *,
+    meta: dict[str, str],
+    filled_sections: dict[str, str],
+    project_info: dict[str, str],
+    fpa_meta: dict[str, str],
+    all_l3_names: list[str],
+    all_module_descs: list[str],
+    all_proc_descs: list[str],
+) -> None:
+    ph_pattern = re.compile(r'\{\{([^}]+)\}\}')
+    for table in tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text = cell.text
+                if '{{' not in text:
+                    continue
+                match = ph_pattern.search(text)
+                if not match:
+                    continue
+                placeholder = match.group(1)
+                value = _render_spec_placeholder_value(
+                    placeholder,
+                    meta=meta,
+                    filled_sections=filled_sections,
+                    project_info=project_info,
+                    fpa_meta=fpa_meta,
+                    all_l3_names=all_l3_names,
+                    all_module_descs=all_module_descs,
+                    all_proc_descs=all_proc_descs,
+                )
+                if value and _replace_cell_placeholder(cell, value):
+                    logger.info("表格占位符 [{{%s}}] → %s 字", placeholder, len(value))
+
+
+def _iter_header_footer_tables(sections, attr_name: str):
+    for section in sections:
+        part = getattr(section, attr_name)
+        for table in part.tables:
+            yield table
 
 
 
@@ -619,77 +797,97 @@ def generate_spec_docx_from_md(
 
     # 加载模板
     doc = _safe_load_docx(template_path, '项目需求说明书')
+    spec_manifest, spec_manifest_path, spec_manifest_source = load_template_manifest("spec", template_path)
+    replacement_scopes = set(
+        spec_manifest.get("replacement_scopes")
+        or ["body", "tables", "headers", "footers"]
+    )
+    styles = spec_manifest.get("styles", {}) or {}
+    if not isinstance(styles, dict):
+        logger.warning("spec manifest styles 格式错误，忽略样式配置: %s", spec_manifest_path or spec_manifest_source)
+        styles = {}
 
-    # ====== 替换段落中的 {{占位符}} ======
+    # ====== 替换正文段落中的 {{占位符}}，并处理 {{功能需求详情}} 锚点 ======
     PH_PATTERN = re.compile(r'\{\{([^}]+)\}\}')
-    for para in list(doc.paragraphs):
-        text = para.text
-        if '{{' not in text:
-            continue
-        m = PH_PATTERN.search(text)
-        if not m:
-            continue
-        placeholder = m.group(1)
+    if "body" in replacement_scopes:
+        for para in list(doc.paragraphs):
+            text = para.text
+            if '{{' not in text:
+                continue
+            m = PH_PATTERN.search(text)
+            if not m:
+                continue
+            placeholder = m.group(1)
 
-        # {{功能需求详情}} — 在此位置生成 Section 4 内容
-        if placeholder == "功能需求详情":
-            insert_elem = para._element
-            next_elem = insert_elem.getnext()
-            insert_elem.getparent().remove(insert_elem)
-            anchor = next_elem if next_elem is not None else insert_elem.getparent()
-            _generate_section4_content(doc, groups, rows, anchor, meta,
-                                         filled_sections, filled_proc_descs)
-            continue
+            # {{功能需求详情}} — 在此位置生成 Section 4 内容
+            if placeholder == "功能需求详情":
+                insert_elem = para._element
+                next_elem = insert_elem.getnext()
+                insert_elem.getparent().remove(insert_elem)
+                anchor = next_elem if next_elem is not None else insert_elem.getparent()
+                _generate_section4_content(
+                    doc,
+                    groups,
+                    rows,
+                    anchor,
+                    meta,
+                    filled_sections,
+                    filled_proc_descs,
+                    styles,
+                )
+                continue
 
-        # 优先取 AI填充MD，否则从 meta 取值（{{}} 名称与 Excel 项目名一致）
-        raw_val = filled_sections.get(placeholder, "") or meta.get(placeholder, "")
-        if not raw_val:
-            continue
+            value = _render_spec_placeholder_value(
+                placeholder,
+                meta=meta,
+                filled_sections=filled_sections,
+                project_info=project_info,
+                fpa_meta=fpa_meta,
+                all_l3_names=all_l3_names,
+                all_module_descs=all_module_descs,
+                all_proc_descs=all_proc_descs,
+            )
+            if value and _replace_paragraph_placeholder(para, value):
+                logger.info("占位符 [{{%s}}] → %s 字", placeholder, len(value))
 
-        # 文档日期：Excel 序列号 → yyyy年MM月
-        if placeholder == "文档日期" and raw_val.isdigit():
-            from datetime import datetime, timedelta
-            dt = datetime(1899, 12, 30) + timedelta(days=int(raw_val))
-            raw_val = dt.strftime("%Y年%m月")
+    common_replace_kwargs = {
+        "meta": meta,
+        "filled_sections": filled_sections,
+        "project_info": project_info,
+        "fpa_meta": fpa_meta,
+        "all_l3_names": all_l3_names,
+        "all_module_descs": all_module_descs,
+        "all_proc_descs": all_proc_descs,
+    }
 
-        raw_val = replace_placeholders(raw_val, project_info, fpa_meta)
-        raw_val = raw_val.replace("【三级模块整体功能描述】", "；".join(all_module_descs))
-        raw_val = raw_val.replace("${三级模块整体功能描述}", "；".join(all_module_descs))
-        raw_val = raw_val.replace("【三级模块】", "、".join(all_l3_names))
-        raw_val = raw_val.replace("${三级模块}", "、".join(all_l3_names))
-        raw_val = raw_val.replace("【功能过程描述】", "；".join(all_proc_descs))
-        raw_val = raw_val.replace("${功能过程描述}", "；".join(all_proc_descs))
-        final_val, _ = strip_ai_marker(raw_val)
-        if not final_val:
-            continue
-        _replace_paragraph_text(doc, text, final_val)
-        logger.info(f"占位符 [{{{{{placeholder}}}}}] → {len(final_val)} 字")
+    if "tables" in replacement_scopes:
+        _replace_spec_placeholders_in_tables(doc.tables, **common_replace_kwargs)
 
-    # ====== 替换表格中的 {{占位符}} ======
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                txt = cell.text
-                if '{{' not in txt:
-                    continue
-                m = re.search(r'\{\{([^}]+)\}\}', txt)
-                if not m:
-                    continue
-                p = m.group(1)
-                rv = meta.get(p, "")
-                if rv:
-                    rv = replace_placeholders(rv, project_info, fpa_meta)
-                    fv, _ = strip_ai_marker(rv)
-                    if fv:
-                        # 替换单元格内第一个 run 的文本，保留模板字体样式
-                        fp = cell.paragraphs[0]
-                        for run in fp.runs:
-                            run.text = ""
-                        if fp.runs:
-                            fp.runs[0].text = fv
-                        else:
-                            fp.add_run(fv)
-                        logger.info(f"表格占位符 [{{{{{p}}}}}] → {len(fv)} 字")
+    if "headers" in replacement_scopes:
+        for section in doc.sections:
+            _replace_spec_placeholders_in_paragraphs(
+                section.header.paragraphs,
+                **common_replace_kwargs,
+            )
+        _replace_spec_placeholders_in_tables(
+            _iter_header_footer_tables(doc.sections, "header"),
+            **common_replace_kwargs,
+        )
+
+    if "footers" in replacement_scopes:
+        for section in doc.sections:
+            _replace_spec_placeholders_in_paragraphs(
+                section.footer.paragraphs,
+                **common_replace_kwargs,
+            )
+        _replace_spec_placeholders_in_tables(
+            _iter_header_footer_tables(doc.sections, "footer"),
+            **common_replace_kwargs,
+        )
+
+    unknown_scopes = replacement_scopes - {"body", "tables", "headers", "footers"}
+    if unknown_scopes:
+        logger.warning("spec manifest replacement_scopes 包含暂不支持的范围: %s", sorted(unknown_scopes))
 
     # ====== 保存 ======
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
