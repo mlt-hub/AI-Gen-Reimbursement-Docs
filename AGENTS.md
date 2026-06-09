@@ -55,9 +55,13 @@
 
 - `gen-list` 已使用 `list` manifest 驱动项目需求清单写入：sheet 名、表头行、数据起始行、样式源行和关键列映射会影响实际输出。
 - `gen-spec` 已使用 Word manifest 驱动占位符替换范围、功能需求锚点、模块清单列配置和样式配置。
+- `gen-fpa` 已使用 `fpa` manifest 驱动 FPA 结果 sheet 名、表头行、数据起始行、样式源行和关键列定位。
+- `gen-cosmic` 已使用 `cosmic` manifest 驱动 COSMIC 结果 sheet 名、数据起始行和样式源行。
 - pipeline 已支持 `active_output_template_profile` / `output_template_profiles` 基础解析，profile 可直接声明 `templates` 或通过 `template_pack` 指向带 `manifest.yaml` 的模板包目录。
 - Web 配置页已支持输出模板 profile 基础选择能力：读取 `output_template_profiles`、选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。
-- 尚未完成的输出模板方向包括：Word 导入模板的版式渲染预览、锚点/字段在线调整、正式版本发布、复杂 Word 结构识别、profile 与 FPA 口径/规则集/生成策略联动，以及 FPA/COSMIC 等 Excel 写入器的 manifest 驱动写入。
+- Web/API 保存 `active_output_template_profile` 时已支持联动 profile 中的 `fpa_profile`、`fpa_rule_set`、`fpa_strategy` 和 `fpa_confirmation_mode`。
+- Word 导入模板草稿已支持发布为正式用户模板版本，发布后返回可应用到 `spec_out_template` 的正式模板路径。
+- 尚未完成的输出模板方向包括：Word 导入模板的版式渲染预览、锚点/字段在线调整、复杂 Word 结构识别，以及 COSMIC/FPA 更复杂 Excel 锚点、列映射和公式重写。
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph

@@ -50,6 +50,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     resolve_fpa_execution_config,
     set_current_fpa_rule_set_config,
 )
+from ai_gen_reimbursement_docs.template_manifest import load_template_manifest
 from ai_gen_reimbursement_docs.fpa_quality_review import (
     build_fpa_quality_review,
     quality_feedback,
@@ -4125,6 +4126,83 @@ def _format_fpa_explanation(text: str) -> str:
     return text
 
 
+def _as_manifest_int(value: object, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _fpa_result_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
+    sheets = manifest.get("sheets", {}) or {}
+    spec = sheets.get("result", {}) if isinstance(sheets, dict) else {}
+    if not isinstance(spec, dict):
+        spec = {}
+    return {
+        "name": str(spec.get("name") or "FPA功能点估算"),
+        "header_row": _as_manifest_int(spec.get("header_row"), 2),
+        "data_start_row": _as_manifest_int(spec.get("data_start_row"), 3),
+        "style_source_row": _as_manifest_int(spec.get("style_source_row"), 3),
+        "columns": spec.get("columns", {}) if isinstance(spec.get("columns", {}), dict) else {},
+    }
+
+
+def _fpa_header_map(ws, header_row: int) -> dict[str, int]:
+    headers: dict[str, int] = {}
+    for col_idx in range(1, ws.max_column + 1):
+        value = ws.cell(header_row, col_idx).value
+        if value is None:
+            continue
+        header = str(value).strip()
+        if header and header not in headers:
+            headers[header] = col_idx
+    return headers
+
+
+def _fpa_manifest_header(sheet_spec: dict[str, Any], key: str) -> str:
+    columns = sheet_spec.get("columns", {}) or {}
+    if not isinstance(columns, dict):
+        return ""
+    spec = columns.get(key, {})
+    if isinstance(spec, str):
+        return spec.strip()
+    if isinstance(spec, dict):
+        return str(spec.get("header", "") or "").strip()
+    return ""
+
+
+def _fpa_column_by_header(
+    headers: dict[str, int],
+    sheet_spec: dict[str, Any],
+    key: str,
+    candidates: tuple[str, ...],
+    fallback_col: int,
+) -> int:
+    manifest_header = _fpa_manifest_header(sheet_spec, key)
+    search = (manifest_header,) + candidates if manifest_header else candidates
+    for header in search:
+        if header and header in headers:
+            return headers[header]
+    return fallback_col
+
+
+def _replace_fpa_formula_refs(formula: str, *, row: int, columns: dict[str, int]) -> str:
+    replacements = {
+        "E3": f"{openpyxl.utils.get_column_letter(columns['type'])}{row}",
+        "H3": f"{openpyxl.utils.get_column_letter(columns['status'])}{row}",
+        "I3": f"{openpyxl.utils.get_column_letter(columns['formula_base'])}{row}",
+        "J3": f"{openpyxl.utils.get_column_letter(columns['adjust'])}{row}",
+        "K3": f"{openpyxl.utils.get_column_letter(columns['elements'])}{row}",
+        "J{row}": f"{openpyxl.utils.get_column_letter(columns['adjust'])}{row}",
+        "K{row}": f"{openpyxl.utils.get_column_letter(columns['elements'])}{row}",
+    }
+    result = formula
+    for old, new in replacements.items():
+        result = result.replace(old, new)
+    return result
+
+
 def generate_fpa_xlsx_from_md(
     fpa_md_path: str,
     meta_md_path: str,
@@ -4164,14 +4242,53 @@ def generate_fpa_xlsx_from_md(
                         "要素数量": cells[9],
                     })
 
+    manifest, _, _ = load_template_manifest("fpa", template_path)
+    sheet_spec = _fpa_result_sheet_spec(manifest)
     wb = safe_load_workbook(template_path, 'FPA工作量评估')
     from ai_gen_reimbursement_docs.config_utils import _get_system_config_value
-    _fpa_sheet = _get_system_config_value('fpa_sheet', 'FPA功能点估算')
-    ws = wb[_fpa_sheet]
+    _fpa_sheet = _get_system_config_value('fpa_sheet', sheet_spec["name"])
+    ws = wb[_fpa_sheet if _fpa_sheet in wb.sheetnames else sheet_spec["name"]]
+    header_row = sheet_spec["header_row"]
+    data_start_row = sheet_spec["data_start_row"]
+    style_source_row = sheet_spec["style_source_row"]
+    headers = _fpa_header_map(ws, header_row)
+    fpa_columns = {
+        "seq": _fpa_column_by_header(headers, sheet_spec, "seq", ("序号",), FPA_COL_SEQ),
+        "subsystem": _fpa_column_by_header(headers, sheet_spec, "subsystem", ("子系统(模块)", "子系统"), FPA_COL_SUBSYSTEM),
+        "asset": _fpa_column_by_header(headers, sheet_spec, "asset", ("资产标识",), FPA_COL_ASSET),
+        "function_point_name": _fpa_column_by_header(headers, sheet_spec, "function_point_name", ("新增/修改功能点",), FPA_COL_FUNC_POINT),
+        "type": _fpa_column_by_header(headers, sheet_spec, "type", ("类型",), FPA_COL_TYPE),
+        "classification_basis": _fpa_column_by_header(headers, sheet_spec, "classification_basis", ("计算依据归类",), FPA_COL_CLASSIFICATION),
+        "explanation": _fpa_column_by_header(
+            headers,
+            sheet_spec,
+            "explanation",
+            ("计算依据说明", "计算依据说明，记录关键信息如：事件流、业务规则、业务数据、非功能性规约、表、服务、接口等内容"),
+            FPA_COL_EXPLANATION,
+        ),
+        "status": _fpa_column_by_header(headers, sheet_spec, "status", ("变更状态",), FPA_COL_STATUS),
+        "formula_base": _fpa_column_by_header(headers, sheet_spec, "formula_base", ("基准值",), FPA_COL_FORMULA_BASE),
+        "adjust": _fpa_column_by_header(headers, sheet_spec, "adjust", ("调整值",), FPA_COL_ADJUST),
+        "elements": _fpa_column_by_header(headers, sheet_spec, "elements", ("要素数量",), FPA_COL_ELEMENTS),
+        "formula_workload": _fpa_column_by_header(headers, sheet_spec, "formula_workload", ("FPA工作量",), FPA_COL_FORMULA_WORKLOAD),
+    }
+    fpa_key_columns = {
+        "序号": fpa_columns["seq"],
+        "子系统(模块)": fpa_columns["subsystem"],
+        "资产标识": fpa_columns["asset"],
+        "新增/修改功能点": fpa_columns["function_point_name"],
+        "类型": fpa_columns["type"],
+        "计算依据归类": fpa_columns["classification_basis"],
+        "计算依据说明": fpa_columns["explanation"],
+        "变更状态": fpa_columns["status"],
+        "调整值": fpa_columns["adjust"],
+        "要素数量": fpa_columns["elements"],
+    }
+    total_cols = max(FPA_TOTAL_COLS, ws.max_column, *fpa_columns.values())
 
     tmpl_format = {}
-    for col_idx in range(1, FPA_TOTAL_COLS):
-        c = ws.cell(3, col_idx)
+    for col_idx in range(1, total_cols + 1):
+        c = ws.cell(style_source_row, col_idx)
         tmpl_format[col_idx] = {
             'font': copy(c.font) if c.font else None,
             'fill': copy(c.fill) if c.fill else None,
@@ -4179,42 +4296,38 @@ def generate_fpa_xlsx_from_md(
             'number_format': c.number_format,
             'alignment': copy(c.alignment) if c.alignment else None,
         }
-    for col_idx in (FPA_COL_FORMULA_BASE, FPA_COL_FORMULA_WORKLOAD):
-        c = ws.cell(2, col_idx)
+    for col_idx in (fpa_columns["formula_base"], fpa_columns["formula_workload"]):
+        c = ws.cell(header_row, col_idx)
         if c.fill:
             tmpl_format[col_idx]['fill'] = copy(c.fill)
 
-    if ws.max_row >= 3:
-        ws.delete_rows(3, ws.max_row - 2)
+    if ws.max_row >= data_start_row:
+        ws.delete_rows(data_start_row, ws.max_row - data_start_row + 1)
 
     for i, fpa_row in enumerate(fpa_rows):
-        excel_row = i + 3
-        for col_idx, key in FPA_COL_KEY_MAP.items():
+        excel_row = i + data_start_row
+        for key, col_idx in fpa_key_columns.items():
             val = fpa_row.get(key, "")
             cell = ws.cell(excel_row, col_idx)
-            if col_idx in (FPA_COL_SEQ, FPA_COL_ADJUST, FPA_COL_ELEMENTS):
+            if col_idx in (fpa_columns["seq"], fpa_columns["adjust"], fpa_columns["elements"]):
                 try:
                     cell.value = int(val)
                 except (ValueError, TypeError):
                     cell.value = val
-            elif col_idx == FPA_COL_EXPLANATION:
+            elif col_idx == fpa_columns["explanation"]:
                 cell.value = _format_fpa_explanation(val)
             else:
                 cell.value = val
         if base_formula:
-            formula = base_formula.replace("E3", f"E{excel_row}") \
-                .replace("H3", f"H{excel_row}").replace("I3", f"I{excel_row}") \
-                .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
-            ws.cell(excel_row, FPA_COL_FORMULA_BASE).value = f"={formula}" if not formula.startswith('=') else formula
+            formula = _replace_fpa_formula_refs(base_formula, row=excel_row, columns=fpa_columns)
+            ws.cell(excel_row, fpa_columns["formula_base"]).value = f"={formula}" if not formula.startswith('=') else formula
         if workload_formula:
-            formula = workload_formula.replace("J{row}", f"J{excel_row}") \
-                .replace("K{row}", f"K{excel_row}") \
-                .replace("J3", f"J{excel_row}").replace("K3", f"K{excel_row}")
-            ws.cell(excel_row, FPA_COL_FORMULA_WORKLOAD).value = f"={formula}" if not formula.startswith('=') else formula
+            formula = _replace_fpa_formula_refs(workload_formula, row=excel_row, columns=fpa_columns)
+            ws.cell(excel_row, fpa_columns["formula_workload"]).value = f"={formula}" if not formula.startswith('=') else formula
         ws.cell(excel_row, FPA_TOTAL_COLS - 1, "")
         ws.cell(excel_row, FPA_TOTAL_COLS, "")
 
-        for col_idx in range(1, FPA_TOTAL_COLS):
+        for col_idx in range(1, total_cols + 1):
             c = ws.cell(excel_row, col_idx)
             fmt = tmpl_format.get(col_idx, {})
             if fmt.get('font'):
@@ -4223,11 +4336,11 @@ def generate_fpa_xlsx_from_md(
                 c.border = fmt['border']
             if fmt.get('number_format'):
                 c.number_format = fmt['number_format']
-            if col_idx in (9, 12) and fmt.get('fill'):
+            if col_idx in (fpa_columns["formula_base"], fpa_columns["formula_workload"]) and fmt.get('fill'):
                 c.fill = fmt['fill']
-            if col_idx in (FPA_COL_FUNC_POINT, FPA_COL_EXPLANATION):
+            if col_idx in (fpa_columns["function_point_name"], fpa_columns["explanation"]):
                 orig_align = fmt.get('alignment')
-                h = 'left' if col_idx == 7 else (orig_align.horizontal or 'center')
+                h = 'left' if col_idx == fpa_columns["explanation"] else (orig_align.horizontal or 'center')
                 if orig_align:
                     c.alignment = Alignment(
                         wrap_text=True,
@@ -4240,11 +4353,17 @@ def generate_fpa_xlsx_from_md(
                 if fmt.get('alignment'):
                     c.alignment = fmt['alignment']
 
-    last_data_row = len(fpa_rows) + 2
-    for col_idx in [FPA_COL_FORMULA_BASE, FPA_COL_ADJUST, FPA_COL_ELEMENTS, FPA_COL_FORMULA_WORKLOAD, FPA_TOTAL_COLS - 1]:
+    last_data_row = data_start_row + len(fpa_rows) - 1
+    for col_idx in [
+        fpa_columns["formula_base"],
+        fpa_columns["adjust"],
+        fpa_columns["elements"],
+        fpa_columns["formula_workload"],
+        FPA_TOTAL_COLS - 1,
+    ]:
         cell = ws.cell(1, col_idx)
         col_letter = openpyxl.utils.get_column_letter(col_idx)
-        cell.value = f"=SUM({col_letter}3:{col_letter}{last_data_row})"
+        cell.value = f"=SUM({col_letter}{data_start_row}:{col_letter}{last_data_row})"
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     try:
         wb.save(output_path)

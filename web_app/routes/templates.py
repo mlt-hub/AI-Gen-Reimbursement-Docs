@@ -9,6 +9,7 @@ from web_app.services.template_service import (
     delete_imported_spec_template,
     import_spec_template_upload,
     list_imported_spec_templates,
+    publish_imported_spec_template,
     update_imported_spec_template_metadata,
     resolve_imported_spec_template_file,
 )
@@ -166,6 +167,23 @@ async def download_imported_spec_template(
     except FileNotFoundError:
         raise HTTPException(404, "模板草稿不存在")
     return FileResponse(path, filename=filename)
+
+
+@router.post("/api/templates/spec/imported/{import_id}/publish")
+async def publish_imported_spec_template_route(
+    request: Request,
+    import_id: str,
+    _user: str = Depends(require_auth),
+):
+    """发布已确认的需求说明书模板草稿为正式用户模板版本。"""
+    if not is_local_mode(request):
+        raise HTTPException(403, "Word 模板草稿只能由本机管理员管理")
+    try:
+        return publish_imported_spec_template(config_dir(), import_id)
+    except FileNotFoundError:
+        raise HTTPException(404, "模板草稿不存在")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.delete("/api/templates/spec/imported/{import_id}")

@@ -377,6 +377,69 @@ def test_save_web_config_to_dir_clears_active_template_profile(tmp_path):
     assert "active_output_template_profile" not in saved["_system"]
 
 
+def test_save_web_config_to_dir_applies_template_profile_fpa_defaults(tmp_path):
+    (tmp_path / "system_config.yaml").write_text(
+        "\n".join([
+            "output_template_profiles:",
+            "  strict_delivery:",
+            "    template_pack: data/template_packs/strict_delivery",
+            "    fpa_profile: strict_fpa",
+            "    fpa_strategy: ai_first",
+            "    fpa_rule_set: strict_fpa_rs",
+            "    fpa_confirmation_mode: strict",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+
+    asyncio.run(config_service.save_web_config_to_dir(
+        {
+            "templates": {
+                "active_output_template_profile": {"value": "strict_delivery"},
+            },
+        },
+        tmp_path,
+    ))
+
+    saved = config_service.read_config_from_dir(tmp_path)["_system"]
+    assert saved["active_output_template_profile"] == "strict_delivery"
+    assert saved["fpa_profile"] == "strict_fpa"
+    assert saved["fpa_strategy"] == "ai_first"
+    assert saved["fpa_rule_set"] == "strict_fpa_rs"
+    assert saved["fpa_confirmation_mode"] == "strict"
+
+
+def test_save_web_config_to_dir_explicit_run_defaults_override_template_profile_defaults(tmp_path):
+    (tmp_path / "system_config.yaml").write_text(
+        "\n".join([
+            "output_template_profiles:",
+            "  strict_delivery:",
+            "    fpa_profile: strict_fpa",
+            "    fpa_strategy: ai_first",
+            "    fpa_rule_set: strict_fpa_rs",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+
+    asyncio.run(config_service.save_web_config_to_dir(
+        {
+            "templates": {
+                "active_output_template_profile": {"value": "strict_delivery"},
+            },
+            "run_defaults": {
+                "fpa_strategy": {"value": "rules_first"},
+            },
+        },
+        tmp_path,
+    ))
+
+    saved = config_service.read_config_from_dir(tmp_path)["_system"]
+    assert saved["fpa_profile"] == "strict_fpa"
+    assert saved["fpa_strategy"] == "rules_first"
+    assert saved["fpa_rule_set"] == "strict_fpa_rs"
+
+
 def test_save_web_config_to_dir_preserves_encrypted_key_when_omitted(monkeypatch, tmp_path):
     monkeypatch.setattr(secret_service, "_encrypt_with_dpapi", lambda value: (_ for _ in ()).throw(secret_service.SecretServiceError("no dpapi")))
     asyncio.run(config_service.save_web_config_to_dir({"ai": {"api_key": "sk-existing"}}, tmp_path))

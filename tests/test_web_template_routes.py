@@ -101,6 +101,7 @@ def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp
     assert items[0]["display_name"] == "客户A需求说明书模板 v1"
     assert items[0]["note"] == "功能需求锚点已确认"
     assert items[0]["confirmed"] is True
+    assert items[0]["published"] is False
 
     download_resp = client.get(f"/api/templates/spec/imported/{import_id}/项目需求说明书-输出模板.manifest.yaml")
     assert download_resp.status_code == 200
@@ -121,6 +122,19 @@ def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp
     assert any(item["scope"] == "footers" and item["token"] == "{{文档标题}}" for item in preview["placeholders"])
     assert any(item["scope"] == "tables" and item["token"] == "{{需求部门}}" for item in preview["placeholders"])
 
+    publish_resp = client.post(f"/api/templates/spec/imported/{import_id}/publish")
+    assert publish_resp.status_code == 200
+    published = publish_resp.json()
+    assert Path(published["template_path"]).exists()
+    assert Path(published["manifest_path"]).exists()
+    assert "published_templates" in published["template_path"]
+    assert published["out_templates_patch"] == {"spec_out_template": published["template_path"]}
+    assert published["metadata"]["published"] is True
+    list_resp = client.get("/api/templates/spec/imported")
+    items = list_resp.json()["templates"]
+    assert items[0]["published"] is True
+    assert items[0]["published_template_path"] == published["template_path"]
+
     delete_resp = client.delete(f"/api/templates/spec/imported/{import_id}")
     assert delete_resp.status_code == 200
     assert delete_resp.json() == {"deleted": True, "id": import_id}
@@ -133,6 +147,24 @@ def test_imported_spec_template_routes_reject_invalid_file(monkeypatch, tmp_path
     resp = client.get("/api/templates/spec/imported/not-found/..%2Fsecret.txt")
 
     assert resp.status_code == 404
+
+
+def test_imported_spec_template_publish_requires_confirmation(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    import_id = Path(import_resp.json()["template_path"]).parent.name
+
+    publish_resp = client.post(f"/api/templates/spec/imported/{import_id}/publish")
+
+    assert publish_resp.status_code == 400
+    assert "尚未确认" in publish_resp.json()["detail"]
 
 
 def test_import_spec_template_route_rejects_non_docx(monkeypatch, tmp_path):
@@ -165,4 +197,5 @@ def test_imported_spec_template_management_rejects_remote_mode(monkeypatch, tmp_
     assert client.get("/api/templates/spec/imported").status_code == 403
     assert client.get("/api/templates/spec/imported/abc/preview").status_code == 403
     assert client.put("/api/templates/spec/imported/abc/metadata", json={"confirmed": True}).status_code == 403
+    assert client.post("/api/templates/spec/imported/abc/publish").status_code == 403
     assert client.delete("/api/templates/spec/imported/abc").status_code == 403

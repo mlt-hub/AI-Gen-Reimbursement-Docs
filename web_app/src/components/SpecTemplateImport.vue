@@ -98,6 +98,7 @@
                   <span :class="['status-badge', item.confirmed ? 'status-badge--success' : 'status-badge--neutral']">
                     {{ item.confirmed ? '已确认' : '未确认' }}
                   </span>
+                  <span v-if="item.published" class="status-badge status-badge--success">已发布</span>
                   <span class="text-xs text-[var(--color-ink-soft)]">{{ formatBytes(item.size_bytes) }}</span>
                 </div>
                 <p v-if="item.note" class="mt-1 text-xs text-[var(--color-ink-muted)]">{{ item.note }}</p>
@@ -121,6 +122,9 @@
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" @click="toggleMetadataEditor(item)">命名</button>
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="metadataSavingId === item.id" @click="setDraftConfirmed(item, !item.confirmed)">
                   {{ item.confirmed ? '取消确认' : '确认' }}
+                </button>
+                <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="publishingId === item.id || !item.confirmed || !item.ok" @click="publishDraft(item)">
+                  {{ publishingId === item.id ? '发布中' : '发布' }}
                 </button>
                 <button class="btn-primary min-h-0 px-2 py-1 text-xs" @click="applyDraft(item)">应用</button>
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="deletingId === item.id" @click="deleteDraft(item)">
@@ -258,6 +262,9 @@ interface ImportedDraft {
   note: string
   confirmed: boolean
   confirmed_at: string
+  published: boolean
+  published_at: string
+  published_template_path: string
   updated_at: string
   template_path: string
   manifest_path: string
@@ -360,6 +367,7 @@ const activePreviewId = ref('')
 const activePreview = ref<ImportedDraftPreview | null>(null)
 const metadataEditorId = ref('')
 const metadataSavingId = ref('')
+const publishingId = ref('')
 const draftEdits = ref<Record<string, { display_name: string; note: string; confirmed: boolean }>>({})
 
 const statusText = computed(() => {
@@ -444,6 +452,26 @@ function applyDraft(item: ImportedDraft) {
   emit('apply', item.out_templates_patch || {})
   draftsOk.value = true
   draftsMessage.value = '已应用到模板映射，请保存'
+}
+
+async function publishDraft(item: ImportedDraft) {
+  publishingId.value = item.id
+  draftsMessage.value = ''
+  try {
+    const published = await apiFetch<{ out_templates_patch: Record<string, string> }>(
+      `/api/templates/spec/imported/${encodeURIComponent(item.id)}/publish`,
+      { method: 'POST' },
+    )
+    emit('apply', published.out_templates_patch || {})
+    draftsOk.value = true
+    draftsMessage.value = '正式模板已发布并应用到模板映射，请保存'
+    await loadDrafts()
+  } catch (error) {
+    draftsOk.value = false
+    draftsMessage.value = normalizeApiError(error)
+  } finally {
+    publishingId.value = ''
+  }
 }
 
 async function deleteDraft(item: ImportedDraft) {

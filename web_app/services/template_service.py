@@ -116,6 +116,9 @@ def list_imported_spec_templates(target_root: Path) -> list[dict[str, Any]]:
             "note": metadata.get("note", ""),
             "confirmed": bool(metadata.get("confirmed", False)),
             "confirmed_at": metadata.get("confirmed_at", ""),
+            "published": bool(metadata.get("published", False)),
+            "published_at": metadata.get("published_at", ""),
+            "published_template_path": metadata.get("published_template_path", ""),
             "updated_at": metadata.get("updated_at", ""),
             "template_path": str(template_path),
             "manifest_path": str(manifest_path),
@@ -190,6 +193,10 @@ def _default_imported_spec_template_metadata(import_id: str) -> dict[str, Any]:
         "note": "",
         "confirmed": False,
         "confirmed_at": "",
+        "published": False,
+        "published_at": "",
+        "published_template_path": "",
+        "published_manifest_path": "",
         "updated_at": "",
     }
 
@@ -222,6 +229,55 @@ def delete_imported_spec_template(target_root: Path, import_id: str) -> bool:
         return False
     shutil.rmtree(path)
     return True
+
+
+def published_spec_templates_root(target_root: Path) -> Path:
+    return target_root / "published_templates" / "spec"
+
+
+def publish_imported_spec_template(target_root: Path, import_id: str) -> dict[str, Any]:
+    """Publish a confirmed imported spec template draft as a stable user template."""
+    item_dir = _resolve_imported_spec_template_dir(target_root, import_id)
+    template_path = item_dir / "项目需求说明书-输出模板.docx"
+    manifest_path = item_dir / "项目需求说明书-输出模板.manifest.yaml"
+    metadata = read_imported_spec_template_metadata(target_root, import_id)
+    if not bool(metadata.get("confirmed", False)):
+        raise ValueError("模板草稿尚未确认，不能发布正式版本")
+    validation = validate_output_template("spec", str(template_path))
+    if not validation.ok:
+        messages = "；".join(issue.message for issue in validation.errors)
+        raise ValueError(f"模板草稿预检未通过，不能发布正式版本：{messages}")
+
+    publish_dir = published_spec_templates_root(target_root) / import_id
+    publish_dir.mkdir(parents=True, exist_ok=True)
+    published_template_path = publish_dir / template_path.name
+    published_manifest_path = publish_dir / manifest_path.name
+    shutil.copy2(template_path, published_template_path)
+    shutil.copy2(manifest_path, published_manifest_path)
+
+    now = str(int(time.time()))
+    metadata.update({
+        "published": True,
+        "published_at": now,
+        "published_template_path": str(published_template_path),
+        "published_manifest_path": str(published_manifest_path),
+        "updated_at": now,
+    })
+    (item_dir / "metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return {
+        "id": import_id,
+        "template_path": str(published_template_path),
+        "manifest_path": str(published_manifest_path),
+        "template_filename": published_template_path.name,
+        "manifest_filename": published_manifest_path.name,
+        "metadata": metadata,
+        "out_templates_patch": {
+            "spec_out_template": str(published_template_path),
+        },
+    }
 
 
 def build_imported_spec_template_preview(target_root: Path, import_id: str) -> dict[str, Any]:

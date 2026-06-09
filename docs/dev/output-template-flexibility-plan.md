@@ -412,7 +412,9 @@ template_pack/
 当前边界：
 
 - `list` 需求清单写入器已开始使用 manifest 做 sheet、表头行、数据起始行、样式源行和列映射。
-- 其他 Excel 写入器仍主要使用旧固定结构，尚未全面按 manifest 做列映射或锚点写入。
+- FPA 结果写入器已开始使用 manifest 做 result sheet、表头行、数据起始行、样式源行和关键列定位。
+- COSMIC 写入器已开始使用 manifest 做 result sheet、数据起始行和样式源行。
+- COSMIC 等 Excel 写入器尚未全面按 manifest 做列映射、复杂锚点或公式重写。
 - 用户自定义模板如果没有同名 manifest，会按对应 kind 的默认契约预检。
 - `gen-basedata` 不生成最终交付物，因此不执行输出模板预检。
 
@@ -430,6 +432,10 @@ template_pack/
   - 预检通过后通过 pipeline activity 事件输出模板预检结果。
 - `ai_gen_reimbursement_docs/config_utils.py`
   - `load_output_template_profile(...)`：读取当前输出模板 profile，并解析可选模板包。
+- `ai_gen_reimbursement_docs/gen_fpa.py`
+  - `generate_fpa_xlsx_from_md(...)`：按 `fpa` manifest 的 result sheet、行号和关键列表头定位写入 FPA 结果。
+- `ai_gen_reimbursement_docs/cosmic_writer.py`
+  - `write_cosmic_xlsx(...)`：按 `cosmic` manifest 的 result sheet、数据起始行和样式源行写入 COSMIC 结果。
 
 manifest 文件命名规则：
 
@@ -479,15 +485,17 @@ manifest 文件命名规则：
 - Web 配置页已支持已导入 Word 模板草稿的列表、下载、应用和删除。
 - Web 配置页已支持已导入 Word 模板草稿的结构预览，展示占位符、功能需求锚点、章节候选和正文/表格/页眉/页脚摘要。
 - Web 配置页已支持已导入 Word 模板草稿的名称、版本备注和确认状态管理。
+- Web 配置页已支持将已确认且预检通过的 Word 模板草稿发布为正式用户模板版本，发布后可将正式模板路径应用到 `spec_out_template`。
 - Web 配置页已支持输出模板 profile 基础选择能力：展示 `output_template_profiles` 列表，选择或清空 `active_output_template_profile`，并显示所选 profile 的 `template_pack` 和 `templates` key。
+- Web/API 保存 `active_output_template_profile` 时已支持联动 profile 中的 FPA 口径、规则集、生成策略和确认模式；同一次保存中显式传入的 `run_defaults` 会覆盖 profile 默认值。
 
 默认 Word 模板文件已使用 `{{模块清单表}}` 和 `{{功能过程详情}}` 作为功能需求章节拆分插入点。`{{功能需求详情}}` 仍作为历史自定义模板的兼容锚点保留。
 
 当前仍未落地：
 
-- 导入后模板草稿的版式渲染预览、锚点/字段在线调整和正式版本发布。
-- profile 与 FPA 口径、规则集、生成策略的联动。
-- FPA/COSMIC 等 Excel 写入器按 manifest 做列映射、锚点定位和样式复制。
+- 导入后模板草稿的版式渲染预览、锚点/字段在线调整。
+- COSMIC/FPA 等 Excel 写入器按 manifest 做完整列映射、锚点定位和复杂样式复制。
+- FPA 写入器的附录读取、复杂锚点、命名单元格、图片/文本框和跨 sheet 公式重写。
 - 文本框、内容控件、图片文字等复杂 Word 结构识别。
 
 ### 输出模板 profile 当前行为

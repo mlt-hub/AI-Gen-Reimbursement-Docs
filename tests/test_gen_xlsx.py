@@ -188,6 +188,91 @@ class TestFpaTotalCalculation:
         assert ws.cell(1, 12).value == "=SUM(L3:L4)"
         wb.close()
 
+    def test_generate_xlsx_uses_fpa_manifest_sheet_rows_and_headers(self, tmp_path):
+        template = tmp_path / "custom-fpa.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "自定义FPA"
+        headers = [
+            "序号",
+            "新增/修改功能点",
+            "类型",
+            "子系统(模块)",
+            "资产标识",
+            "变更状态",
+            "计算依据归类",
+            "计算依据说明",
+            "调整值",
+            "要素数量",
+            "基准值",
+            "FPA工作量",
+            "核减后工作量",
+            "备注说明",
+        ]
+        for col_idx, header in enumerate(headers, start=1):
+            ws.cell(4, col_idx).value = header
+        for col_idx in range(1, len(headers) + 1):
+            ws.cell(5, col_idx).border = openpyxl.styles.Border(
+                left=openpyxl.styles.Side(style="thin"),
+                right=openpyxl.styles.Side(style="thin"),
+                top=openpyxl.styles.Side(style="thin"),
+                bottom=openpyxl.styles.Side(style="thin"),
+            )
+        wb.save(template)
+        wb.close()
+        template.with_suffix(".manifest.yaml").write_text(
+            "\n".join([
+                "kind: fpa",
+                "sheets:",
+                "  result:",
+                "    name: 自定义FPA",
+                "    header_row: 4",
+                "    data_start_row: 5",
+                "    style_source_row: 5",
+                "    columns:",
+                "      function_point_name:",
+                "        header: 新增/修改功能点",
+                "      type:",
+                "        header: 类型",
+                "      classification_basis:",
+                "        header: 计算依据归类",
+                "      explanation:",
+                "        header: 计算依据说明",
+                "",
+            ]),
+            encoding="utf-8",
+        )
+
+        fpa_md = tmp_path / "fpa.md"
+        meta_md = tmp_path / "meta.md"
+        output = tmp_path / "FPA工作量评估.xlsx"
+        fpa_md.write_text(
+            "# FPA 工作量评估\n\n"
+            "| 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |\n"
+            "|------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|\n"
+            "| 1 | 测试系统 | TEST | 自定义列功能点 | EI | 规则一 | 说明 | 新增 | 2 | 3 | fallback | - | - |  |\n",
+            encoding="utf-8",
+        )
+        meta_md.write_text(
+            "# 元数据\n\n"
+            "| 字段 | 值 |\n"
+            "|------|----|\n"
+            "| 基准值公式 | IF(E3=\"EI\",4,IF(E3=\"EO\",5,IF(E3=\"EQ\",4,IF(E3=\"ILF\",10,IF(E3=\"EIF\",7,0)))))*IF(H3=\"修改\",0.6,1) |\n",
+            encoding="utf-8",
+        )
+
+        generate_fpa_xlsx_from_md(str(fpa_md), str(meta_md), str(template), str(output))
+
+        wb = openpyxl.load_workbook(output, data_only=False)
+        ws = wb["自定义FPA"]
+        assert ws.cell(5, 2).value == "自定义列功能点"
+        assert ws.cell(5, 4).value == "测试系统"
+        assert ws.cell(5, 7).value == "规则一"
+        assert ws.cell(5, 11).value == "=IF(C5=\"EI\",4,IF(C5=\"EO\",5,IF(C5=\"EQ\",4,IF(C5=\"ILF\",10,IF(C5=\"EIF\",7,0)))))*IF(F5=\"修改\",0.6,1)"
+        assert ws.cell(5, 12).value == "=I5*J5"
+        assert ws.cell(1, 12).value == "=SUM(L5:L5)"
+        wb.close()
+
     def test_formula_projection_rejects_unexpected_workload_formula(self, tmp_path):
         xlsx = tmp_path / "fpa.xlsx"
         wb = openpyxl.Workbook()
