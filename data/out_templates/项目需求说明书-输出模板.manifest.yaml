@@ -11,16 +11,16 @@ placeholders:
     required: true
   functional_requirements:
     token: "{{功能需求详情}}"
-    required: true
+    required: false
   functional_requirements_section:
     token: "{{功能需求章节}}"
     required: false
   module_table:
     token: "{{模块清单表}}"
-    required: false
+    required: true
   module_details:
     token: "{{功能过程详情}}"
-    required: false
+    required: true
   subsystem:
     token: "{{调整因子中的子系统名称}}"
     required: true

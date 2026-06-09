@@ -504,7 +504,7 @@ replacement_scopes:
 
 - 默认 Word 模板配套 `项目需求说明书-输出模板.manifest.yaml`。
 - 预检会检查正文、表格、页眉、页脚中的必要占位符。
-- 当前默认模板的功能需求章节锚点仍为 `{{功能需求详情}}`，生成器同时支持新锚点。
+- 当前默认模板已使用 `{{模块清单表}}` 和 `{{功能过程详情}}` 拆分锚点，生成器仍兼容旧锚点。
 - `replacement_scopes` 会控制正文、表格、页眉、页脚中的占位符替换范围。
 - 页眉、页脚中的普通 `{{占位符}}` 已支持替换。
 - 模块清单表、章节标题、正文段落开始使用 manifest 中的 `styles` 配置；样式不存在时记录 warning 并回退。
@@ -538,16 +538,16 @@ placeholders:
     required: true
   functional_requirements:
     token: "{{功能需求详情}}"
-    required: true
+    required: false
   functional_requirements_section:
     token: "{{功能需求章节}}"
     required: false
   module_table:
     token: "{{模块清单表}}"
-    required: false
+    required: true
   module_details:
     token: "{{功能过程详情}}"
-    required: false
+    required: true
   subsystem:
     token: "{{调整因子中的子系统名称}}"
     required: true
@@ -603,14 +603,13 @@ module_table:
 
 `sample_table` 是可选配置。只有 manifest 明确提供 marker 且模板中存在包含该 marker 的表格时，才会启用样例表复制；默认内置 Word 模板目前仍使用 `style` 新建模块清单表。
 
-这里保留 `{{功能需求详情}}` 是为了兼容现有内置 Word 模板。新自定义模板可以直接使用 `{{功能需求章节}}`，或用 `{{模块清单表}}` 和 `{{功能过程详情}}` 分别控制模块清单表与功能过程详情的位置。
+这里保留 `{{功能需求详情}}` 是为了兼容历史自定义 Word 模板。新自定义模板可以直接使用 `{{功能需求章节}}`，或用 `{{模块清单表}}` 和 `{{功能过程详情}}` 分别控制模块清单表与功能过程详情的位置；内置默认模板已采用拆分锚点。
 
 ### 下一阶段建议
 
-下一阶段建议先让默认 Word 模板文件自身采用新拆分锚点，而不是直接做上传导入向导：
+下一阶段建议先增加 Web/CLI 对 Word 模板锚点能力的展示，而不是直接做上传导入向导：
 
-1. 将内置 Word 模板文件中的旧锚点替换为新拆分锚点。
-2. 增加 Web/CLI 对当前 Word 锚点模式和样例表能力的展示。
-3. 再实现 Word 模板导入向导。
+1. 增加 Web/CLI 对当前 Word 锚点模式和样例表能力的展示。
+2. 再实现 Word 模板导入向导。
 
 这样可以先让默认模板和自定义模板的生成位置真正受 manifest 控制，再处理上传 Word 自动识别的复杂场景。
