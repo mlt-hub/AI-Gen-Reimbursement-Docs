@@ -1534,3 +1534,105 @@ def test_cosmic_confirmation_get_missing_returns_404(monkeypatch, tmp_path):
 
     assert resp.status_code == 404
     server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_draft_can_be_loaded_from_session_artifact(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_draft_artifact"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = {
+        "project": "测试项目",
+        "status": "review_required",
+        "preview_rows": [],
+        "review_items": [],
+        "items": [],
+    }
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    server.session_manager.record_pipeline_event(session_id, {
+        "type": "artifact",
+        "step": "cosmic",
+        "payload": {
+            "label": "COSMIC JSON 草稿",
+            "name": draft_path.name,
+            "path": str(draft_path),
+            "is_temp": True,
+        },
+    })
+
+    resp = client.get(f"/api/sessions/{session_id}/cosmic/draft")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["filename"] == "3.3.gen-cosmic-AI填充-COSMIC.json"
+    assert data["payload"] == payload
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_draft_falls_back_to_output_search(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_draft_search"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "nested" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = {
+        "project": "搜索回退",
+        "status": "blocked",
+        "preview_rows": [],
+        "review_items": [],
+        "items": [],
+    }
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    resp = client.get(f"/api/sessions/{session_id}/cosmic/draft")
+
+    assert resp.status_code == 200
+    assert resp.json()["payload"] == payload
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_draft_rejects_artifact_outside_output_dir(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_draft_unsafe_artifact"
+    unsafe_path = tmp_path / "scratch" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    unsafe_path.parent.mkdir(parents=True)
+    unsafe_path.write_text(
+        json.dumps({
+            "project": "越界草稿",
+            "status": "passed",
+            "preview_rows": [],
+            "review_items": [],
+            "items": [],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    server.session_manager.record_pipeline_event(session_id, {
+        "type": "artifact",
+        "step": "cosmic",
+        "payload": {
+            "label": "COSMIC JSON 草稿",
+            "name": unsafe_path.name,
+            "path": str(unsafe_path),
+            "is_temp": True,
+        },
+    })
+
+    resp = client.get(f"/api/sessions/{session_id}/cosmic/draft")
+
+    assert resp.status_code == 404
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_draft_requires_session_access(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="bob")
+    session_id = "cosmic_draft_other_user"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    resp = client.get(f"/api/sessions/{session_id}/cosmic/draft")
+
+    assert resp.status_code == 404
+    server.session_manager.cleanup_download(session_id)

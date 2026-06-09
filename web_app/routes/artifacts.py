@@ -59,6 +59,57 @@ def _cosmic_confirmation_path(session_manager: SessionManager, session_id: str) 
     return root / "cosmic-confirmation.json"
 
 
+def _session_output_dir(session_manager: SessionManager, session_id: str) -> Path | None:
+    state = session_manager.get(session_id)
+    if state is None:
+        return None
+    if state.output_dir is not None:
+        return state.output_dir
+    if state.work_dir is not None:
+        return state.work_dir / "output"
+    return None
+
+
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _cosmic_draft_json_path(session_manager: SessionManager, session_id: str) -> Path | None:
+    state = session_manager.get(session_id)
+    if state is None:
+        return None
+
+    output_dir = _session_output_dir(session_manager, session_id)
+    roots = [
+        root
+        for root in (state.output_dir, output_dir)
+        if root is not None and root.exists()
+    ]
+    standard_name = "3.3.gen-cosmic-AI填充-COSMIC.json"
+    cosmic_step = state.progress_steps.get("cosmic", {})
+    for artifact in cosmic_step.get("artifacts", []):
+        if not isinstance(artifact, dict):
+            continue
+        label = str(artifact.get("label") or "")
+        name = str(artifact.get("name") or "")
+        if label != "COSMIC JSON 草稿" and name != standard_name:
+            continue
+        candidate = Path(str(artifact.get("path") or ""))
+        if candidate.name != standard_name or not candidate.exists() or not candidate.is_file():
+            continue
+        if any(_is_under(candidate, root) for root in roots):
+            return candidate
+
+    if output_dir is None or not output_dir.exists():
+        return None
+    matches = sorted(path for path in output_dir.rglob(standard_name) if path.is_file())
+    return matches[0] if matches else None
+
+
 def _record_function_points(record: dict) -> list[str]:
     values: list[str] = []
     for key in ("final_rows", "parsed_rows"):
@@ -283,6 +334,27 @@ def create_router(session_manager: SessionManager) -> APIRouter:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise HTTPException(500, "COSMIC 确认 JSON 损坏") from exc
+        return {
+            "session_id": session_id,
+            "filename": path.name,
+            "payload": payload,
+        }
+
+    @router.get("/api/sessions/{session_id}/cosmic/draft")
+    async def get_cosmic_draft(
+        session_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        """读取生成任务产出的 COSMIC JSON 草稿。"""
+        require_session_access(session_manager, session_id, request, user)
+        path = _cosmic_draft_json_path(session_manager, session_id)
+        if path is None:
+            raise HTTPException(404, "COSMIC JSON 草稿尚未生成")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(500, "COSMIC JSON 草稿损坏") from exc
         return {
             "session_id": session_id,
             "filename": path.name,

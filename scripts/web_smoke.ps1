@@ -133,6 +133,7 @@ Assert-Contains -Dom $cosmicPreviewDom -Text "新增/修改功能过程" -Url $c
 Write-Host "Web smoke test: $sessionCosmicPreviewUrl"
 $sessionCosmicPreviewDom = Get-Dom -Url $sessionCosmicPreviewUrl -BrowserPath $edge
 Assert-Contains -Dom $sessionCosmicPreviewDom -Text "COSMIC 预览" -Url $sessionCosmicPreviewUrl
+Assert-Contains -Dom $sessionCosmicPreviewDom -Text "读取任务草稿" -Url $sessionCosmicPreviewUrl
 Assert-Contains -Dom $sessionCosmicPreviewDom -Text "读取会话确认" -Url $sessionCosmicPreviewUrl
 Assert-Contains -Dom $sessionCosmicPreviewDom -Text "保存到会话" -Url $sessionCosmicPreviewUrl
 

@@ -7,6 +7,9 @@
             选择 COSMIC JSON
             <input class="sr-only" type="file" accept="application/json,.json" @change="loadJsonFile" />
           </label>
+          <button v-if="sessionId" class="btn-secondary" type="button" :disabled="backendLoading" @click="() => loadSessionDraft()">
+            {{ backendLoading ? '读取中...' : '读取任务草稿' }}
+          </button>
           <button v-if="sessionId" class="btn-secondary" type="button" :disabled="backendLoading" @click="loadSessionConfirmation">
             {{ backendLoading ? '读取中...' : '读取会话确认' }}
           </button>
@@ -160,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import PreviewLayout from '@/components/PreviewLayout.vue'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
@@ -226,7 +229,7 @@ interface CosmicReport {
   items: CosmicItem[]
 }
 
-interface CosmicConfirmationResponse {
+interface CosmicJsonResponse {
   session_id: string
   filename: string
   payload: CosmicReport
@@ -258,6 +261,12 @@ const reviewItemsById = computed(() => {
 
 const globalReviewItems = computed(() => {
   return (report.value?.review_items ?? []).filter(item => item.scope === 'global' || item.item_index === null)
+})
+
+onMounted(() => {
+  if (sessionId.value) {
+    void loadSessionDraft({ silent: true })
+  }
 })
 
 async function loadJsonFile(event: Event) {
@@ -330,9 +339,7 @@ async function loadSessionConfirmation() {
   backendSyncError.value = ''
   backendSyncStatus.value = ''
   try {
-    const response = await apiFetch<CosmicConfirmationResponse>(
-      `/api/sessions/${encodeURIComponent(sessionId.value)}/cosmic/confirmation`,
-    )
+    const response = await fetchSessionConfirmation()
     const normalized = normalizeReport(response.payload)
     confirmationStoreKey.value = buildConfirmationStoreKey(normalized)
     applyStoredConfirmations(normalized)
@@ -345,13 +352,72 @@ async function loadSessionConfirmation() {
   }
 }
 
+async function loadSessionDraft(options: { silent?: boolean } = {}) {
+  if (!sessionId.value) return
+  backendLoading.value = true
+  backendSyncError.value = ''
+  backendSyncStatus.value = ''
+  try {
+    const response = await apiFetch<CosmicJsonResponse>(
+      `/api/sessions/${encodeURIComponent(sessionId.value)}/cosmic/draft`,
+    )
+    const normalized = normalizeReport(response.payload)
+    confirmationStoreKey.value = buildConfirmationStoreKey(normalized)
+    applyStoredConfirmations(normalized)
+    await applySessionConfirmations(normalized)
+    report.value = normalized
+    backendSyncStatus.value = '已读取任务草稿'
+  } catch (err) {
+    if (!options.silent) {
+      backendSyncError.value = normalizeApiError(err)
+    }
+  } finally {
+    backendLoading.value = false
+  }
+}
+
+async function fetchSessionConfirmation(): Promise<CosmicJsonResponse> {
+  return apiFetch<CosmicJsonResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId.value)}/cosmic/confirmation`,
+  )
+}
+
+async function applySessionConfirmations(data: CosmicReport) {
+  if (!sessionId.value) return
+  try {
+    const response = await fetchSessionConfirmation()
+    mergeConfirmations(data, response.payload)
+  } catch {
+    // A missing saved confirmation should not block loading the generated draft.
+  }
+}
+
+function mergeConfirmations(target: CosmicReport, source: Partial<CosmicReport>) {
+  if (!Array.isArray(source.review_items)) return
+  const confirmations = new Map<string, CosmicReviewItem['confirmation']>()
+  for (const item of source.review_items) {
+    if (item?.review_id && item.confirmation) {
+      confirmations.set(item.review_id, item.confirmation)
+    }
+  }
+  for (const item of target.review_items) {
+    const confirmation = confirmations.get(item.review_id)
+    if (confirmation) {
+      item.confirmation = {
+        ...item.confirmation,
+        ...confirmation,
+      }
+    }
+  }
+}
+
 async function saveSessionConfirmation() {
   if (!sessionId.value || !report.value) return
   backendSaving.value = true
   backendSyncError.value = ''
   backendSyncStatus.value = ''
   try {
-    await apiFetch<CosmicConfirmationResponse>(
+    await apiFetch<CosmicJsonResponse>(
       `/api/sessions/${encodeURIComponent(sessionId.value)}/cosmic/confirmation`,
       {
         method: 'PUT',
@@ -432,7 +498,7 @@ function updateConfirmation(reviewId: string, patch: Record<string, string>) {
   const statusChanged = patch.status !== undefined && patch.status !== previous.status
   item.confirmation = {
     status: nextStatus,
-    decision: nextStatus === 'unconfirmed' ? '' : previous.decision || nextStatus,
+    decision: nextStatus === 'unconfirmed' ? '' : statusChanged ? nextStatus : previous.decision || nextStatus,
     note: patch.note ?? previous.note ?? '',
     confirmed_by: previous.confirmed_by ?? '',
     confirmed_at: nextStatus === 'unconfirmed' ? '' : statusChanged ? new Date().toISOString() : previous.confirmed_at ?? '',
