@@ -519,6 +519,7 @@ def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
         "cfp_basis": report.cfp_basis,
         "issues": [_issue_to_dict(issue) for issue in report.issues],
         "issue_codes": report.issue_codes,
+        "review_items": _review_items_to_dict(report),
         "items": [
             {
                 "project": result.item.project,
@@ -540,6 +541,29 @@ def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:
         ],
         "summary": report.summary,
     }
+
+
+def _review_items_to_dict(report: CosmicValidationReport) -> list[dict]:
+    rows = [
+        _review_item_to_dict(issue, item_index=None)
+        for issue in report.issues
+    ]
+    for item_index, result in enumerate(report.results):
+        rows.extend(
+            _review_item_to_dict(issue, item_index=item_index)
+            for issue in result.issues
+        )
+    return rows
+
+
+def _review_item_to_dict(
+    issue: CosmicIssue,
+    *,
+    item_index: int | None,
+) -> dict:
+    data = _issue_to_dict(issue)
+    data["item_index"] = item_index
+    return data
 
 
 def write_cosmic_validation_json(

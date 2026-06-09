@@ -274,6 +274,29 @@ def test_report_json_includes_issue_details(tmp_path):
     assert "错误提示" in issue["details"]["matched_terms"]
 
 
+def test_report_json_includes_flat_review_items(tmp_path):
+    report = validate_cosmic_items(
+        [_item(user="发起者：操作员|接收者：系统")],
+        project_name="测试项目",
+        cfp_formula="",
+    )
+    output = tmp_path / "cosmic.json"
+
+    write_cosmic_validation_json(report, str(output))
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    review_items = payload["review_items"]
+    assert [item["code"] for item in review_items] == [
+        "MISSING_CFP_FORMULA",
+        "GENERIC_FUNCTION_USER",
+    ]
+    assert review_items[0]["scope"] == "global"
+    assert review_items[0]["item_index"] is None
+    assert review_items[1]["scope"] == "item"
+    assert review_items[1]["item_index"] == 0
+    assert review_items[1]["details"]["match_source"] == "generic_only"
+
+
 def test_report_md_includes_issue_details(tmp_path):
     message = _movement(2, "X", data_group="错误提示", data_attrs="确认消息")
     message.sub_process = "输出保存失败错误提示和确认消息"
