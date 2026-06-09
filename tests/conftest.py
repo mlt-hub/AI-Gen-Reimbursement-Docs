@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
+from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.excel_source import parse_module_tree_md
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -64,6 +65,23 @@ def mock_ai():
         shutil.copy2(template_md, output_md)
         return output_md
 
+    def _cosmic_items(*args, **kwargs):
+        return [
+            CosmicItem(
+                project=kwargs.get("project_name", "测试项目"),
+                module_l1="系统管理",
+                module_l2="用户管理",
+                module_l3="用户注册",
+                user="发起者：用户注册|接收者：系统管理",
+                trigger="用户触发",
+                process="注册用户",
+                movements=[
+                    DataMovement(1, "接收注册请求", "E", "用户注册请求", "姓名,手机号"),
+                    DataMovement(2, "返回注册结果", "X", "用户注册结果", "结果状态,用户编号"),
+                ],
+            )
+        ]
+
     with patch("ai_gen_reimbursement_docs.pipeline.plan_fpa_md_from_tree",
                side_effect=_copy_fpa_template) as m1b, \
          patch("ai_gen_reimbursement_docs.pipeline.ai_fill_spec_md",
@@ -73,5 +91,5 @@ def mock_ai():
          patch("ai_gen_reimbursement_docs.excel_source._call_llm_once",
                return_value="AI填充内容") as m4, \
          patch("ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
-               return_value=[]) as m5:
+               side_effect=_cosmic_items) as m5:
         yield {"fpa_plan": m1b, "spec": m2, "meta": m3, "llm": m4, "cosmic": m5}

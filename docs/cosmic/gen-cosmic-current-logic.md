@@ -15,13 +15,13 @@
 
 1. 读取模块树和元数据。
 2. 生成空白 COSMIC Markdown 模板。
-3. 调用 AI 为三级模块生成功能过程的数据移动链。
-4. 将 AI 结果写回 Markdown。
-5. 从 Markdown 解析结构化数据。
-6. 写入 COSMIC Excel 输出模板。
-7. 汇总 CFP 总和，供后续 `gen-list` 使用。
+3. 调用 AI 为三级模块生成功能过程的数据移动链，得到结构化 `CosmicItem`。
+4. 对结构化草稿执行确定性规则校验。
+5. 写入 JSON 草稿、Markdown 审阅稿和 Markdown 校验报告。
+6. 根据 `passed/review_required/blocked` 决定是否写正式 Excel 或草稿 Excel。
+7. 只有正式 Excel 写入成功时，才写入 CFP 总和，供后续 `gen-list` 使用。
 
-当前还不是稳定的预览或人工审阅链路，`/preview/cosmic` 仍是占位页。
+当前还不是稳定的预览或人工审阅链路，`/preview/cosmic` 仍是占位页；但批处理阶段不再用“目标 Excel 路径已设置”表示 COSMIC 成功。
 
 ## 流水线入口
 
@@ -33,12 +33,12 @@
 2. 读取项目名称和 FPA 核减后工作量。
 3. 写入 `md/3.1.gen-cosmic-FPA核减后的工作量-总和.md`。
 4. 调用 `init_cosmic_template_md` 生成 `md/3.2.gen-cosmic-COSMIC-模板.md`。
-5. 如果存在 API Key，复制模板为 `md/3.3.gen-cosmic-AI填充-COSMIC.md`，再调用 `ai_fill_cosmic_md`。
+5. 如果存在 API Key，直接调用 `generate_cosmic_items` 生成结构化 `CosmicItem`；如果没有 API Key，则以空列表进入校验。
 6. 读取元数据中的 `CFP计算公式`。
-7. 调用 `generate_cosmic_xlsx_from_md` 写入 Excel。
-8. 从 `md/3.5.gen-cosmic-CFP-总和.md` 读取 CFP 总和到 `result.cfp_total`。
+7. 调用 `generate_cosmic_artifacts` 写 JSON 草稿、Markdown 审阅稿、校验报告，并按校验状态决定 Excel 输出。
+8. 如果正式 Excel 写入成功，将 CFP 总和写入 `md/3.5.gen-cosmic-CFP-总和.md` 并同步到 `result.cfp_total`。
 
-如果没有 API Key，当前逻辑只记录 warning，不调用 AI，也不会生成真实 COSMIC 内容；但 `result.cosmic_xlsx` 仍会被设置为目标输出路径。
+如果没有 API Key，当前逻辑会生成 COSMIC 模板、JSON 草稿和校验报告，报告状态为 `blocked`，包含 `NO_COSMIC_ITEMS` 等结构化问题；不会写正式 COSMIC Excel，也不会更新正式 CFP 总和。
 
 ## 核心模块
 
@@ -49,7 +49,8 @@
 | `cosmic_md.py` | 导出空 Markdown、写入 AI 结果、从 Markdown 解析 `CosmicItem`。 |
 | `cosmic_ai.py` | 构造 prompt、调用 LLM、解析 JSON、生成质量 warning。 |
 | `cosmic_models.py` | 定义 `DataMovement` 和 `CosmicItem`。 |
-| `cosmic_writer.py` | 将 `CosmicItem` 扁平化后写入 Excel 模板。 |
+| `cosmic_validator.py` | 定义结构化校验结果、确定性规则、JSON 草稿和 Markdown 校验报告写出。 |
+| `cosmic_writer.py` | 将校验后的 `CosmicValidationReport` 扁平化后写入 Excel 模板。 |
 
 ## 数据模型
 
@@ -71,12 +72,14 @@
 - `trigger`：触发事件。
 - `process`：功能过程名称。
 - `movements`：数据移动列表。
-- `warnings`：质量检查提示。
+- `warnings`：旧 AI 解析路径留下的兼容字段；正式 Excel 标记以 `CosmicIssue` 为准。
 
 `CosmicItem.total_cfp()` 当前计算规则：
 
 - `复用`：每次数据移动按 `1/3` CFP。
 - 其他值：每次数据移动按 `1` CFP。
+
+第一阶段新链路不再依赖 `CosmicItem.total_cfp()` 计算正式 CFP。正式 Excel 中的 CFP 仍以模板公式为准；Python 侧只在正式 Excel 写入成功时写入 CFP 总和。
 
 ## AI 生成逻辑
 
@@ -122,16 +125,18 @@ AI 调用限制：
 - `触发事件：`
 - 固定列 Markdown 表格：`序号 / 子过程描述 / 移动类型 / 数据组 / 数据属性 / 复用度 / CFP`
 
-`cosmic_md.fill_md_with_ai` 当前不是在原 Markdown 中局部填空，而是：
+`cosmic_md.fill_md_with_ai` 仍保留给旧调用或排查使用，不再是正式批处理管线的结构化入口。正式管线直接使用 AI 返回的 `CosmicItem` 列表，并将 Markdown 作为人类可读审阅稿。
+
+`cosmic_md.fill_md_with_ai` 不是在原 Markdown 中局部填空，而是：
 
 1. 调用 `generate_cosmic_items` 重新生成全部 `CosmicItem`。
 2. 调用 `export_filled_md` 整体重写已填充 Markdown。
 
-`cosmic_md.parse_md_to_items` 再从填充后的 Markdown 解析回结构化对象。该解析对标题层级和表格格式较敏感。
+`cosmic_md.parse_md_to_items` 仅保留给临时排查或兼容场景；正式管线不再从填充后的 Markdown 解析结构化对象。该解析对标题层级和表格格式较敏感，不应作为新链路事实源。
 
 ## Excel 写入逻辑
 
-核心函数是 `cosmic_writer.write_cosmic_xlsx`。
+核心函数是 `cosmic_writer.write_cosmic_xlsx`，其输入是 `CosmicValidationReport`，不是裸 `CosmicItem` 列表。
 
 写入规则：
 
@@ -144,7 +149,7 @@ AI 调用限制：
 7. 合并项目名、一级模块、二级模块、三级模块、用户、触发事件、功能过程等重复单元格。
 8. 给 `复用度` 列添加下拉：`新增,复用,利旧`。
 9. 将模板页脚备注搬移到新数据之后。
-10. 根据 warning 添加黄色标记和 Excel 批注。
+10. 根据结构化 `CosmicIssue` 添加黄色标记和 Excel 批注。
 
 写入过程中还会保存一份扁平源数据到日志目录 `source_data`，用于排查 Excel 写入问题。
 
@@ -154,9 +159,12 @@ AI 调用限制：
 | --- | --- |
 | `md/3.1.gen-cosmic-FPA核减后的工作量-总和.md` | FPA 核减后工作量。 |
 | `md/3.2.gen-cosmic-COSMIC-模板.md` | 空白 COSMIC Markdown 模板。 |
-| `md/3.3.gen-cosmic-AI填充-COSMIC.md` | AI 填充后的 COSMIC Markdown。 |
-| `md/3.5.gen-cosmic-CFP-总和.md` | CFP 总和。 |
-| `cosmic文档/*.xlsx` | 项目功能点拆分表。 |
+| `md/3.3.gen-cosmic-AI填充-COSMIC.md` | AI 结果导出的 COSMIC Markdown 审阅稿。 |
+| `md/3.3.gen-cosmic-AI填充-COSMIC.json` | 结构化 COSMIC 草稿、状态和 issue。 |
+| `md/3.4.gen-cosmic-校验报告.md` | 人工可读校验报告和 Excel 输出策略说明。 |
+| `md/3.5.gen-cosmic-CFP-总和.md` | CFP 总和，仅正式 Excel 写入成功时更新。 |
+| `cosmic文档/*.xlsx` | 正式项目功能点拆分表，仅 `passed` 时默认写入。 |
+| `cosmic文档/*-草稿.xlsx` | 草稿项目功能点拆分表，仅 `review_required` 且开启草稿输出时写入。 |
 | `log/ai_prompts/*generate_cosmic_prompt.md` | AI prompt 日志。 |
 | `log/ai_responses/*` | AI response 日志。 |
 | `log/source_data/*excel_source.json` | Excel 写入源数据快照。 |
@@ -188,9 +196,9 @@ AI 调用限制：
 5. 最后一个子过程必须为写 `W` 或输出 `X`。
 6. 一个功能过程至少包含两个子过程及相应的数据移动。
 
-当前实现：首步 `E`、末步 `W/X`、至少两步等规则只进入 `warnings`，仍会继续写入 Markdown 和 Excel；跨模块归属没有明确校验；缺少触发事件时也没有阻断。
+当前实现：首步 `E`、末步 `W/X`、至少两步、缺少模块路径、缺少功能过程名称、缺少触发事件等规则已经进入结构化校验。存在 `error` 时报告状态为 `blocked`，默认不会写正式 Excel；存在 `warning` 且没有 `error` 时报告状态为 `review_required`，默认也不会写正式 Excel。
 
-影响：当前输出更适合作为草稿，不足以作为已满足送审规则的结果。
+影响：当前批处理输出已经能阻断明显不符合送审规则的结果；但跨模块归属、功能用户一对一关系等更复杂规则仍需要后续阶段继续工程化。
 
 ### CFP 和复用口径待确认
 
@@ -198,11 +206,11 @@ AI 调用限制：
 
 当前实现：
 
-1. `CosmicItem.total_cfp()` 中 `复用` 按 `1/3` 计，其他按 `1` 计。
-2. Excel 写入时 CFP 列主要依赖模板中的 `CFP计算公式`，未配置公式时 CFP 留空。
+1. `CosmicItem.total_cfp()` 中仍保留旧兼容逻辑，但第一阶段新链路不再依赖它计算正式 CFP。
+2. Excel 写入时 CFP 列依赖模板或元数据中的 `CFP计算公式`；未配置公式时产生 `MISSING_CFP_FORMULA` error，并阻断正式输出。
 3. `利旧`、优化未改子过程填 `0` 的规则没有进入模型层。
 
-影响：代码内 CFP 汇总、Excel 公式、手册送审口径之间可能不一致，尤其是 `复用`、`利旧`、`0` 的处理。
+影响：缺公式不再静默生成正式结果，但 `复用`、`利旧`、`0` 的完整送审口径仍待后续确认和配置化。
 
 ### 边界识别规则缺失
 
@@ -246,13 +254,12 @@ AI 调用限制：
 
 ## 当前风险和重构关注点
 
-1. 数据契约绕行 Markdown：AI 结果先写 Markdown，再解析回对象，容易受格式变更影响。
-2. 失败不阻断：AI 失败或超过限制时会产生空占位，最终 Excel 可能包含没有数据移动的功能过程。
-3. 质量问题只提示：warning 主要进入日志、Markdown 和 Excel 批注，不作为硬性校验。
-4. CFP 依赖公式和重算：如果公式缺失、写入失败或 Excel 未重算，下游读取到的 CFP 可能不准确。
-5. 预览模型缺失：目前没有稳定的 COSMIC 预览、人工审阅、确认、错误边界数据结构。
-6. 解析格式敏感：`parse_md_to_items` 依赖固定标题和表格结构，不适合承载复杂人工编辑。
-7. 送审规则未工程化：软评填报参考手册中的硬性口径尚未完整进入 prompt、结构化校验和结果状态。
+1. 边界识别不足：内部技术交互、控制命令、非功能事项等仍主要依赖 AI 自觉和后续人工确认。
+2. 功能用户口径仍偏弱：第一阶段只产生 `GENERIC_FUNCTION_USER` warning，尚未自动修复到最小颗粒度模块。
+3. CFP 口径仍需配置化：缺公式已阻断，但 `复用`、`利旧`、优化未改子过程填 `0` 仍未完整工程化。
+4. 预览模型缺失：目前没有稳定的 COSMIC 预览、人工审阅、确认、错误边界数据结构。
+5. 解析格式敏感：`parse_md_to_items` 仍保留给兼容或排查场景，不适合承载复杂人工编辑。
+6. 送审规则未完整工程化：软评填报参考手册中的启发式规则尚未完整进入 prompt、结构化校验和结果状态。
 
 后续如果要实现 COSMIC 预览或审阅页，应先稳定核心输入/输出模型，再决定是否复用 FPA 的审阅抽象。
 

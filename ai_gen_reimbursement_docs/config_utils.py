@@ -1306,6 +1306,23 @@ def load_gen_cosmic_ai_limit() -> int:
     return max(_get_system_config_value('gen_cosmic_ai_limit', 0), 0)
 
 
+def load_gen_cosmic_allow_draft_excel_output() -> bool:
+    """读取 gen_cosmic.allow_draft_excel_output，默认不写草稿 Excel。"""
+    yaml_path = config_dir() / "system_config.yaml"
+    if not yaml_path.exists():
+        return False
+    try:
+        import yaml
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        section = cfg.get("gen_cosmic", {})
+        if not isinstance(section, dict):
+            return False
+        return bool(section.get("allow_draft_excel_output", False))
+    except Exception:
+        return False
+
+
 def load_gen_spec_ai_limit() -> int:
     """读取 gen_spec_ai_limit，限制 spec AI 完善的功能过程描述数（0=不限制）。"""
     return max(_get_system_config_value('gen_spec_ai_limit', 0), 0)

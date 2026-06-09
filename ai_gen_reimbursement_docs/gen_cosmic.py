@@ -5,18 +5,40 @@
 
 import logging
 import os
-import shutil
+from dataclasses import dataclass
 
 from ai_gen_reimbursement_docs.cosmic_ai import load_user_config_from_meta
 from ai_gen_reimbursement_docs.excel_source import (
     build_modules_from_tree_md, write_cfp_sum,
 )
 from ai_gen_reimbursement_docs.cosmic_writer import write_cosmic_xlsx, write_environment_sheet
+from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
 from ai_gen_reimbursement_docs.cosmic_md import (
-    export_empty_md, fill_md_with_ai, parse_md_to_items,
+    export_empty_md, export_filled_md, fill_md_with_ai,
+)
+from ai_gen_reimbursement_docs.cosmic_validator import (
+    CosmicValidationReport,
+    validate_cosmic_items,
+    write_cosmic_validation_json,
+    write_cosmic_validation_report_md,
 )
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.gen_cosmic')
+
+
+@dataclass
+class CosmicGenerationResult:
+    formal_excel_path: str
+    formal_excel_written: bool
+    draft_excel_path: str
+    draft_excel_written: bool
+    validation_json_path: str
+    validation_report_path: str
+    status: str
+    cfp_total: float | None
+    item_count: int
+    blocked_count: int
+    warning_count: int
 
 
 def parse_meta_md(meta_md_path: str) -> dict[str, str]:
@@ -85,49 +107,132 @@ def ai_fill_cosmic_md(
     return md_path
 
 
-def generate_cosmic_xlsx_from_md(
-    md_path: str,
+def _draft_excel_path(formal_output_path: str) -> str:
+    root, ext = os.path.splitext(formal_output_path)
+    return f"{root}-草稿{ext or '.xlsx'}"
+
+
+def _excel_reason(
+    report: CosmicValidationReport,
+    *,
+    formal_excel_written: bool,
+    draft_excel_written: bool,
+    allow_draft_excel_output: bool,
+) -> str:
+    if formal_excel_written:
+        return "校验通过，已写正式 Excel"
+    if draft_excel_written:
+        return "存在待审问题，已按配置写入草稿 Excel"
+    if report.status == "blocked":
+        return "存在阻断问题，未写正式 Excel"
+    if report.status == "review_required" and not allow_draft_excel_output:
+        return "存在待审问题，草稿 Excel 输出未开启"
+    return "未写入 Excel"
+
+
+def generate_cosmic_artifacts(
+    items: list[CosmicItem],
     template_path: str,
-    output_path: str,
+    formal_output_path: str,
     meta_md_path: str = "",
     *,
     md_dir: str = "",
     project_name: str = "",
     cfp_formula: str = "",
-) -> str:
-    """从已填充的 COSMIC MD 生成 项目功能点拆分表.xlsx。
-
-    同时写入 CFP 总和 MD 和更新环境图 sheet。
-    cfp_formula 优先从 Excel 元数据 sheet 读取，空则用默认公式。
-
-    Returns:
-        output_path
-    """
-    logger.info("第3.4步：从 COSMIC MD 生成 Excel...")
-
-    items = parse_md_to_items(md_path)
-    if not items:
-        logger.warning("COSMIC MD 中未解析到任何功能点，跳过 Excel 生成")
-        return output_path
-
+    modules: list | None = None,
+    review_md_path: str = "",
+    allow_draft_excel_output: bool = False,
+) -> CosmicGenerationResult:
+    """Generate structured COSMIC draft, validation report and gated Excel outputs."""
+    logger.info("第3.4步：校验 COSMIC 结构化草稿...")
     meta = parse_meta_md(meta_md_path) if meta_md_path else {}
+    report = validate_cosmic_items(
+        items,
+        project_name=project_name,
+        cfp_formula=cfp_formula,
+    )
 
-    kws = {"meta": meta}
-    if cfp_formula:
-        kws["cfp_formula"] = cfp_formula
-    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
-    saved_path = write_cosmic_xlsx(template_path, output_path, items, **kws)
+    validation_json_path = (
+        os.path.join(md_dir, '3.3.gen-cosmic-AI填充-COSMIC.json')
+        if md_dir else ""
+    )
+    validation_report_path = (
+        os.path.join(md_dir, '3.4.gen-cosmic-校验报告.md')
+        if md_dir else ""
+    )
+    if validation_json_path:
+        write_cosmic_validation_json(report, validation_json_path)
 
+    if review_md_path:
+        export_filled_md(modules or [], items, project_name, review_md_path)
+
+    formal_excel_written = False
+    draft_excel_written = False
+    draft_output_path = _draft_excel_path(formal_output_path)
+    cfp_total: float | None = None
+
+    if report.status == "passed":
+        os.makedirs(os.path.dirname(formal_output_path) or '.', exist_ok=True)
+        saved_path = write_cosmic_xlsx(
+            template_path, formal_output_path, report,
+            meta=meta, cfp_formula=cfp_formula,
+        )
+        _write_environment_if_needed(saved_path, project_name, meta)
+        formal_output_path = saved_path
+        formal_excel_written = True
+        cfp_total = _calculate_cfp_total_for_written_excel(items)
+        if md_dir:
+            write_cfp_sum(md_dir, cfp_total)
+        logger.info("项目功能点拆分表已生成: %s (%d 个功能过程)", saved_path, len(items))
+    elif report.status == "review_required" and allow_draft_excel_output:
+        os.makedirs(os.path.dirname(draft_output_path) or '.', exist_ok=True)
+        saved_path = write_cosmic_xlsx(
+            template_path, draft_output_path, report,
+            meta=meta, cfp_formula=cfp_formula,
+        )
+        _write_environment_if_needed(saved_path, project_name, meta)
+        draft_output_path = saved_path
+        draft_excel_written = True
+        logger.warning("COSMIC 存在待审问题，仅写入草稿 Excel: %s", saved_path)
+    else:
+        logger.warning("COSMIC 校验状态为 %s，未写正式 Excel", report.status)
+
+    reason = _excel_reason(
+        report,
+        formal_excel_written=formal_excel_written,
+        draft_excel_written=draft_excel_written,
+        allow_draft_excel_output=allow_draft_excel_output,
+    )
+    if validation_report_path:
+        write_cosmic_validation_report_md(
+            report,
+            validation_report_path,
+            formal_excel_written=formal_excel_written,
+            draft_excel_written=draft_excel_written,
+            excel_reason=reason,
+        )
+
+    return CosmicGenerationResult(
+        formal_excel_path=formal_output_path,
+        formal_excel_written=formal_excel_written,
+        draft_excel_path=draft_output_path,
+        draft_excel_written=draft_excel_written,
+        validation_json_path=validation_json_path,
+        validation_report_path=validation_report_path,
+        status=report.status,
+        cfp_total=cfp_total,
+        item_count=len(items),
+        blocked_count=report.summary.get("blocked", 0),
+        warning_count=report.summary.get("warnings", 0) + report.summary.get("global_warnings", 0),
+    )
+
+
+def _write_environment_if_needed(output_path: str, project_name: str, meta: dict[str, str]) -> None:
     target = meta.get("建设目标", "")
     necessity = meta.get("建设必要性", "")
     if target or necessity:
         write_environment_sheet(output_path, output_path, project_name, target, necessity)
 
-    logger.info(f"项目功能点拆分表已生成: {saved_path} ({len(items)} 个功能过程)")
 
-    cfp_total = sum(item.total_cfp() for item in items)
-
-    if md_dir:
-        write_cfp_sum(md_dir, cfp_total)
-
-    return saved_path
+def _calculate_cfp_total_for_written_excel(items: list[CosmicItem]) -> float:
+    return float(sum(len(item.movements) for item in items))

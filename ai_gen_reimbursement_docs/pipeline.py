@@ -25,6 +25,10 @@ from ai_gen_reimbursement_docs.pipeline_callbacks import (
     PipelineStep,
 )
 from ai_gen_reimbursement_docs.runtime_context import callbacks_var, current_callbacks
+from ai_gen_reimbursement_docs.template_manifest import (
+    required_template_kinds_for_mode,
+    validate_output_templates,
+)
 from ai_gen_reimbursement_docs.excel_source import (
     generate_md_files, verify_module_tree_stats
 )
@@ -40,7 +44,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
 )
 from ai_gen_reimbursement_docs.gen_list import generate_list_xlsx_from_md
 from ai_gen_reimbursement_docs.gen_cosmic import (
-    init_cosmic_template_md, ai_fill_cosmic_md, generate_cosmic_xlsx_from_md,
+    init_cosmic_template_md, generate_cosmic_artifacts,
 )
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.pipeline')
@@ -172,6 +176,13 @@ class PipelineResult:
     fpa_xlsx: str = ""
     fpa_check_xlsx: str = ""
     cosmic_xlsx: str = ""
+    cosmic_validation_json: str = ""
+    cosmic_validation_report: str = ""
+    cosmic_status: str = ""
+    cosmic_formal_xlsx: str = ""
+    cosmic_formal_excel_written: bool = False
+    cosmic_draft_xlsx: str = ""
+    cosmic_draft_excel_written: bool = False
     require_xlsx: str = ""
     spec_docx: str = ""
     cfp_total: float = 0.0
@@ -286,6 +297,29 @@ def run_pipeline(
 
     # 模板解析（优先级：传入 > Sheet 8 > 默认 data/templates/）
     templates_dict = _resolve_templates(file_path, templates)
+    template_validation_results = validate_output_templates(
+        templates_dict,
+        required_kinds=required_template_kinds_for_mode(mode),
+    )
+    if template_validation_results:
+        _emit_event(
+            "activity",
+            "basedata",
+            "输出模板预检通过",
+            {
+                "templates": [
+                    {
+                        "kind": item.kind,
+                        "template_path": item.template_path,
+                        "manifest_path": item.manifest_path,
+                        "template_id": item.template_id,
+                        "source": item.source,
+                        "warnings": [issue.message for issue in item.warnings],
+                    }
+                    for item in template_validation_results
+                ]
+            },
+        )
 
     result = PipelineResult()
 
@@ -682,25 +716,62 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     _activity("cosmic", "正在准备 COSMIC 模板")
     _, _cosmic_modules = init_cosmic_template_md(tree_md, project, init_md_path)
 
+    cosmic_items = []
     if api_key:
         _activity("cosmic", "正在调用 AI 生成 COSMIC 拆分数据")
-        shutil.copy2(init_md_path, filled_md_path)
-        ai_fill_cosmic_md(filled_md_path, tree_md, project, api_key, model, base_url, meta_md,
-                          modules=_cosmic_modules)
-        _cosmic_cfp = _read_cfp_formula_from_meta_md(meta_md)
-        _activity("cosmic", "正在写入 COSMIC Excel 模板")
-        cosmic_xlsx = generate_cosmic_xlsx_from_md(filled_md_path, cosmic_src, cosmic_xlsx, meta_md,
-                                                   md_dir=md_dir, project_name=project_name,
-                                                   cfp_formula=_cosmic_cfp)
-        result.cfp_total = read_md_value(
-            os.path.join(md_dir, '3.5.gen-cosmic-CFP-总和.md'),
-            r'CFP 总和[：:]\s*([\d.]+)') or 0
+        from ai_gen_reimbursement_docs.cosmic_ai import (
+            generate_cosmic_items, load_user_config_from_meta,
+        )
+        user_cfg: dict = {}
+        if meta_md and os.path.exists(meta_md):
+            user_cfg = load_user_config_from_meta(meta_md)
+        cosmic_items = generate_cosmic_items(
+            modules=_cosmic_modules,
+            project_name=project,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            **user_cfg,
+        )
     else:
         logger.warning("未设置 API Key，无法生成 COSMIC 拆分数据")
 
-    result.cosmic_xlsx = cosmic_xlsx
-    if os.path.exists(cosmic_xlsx):
-        _artifact("cosmic", cosmic_xlsx, "项目功能点拆分表")
+    _cosmic_cfp = _read_cfp_formula_from_meta_md(meta_md)
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_gen_cosmic_allow_draft_excel_output,
+    )
+    _activity("cosmic", "正在校验 COSMIC 拆分数据")
+    generation = generate_cosmic_artifacts(
+        cosmic_items,
+        cosmic_src,
+        cosmic_xlsx,
+        meta_md,
+        md_dir=md_dir,
+        project_name=project_name or project,
+        cfp_formula=_cosmic_cfp,
+        modules=_cosmic_modules,
+        review_md_path=filled_md_path,
+        allow_draft_excel_output=load_gen_cosmic_allow_draft_excel_output(),
+    )
+
+    result.cosmic_xlsx = generation.formal_excel_path
+    result.cosmic_formal_xlsx = generation.formal_excel_path
+    result.cosmic_formal_excel_written = generation.formal_excel_written
+    result.cosmic_draft_xlsx = generation.draft_excel_path
+    result.cosmic_draft_excel_written = generation.draft_excel_written
+    result.cosmic_validation_json = generation.validation_json_path
+    result.cosmic_validation_report = generation.validation_report_path
+    result.cosmic_status = generation.status
+    result.cfp_total = generation.cfp_total or 0
+
+    if generation.formal_excel_written and os.path.exists(generation.formal_excel_path):
+        _artifact("cosmic", generation.formal_excel_path, "项目功能点拆分表")
+    if generation.draft_excel_written and os.path.exists(generation.draft_excel_path):
+        _artifact("cosmic", generation.draft_excel_path, "项目功能点拆分表（草稿）")
+    if generation.validation_json_path and os.path.exists(generation.validation_json_path):
+        _artifact("cosmic", generation.validation_json_path, "COSMIC JSON 草稿", is_temp=True)
+    if generation.validation_report_path and os.path.exists(generation.validation_report_path):
+        _artifact("cosmic", generation.validation_report_path, "COSMIC 校验报告", is_temp=True)
     _step_done("cosmic", "COSMIC 项目功能点拆分表阶段已完成")
     return result
 
@@ -830,7 +901,7 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
 
 def _read_cfp_formula_from_meta_md(meta_md: str) -> str:
     """从 gen-basedata-AI填充-录入文档元数据.md 读取 CFP 计算公式。
-    在「6、项目功能点拆分表-元数据录入」section 中查找 key 为「CFP计算公式」的行。
+    在「项目功能点拆分表-元数据录入」section 中查找 key 为「CFP计算公式」的行。
     未配置时返回空字符串。
     """
     if not meta_md or not os.path.exists(meta_md):
@@ -838,12 +909,19 @@ def _read_cfp_formula_from_meta_md(meta_md: str) -> str:
     with open(meta_md, 'r', encoding='utf-8') as f:
         content = f.read()
     # 定位到 COSMIC 元数据 section
-    marker = "## 6、项目功能点拆分表-元数据录入"
-    idx = content.find(marker)
-    if idx < 0:
+    markers = [
+        "## 5、项目功能点拆分表-元数据录入",
+        "## 6、项目功能点拆分表-元数据录入",
+        "## 项目功能点拆分表-元数据录入",
+    ]
+    indexes = [content.find(marker) for marker in markers]
+    indexes = [idx for idx in indexes if idx >= 0]
+    if not indexes:
         return ""
+    idx = min(indexes)
     # 在 section 内查找表格行 | CFP计算公式 | xxx |
-    section = content[idx:]
+    next_section_idx = content.find("\n## ", idx + 1)
+    section = content[idx:] if next_section_idx < 0 else content[idx:next_section_idx]
     for line in section.split('\n'):
         line = line.strip()
         if line.startswith('|') and ('CFP计算公式' in line or 'cfp_formula' in line):

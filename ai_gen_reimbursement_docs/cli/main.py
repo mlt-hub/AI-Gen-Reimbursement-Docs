@@ -31,7 +31,7 @@ def _new_cli_run_id() -> str:
 def _summary_files_from_result(result) -> list[tuple[str, str]]:
     return [
         ("FPA 工作量评估", getattr(result, "fpa_xlsx", "")),
-        ("项目功能点拆分表", getattr(result, "cosmic_xlsx", "")),
+        ("项目功能点拆分表", getattr(result, "cosmic_formal_xlsx", "") or getattr(result, "cosmic_xlsx", "")),
         ("项目需求清单", getattr(result, "require_xlsx", "")),
         ("项目需求说明书", getattr(result, "spec_docx", "")),
     ]

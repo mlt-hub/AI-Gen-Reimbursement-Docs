@@ -11,7 +11,7 @@ from ai_gen_reimbursement_docs.constants import (
     FP_DATA_START_ROW, FP_LEFT_ALIGN_COLS, FP_TOTAL_COLS,
     FP_COL_KEY_MAP, COL_FP_CFP, COL_FP_SUB_PROCESS, COL_FP_MOVE_TYPE,
 )
-from ai_gen_reimbursement_docs.cosmic_models import CosmicItem
+from ai_gen_reimbursement_docs.cosmic_validator import CosmicValidationReport
 from ai_gen_reimbursement_docs.excel_source import safe_load_workbook
 
 logger = logging.getLogger('ai_gen_reimbursement_docs.cosmic_writer')
@@ -110,7 +110,7 @@ def _save_footer_notes(ws) -> list:
 def write_cosmic_xlsx(
     template_path: str,
     output_path: str,
-    items: list[CosmicItem],
+    report: CosmicValidationReport,
     *,
     meta: dict[str, str] | None = None,
     cfp_formula: str = "",
@@ -189,10 +189,25 @@ def write_cosmic_xlsx(
     if ws.max_row >= _data_start_row:
         ws.delete_rows(_data_start_row, ws.max_row - (_data_start_row - 1))
 
+    items = [result.item for result in report.results]
+    issue_map = {
+        id(result.item): result.issues
+        for result in report.results
+    }
+
     # --- Flatten all rows ---
     all_rows = []
     for item in items:
-        all_rows.extend(item.to_rows())
+        rows = item.to_rows()
+        item_issues = issue_map.get(id(item), [])
+        if rows:
+            rows[0]["warnings"] = [
+                f"{issue.severity} {issue.code}: {issue.message}"
+                for issue in item_issues
+            ]
+            for row in rows[1:]:
+                row["warnings"] = []
+        all_rows.extend(rows)
 
     # Save source data for debugging
     _save_source_data(all_rows)

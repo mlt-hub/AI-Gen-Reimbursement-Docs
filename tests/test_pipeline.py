@@ -6,6 +6,7 @@ from pathlib import Path
 
 import openpyxl
 import pytest
+from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.pipeline import run_pipeline, PipelineResult
 
 pytestmark = pytest.mark.slow
@@ -243,19 +244,105 @@ class TestGenFpa:
 class TestGenCosmic:
     """gen-cosmic 模式"""
 
-    def test_generates_cosmic_xlsx(self, output_dir, test_excel, mock_ai):
+    def test_generates_cosmic_xlsx(self, output_dir, test_excel, mock_ai, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
         result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
                              output_dir=output_dir, templates=TEMPLATES,
                              api_key="sk-test")
-        assert result.cosmic_xlsx  # 路径已设置
-        if os.path.exists(result.cosmic_xlsx):
-            assert os.path.getsize(result.cosmic_xlsx) > 0
+        assert result.cosmic_status == "passed"
+        assert result.cosmic_formal_excel_written is True
+        assert os.path.exists(result.cosmic_formal_xlsx)
+        assert os.path.getsize(result.cosmic_formal_xlsx) > 0
+        assert os.path.exists(result.cosmic_validation_json)
+        assert os.path.exists(result.cosmic_validation_report)
+        assert result.cfp_total > 0
 
     def test_no_api_key_sets_path_but_no_file(self, output_dir, test_excel):
         result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
                              output_dir=output_dir, templates=TEMPLATES,
                              api_key="")
-        assert result.cosmic_xlsx  # 路径已设置
+        assert result.cosmic_status == "blocked"
+        assert result.cosmic_formal_xlsx
+        assert result.cosmic_formal_excel_written is False
+        assert not os.path.exists(result.cosmic_formal_xlsx)
+        assert os.path.exists(result.cosmic_validation_json)
+        assert os.path.exists(result.cosmic_validation_report)
+        assert result.cfp_total == 0
+
+    def test_empty_movements_blocks_formal_excel(self, output_dir, test_excel, monkeypatch):
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
+            lambda **kwargs: [
+                CosmicItem(
+                    project="测试项目",
+                    module_l1="系统管理",
+                    module_l2="用户管理",
+                    module_l3="用户注册",
+                    user="发起者：用户注册|接收者：系统管理",
+                    trigger="用户触发",
+                    process="注册用户",
+                    movements=[],
+                )
+            ],
+        )
+
+        result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        assert result.cosmic_status == "blocked"
+        assert result.cosmic_formal_excel_written is False
+        assert not os.path.exists(result.cosmic_formal_xlsx)
+        content = Path(result.cosmic_validation_report).read_text(encoding="utf-8")
+        assert "TOO_FEW_MOVEMENTS" in content
+
+    def test_review_required_can_write_draft_excel(self, output_dir, test_excel, monkeypatch, tmp_path):
+        cfg_dir = tmp_path / "config"
+        cfg_dir.mkdir()
+        (cfg_dir / "system_config.yaml").write_text(
+            "gen_cosmic:\n  allow_draft_excel_output: true\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("ai_gen_reimbursement_docs.config_utils.config_dir", lambda: cfg_dir)
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
+            lambda meta_md: 'IF(L{row}="新增",1,0)',
+        )
+        monkeypatch.setattr(
+            "ai_gen_reimbursement_docs.cosmic_ai.generate_cosmic_items",
+            lambda **kwargs: [
+                CosmicItem(
+                    project="测试项目",
+                    module_l1="系统管理",
+                    module_l2="用户管理",
+                    module_l3="用户注册",
+                    user="发起者：用户注册|接收者：系统管理",
+                    trigger="用户触发",
+                    process="注册用户",
+                    movements=[
+                        DataMovement(1, "接收注册请求", "E", "用户注册请求", ""),
+                        DataMovement(2, "返回注册结果", "X", "用户注册结果", "结果状态"),
+                    ],
+                )
+            ],
+        )
+
+        result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
+                             output_dir=output_dir, templates=TEMPLATES,
+                             api_key="sk-test")
+
+        assert result.cosmic_status == "review_required"
+        assert result.cosmic_formal_excel_written is False
+        assert result.cosmic_draft_excel_written is True
+        assert os.path.exists(result.cosmic_draft_xlsx)
+        assert not os.path.exists(result.cosmic_formal_xlsx)
 
 
 class TestGenSpec:

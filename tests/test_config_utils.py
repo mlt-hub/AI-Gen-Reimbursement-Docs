@@ -16,6 +16,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_max_tokens,
     load_cfp_formula,
     load_cosmic_warn_marker,
+    load_gen_cosmic_allow_draft_excel_output,
     load_fpa_reduced_use_workload,
     load_fpa_adjustment_value_config,
     load_fpa_profile,
@@ -363,6 +364,29 @@ class TestBooleanLoaders:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
                    return_value=Path("/nonexistent")):
             assert load_cosmic_warn_marker() is True
+
+    def test_load_gen_cosmic_allow_draft_excel_output_default(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            assert load_gen_cosmic_allow_draft_excel_output() is False
+
+    def test_load_gen_cosmic_allow_draft_excel_output_nested(self, tmp_path):
+        (tmp_path / "system_config.yaml").write_text(
+            "gen_cosmic:\n  allow_draft_excel_output: true\n",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=tmp_path):
+            assert load_gen_cosmic_allow_draft_excel_output() is True
+
+    def test_load_gen_cosmic_allow_draft_excel_output_ignores_flat_key(self, tmp_path):
+        (tmp_path / "system_config.yaml").write_text(
+            "gen_cosmic_allow_draft_excel_output: true\n",
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=tmp_path):
+            assert load_gen_cosmic_allow_draft_excel_output() is False
 
     def test_load_fpa_reduced_default(self):
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
