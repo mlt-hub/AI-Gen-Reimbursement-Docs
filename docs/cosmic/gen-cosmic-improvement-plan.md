@@ -283,33 +283,33 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 
 ## 剩余改进清单
 
-以下事项不属于“是否能开始第一阶段实现”的前置条件，但会影响 `gen-cosmic` 走向稳定送审结果。应在结构化校验链路落地后按优先级推进。
+第一阶段结构化校验链路已经落地。以下事项是从当前基线继续走向稳定送审结果的后续改进清单。
 
-### P0：结构化主链路落地
+### 已完成：结构化主链路落地
 
-当前代码仍以 `_generate_cosmic` 编排、`generate_cosmic_items` 生成、`write_cosmic_xlsx` 写入为主，Excel 写入仍可接收未经校验的 `list[CosmicItem]`。第一阶段实现必须完成以下替换：
+当前代码已经完成第一阶段主链路替换：
 
-1. `generate_cosmic_items` 或其上层包装直接返回结构化 `CosmicDraft` 或 `list[CosmicItem]`。
+1. `_generate_cosmic` 直接调用 `generate_cosmic_items` 获取结构化 `list[CosmicItem]`。
 2. `cosmic_validator` 产出 `CosmicValidationReport`。
-3. `write_cosmic_xlsx` 只接收 `CosmicValidationReport` 或已校验结果，不能绕过校验写正式 Excel。
+3. `write_cosmic_xlsx` 接收 `CosmicValidationReport`，Excel 批注来自结构化 issue。
 4. Markdown 只作为审阅稿和日志，不作为正式管线结构化输入。
 
-### P0：正式和草稿产物隔离
+### 已完成：正式和草稿产物隔离
 
-正式 Excel 和草稿 Excel 必须使用不同路径和不同状态字段。草稿 Excel 可用于人工排查，但不得登记为正式 artifact，不得被 `gen-list` 读取。
+正式 Excel 和草稿 Excel 已使用不同路径和不同状态字段。草稿 Excel 可用于人工排查，不登记为正式 artifact，也不更新 `gen-list` 读取的正式 CFP 总和。
 
-需要明确并测试：
+已明确并测试：
 
 1. `formal_excel_path` / `formal_excel_written`。
 2. `draft_excel_path` / `draft_excel_written`。
 3. `cfp_total` 只来自正式 Excel 成功写入后的结果。
 4. 上一轮残留正式 Excel 不得被本轮阻断结果误登记。
 
-### P0：空结果和失败状态工程化
+### 部分完成：空结果和失败状态工程化
 
-无 API Key、AI 全部失败、AI 超限导致全为空、结构化解析为空，都必须进入全局 `NO_COSMIC_ITEMS` error。不能用“阶段完成”掩盖“没有可送审 COSMIC 结果”。
+无 API Key、AI 全部失败、AI 超限导致全为空、结构化结果为空，当前都会通过空 `items` 进入全局 `NO_COSMIC_ITEMS` error。阶段可以完成，但结果状态会是 `blocked`，不会写正式 Excel。
 
-需要区分并记录：
+后续仍可进一步区分并记录失败原因：
 
 1. `NO_API_KEY`：未设置 API Key。
 2. `AI_GENERATION_FAILED`：AI 调用或解析全部失败。
@@ -318,7 +318,7 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 
 ### P1：CFP 口径收口
 
-`MISSING_CFP_FORMULA` 已确定为 error，但还需要继续处理以下问题：
+`MISSING_CFP_FORMULA` 已实现为 error，并会阻断正式输出；但还需要继续处理以下问题：
 
 1. `CosmicItem.total_cfp()` 中 `复用 = 1/3` 不应作为正式业务口径继续扩散。
 2. `复用`、`利旧`、`不涉及修改`、人工覆盖 CFP 的规则需要配置化或模板化。

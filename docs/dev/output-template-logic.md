@@ -113,10 +113,12 @@ FPA 模板不仅用于最终 Excel 写入，在部分配置下也会用于读取
 使用方式：
 
 1. 从 `templates_dict["cosmic"]` 取得 COSMIC 模板路径。
-2. 先生成并填充 COSMIC Markdown。
-3. 调用 `generate_cosmic_xlsx_from_md(filled_md_path, cosmic_src, cosmic_xlsx, ...)` 写入最终 Excel。
+2. 生成空白 COSMIC Markdown 模板。
+3. 如果存在 API Key，调用 `generate_cosmic_items` 得到结构化 `CosmicItem`；如果没有 API Key，则以空列表进入校验。
+4. 调用 `generate_cosmic_artifacts(...)` 生成 JSON 草稿、Markdown 审阅稿和校验报告。
+5. 只有校验状态为 `passed` 时写正式 Excel；`review_required` 仅在 `gen_cosmic.allow_draft_excel_output=true` 时写草稿 Excel；`blocked` 不写正式 Excel。
 
-COSMIC 写入过程会基于模板保留既有结构，并更新功能点拆分数据、CFP 汇总和环境图相关 sheet。
+COSMIC 写入过程会基于模板保留既有结构，并更新功能点拆分数据和环境图相关 sheet。CFP 总和只在正式 Excel 写入成功时更新，避免 `gen-list` 读取草稿或阻断结果。
 
 ### 项目需求清单
 
