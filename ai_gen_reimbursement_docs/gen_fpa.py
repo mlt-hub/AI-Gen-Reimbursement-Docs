@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any
 
 import openpyxl
+from openpyxl.utils.cell import column_index_from_string
 from openpyxl.styles import Alignment, Font, Border
 from openpyxl.styles import PatternFill
 
@@ -662,6 +663,7 @@ def _fpa_judgement_rules_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
         "name": str(spec.get("name") or "附录1-FPA评估方法说明"),
         "data_start_row": _as_manifest_int(spec.get("data_start_row"), 2),
         "data_end_row": _fpa_optional_manifest_int(spec.get("data_end_row")),
+        "max_rows": _fpa_optional_manifest_int(spec.get("max_rows")),
         "column": _fpa_judgement_rules_column(spec.get("column", spec.get("rule_column")), 3),
         "anchor": spec.get("anchor", {}) if isinstance(spec.get("anchor", {}), (dict, str)) else {},
     }
@@ -680,7 +682,7 @@ def _fpa_judgement_rules_column(value: object, default: int) -> int:
         return default
     try:
         if isinstance(value, str) and value.strip().isalpha():
-            return openpyxl.utils.column_index_from_string(value.strip())
+            return column_index_from_string(value.strip())
         parsed = int(value)
     except (TypeError, ValueError):
         return default
@@ -726,6 +728,8 @@ def _read_fpa_judgement_rules_from_template(template_path: str = "") -> list[str
         ws = wb[appendix_sheet]
         start_row, column = _fpa_judgement_rules_anchor_start(ws, sheet_spec)
         end_row = min(sheet_spec["data_end_row"], ws.max_row) if sheet_spec["data_end_row"] else ws.max_row
+        if sheet_spec["max_rows"]:
+            end_row = min(end_row, start_row + sheet_spec["max_rows"] - 1)
         for row_num in range(start_row, end_row + 1):
             val = ws.cell(row_num, column).value
             if val and str(val).strip():

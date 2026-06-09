@@ -161,6 +161,7 @@ FPA 结果写入器当前会读取 `fpa` manifest 的 `sheets.result`：
 - `data_start_row`：默认规则读取起始行。
 - `data_end_row`：可选读取结束行；未配置时读取到 sheet 最后一行。
 - `column` / `rule_column`：规则文本列，支持列号或 Excel 列字母。
+- `max_rows`：可选，限制最多读取行数。
 - `anchor.cell` 或 `anchor.contains`：定位规则标题所在单元格。
 - `anchor.offset_rows` 和 `anchor.column`：从锚点定位第一条规则的位置。
 
@@ -362,6 +363,7 @@ Excel 预检当前支持：
 - `data_start_row`：数据起始行必须在模板现有范围或下一行内。
 - `style_source_row`：样式源行必须存在。
 - `columns`：必要表头必须出现在表头行。
+- `named_cells`：可校验 manifest 声明的 Excel 命名单元格是否存在、是否指向期望 sheet、是否为单一目标和单个单元格；`required: false` 时只产生 warning。
 - `required_cells`：关键单元格必须包含指定文本或公式。
 
 ### Word 预检内容

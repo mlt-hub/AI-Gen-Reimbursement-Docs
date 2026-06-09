@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import openpyxl
+from openpyxl.utils.cell import range_boundaries
 import yaml
 from docx import Document
 
@@ -188,7 +189,35 @@ def _template_capabilities(kind: str, manifest: dict[str, Any]) -> dict[str, Any
     if kind == "spec":
         return _spec_template_capabilities(manifest)
     features = manifest.get("features", {}) or {}
-    return dict(features) if isinstance(features, dict) else {}
+    capabilities = dict(features) if isinstance(features, dict) else {}
+    capabilities.update(_excel_template_capabilities(manifest))
+    return capabilities
+
+
+def _excel_template_capabilities(manifest: dict[str, Any]) -> dict[str, Any]:
+    sheets = manifest.get("sheets", {}) or {}
+    if not isinstance(sheets, dict):
+        return {}
+    sheet_capabilities: dict[str, dict[str, Any]] = {}
+    for sheet_key, sheet_spec in sheets.items():
+        if isinstance(sheet_spec, str):
+            sheet_spec = {"name": sheet_spec}
+        if not isinstance(sheet_spec, dict):
+            continue
+        named_cells = sheet_spec.get("named_cells", {}) or {}
+        if not isinstance(named_cells, dict):
+            named_cells = {}
+        sheet_capabilities[str(sheet_key)] = {
+            "name": str(sheet_spec.get("name", sheet_key)),
+            "header_row": sheet_spec.get("header_row"),
+            "data_start_row": sheet_spec.get("data_start_row"),
+            "style_source_row": sheet_spec.get("style_source_row"),
+            "column_count": len(sheet_spec.get("columns", {}) or {})
+            if isinstance(sheet_spec.get("columns", {}) or {}, dict)
+            else 0,
+            "named_cells": sorted(str(key) for key in named_cells),
+        }
+    return {"sheets": sheet_capabilities} if sheet_capabilities else {}
 
 
 def _spec_template_capabilities(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -321,7 +350,87 @@ def _validate_excel_template(
         if style_source_row is not None and int(style_source_row) > ws.max_row:
             issues.append(TemplateIssue(kind, "error", f"sheet {name} 样式源行不存在: {style_source_row}", template_path))
         issues.extend(_validate_sheet_columns(kind, template_path, ws, name, manifest, sheet_key, sheet_spec))
+        issues.extend(_validate_named_cells(kind, template_path, wb, name, sheet_spec))
         issues.extend(_validate_required_cells(kind, template_path, ws, name, sheet_spec))
+    return issues
+
+
+def _named_cell_spec(raw_spec: object) -> dict[str, Any]:
+    if isinstance(raw_spec, str):
+        return {"name": raw_spec.strip(), "required": True, "single_cell": True}
+    if isinstance(raw_spec, dict):
+        return {
+            **raw_spec,
+            "name": str(raw_spec.get("name", "") or "").strip(),
+            "required": bool(raw_spec.get("required", True)),
+            "single_cell": bool(raw_spec.get("single_cell", True)),
+        }
+    return {"name": "", "required": True, "single_cell": True}
+
+
+def _validate_named_cells(
+    kind: str,
+    template_path: str,
+    wb,
+    sheet_name: str,
+    sheet_spec: dict[str, Any],
+) -> list[TemplateIssue]:
+    issues: list[TemplateIssue] = []
+    named_cells = sheet_spec.get("named_cells", {}) or {}
+    if not named_cells:
+        return issues
+    if not isinstance(named_cells, dict):
+        return [TemplateIssue(kind, "error", f"sheet {sheet_name} named_cells 应为对象", template_path)]
+
+    for cell_key, raw_spec in named_cells.items():
+        cell_spec = _named_cell_spec(raw_spec)
+        name = cell_spec.get("name", "")
+        if not name:
+            issues.append(
+                TemplateIssue(kind, "error", f"sheet {sheet_name} 命名单元格 {cell_key} 未声明 name", template_path)
+            )
+            continue
+        required = bool(cell_spec.get("required", True))
+        severity = "error" if required else "warning"
+        defined_name = wb.defined_names.get(name)
+        if defined_name is None:
+            issues.append(TemplateIssue(kind, severity, f"sheet {sheet_name} 缺少命名单元格: {name}", template_path))
+            continue
+        try:
+            destinations = list(defined_name.destinations)
+        except Exception as exc:
+            issues.append(
+                TemplateIssue(kind, severity, f"sheet {sheet_name} 命名单元格 {name} 无法解析: {exc}", template_path)
+            )
+            continue
+        if len(destinations) != 1:
+            issues.append(
+                TemplateIssue(kind, severity, f"sheet {sheet_name} 命名单元格 {name} 必须指向单一目标", template_path)
+            )
+            continue
+        target_sheet, coord = destinations[0]
+        expected_sheet = str(cell_spec.get("sheet", "") or sheet_name)
+        if target_sheet != expected_sheet:
+            issues.append(
+                TemplateIssue(
+                    kind,
+                    severity,
+                    f"sheet {sheet_name} 命名单元格 {name} 指向 sheet {target_sheet}，期望 {expected_sheet}",
+                    template_path,
+                )
+            )
+            continue
+        try:
+            min_col, min_row, max_col, max_row = range_boundaries(str(coord))
+        except ValueError:
+            issues.append(
+                TemplateIssue(kind, severity, f"sheet {sheet_name} 命名单元格 {name} 坐标无效: {coord}", template_path)
+            )
+            continue
+        if cell_spec.get("single_cell", True) and (min_col != max_col or min_row != max_row):
+            issues.append(
+                TemplateIssue(kind, severity, f"sheet {sheet_name} 命名单元格 {name} 必须指向单个单元格", template_path)
+            )
     return issues
 
 
