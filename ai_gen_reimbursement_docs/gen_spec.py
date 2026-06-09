@@ -163,6 +163,46 @@ def _generate_section4_content(doc: Document, tree: list[dict], rows: list[dict]
                            filled_sections, filled_proc_descs, styles)
 
 
+def _generate_module_table_content(
+    doc: Document,
+    rows: list[dict],
+    insert_before_elem,
+    styles: dict[str, str] | None = None,
+):
+    """在指定元素前只插入模块清单表。"""
+    styles = styles or {}
+    module_tree = _build_module_tree(rows)
+    _insert_module_table(
+        doc,
+        module_tree,
+        insert_before_elem,
+        table_style=styles.get("module_table", "Table Grid"),
+    )
+
+
+def _generate_module_details_content(
+    doc: Document,
+    tree: list[dict],
+    rows: list[dict],
+    insert_before_elem,
+    meta: dict,
+    filled_sections: dict[str, str] | None = None,
+    filled_proc_descs: dict[str, str] | None = None,
+    styles: dict[str, str] | None = None,
+):
+    """在指定元素前只插入模块详情和功能过程描述。"""
+    _insert_module_details(
+        doc,
+        tree,
+        rows,
+        insert_before_elem,
+        meta,
+        filled_sections,
+        filled_proc_descs,
+        styles,
+    )
+
+
 def _insert_module_table(
     doc: Document,
     tree: list[dict],
@@ -557,6 +597,34 @@ def _iter_header_footer_tables(sections, attr_name: str):
             yield table
 
 
+def _placeholder_name(token: str) -> str:
+    token = str(token or "").strip()
+    match = re.fullmatch(r'\{\{([^}]+)\}\}', token)
+    if match:
+        return match.group(1).strip()
+    return token
+
+
+def _spec_section_anchor_names(manifest: dict) -> dict[str, str]:
+    anchors = manifest.get("anchors", {}) or {}
+    if not isinstance(anchors, dict):
+        anchors = {}
+    return {
+        "legacy_full": _placeholder_name(anchors.get("legacy_functional_requirements", "{{功能需求详情}}")),
+        "full": _placeholder_name(anchors.get("functional_requirements", "{{功能需求章节}}")),
+        "module_table": _placeholder_name(anchors.get("module_table", "{{模块清单表}}")),
+        "module_details": _placeholder_name(anchors.get("module_details", "{{功能过程详情}}")),
+    }
+
+
+def _remove_anchor_paragraph(paragraph):
+    insert_elem = paragraph._element
+    next_elem = insert_elem.getnext()
+    parent = insert_elem.getparent()
+    parent.remove(insert_elem)
+    return next_elem if next_elem is not None else parent
+
+
 
 
 
@@ -806,8 +874,9 @@ def generate_spec_docx_from_md(
     if not isinstance(styles, dict):
         logger.warning("spec manifest styles 格式错误，忽略样式配置: %s", spec_manifest_path or spec_manifest_source)
         styles = {}
+    section_anchors = _spec_section_anchor_names(spec_manifest)
 
-    # ====== 替换正文段落中的 {{占位符}}，并处理 {{功能需求详情}} 锚点 ======
+    # ====== 替换正文段落中的 {{占位符}}，并处理功能需求章节锚点 ======
     PH_PATTERN = re.compile(r'\{\{([^}]+)\}\}')
     if "body" in replacement_scopes:
         for para in list(doc.paragraphs):
@@ -819,13 +888,28 @@ def generate_spec_docx_from_md(
                 continue
             placeholder = m.group(1)
 
-            # {{功能需求详情}} — 在此位置生成 Section 4 内容
-            if placeholder == "功能需求详情":
-                insert_elem = para._element
-                next_elem = insert_elem.getnext()
-                insert_elem.getparent().remove(insert_elem)
-                anchor = next_elem if next_elem is not None else insert_elem.getparent()
+            if placeholder in {section_anchors["legacy_full"], section_anchors["full"]}:
+                anchor = _remove_anchor_paragraph(para)
                 _generate_section4_content(
+                    doc,
+                    groups,
+                    rows,
+                    anchor,
+                    meta,
+                    filled_sections,
+                    filled_proc_descs,
+                    styles,
+                )
+                continue
+
+            if placeholder == section_anchors["module_table"]:
+                anchor = _remove_anchor_paragraph(para)
+                _generate_module_table_content(doc, rows, anchor, styles)
+                continue
+
+            if placeholder == section_anchors["module_details"]:
+                anchor = _remove_anchor_paragraph(para)
+                _generate_module_details_content(
                     doc,
                     groups,
                     rows,

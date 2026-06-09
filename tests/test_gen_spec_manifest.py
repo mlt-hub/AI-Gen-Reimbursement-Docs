@@ -72,6 +72,49 @@ def _write_manifest(path: Path, scopes: list[str], module_table_style: str = "Li
     )
 
 
+def _write_split_anchor_template(path: Path) -> None:
+    doc = Document()
+    doc.add_paragraph("正文：{{文档标题}}")
+    doc.add_paragraph("表格前")
+    doc.add_paragraph("{{模块清单表}}")
+    doc.add_paragraph("详情前")
+    doc.add_paragraph("{{功能过程详情}}")
+    doc.save(path)
+
+
+def _write_split_anchor_manifest(path: Path) -> None:
+    path.with_suffix(".manifest.yaml").write_text(
+        "\n".join(
+            [
+                "template_id: spec_split_anchor_test_v1",
+                "kind: spec",
+                "version: 1",
+                f"file: {path.name}",
+                "placeholders:",
+                '  title: {token: "{{文档标题}}", required: true}',
+                '  module_table: {token: "{{模块清单表}}", required: true}',
+                '  module_details: {token: "{{功能过程详情}}", required: true}',
+                "anchors:",
+                '  legacy_functional_requirements: "{{功能需求详情}}"',
+                '  functional_requirements: "{{功能需求章节}}"',
+                '  module_table: "{{模块清单表}}"',
+                '  module_details: "{{功能过程详情}}"',
+                "styles:",
+                "  heading_2: Normal",
+                "  heading_3: Normal",
+                "  heading_4: Normal",
+                "  process_heading: Normal",
+                "  body: Normal",
+                "  body_indent: Normal",
+                "  module_table: Table Grid",
+                "replacement_scopes:",
+                "  - body",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_generate_spec_uses_manifest_replacement_scopes_and_table_style(tmp_path):
     template = tmp_path / "spec-template.docx"
     output = tmp_path / "spec-output.docx"
@@ -108,3 +151,28 @@ def test_generate_spec_respects_manifest_scope_exclusions(tmp_path):
     assert doc.paragraphs[0].text == "正文：测试需求说明书"
     assert doc.sections[0].header.paragraphs[0].text == "页眉：{{文档标题}}"
     assert doc.sections[0].footer.paragraphs[0].text == "页脚：{{总体描述}}"
+
+
+def test_generate_spec_supports_split_requirement_anchors(tmp_path):
+    template = tmp_path / "spec-template.docx"
+    output = tmp_path / "spec-output.docx"
+    meta = tmp_path / "meta.md"
+    tree = tmp_path / "tree.md"
+    _write_split_anchor_template(template)
+    _write_split_anchor_manifest(template)
+    _write_meta_md(meta)
+    _write_tree_md(tree)
+
+    generate_spec_docx_from_md(str(template), str(output), str(meta), str(tree))
+
+    doc = Document(output)
+    body_text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
+    assert "{{模块清单表}}" not in body_text
+    assert "{{功能过程详情}}" not in body_text
+    assert "{{功能需求详情}}" not in body_text
+    assert "4.1. 用户管理" in body_text
+    assert "4.1.1. 账号管理" in body_text
+    assert "4.1.1.1. 账号维护" in body_text
+    assert "4.1.1.1.1. 新增账号" in body_text
+    assert "填写账号信息并保存" in body_text
+    assert any(table.cell(0, 0).text == "入口" for table in doc.tables)

@@ -464,7 +464,16 @@ def _default_manifest(kind: str, template_path: str) -> dict[str, Any]:
                 "document_title": {"token": "{{文档标题}}", "required": True},
                 "project_summary": {"token": "{{总体描述}}", "required": True},
                 "functional_requirements": {"token": "{{功能需求详情}}", "required": True},
+                "functional_requirements_section": {"token": "{{功能需求章节}}", "required": False},
+                "module_table": {"token": "{{模块清单表}}", "required": False},
+                "module_details": {"token": "{{功能过程详情}}", "required": False},
                 "subsystem": {"token": "{{调整因子中的子系统名称}}", "required": True},
+            },
+            "anchors": {
+                "legacy_functional_requirements": "{{功能需求详情}}",
+                "functional_requirements": "{{功能需求章节}}",
+                "module_table": "{{模块清单表}}",
+                "module_details": "{{功能过程详情}}",
             },
             "styles": {
                 "heading_1": "Heading 1",

@@ -12,9 +12,23 @@ placeholders:
   functional_requirements:
     token: "{{功能需求详情}}"
     required: true
+  functional_requirements_section:
+    token: "{{功能需求章节}}"
+    required: false
+  module_table:
+    token: "{{模块清单表}}"
+    required: false
+  module_details:
+    token: "{{功能过程详情}}"
+    required: false
   subsystem:
     token: "{{调整因子中的子系统名称}}"
     required: true
+anchors:
+  legacy_functional_requirements: "{{功能需求详情}}"
+  functional_requirements: "{{功能需求章节}}"
+  module_table: "{{模块清单表}}"
+  module_details: "{{功能过程详情}}"
 styles:
   heading_1: Heading 1
   heading_2: Heading 2
