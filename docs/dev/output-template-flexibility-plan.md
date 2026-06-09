@@ -413,8 +413,8 @@ template_pack/
 
 - `list` 需求清单写入器已开始使用 manifest 做 sheet、表头行、数据起始行、样式源行、列映射和项目概览命名单元格写入。
 - FPA 结果写入器已开始使用 manifest 做 result sheet、表头行、数据起始行、样式源行、关键列定位，以及 result sheet 的数据起始和 FPA 工作量汇总命名单元格定位。
-- COSMIC 写入器已开始使用 manifest 做 result sheet、数据起始行和样式源行。
-- COSMIC 等 Excel 写入器尚未全面按 manifest 做列映射、复杂锚点或公式重写。
+- COSMIC 写入器已开始使用 manifest 做 result sheet、数据起始行、样式源行和结果字段列映射。
+- COSMIC 等 Excel 写入器尚未全面按 manifest 做复杂锚点或跨 sheet 公式重写。
 - 用户自定义模板如果没有同名 manifest，会按对应 kind 的默认契约预检。
 - `gen-basedata` 不生成最终交付物，因此不执行输出模板预检。
 

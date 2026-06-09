@@ -12,6 +12,9 @@ sheets:
     data_start_row: 6
     style_source_row: 6
     columns:
+      project:
+        header: 项目
+        required: false
       module_l1:
         header: 一级模块
         required: true
@@ -21,6 +24,33 @@ sheets:
       module_l3:
         header: 三级模块
         required: true
+      user:
+        header: 用户
+        required: false
+      trigger:
+        header: 触发事件
+        required: false
+      process:
+        header: 功能过程
+        required: false
+      sub_process:
+        header: 子过程描述
+        required: false
+      move_type:
+        header: 数据移动类型
+        required: false
+      data_group:
+        header: 数据组
+        required: false
+      data_attrs:
+        header: 数据属性
+        required: false
+      reuse:
+        header: 复用度
+        required: false
+      cfp:
+        header: CFP
+        required: false
 features:
   preserve_formulas: true
 format:
