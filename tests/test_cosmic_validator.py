@@ -168,6 +168,21 @@ def test_error_confirmation_message_requires_review():
     assert result.basis["movement_semantics"][0]["code"] == "ERROR_CONFIRMATION_MESSAGE"
 
 
+def test_internal_technical_boundary_requires_review():
+    internal = _movement(2, "X", data_group="接口响应", data_attrs="状态码")
+    internal.sub_process = "后端调用内部接口并返回微服务响应"
+    result = validate_cosmic_item(
+        _item(movements=[
+            _movement(1, "E", data_group="查询请求", data_attrs="业务编号"),
+            internal,
+        ])
+    )
+
+    assert "INTERNAL_TECHNICAL_BOUNDARY" in _codes(result)
+    assert result.status == "review_required"
+    assert result.basis["movement_semantics"][0]["code"] == "INTERNAL_TECHNICAL_BOUNDARY"
+
+
 def test_non_functional_scope_requires_review():
     result = validate_cosmic_item(_item(
         module_l3="服务器扩容",

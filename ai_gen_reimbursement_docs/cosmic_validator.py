@@ -29,6 +29,11 @@ _ERROR_CONFIRMATION_WORDS = {
     "错误提示", "错误消息", "异常提示", "失败提示", "确认消息", "确认提示",
     "成功提示", "操作成功", "操作失败", "保存成功", "保存失败", "提示信息",
 }
+_INTERNAL_TECHNICAL_BOUNDARY_WORDS = {
+    "前端/后端", "前台/后台", "前端", "后端", "前台", "后台",
+    "内部接口", "临时接口", "接口响应", "接口调用", "微服务", "服务调用",
+    "RPC", "HTTP接口", "API接口",
+}
 _NON_FUNCTIONAL_SCOPE_WORDS = {
     "非功能", "系统迁移", "数据迁移", "多系统联调", "联调", "前端适配",
     "软硬件环境", "环境扩容", "服务器扩容", "资源扩容", "架构改造",
@@ -247,6 +252,14 @@ def _movement_semantic_findings(movement) -> list[dict[str, object]]:
             "matched_terms": matched,
             "description": "子过程疑似错误或确认消息输出，通常需要按手册规则合并识别",
         })
+    matched = _matched_words(text, _INTERNAL_TECHNICAL_BOUNDARY_WORDS)
+    if matched:
+        findings.append({
+            "code": "INTERNAL_TECHNICAL_BOUNDARY",
+            "movement_order": movement.order,
+            "matched_terms": matched,
+            "description": "子过程疑似内部技术交互或无效软件边界，需确认是否跨有效 COSMIC 边界",
+        })
     return findings
 
 
@@ -325,8 +338,10 @@ def validate_cosmic_item(item: CosmicItem) -> CosmicValidationResult:
                 message = "控制命令通常不移动兴趣对象数据，需确认是否应计列"
             elif finding["code"] == "DATA_OPERATION_ONLY_MOVEMENT":
                 message = "数据运算或技术操作通常不单独计为数据移动，需确认是否应计列"
-            else:
+            elif finding["code"] == "ERROR_CONFIRMATION_MESSAGE":
                 message = "错误或确认消息通常需要按手册规则合并识别，需确认是否重复计列"
+            else:
+                message = "内部技术交互通常不构成 COSMIC 有效边界，需确认是否应计列"
             issues.append(_issue(
                 "warning", finding["code"], message,
                 f"movements[{index}].sub_process", movement.order, item=item,

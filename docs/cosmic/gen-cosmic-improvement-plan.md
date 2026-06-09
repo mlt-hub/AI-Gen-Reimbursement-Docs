@@ -350,11 +350,11 @@ COSMIC 预览应等结构化数据契约稳定后再实现。
 
 Prompt 需要和校验器同步升级，减少明显违规输出，而不是只靠后置校验拦截。
 
-当前 prompt 已加入第一版 COSMIC 送审口径硬约束；后置校验也会对控制命令、纯数据运算/技术操作、错误/确认消息、部分非功能或技术改造事项产生待审 warning，并把命中依据写入 `items[].basis.movement_semantics` 或 `items[].basis.process_semantics`。下一步应继续补内部接口、复杂非功能内容等更依赖上下文的规则，并细分业务错误、持久化读写错误和系统错误消息。
+当前 prompt 已加入第一版 COSMIC 送审口径硬约束；后置校验也会对内部技术交互、控制命令、纯数据运算/技术操作、错误/确认消息、部分非功能或技术改造事项产生待审 warning，并把命中依据写入 `items[].basis.movement_semantics` 或 `items[].basis.process_semantics`。下一步应继续补复杂非功能内容等更依赖上下文的规则，并细分业务错误、持久化读写错误和系统错误消息。
 
 重点规则：
 
-1. 前端/后端、前台/后台交互不识别为 COSMIC 边界。
+1. 前端/后端、前台/后台交互不识别为 COSMIC 边界；当前后置校验已能产生 `INTERNAL_TECHNICAL_BOUNDARY` 待审项，后续仍需结合接口清单判断是否跨有效边界。
 2. 上一页、下一页、排序、展示/隐藏菜单、点击确认等控制命令不计列；当前 prompt 已约束，后置校验已能产生 `CONTROL_COMMAND_MOVEMENT` 待审项。
 3. 校验、分析、统计、格式化、连接数据库等通常不单独作为数据移动；当前 prompt 已约束，后置校验已能产生 `DATA_OPERATION_ONLY_MOVEMENT` 待审项。
 4. 非功能内容不得拆成 COSMIC 功能过程；当前 prompt 已约束，后置校验已能产生 `NON_FUNCTIONAL_SCOPE` 待审项，后续仍需结合模块树或元数据做更可靠识别。
