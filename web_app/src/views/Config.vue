@@ -709,6 +709,37 @@
         <h2 class="mt-1 text-lg font-semibold">输出与下载模板</h2>
       </div>
       <div class="mb-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+        <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div>
+            <label for="web-template-profile" class="field-label text-xs">输出模板 profile</label>
+            <select
+              id="web-template-profile"
+              v-model="webTemplateForm.activeProfile"
+              class="field-control"
+              :disabled="templateProfileNames.length === 0"
+            >
+              <option value="">不使用 profile</option>
+              <option v-for="name in templateProfileNames" :key="name" :value="name">
+                {{ name }}
+              </option>
+            </select>
+          </div>
+          <button class="btn-primary w-fit" :disabled="webConfigSaving || !hasWebTemplateChanges" @click="saveTemplateSettings">
+            {{ webConfigSaving ? '保存中...' : '保存模板配置' }}
+          </button>
+        </div>
+        <div v-if="selectedTemplateProfile" class="mt-3 grid gap-2 text-sm md:grid-cols-2">
+          <div class="min-w-0">
+            <span class="text-[var(--color-ink-soft)]">模板包</span>
+            <p class="mt-1 truncate font-mono text-xs">{{ selectedTemplateProfilePack || '未配置' }}</p>
+          </div>
+          <div class="min-w-0">
+            <span class="text-[var(--color-ink-soft)]">模板映射</span>
+            <p class="mt-1 truncate font-mono text-xs">{{ selectedTemplateProfileTemplateKeys }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="mb-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
         <label for="web-out-templates" class="field-label text-xs">out_templates 映射</label>
         <textarea
           id="web-out-templates"
@@ -720,7 +751,7 @@
         <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', webSectionStatusClass(hasWebTemplateChanges)]">{{ webSectionStatusText(hasWebTemplateChanges) }}</span>
           <button class="btn-primary w-fit" :disabled="webConfigSaving || !hasWebTemplateChanges" @click="saveTemplateSettings">
-            {{ webConfigSaving ? '保存中...' : '保存模板映射' }}
+            {{ webConfigSaving ? '保存中...' : '保存模板配置' }}
           </button>
         </div>
       </div>
@@ -1106,6 +1137,12 @@ interface WebConfigField<T = unknown> {
   source: ConfigSource
 }
 
+interface OutputTemplateProfileConfig {
+  template_pack?: string
+  pack?: string
+  templates?: Record<string, string>
+}
+
 interface WebConfigResponse {
   scope: {
     mode: 'local' | 'remote'
@@ -1121,6 +1158,8 @@ interface WebConfigResponse {
   }
   templates: {
     out_templates: WebConfigField<Record<string, string>>
+    active_output_template_profile: WebConfigField<string>
+    output_template_profiles: WebConfigField<Record<string, OutputTemplateProfileConfig>>
   }
   run_defaults: Record<string, WebConfigField<unknown>>
 }
@@ -1457,6 +1496,7 @@ const webRunForm = reactive({
 })
 const webTemplateForm = reactive({
   outTemplatesJson: '{}',
+  activeProfile: '',
 })
 const webApiKeyInput = ref<HTMLInputElement | null>(null)
 const {
@@ -1559,7 +1599,10 @@ const webConfigFormSnapshot = computed(() => JSON.stringify({
   clearApiKey: webAiForm.clearApiKey,
 }))
 const webRunFormSnapshot = computed(() => JSON.stringify(webRunForm))
-const webTemplateFormSnapshot = computed(() => webTemplateForm.outTemplatesJson.trim())
+const webTemplateFormSnapshot = computed(() => JSON.stringify({
+  outTemplatesJson: webTemplateForm.outTemplatesJson.trim(),
+  activeProfile: webTemplateForm.activeProfile,
+}))
 
 const hasWebConfigChanges = computed(() => (
   webConfigSnapshot.value !== '' && webConfigFormSnapshot.value !== webConfigSnapshot.value
@@ -1570,6 +1613,20 @@ const hasWebRunChanges = computed(() => webRunSnapshot.value !== '' && webRunFor
 const hasWebTemplateChanges = computed(() => (
   webTemplateSnapshot.value !== '' && webTemplateFormSnapshot.value !== webTemplateSnapshot.value
 ))
+const outputTemplateProfiles = computed(() => (
+  webConfig.value?.templates.output_template_profiles?.value || {}
+))
+const templateProfileNames = computed(() => Object.keys(outputTemplateProfiles.value).sort())
+const selectedTemplateProfile = computed(() => (
+  webTemplateForm.activeProfile ? outputTemplateProfiles.value[webTemplateForm.activeProfile] || null : null
+))
+const selectedTemplateProfilePack = computed(() => (
+  selectedTemplateProfile.value?.template_pack || selectedTemplateProfile.value?.pack || ''
+))
+const selectedTemplateProfileTemplateKeys = computed(() => {
+  const keys = Object.keys(selectedTemplateProfile.value?.templates || {})
+  return keys.length ? keys.join(', ') : '未配置'
+})
 const activeAdvancedFile = computed(() => (
   advancedConfigFiles.value.find(item => item.id === activeAdvancedFileId.value) || null
 ))
@@ -2485,6 +2542,7 @@ function applyWebConfigToForm(data: WebConfigResponse) {
   webRunForm.fpaConfirmationMode = fieldValue(data.run_defaults.fpa_confirmation_mode) || 'cautious'
   webRunSnapshot.value = webRunFormSnapshot.value
   webTemplateForm.outTemplatesJson = JSON.stringify(data.templates.out_templates.value || {}, null, 2)
+  webTemplateForm.activeProfile = String(data.templates.active_output_template_profile?.value || '')
   webTemplateSnapshot.value = webTemplateFormSnapshot.value
 }
 
@@ -2564,8 +2622,9 @@ async function saveTemplateSettings() {
   await saveWebConfigPayload({
     templates: {
       out_templates: { value: outTemplates },
+      active_output_template_profile: { value: webTemplateForm.activeProfile },
     },
-  }, '模板映射保存成功')
+  }, '模板配置保存成功')
 }
 
 function applyTemplateImportPatch(patch: Record<string, string>) {
@@ -2772,7 +2831,7 @@ const SELECT_OPTIONS: Record<string, string[]> = {
   log_level: ['DEBUG', 'INFO', 'WARNING', 'ERROR'],
 }
 
-const NESTED_KEYS = new Set(['sheets', 'out_templates'])
+const NESTED_KEYS = new Set(['sheets', 'out_templates', 'output_template_profiles'])
 
 function buildFormFields(sys: Record<string, any>) {
   const bools: ScalarField[] = []

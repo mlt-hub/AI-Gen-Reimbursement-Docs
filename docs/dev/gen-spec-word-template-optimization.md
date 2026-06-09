@@ -518,12 +518,13 @@ replacement_scopes:
 - Web 已支持已导入模板草稿的结构预览：可查看正文/表格/页眉/页脚摘要、占位符位置、功能需求锚点位置和功能需求章节候选。
 - Web 已支持已导入模板草稿的确认信息管理：可设置模板名称、版本备注和“已确认”状态，列表和预览接口会返回确认状态。
 - pipeline 已支持输出模板 profile/模板包基础解析：`system_config.yaml` 可通过 `active_output_template_profile` 选择 `output_template_profiles`，profile 可直接声明模板路径或通过 `template_pack` 指向带 `manifest.yaml` 的模板包目录。
+- Web 配置页已支持输出模板 profile 基础选择能力：读取 `output_template_profiles`、选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。
 
 尚未实施：
 
 - 文本框、内容控件、图片文字等复杂 Word 结构识别。
 - 导入后的版式渲染预览、锚点/字段在线调整和正式版本发布。
-- Web UI 中的模板 profile/模板包选择器，以及 profile 与 FPA 口径、规则集、生成策略的联动。
+- profile 与 FPA 口径、规则集、生成策略的联动。
 
 ### 当前默认 Word manifest
 
