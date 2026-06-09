@@ -1304,7 +1304,8 @@ def _supplement_ai_rows_with_rules(
     coverage_rules = rule_set_config.coverage_rules if isinstance(rule_set_config, FpaRuleSetConfig) else None
     require_process_coverage = True if coverage_rules is None or coverage_rules.require_process_coverage is None else coverage_rules.require_process_coverage
     require_data_function = True if coverage_rules is None or coverage_rules.require_data_function is None else coverage_rules.require_data_function
-    if not require_process_coverage and not require_data_function:
+    require_profile_exact_rows = profile.agent_review_profile_kind() in {"unified_ui", "ui_api_mapping"}
+    if not require_process_coverage and not require_data_function and not require_profile_exact_rows:
         return ai_rows, []
 
     rule_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
@@ -1330,13 +1331,53 @@ def _supplement_ai_rows_with_rules(
     supplemental: list[dict[str, object]] = []
     data_function_supplements = 0
     missing_process_supplements = 0
+    required_row_supplements = 0
+    required_type_normalizations = 0
+    existing_by_name = {
+        str(row.get("新增/修改功能点", "") or ""): row
+        for row in ai_rows
+        if str(row.get("新增/修改功能点", "") or "")
+    }
 
     for row in rule_rows:
         row_type = str(row.get("类型", ""))
         row_sources = _source_process_set(row)
+        row_name = str(row.get("新增/修改功能点", "") or "")
+        existing = existing_by_name.get(row_name)
+        include_profile_required_row = False
+        if require_profile_exact_rows and row_name:
+            if existing is None:
+                include_profile_required_row = True
+            elif profile.agent_review_profile_kind() == "ui_api_mapping" and str(existing.get("类型", "") or "") != row_type:
+                old_type = str(existing.get("类型", "") or "")
+                existing["类型"] = row_type
+                existing["类型理由"] = str(row.get("类型理由", "") or "") or str(existing.get("类型理由", "") or "")
+                warning = f"{row_name} AI 默认映射行类型 {old_type or '空'} 已按 {profile.name} contract 修正为 {row_type}。"
+                old_warning = str(existing.get("后处理警告", "") or "")
+                existing["后处理警告"] = f"{old_warning}；{warning}" if old_warning else warning
+                adjustment_audit = calculate_fpa_adjustment_for_row(existing)
+                existing["调整值"] = adjustment_audit["adjustment_value"]
+                existing["复杂度"] = adjustment_audit["complexity"]
+                existing["DET"] = adjustment_audit["det_count"]
+                existing["RET"] = adjustment_audit["ret_count"]
+                existing["FTR"] = adjustment_audit["ftr_count"]
+                existing["复杂度说明"] = adjustment_audit["complexity_reason"]
+                existing["调整值计算方式"] = adjustment_audit["method"]
+                _add_rule_hit(
+                    existing,
+                    hit_object=row_name,
+                    rule_id=f"{profile.name}.contract_required_type",
+                    rule_desc=f"{profile.name} contract 要求该默认映射行类型为 {row_type}。",
+                    suggested_type=row_type,
+                    adopted=True,
+                    warnings=[warning],
+                )
+                required_type_normalizations += 1
+                if row_type in {"ILF", "EIF"}:
+                    data_function_types.add(row_type)
         include_data_row = require_data_function and row_type in {"ILF", "EIF"} and row_type not in data_function_types
         include_missing_process = require_process_coverage and bool(row_sources & missing_processes)
-        if not include_data_row and not include_missing_process:
+        if not include_data_row and not include_missing_process and not include_profile_required_row:
             continue
 
         copied = dict(row)
@@ -1346,14 +1387,20 @@ def _supplement_ai_rows_with_rules(
             missing_process_supplements += 1
         if include_data_row:
             data_function_supplements += 1
+        if include_profile_required_row:
+            required_row_supplements += 1
         copied["类型理由"] = reason or (
             "AI 未包含数据功能行，按规则集补齐。"
             if include_data_row and not include_missing_process
+            else f"AI 未输出 {profile.name} contract 强制行，按规则集补齐。"
+            if include_profile_required_row and not include_missing_process
             else "AI 未覆盖该功能过程，按规则集补齐。"
         )
         warning = (
             "AI 结果未包含数据功能行，已按规则集补齐；未覆盖 AI 已判定类型。"
             if include_data_row and not include_missing_process
+            else f"AI 结果未输出 {profile.name} contract 强制行，已按规则集补齐。"
+            if include_profile_required_row and not include_missing_process
             else "AI 结果未覆盖该功能过程，已按规则集补齐；未覆盖 AI 已判定类型。"
         )
         old_warning = str(copied.get("后处理警告", "") or "")
@@ -1361,7 +1408,7 @@ def _supplement_ai_rows_with_rules(
         _attach_profile_rule_hits([copied], profile=profile, generation="rules_fallback")
         supplemental.append(copied)
 
-    if not supplemental:
+    if not supplemental and not required_type_normalizations:
         return ai_rows, []
 
     combined = [*ai_rows, *supplemental]
@@ -1372,8 +1419,17 @@ def _supplement_ai_rows_with_rules(
         warning_parts.append(f"AI 结果未覆盖 {len(missing_processes)} 个功能过程")
     if data_function_supplements:
         warning_parts.append("AI 结果未包含数据功能行")
+    if required_row_supplements:
+        warning_parts.append(f"AI 结果未输出 {required_row_supplements} 条 {profile.name} contract 强制行")
+    if required_type_normalizations:
+        warning_parts.append(f"AI 结果有 {required_type_normalizations} 条 {profile.name} contract 默认行类型已修正")
     reason = "，".join(warning_parts) or "AI 结果需要规则补齐"
-    warnings = [f"{_group_tag(group)} {reason}，已追加 {len(supplemental)} 条 rules_fallback 行"]
+    action_parts: list[str] = []
+    if supplemental:
+        action_parts.append(f"已追加 {len(supplemental)} 条 rules_fallback 行")
+    if required_type_normalizations:
+        action_parts.append(f"已修正 {required_type_normalizations} 条 ai 行类型")
+    warnings = [f"{_group_tag(group)} {reason}，{'；'.join(action_parts)}"]
     return combined, warnings
 
 

@@ -25,6 +25,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
+    UI_API_MAPPING_PROFILE,
     CustomRulesProfile,
     ExternalDataGroupRule,
     FpaCoverageRules,
@@ -1966,6 +1967,166 @@ def test_ai_first_process_id_covers_near_name_difference_without_rules_fallback(
     assert combined[0]["source_process_ids"] == [process_id]
     assert audit.covered_processes == ["搜索卡劵订单"]
     assert audit.missing_processes == []
+
+
+def test_ai_first_unified_ui_supplements_profile_required_process_rows_even_when_ui_covers_process():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "客户管理",
+            "二级模块": "客户查询",
+            "三级模块": "客户查询",
+            "三级模块整体功能描述": "查询客户并展示列表。",
+            "功能过程": "查询客户",
+            "功能过程类型": "新增",
+            "功能过程描述": "按客户名称查询客户列表。",
+        },
+    ])[0]
+    process_id = group["processes"][0]["process_id"]
+    rule_set = _custom_default_rule_set()
+    token = set_current_fpa_rule_set_config(rule_set)
+    try:
+        ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
+            group=group,
+            meta=_meta(),
+            judgement_rules=[],
+            start_seq=1,
+            profile=CUSTOM_RULES_PROFILE,
+            strategy="ai_first",
+            ai_rows=[{
+                "name": "客户查询-界面开发",
+                "type": "EI",
+                "explanation": "客户查询页面提供查询条件和结果列表。",
+                "source_process_ids": [process_id],
+                "source_processes": ["查询客户"],
+            }],
+        )
+
+        combined, warnings = _supplement_ai_rows_with_rules(
+            group=group,
+            meta=_meta(),
+            ai_rows=ai_rows,
+            profile=CUSTOM_RULES_PROFILE,
+            strategy="ai_first",
+            rule_set_config=rule_set,
+        )
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert any(
+        row["新增/修改功能点"] == "【地市后台】客户管理-客户查询-客户查询-查询客户-查询处理开发"
+        and row["生成方式"] == "rules_fallback"
+        for row in combined
+    )
+    assert any("contract 强制行" in warning for warning in warnings)
+
+
+def test_ai_first_ui_api_mapping_supplements_required_default_rows_and_normalizes_type():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "消息管理",
+            "二级模块": "发送记录",
+            "三级模块": "发送记录查询",
+            "三级模块整体功能描述": "查询消息发送记录。",
+            "功能过程": "查看发送记录",
+            "功能过程类型": "新增",
+            "功能过程描述": "按手机号查询发送记录并返回详情。",
+        },
+    ])[0]
+    tag = "【地市后台】消息管理-发送记录-发送记录查询"
+    api_name = f"{tag}-查看发送记录-接口开发"
+    ui_name = f"{tag}-查看发送记录-界面开发"
+
+    ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=UI_API_MAPPING_PROFILE,
+        strategy="ai_first",
+        ai_rows=[{
+            "name": api_name,
+            "type": "EQ",
+            "explanation": "查询发送记录接口返回详情。",
+            "source_processes": ["查看发送记录"],
+        }],
+    )
+
+    combined, warnings = _supplement_ai_rows_with_rules(
+        group=group,
+        meta=_meta(),
+        ai_rows=ai_rows,
+        profile=UI_API_MAPPING_PROFILE,
+        strategy="ai_first",
+    )
+
+    api_row = next(row for row in combined if row["新增/修改功能点"] == api_name)
+    assert api_row["类型"] == "ILF"
+    assert api_row["生成方式"] == "ai"
+    assert any(hit["rule_id"] == "ui_api_mapping.contract_required_type" for hit in api_row["_规则命中详情"])
+    assert sum(1 for row in combined if row["新增/修改功能点"] == api_name) == 1
+    assert any(row["新增/修改功能点"] == ui_name and row["类型"] == "EI" and row["生成方式"] == "rules_fallback" for row in combined)
+    assert any("默认行类型已修正" in warning and "contract 强制行" in warning for warning in warnings)
+
+
+def test_ai_first_ui_api_mapping_normalizes_type_without_reporting_added_rows():
+    group = _group_rows_by_l3([
+        {
+            "客户端类型": "地市后台",
+            "一级模块": "消息管理",
+            "二级模块": "发送记录",
+            "三级模块": "发送记录查询",
+            "三级模块整体功能描述": "查询消息发送记录。",
+            "功能过程": "查看发送记录",
+            "功能过程类型": "新增",
+            "功能过程描述": "按手机号查询发送记录并返回详情。",
+        },
+    ])[0]
+    tag = "【地市后台】消息管理-发送记录-发送记录查询"
+    api_name = f"{tag}-查看发送记录-接口开发"
+    ui_name = f"{tag}-查看发送记录-界面开发"
+
+    ai_rows, _ = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=[],
+        start_seq=1,
+        profile=UI_API_MAPPING_PROFILE,
+        strategy="ai_first",
+        ai_rows=[
+            {
+                "name": api_name,
+                "type": "EQ",
+                "explanation": "查询发送记录接口返回详情。",
+                "source_processes": ["查看发送记录"],
+            },
+            {
+                "name": ui_name,
+                "type": "EI",
+                "explanation": "发送记录查询页面提供查询条件。",
+                "source_processes": ["查看发送记录"],
+            },
+        ],
+    )
+
+    combined, warnings = _supplement_ai_rows_with_rules(
+        group=group,
+        meta=_meta(),
+        ai_rows=ai_rows,
+        profile=UI_API_MAPPING_PROFILE,
+        strategy="ai_first",
+        rule_set_config=FpaRuleSetConfig(
+            name="contract_only",
+            coverage_rules=FpaCoverageRules(require_data_function=False, require_process_coverage=False),
+        ),
+    )
+
+    api_row = next(row for row in combined if row["新增/修改功能点"] == api_name)
+    assert api_row["类型"] == "ILF"
+    assert len(combined) == 2
+    assert any("已修正 1 条 ai 行类型" in warning for warning in warnings)
+    assert not any("rules_fallback" in warning for warning in warnings)
 
 
 def test_ai_first_missing_source_process_ids_warns_and_falls_back_to_source_names():
