@@ -28,7 +28,7 @@
 
 ## 执行进度
 
-截至 2026-06-09，本规范已进入执行状态。第一阶段 prompt fragment 抽取已落地；第二阶段已开始推进运行时 prompt diagnostics。
+截至 2026-06-09，本规范已进入执行状态。第一阶段 prompt fragment 抽取已落地；第二阶段运行时 prompt diagnostics 已落地；第三阶段样例试运行与说明质量预检已落地。
 
 已完成：
 
@@ -40,6 +40,8 @@
 - 已保持非阻断策略：质量问题只记录 warning，进入`后处理警告`、`Warnings` 和规则命中详情，不阻断 gen-fpa 生成。
 - 已补充回归测试：覆盖结构化说明通过、非结构化说明告警、数据组路径、表个数归类依据误入说明、以及默认 prompt 规则存在性。
 - 已新增后端 prompt diagnostics helper：`ai_gen_reimbursement_docs.config_utils.diagnose_fpa_user_prompt(profile_name)` 可返回 user prompt 来源、`calculation_explanation_rules` 引用/解析状态、warning/error、未替换占位符和预览渲染结果。
+- 已新增 FPA prompt 样例试运行：`POST /api/web-config/fpa-prompt-sample-run` 使用内置样例模块调用当前 profile prompt，返回 prompt diagnostics、raw response、解析状态、后处理后的 FPA 行、普通 warning、`计算依据说明`质量 warning 和规则命中详情；prompt 配置错误时不调用模型。
+- Web 配置页 FPA 策略区已支持逐 profile 触发“试运行当前 prompt”，并展示最终 prompt、模型原始返回、样例 FPA 行、后处理 warning 和`计算依据说明` warning。
 
 已提交：
 
@@ -49,7 +51,7 @@
 - `13c5204`：补齐 prompt 和文档中的 `ILF/EIF` 数据功能来源路径规则。
 - `41b4fc7`：补充决策摘要和`垂直行业数据组`示例。
 - `17c104e`：抽取 FPA `calculation_explanation_rules` prompt fragment，补齐四个默认 profile 的引用、配置校验、渲染和测试。
-- 本轮：新增 FPA prompt diagnostics 后端 helper 和配置单元测试。
+- 本轮：新增 FPA prompt 样例试运行 service/API、Web 配置页试运行入口和后端/前端验证。
 
 已验证：
 
@@ -66,13 +68,16 @@
 本轮聚焦验证：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_web_config_service.py tests/test_web_config_routes.py tests/test_gen_fpa_ai.py -q
+npm run build
+.\scripts\check_web_ui.ps1
 ```
 
 结果：
 
 ```text
-174 passed
+260 passed
+Web UI 检查全部通过
 ```
 
 ### 第二阶段实施方案：运行时配置校验与最终 prompt 预览

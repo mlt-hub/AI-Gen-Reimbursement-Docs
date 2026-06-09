@@ -25,6 +25,7 @@ from web_app.services.config_service import (
     redact_env_dict,
     restore_config_backup,
     import_config_package,
+    run_fpa_prompt_sample_preview,
     save_ai_prompt_settings,
     save_business_rules,
     save_domain_context_settings,
@@ -283,6 +284,19 @@ async def save_web_config_fpa_strategy(data: dict, request: Request, user: str =
             audit_root=config_dir(),
             backup_root=config_dir(),
             backup_scope="global",
+        )
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/api/web-config/fpa-prompt-sample-run")
+async def run_web_config_fpa_prompt_sample(data: dict, request: Request, _user: str = Depends(require_auth)):
+    """使用内置样例试运行当前 FPA prompt，不写正式产物。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return run_fpa_prompt_sample_preview(
+            profile_name=str(data.get("profile") or ""),
+            target_dir=target_dir,
         )
     except AdvancedConfigError as exc:
         raise HTTPException(400, str(exc)) from exc

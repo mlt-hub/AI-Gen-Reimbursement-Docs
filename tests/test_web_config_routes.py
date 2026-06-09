@@ -436,6 +436,69 @@ def test_web_config_fpa_strategy_rejects_remote_user(monkeypatch):
     assert "本机管理员" in resp.json()["detail"]
 
 
+def test_web_config_fpa_prompt_sample_run_calls_service(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    calls = []
+
+    def fake_run_fpa_prompt_sample_preview(**kwargs):
+        calls.append(kwargs)
+        return {
+            "profile": "strict_fpa",
+            "ai_called": True,
+            "parse_ok": True,
+            "normalized_rows": [],
+            "warnings": [],
+            "quality_warnings": [],
+        }
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "run_fpa_prompt_sample_preview", fake_run_fpa_prompt_sample_preview)
+
+    resp = client.post("/api/web-config/fpa-prompt-sample-run", json={"profile": "strict_fpa"})
+
+    assert resp.status_code == 200
+    assert resp.json()["parse_ok"] is True
+    assert calls == [{"profile_name": "strict_fpa", "target_dir": tmp_path}]
+
+
+def test_web_config_fpa_prompt_sample_run_returns_config_error(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: ""
+    client = TestClient(app)
+
+    def fake_run_fpa_prompt_sample_preview(**kwargs):
+        raise config_routes.AdvancedConfigError("当前运行配置没有可用 API Key")
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_routes, "run_fpa_prompt_sample_preview", fake_run_fpa_prompt_sample_preview)
+
+    resp = client.post("/api/web-config/fpa-prompt-sample-run", json={"profile": "strict_fpa"})
+
+    assert resp.status_code == 400
+    assert "API Key" in resp.json()["detail"]
+
+
+def test_web_config_fpa_prompt_sample_run_rejects_remote_user(monkeypatch):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+
+    resp = client.post("/api/web-config/fpa-prompt-sample-run", json={"profile": "strict_fpa"})
+
+    assert resp.status_code == 403
+    assert "本机管理员" in resp.json()["detail"]
+
+
 def test_web_config_fpa_judgement_rules_endpoint_reads_local_rules(monkeypatch, tmp_path):
     app = FastAPI()
     app.include_router(config_routes.router)

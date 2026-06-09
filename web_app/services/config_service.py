@@ -3,6 +3,7 @@ import json
 import re
 import shutil
 import difflib
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -77,6 +78,124 @@ AI_TASK_MODES = {
 
 class AdvancedConfigError(ValueError):
     """Raised when an advanced config file cannot be parsed or validated."""
+
+
+FPA_PROMPT_SAMPLE_GROUP: dict[str, object] = {
+    "client_type": "后台",
+    "l1": "业务管理",
+    "l2": "客户管理",
+    "l3": "客户资料维护",
+    "l3_desc": "维护客户基础资料，支持新增、编辑、查询和导出客户信息。",
+    "processes": [
+        {
+            "id": "P1",
+            "process_id": "P1",
+            "name": "新增客户",
+            "process_name": "新增客户",
+            "desc": "录入客户名称、证件号码、联系电话并保存客户资料。",
+            "description": "录入客户名称、证件号码、联系电话并保存客户资料。",
+        },
+        {
+            "id": "P2",
+            "process_id": "P2",
+            "name": "查询客户",
+            "process_name": "查询客户",
+            "desc": "按客户名称和证件号码查询客户列表。",
+            "description": "按客户名称和证件号码查询客户列表。",
+        },
+        {
+            "id": "P3",
+            "process_id": "P3",
+            "name": "导出客户清单",
+            "process_name": "导出客户清单",
+            "desc": "导出客户资料清单。",
+            "description": "导出客户资料清单。",
+        },
+    ],
+}
+
+FPA_PROMPT_SAMPLE_JUDGEMENT_RULES = [
+    "维护业务数据的外部输入，按 EI 识别。",
+    "查询业务数据且无派生计算，按 EQ 识别。",
+    "输出格式化清单或报表，按 EO 识别。",
+    "本系统维护的逻辑数据组，按 ILF 识别。",
+    "外部系统维护、本系统引用的数据组，按 EIF 识别。",
+]
+
+
+@contextmanager
+def _temporary_fpa_config_dir(target_dir: Path):
+    from ai_gen_reimbursement_docs.config_utils import FPA_CONFIG_DIR_ENV, clear_config_caches
+
+    previous = os.environ.get(FPA_CONFIG_DIR_ENV)
+    os.environ[FPA_CONFIG_DIR_ENV] = str(target_dir)
+    clear_config_caches()
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(FPA_CONFIG_DIR_ENV, None)
+        else:
+            os.environ[FPA_CONFIG_DIR_ENV] = previous
+        clear_config_caches()
+
+
+def _sample_judgement_rules(target_dir: Path) -> list[str]:
+    try:
+        view = build_fpa_judgement_rules_view(target_dir=target_dir)
+    except AdvancedConfigError:
+        return list(FPA_PROMPT_SAMPLE_JUDGEMENT_RULES)
+    rules = [str(item).strip() for item in view.get("rules", []) if str(item).strip()]
+    return rules or list(FPA_PROMPT_SAMPLE_JUDGEMENT_RULES)
+
+
+def _fpa_quality_warnings_from_rows(rows: list[dict[str, object]]) -> list[str]:
+    warnings: list[str] = []
+    for row in rows:
+        for hit in row.get("_规则命中详情", []) if isinstance(row.get("_规则命中详情"), list) else []:
+            if not isinstance(hit, dict) or hit.get("rule_id") != "postprocess.explanation_quality":
+                continue
+            hit_warnings = hit.get("warnings", [])
+            if isinstance(hit_warnings, list):
+                warnings.extend(str(item) for item in hit_warnings if str(item).strip())
+    return list(dict.fromkeys(warnings))
+
+
+def _fpa_sample_row_payload(row: dict[str, object]) -> dict[str, object]:
+    return {
+        "序号": row.get("序号", ""),
+        "新增/修改功能点": row.get("新增/修改功能点", ""),
+        "类型": row.get("类型", ""),
+        "生成方式": row.get("生成方式", ""),
+        "计算依据归类": row.get("计算依据归类", ""),
+        "计算依据说明": row.get("计算依据说明", ""),
+        "后处理警告": row.get("后处理警告", ""),
+        "源功能过程": row.get("源功能过程", ""),
+    }
+
+
+def _empty_fpa_prompt_sample_result(
+    *,
+    profile_name: str,
+    prompt_diagnostics: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "profile": profile_name,
+        "prompt_diagnostics": prompt_diagnostics,
+        "sample_input": FPA_PROMPT_SAMPLE_GROUP,
+        "ai_called": False,
+        "parse_ok": False,
+        "raw_response": "",
+        "parsed_rows": [],
+        "normalized_rows": [],
+        "warnings": [],
+        "quality_warnings": [],
+        "rule_hits": [],
+        "error": "",
+        "model": "",
+        "base_url": "",
+        "api_key_source": "",
+    }
 
 
 def config_dir() -> Path:
@@ -1031,6 +1150,128 @@ def save_fpa_strategy_settings(
     result = build_fpa_strategy_settings_view(target_dir=target_dir)
     result["backed_up"] = [backed_up] if backed_up else []
     return result
+
+
+def run_fpa_prompt_sample_preview(
+    *,
+    profile_name: str,
+    target_dir: Path,
+) -> dict[str, object]:
+    """Run the configured FPA prompt against a fixed sample module without writing artifacts."""
+    from ai_gen_reimbursement_docs.config_utils import diagnose_fpa_prompt_config
+    from ai_gen_reimbursement_docs.fpa_profiles import resolve_fpa_execution_config
+    from ai_gen_reimbursement_docs.gen_fpa import (
+        _ai_plan_fpa_rows_for_l3_debug,
+        _build_domain_context,
+        _normalize_ai_fpa_rows_for_l3,
+        _trace_rule_hits_for_rows,
+        reset_current_fpa_rule_set_config,
+        set_current_fpa_rule_set_config,
+    )
+
+    cfg = _read_fpa_config_from_dir(target_dir)
+    profile_key = str(profile_name or cfg.get("default-profile") or "strict_fpa").strip()
+    diagnostics = diagnose_fpa_prompt_config(profile_key, cfg=cfg).to_dict()
+    diagnostics["fragments"] = [{
+        "name": "calculation_explanation_rules",
+        **diagnostics["calculation_explanation_rules"],
+    }]
+    diagnostics["rendered_prompt"] = diagnostics["final_prompt_preview"]
+    if diagnostics.get("errors"):
+        result = _empty_fpa_prompt_sample_result(
+            profile_name=profile_key,
+            prompt_diagnostics=diagnostics,
+        )
+        result["warnings"] = ["prompt diagnostics 存在 error，未调用模型"]
+        return result
+
+    runtime_config = resolve_task_start_config(
+        explicit={},
+        global_config=read_config_from_dir(target_dir),
+        local_mode=True,
+        global_config_root=target_dir,
+    )
+    api_key = str(runtime_config.get("api_key") or "").strip()
+    model = str(runtime_config.get("model") or "").strip()
+    base_url = str(runtime_config.get("base_url") or "").strip()
+    if not api_key:
+        raise AdvancedConfigError("当前运行配置没有可用 API Key，无法试运行 prompt")
+
+    group = json.loads(json.dumps(FPA_PROMPT_SAMPLE_GROUP, ensure_ascii=False))
+    judgement_rules = _sample_judgement_rules(target_dir)
+    meta = {
+        "子系统（模块）": "样例系统",
+        "资产标识": "PROMPT-SAMPLE",
+    }
+
+    with _temporary_fpa_config_dir(target_dir):
+        execution = resolve_fpa_execution_config(profile_key)
+        profile = execution.profile
+        rule_set_token = set_current_fpa_rule_set_config(execution.rule_set_config)
+        try:
+            try:
+                raw_rows, debug = _ai_plan_fpa_rows_for_l3_debug(
+                    group,
+                    judgement_rules,
+                    _build_domain_context(meta),
+                    api_key,
+                    model,
+                    base_url,
+                    profile=profile,
+                )
+            except Exception as exc:
+                debug = getattr(exc, "debug", {})
+                raw_response = str(debug.get("raw_response", "")) if isinstance(debug, dict) else ""
+                parsed_rows = debug.get("parsed_rows", []) if isinstance(debug, dict) else []
+                return {
+                    "profile": profile_key,
+                    "prompt_diagnostics": diagnostics,
+                    "sample_input": group,
+                    "ai_called": bool(debug.get("ai_called", True)) if isinstance(debug, dict) else True,
+                    "parse_ok": False,
+                    "raw_response": raw_response,
+                    "parsed_rows": parsed_rows if isinstance(parsed_rows, list) else [],
+                    "normalized_rows": [],
+                    "warnings": [str(exc)],
+                    "quality_warnings": [],
+                    "rule_hits": [],
+                    "error": str(exc),
+                    "model": model,
+                    "base_url": base_url,
+                    "api_key_source": runtime_config.get("api_key_source", ""),
+                }
+
+            normalized_rows, warnings = _normalize_ai_fpa_rows_for_l3(
+                group=group,
+                meta=meta,
+                ai_rows=raw_rows,
+                judgement_rules=judgement_rules,
+                start_seq=1,
+                profile=profile,
+                strategy="ai_only",
+            )
+            quality_warnings = _fpa_quality_warnings_from_rows(normalized_rows)
+            rule_hits = _trace_rule_hits_for_rows(normalized_rows)
+            raw_response = str(debug.get("raw_response", "")) if isinstance(debug, dict) else ""
+            return {
+                "profile": profile_key,
+                "prompt_diagnostics": diagnostics,
+                "sample_input": group,
+                "ai_called": True,
+                "parse_ok": True,
+                "raw_response": raw_response,
+                "parsed_rows": raw_rows,
+                "normalized_rows": [_fpa_sample_row_payload(row) for row in normalized_rows],
+                "warnings": warnings,
+                "quality_warnings": quality_warnings,
+                "rule_hits": rule_hits,
+                "error": "",
+                "model": model,
+                "base_url": base_url,
+                "api_key_source": runtime_config.get("api_key_source", ""),
+            }
+        finally:
+            reset_current_fpa_rule_set_config(rule_set_token)
 
 
 def build_fpa_judgement_rules_view(*, target_dir: Path) -> dict:

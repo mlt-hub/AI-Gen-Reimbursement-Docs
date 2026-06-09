@@ -884,6 +884,112 @@ def test_save_fpa_strategy_settings_validation_failure_does_not_overwrite(tmp_pa
     assert record["result"] == "validation_failed"
 
 
+def test_run_fpa_prompt_sample_preview_skips_ai_when_prompt_has_error(monkeypatch, tmp_path):
+    path = tmp_path / "fpa_config.yaml"
+    _write_minimal_fpa_config(path)
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("${payload_json}", ""), encoding="utf-8")
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("LLM should not be called")
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fail_if_called)
+
+    result = config_service.run_fpa_prompt_sample_preview(
+        profile_name="strict_fpa",
+        target_dir=tmp_path,
+    )
+
+    assert result["ai_called"] is False
+    assert result["parse_ok"] is False
+    assert result["prompt_diagnostics"]["errors"]
+    assert "prompt diagnostics" in result["warnings"][0]
+
+
+def test_run_fpa_prompt_sample_preview_normalizes_mock_ai_rows(monkeypatch, tmp_path):
+    _write_minimal_fpa_config(tmp_path / "fpa_config.yaml")
+    (tmp_path / ".env").write_text(
+        "ANTHROPIC_API_KEY=sk-test\n"
+        "ANTHROPIC_MODEL=test-model\n"
+        "ANTHROPIC_BASE_URL=https://api.example.test\n",
+        encoding="utf-8",
+    )
+
+    def fake_call_llm(*args, **kwargs):
+        return (
+            json.dumps({
+                "rows": [{
+                    "name": "新增客户",
+                    "type": "EI",
+                    "type_reason": "维护业务数据的外部输入。",
+                    "classification_basis_index": 1,
+                    "explanation": (
+                        "来源场景：【后台】业务管理-客户管理-客户资料维护-新增客户\n"
+                        "业务数据：客户名称、证件号码、联系电话。\n"
+                        "业务规则：保存客户资料。\n"
+                        "计算说明：作为 EI 纳入 FPA 功能点计量。"
+                    ),
+                    "source_process_ids": ["P1"],
+                }]
+            }, ensure_ascii=False),
+            "",
+        )
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+
+    result = config_service.run_fpa_prompt_sample_preview(
+        profile_name="strict_fpa",
+        target_dir=tmp_path,
+    )
+
+    assert result["ai_called"] is True
+    assert result["parse_ok"] is True
+    assert result["model"] == "test-model"
+    assert result["api_key_source"] == "global"
+    assert result["parsed_rows"][0]["type"] == "EI"
+    row = result["normalized_rows"][0]
+    assert row["新增/修改功能点"] == "【后台】业务管理-客户管理-客户资料维护-新增客户"
+    assert row["类型"] == "EI"
+    assert row["计算依据归类"] == "维护业务数据的外部输入，按 EI 识别。"
+    assert result["quality_warnings"] == []
+    assert any(hit["rule_id"] == "postprocess.ai_type_validation" for hit in result["rule_hits"])
+
+
+def test_run_fpa_prompt_sample_preview_returns_parse_error(monkeypatch, tmp_path):
+    _write_minimal_fpa_config(tmp_path / "fpa_config.yaml")
+    (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=sk-test\n", encoding="utf-8")
+
+    def fake_call_llm(*args, **kwargs):
+        return "not json", ""
+
+    monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_call_llm)
+
+    result = config_service.run_fpa_prompt_sample_preview(
+        profile_name="strict_fpa",
+        target_dir=tmp_path,
+    )
+
+    assert result["ai_called"] is True
+    assert result["parse_ok"] is False
+    assert result["raw_response"] == "not json"
+    assert "Expecting value" in result["error"]
+    assert result["normalized_rows"] == []
+
+
+def test_run_fpa_prompt_sample_preview_requires_api_key(tmp_path):
+    _write_minimal_fpa_config(tmp_path / "fpa_config.yaml")
+
+    try:
+        config_service.run_fpa_prompt_sample_preview(
+            profile_name="strict_fpa",
+            target_dir=tmp_path,
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "API Key" in str(exc)
+    else:
+        raise AssertionError("expected AdvancedConfigError")
+
+
 def test_build_fpa_judgement_rules_view_reads_rules(tmp_path):
     (tmp_path / "fpa_judgement_rules.yaml").write_text(
         "judgement_rules:\n  - 规则一\n  - 规则二\n",
