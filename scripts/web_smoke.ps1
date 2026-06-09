@@ -105,12 +105,13 @@ function Assert-AnyContains {
 $edge = Find-Edge -ExplicitPath $EdgePath
 $homeUrl = Join-WebPath -Base $BaseUrl -Path ""
 $configUrl = Join-WebPath -Base $BaseUrl -Path "config"
+$cosmicPreviewUrl = Join-WebPath -Base $BaseUrl -Path "preview/cosmic"
 $promptDebugUrl = Join-WebPath -Base $BaseUrl -Path "prompt-debug"
 
 Write-Host "Web smoke test: $homeUrl"
 $homeDom = Get-Dom -Url $homeUrl -BrowserPath $edge
 Assert-Contains -Dom $homeDom -Text "AI 生成项目报账文档" -Url $homeUrl
-Assert-Contains -Dom $homeDom -Text "任务设置" -Url $homeUrl
+Assert-Contains -Dom $homeDom -Text "生成任务" -Url $homeUrl
 Assert-Contains -Dom $homeDom -Text "执行监控" -Url $homeUrl
 Assert-AnyContains -Dom $homeDom -Texts @("后端未连接", "后端已连接", "检查服务中") -Url $homeUrl
 
@@ -130,6 +131,12 @@ Assert-Contains -Dom $configDom -Text "高级配置" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "YAML / JSON 配置文件" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "配置导入导出" -Url $configUrl
 Assert-Contains -Dom $configDom -Text "配置包" -Url $configUrl
+
+Write-Host "Web smoke test: $cosmicPreviewUrl"
+$cosmicPreviewDom = Get-Dom -Url $cosmicPreviewUrl -BrowserPath $edge
+Assert-Contains -Dom $cosmicPreviewDom -Text "COSMIC 预览" -Url $cosmicPreviewUrl
+Assert-Contains -Dom $cosmicPreviewDom -Text "选择 COSMIC JSON" -Url $cosmicPreviewUrl
+Assert-Contains -Dom $cosmicPreviewDom -Text "新增/修改功能过程" -Url $cosmicPreviewUrl
 
 Write-Host "Web smoke test: $promptDebugUrl"
 $promptDebugDom = Get-Dom -Url $promptDebugUrl -BrowserPath $edge
