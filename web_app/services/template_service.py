@@ -1,15 +1,18 @@
 import glob
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from docx import Document
+
 from ai_gen_reimbursement_docs.spec_template_importer import (
     SpecTemplateImportResult,
     import_spec_word_template,
 )
-from ai_gen_reimbursement_docs.template_manifest import validate_output_template
+from ai_gen_reimbursement_docs.template_manifest import load_template_manifest, validate_output_template
 
 
 async def save_custom_templates_into(
@@ -143,3 +146,188 @@ def delete_imported_spec_template(target_root: Path, import_id: str) -> bool:
         return False
     shutil.rmtree(path)
     return True
+
+
+def build_imported_spec_template_preview(target_root: Path, import_id: str) -> dict[str, Any]:
+    """Build a lightweight structure preview for an imported Word template draft."""
+    template_path = resolve_imported_spec_template_file(
+        target_root,
+        import_id,
+        "项目需求说明书-输出模板.docx",
+    )
+    manifest, manifest_path, manifest_source = load_template_manifest("spec", str(template_path))
+    validation = validate_output_template("spec", str(template_path))
+    doc = Document(str(template_path))
+
+    scopes = _collect_word_preview_scopes(doc)
+    placeholders = _collect_word_placeholder_occurrences(scopes)
+    anchors = _collect_word_anchor_occurrences(scopes, manifest)
+    section_candidates = [
+        item
+        for item in _collect_section_candidates(scopes)
+        if item["scope"] == "body"
+    ]
+
+    return {
+        "id": import_id,
+        "template_path": str(template_path),
+        "manifest_path": manifest_path,
+        "manifest_source": manifest_source,
+        "template_id": validation.template_id,
+        "ok": validation.ok,
+        "errors": [issue.message for issue in validation.errors],
+        "warnings": [issue.message for issue in validation.warnings],
+        "capabilities": validation.capabilities,
+        "summary": {
+            "body_paragraph_count": len(doc.paragraphs),
+            "body_table_count": len(doc.tables),
+            "section_count": len(doc.sections),
+            "placeholder_count": len(placeholders),
+            "anchor_count": len(anchors),
+            "section_candidate_count": len(section_candidates),
+        },
+        "placeholders": placeholders,
+        "anchors": anchors,
+        "section_candidates": section_candidates[:20],
+        "scopes": scopes,
+    }
+
+
+def _collect_word_preview_scopes(doc: Document) -> list[dict[str, Any]]:
+    return [
+        {
+            "scope": "body",
+            "label": "正文",
+            "paragraphs": _paragraph_previews(doc.paragraphs),
+            "tables": _table_previews(doc.tables),
+        },
+        {
+            "scope": "headers",
+            "label": "页眉",
+            "paragraphs": _paragraph_previews(
+                paragraph for section in doc.sections for paragraph in section.header.paragraphs
+            ),
+            "tables": _table_previews(
+                table for section in doc.sections for table in section.header.tables
+            ),
+        },
+        {
+            "scope": "footers",
+            "label": "页脚",
+            "paragraphs": _paragraph_previews(
+                paragraph for section in doc.sections for paragraph in section.footer.paragraphs
+            ),
+            "tables": _table_previews(
+                table for section in doc.sections for table in section.footer.tables
+            ),
+        },
+    ]
+
+
+def _paragraph_previews(paragraphs) -> list[dict[str, Any]]:
+    previews: list[dict[str, Any]] = []
+    for index, paragraph in enumerate(paragraphs):
+        text = _compact_text(paragraph.text)
+        if not text:
+            continue
+        previews.append({
+            "index": index,
+            "text": text,
+            "style": str(paragraph.style.name if paragraph.style else ""),
+            "placeholders": _find_tokens(text),
+        })
+    return previews[:120]
+
+
+def _table_previews(tables) -> list[dict[str, Any]]:
+    previews: list[dict[str, Any]] = []
+    for index, table in enumerate(tables):
+        cell_texts: list[str] = []
+        for row in table.rows[:5]:
+            row_text = " | ".join(_compact_text(cell.text) for cell in row.cells)
+            if row_text.strip():
+                cell_texts.append(row_text)
+        joined = "\n".join(cell_texts)
+        previews.append({
+            "index": index,
+            "row_count": len(table.rows),
+            "column_count": len(table.columns),
+            "style": str(table.style.name if table.style else ""),
+            "text_preview": joined[:500],
+            "placeholders": _find_tokens(joined),
+        })
+    return previews[:40]
+
+
+def _collect_word_placeholder_occurrences(scopes: list[dict[str, Any]]) -> list[dict[str, str]]:
+    occurrences: list[dict[str, str]] = []
+    for scope in scopes:
+        scope_name = scope["scope"]
+        for paragraph in scope["paragraphs"]:
+            for token in paragraph.get("placeholders", []):
+                occurrences.append({
+                    "token": token,
+                    "scope": scope_name,
+                    "location": f"paragraph:{paragraph['index']}",
+                    "text": paragraph["text"],
+                })
+        for table in scope["tables"]:
+            for token in table.get("placeholders", []):
+                occurrences.append({
+                    "token": token,
+                    "scope": scope_name if scope_name != "body" else "tables",
+                    "location": f"table:{table['index']}",
+                    "text": table["text_preview"],
+                })
+    return occurrences
+
+
+def _collect_word_anchor_occurrences(
+    scopes: list[dict[str, Any]],
+    manifest: dict[str, Any],
+) -> list[dict[str, str]]:
+    anchors = manifest.get("anchors", {}) or {}
+    if not isinstance(anchors, dict):
+        anchors = {}
+    anchor_tokens = {
+        "legacy_functional_requirements": str(anchors.get("legacy_functional_requirements", "{{功能需求详情}}")),
+        "functional_requirements": str(anchors.get("functional_requirements", "{{功能需求章节}}")),
+        "module_table": str(anchors.get("module_table", "{{模块清单表}}")),
+        "module_details": str(anchors.get("module_details", "{{功能过程详情}}")),
+    }
+    occurrences: list[dict[str, str]] = []
+    for placeholder in _collect_word_placeholder_occurrences(scopes):
+        for key, token in anchor_tokens.items():
+            if placeholder["token"] == token:
+                occurrences.append({
+                    "key": key,
+                    "token": token,
+                    "scope": placeholder["scope"],
+                    "location": placeholder["location"],
+                    "text": placeholder["text"],
+                })
+    return occurrences
+
+
+def _collect_section_candidates(scopes: list[dict[str, Any]]) -> list[dict[str, str]]:
+    keywords = ("功能需求", "功能说明", "功能模块", "系统功能")
+    candidates: list[dict[str, str]] = []
+    for scope in scopes:
+        for paragraph in scope["paragraphs"]:
+            text = paragraph["text"]
+            if any(keyword in text for keyword in keywords):
+                candidates.append({
+                    "scope": scope["scope"],
+                    "location": f"paragraph:{paragraph['index']}",
+                    "text": text,
+                    "style": paragraph.get("style", ""),
+                })
+    return candidates
+
+
+def _find_tokens(text: str) -> list[str]:
+    return sorted(set(re.findall(r"\{\{[^}]+\}\}", text or "")))
+
+
+def _compact_text(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "")).strip()

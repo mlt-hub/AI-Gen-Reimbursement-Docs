@@ -110,11 +110,76 @@
               <div class="flex flex-wrap gap-2">
                 <a class="btn-secondary min-h-0 px-2 py-1 text-xs" :href="draftDownloadUrl(item, item.template_filename)">下载</a>
                 <a class="btn-secondary min-h-0 px-2 py-1 text-xs" :href="draftDownloadUrl(item, item.manifest_filename)">manifest</a>
+                <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="previewLoadingId === item.id" @click="loadPreview(item)">
+                  {{ previewLoadingId === item.id ? '预览中' : '预览' }}
+                </button>
                 <button class="btn-primary min-h-0 px-2 py-1 text-xs" @click="applyDraft(item)">应用</button>
                 <button class="btn-secondary min-h-0 px-2 py-1 text-xs" :disabled="deletingId === item.id" @click="deleteDraft(item)">
                   {{ deletingId === item.id ? '删除中' : '删除' }}
                 </button>
               </div>
+            </div>
+
+            <div v-if="activePreviewId === item.id && activePreview" class="mt-3 space-y-3 border-t border-[var(--color-rule)] pt-3">
+              <div class="grid gap-2 text-xs text-[var(--color-ink-muted)] sm:grid-cols-3">
+                <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
+                  正文段落：{{ activePreview.summary.body_paragraph_count }}
+                </div>
+                <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
+                  占位符：{{ activePreview.summary.placeholder_count }}
+                </div>
+                <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
+                  锚点：{{ activePreview.summary.anchor_count }}
+                </div>
+              </div>
+
+              <div v-if="activePreview.anchors.length">
+                <p class="text-xs font-semibold text-[var(--color-ink-soft)]">锚点位置</p>
+                <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-ink-muted)]">
+                  <li v-for="anchor in activePreview.anchors" :key="anchor.key + anchor.location">
+                    {{ anchor.token }} / {{ scopeLabel(anchor.scope) }} / {{ anchor.location }} / {{ anchor.text }}
+                  </li>
+                </ul>
+              </div>
+
+              <div v-if="activePreview.section_candidates.length">
+                <p class="text-xs font-semibold text-[var(--color-ink-soft)]">功能需求章节候选</p>
+                <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-ink-muted)]">
+                  <li v-for="candidate in activePreview.section_candidates" :key="candidate.location + candidate.text">
+                    {{ candidate.location }} / {{ candidate.style }} / {{ candidate.text }}
+                  </li>
+                </ul>
+              </div>
+
+              <div v-if="activePreview.placeholders.length">
+                <p class="text-xs font-semibold text-[var(--color-ink-soft)]">占位符位置</p>
+                <div class="mt-2 max-h-48 overflow-auto rounded border border-[var(--color-rule)] bg-[var(--color-surface)]">
+                  <div
+                    v-for="placeholder in activePreview.placeholders"
+                    :key="placeholder.token + placeholder.scope + placeholder.location"
+                    class="grid gap-1 border-b border-[var(--color-rule)] px-2 py-1 text-xs text-[var(--color-ink-muted)] last:border-b-0 sm:grid-cols-[8rem_5rem_1fr]"
+                  >
+                    <span class="font-mono">{{ placeholder.token }}</span>
+                    <span>{{ scopeLabel(placeholder.scope) }}</span>
+                    <span class="break-all">{{ placeholder.location }} / {{ placeholder.text }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <details>
+                <summary class="subtle-link cursor-pointer select-none text-xs">结构摘要</summary>
+                <div class="mt-2 space-y-2">
+                  <div v-for="scope in activePreview.scopes" :key="scope.scope" class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] p-2">
+                    <p class="text-xs font-semibold text-[var(--color-ink-soft)]">{{ scope.label }}</p>
+                    <p class="mt-1 text-xs text-[var(--color-ink-muted)]">段落 {{ scope.paragraphs.length }} / 表格 {{ scope.tables.length }}</p>
+                    <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-ink-muted)]">
+                      <li v-for="paragraph in scope.paragraphs.slice(0, 8)" :key="paragraph.index">
+                        {{ paragraph.index }} / {{ paragraph.style }} / {{ paragraph.text }}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </details>
             </div>
           </div>
         </div>
@@ -172,6 +237,64 @@ interface ImportedDraftsResponse {
   templates?: ImportedDraft[]
 }
 
+interface PreviewParagraph {
+  index: number
+  text: string
+  style: string
+  placeholders: string[]
+}
+
+interface PreviewTable {
+  index: number
+  row_count: number
+  column_count: number
+  style: string
+  text_preview: string
+  placeholders: string[]
+}
+
+interface PreviewScope {
+  scope: string
+  label: string
+  paragraphs: PreviewParagraph[]
+  tables: PreviewTable[]
+}
+
+interface PreviewOccurrence {
+  token: string
+  scope: string
+  location: string
+  text: string
+}
+
+interface PreviewAnchor extends PreviewOccurrence {
+  key: string
+}
+
+interface PreviewCandidate {
+  scope: string
+  location: string
+  text: string
+  style: string
+}
+
+interface ImportedDraftPreview {
+  id: string
+  ok: boolean
+  summary: {
+    body_paragraph_count: number
+    body_table_count: number
+    section_count: number
+    placeholder_count: number
+    anchor_count: number
+    section_candidate_count: number
+  }
+  placeholders: PreviewOccurrence[]
+  anchors: PreviewAnchor[]
+  section_candidates: PreviewCandidate[]
+  scopes: PreviewScope[]
+}
+
 const emit = defineEmits<{
   apply: [patch: Record<string, string>]
 }>()
@@ -186,6 +309,9 @@ const draftsLoading = ref(false)
 const draftsMessage = ref('')
 const draftsOk = ref(true)
 const deletingId = ref('')
+const previewLoadingId = ref('')
+const activePreviewId = ref('')
+const activePreview = ref<ImportedDraftPreview | null>(null)
 
 const statusText = computed(() => {
   if (loading.value) return '导入中'
@@ -275,6 +401,30 @@ async function deleteDraft(item: ImportedDraft) {
     draftsMessage.value = normalizeApiError(error)
   } finally {
     deletingId.value = ''
+  }
+}
+
+async function loadPreview(item: ImportedDraft) {
+  if (activePreviewId.value === item.id && activePreview.value) {
+    activePreviewId.value = ''
+    activePreview.value = null
+    return
+  }
+  previewLoadingId.value = item.id
+  draftsMessage.value = ''
+  try {
+    activePreview.value = await apiFetch<ImportedDraftPreview>(
+      `/api/templates/spec/imported/${encodeURIComponent(item.id)}/preview`,
+    )
+    activePreviewId.value = item.id
+    draftsOk.value = true
+  } catch (error) {
+    activePreview.value = null
+    activePreviewId.value = ''
+    draftsOk.value = false
+    draftsMessage.value = normalizeApiError(error)
+  } finally {
+    previewLoadingId.value = ''
   }
 }
 
