@@ -1,40 +1,41 @@
-# gen-cosmic 重构后的预览抽象暂缓项
+# gen-cosmic 重构后的预览抽象状态
 
-本文档记录从 FPA 当前收口队列中转出的多预览页面扩展事项。
+本文档记录从 FPA 当前收口队列中转出的多预览页面扩展事项，以及 `gen-cosmic` 结构化重构后已恢复推进的状态。
 
-这些事项依赖 `gen-cosmic` 的核心输入/输出模型稳定。当前不在 FPA 重构主线中继续推进，避免把 COSMIC 当前临时数据流提前固化到 UI、API 和测试。
+`/preview/cosmic` 已完成最小结构化 JSON 审阅页，不再属于“等待 gen-cosmic 重构后再做”的事项。剩余工作集中在生成任务产物自动挂接、确认后导出策略和跨预览抽象边界，仍不并入 FPA 收口主线。
 
-## 恢复触发条件
+## 当前触发条件状态
 
-满足以下条件后再恢复评估：
+原恢复条件当前状态：
 
 ```text
-1. gen-cosmic 重构完成，核心输入/输出模型稳定。
-2. COSMIC 预览所需的中间结果、审核信息和错误模型已经明确。
-3. FPA / COSMIC / SPEC 预览是否需要共用抽象边界已有结论。
+1. 已满足：gen-cosmic 已形成结构化 JSON 草稿、review_items、confirmation 和 export_policy。
+2. 已满足：COSMIC 预览所需的中间结果、审核信息和错误模型已经进入 JSON 契约。
+3. 部分满足：FPA / COSMIC 已分别有预览页；SPEC 和跨预览组件抽象边界仍待评估。
 ```
 
-## 暂缓事项
+## 事项状态
 
 ```text
-I1. 暂缓：/preview/cosmic 等 gen-cosmic 重构完成、核心输入/输出模型稳定后再做。
-I2. 暂缓：/preview/spec 也等预览抽象边界稳定后再评估，避免跟 COSMIC 预览分叉。
-I3. 暂缓：COSMIC / SPEC 预览组件拆分待 gen-cosmic 重构后统一设计。
-I4. 暂缓：如后续需要 Golden Case 对比，可增加 /preview/golden-cases；是否做成 FPA 专属入口或跨生成器入口，应等预览抽象边界确定后再决策。
+I1. 已恢复并完成最小页：/preview/cosmic 可加载 COSMIC JSON 草稿，展示功能过程、数据移动、审阅项、确认状态，并导出确认 JSON。会话页 /sessions/:sessionId/cosmic/preview 会自动读取任务输出目录内的 COSMIC JSON 草稿，并可保存/读取 cosmic-confirmation.json。
+I2. 仍暂缓：/preview/spec 仍等 SPEC 数据契约和预览抽象边界稳定后再评估。
+I3. 部分暂缓：COSMIC 已有独立最小页；COSMIC / SPEC 预览组件是否抽象共用仍待设计，避免在 SPEC 未明确前过早抽象。
+I4. 仍暂缓：如后续需要 Golden Case 对比，可增加 /preview/golden-cases；是否做成 FPA 专属入口或跨生成器入口，应等预览抽象边界确定后再决策。
 ```
 
-## 恢复推进建议
+## 后续推进建议
 
-恢复时建议先做评估，不直接改代码：
+继续推进时建议先收口 COSMIC 预览闭环，再评估跨生成器抽象：
 
 ```text
-读取 docs/fpa/fpa-deferred-preview-after-cosmic.md，结合 gen-cosmic 重构后的输入/输出模型、当前 preview 路由和 FPA/COSMIC/SPEC 预览实现，重新评估 I1-I4 是否恢复推进。先给方案，不直接修改代码。
+读取 docs/fpa/fpa-deferred-preview-after-cosmic.md，结合当前 /preview/cosmic、会话预览接口、COSMIC JSON 草稿和确认 JSON，实现下一步 COSMIC 预览闭环。先给方案，不直接修改代码。
 ```
 
-如果确认恢复实施，再拆成小步：
+如果确认继续实施，建议拆成小步：
 
 ```text
-1. 先定义 COSMIC 预览的数据契约和审核信息边界。
-2. 再判断 FPA / COSMIC / SPEC 预览组件是否需要抽象共用。
-3. 最后评估 /preview/golden-cases 是 FPA 专属能力，还是跨生成器验收能力。
+1. 先把生成任务产物、会话 COSMIC 草稿和 /preview/cosmic 的加载入口统一。
+2. 再定义确认后正式导出执行策略，明确 export_policy 如何驱动草稿/正式输出。
+3. 再评估人工编辑功能过程和数据移动是否进入当前预览页。
+4. 最后判断 FPA / COSMIC / SPEC 预览组件是否需要抽象共用，以及 /preview/golden-cases 是 FPA 专属能力还是跨生成器验收能力。
 ```

@@ -587,7 +587,7 @@ strict_fpa 支持 ai_type_conflict_rules 覆盖类型冲突矩阵，适合压制
 FPA 配置样例与文档一致性已复核：custom_rules_default / strict_fpa_default / strict_fpa_conservative 定位已对齐，FPA prompt 保持集中在 fpa_config.yaml.example，不回退到 ai_system_prompts_config.yaml.example。
 ```
 
-跨生成器预览扩展已转入独立暂缓文档，不作为当前 FPA 收口待办：
+跨生成器预览扩展已转入独立状态文档，不作为当前 FPA 收口待办。COSMIC 最小结构化 JSON 审阅页已完成；SPEC、Golden Case 对比、跨预览组件抽象和 COSMIC 导出闭环仍在该文档中维护：
 
 ```text
 docs/fpa/fpa-deferred-preview-after-cosmic.md
