@@ -613,22 +613,158 @@ warnings.extend(profile.explanation_quality_warnings(...))
 
 阶段性建议仍是先保留 common quality gate。profile prompt 负责表达口径差异，公共 `_explanation_quality_warnings` 负责保证说明可审。只有当真实运行样本证明公共质量门太宽或太窄时，再增量添加 profile-specific checks。
 
-### 拟修改范围与验证
+### 第一阶段实施方案：抽取 `calculation_explanation_rules`
 
-如果实施 prompt 抽取，建议修改范围为：
+第一阶段目标是把 `计算依据说明生成规则` 从各 profile 的 user prompt 中抽成一个可复用 prompt fragment，并补齐 `multi_uis`、`ui_api_mapping` 当前缺少完整细则的问题。第一阶段只做这一件事，不抽取其它 prompt fragments。
 
-- `config/fpa_config.yaml.example`：新增 prompt 片段区，替换重复文本，补齐 `multi_uis` 和 `ui_api_mapping`。
-- `ai_gen_reimbursement_docs/fpa_profiles.py`：prompt 构建支持新的 `${calculation_explanation_rules}` 占位符。
-- `ai_gen_reimbursement_docs/config_utils.py`：如配置加载对字段结构有限制，需要同步支持新片段。
-- `tests/test_gen_fpa_ai.py` 和 `tests/test_config_utils.py`：补充 prompt 构建和占位符替换测试。
+#### 实施范围
+
+本阶段实施：
+
+- 新增 `prompt_fragments.calculation_explanation_rules` 配置。
+- 支持 `default + profile override`。
+- 在四个默认 profile 的 user prompt 中引用 `${calculation_explanation_rules}`。
+- 渲染最终 prompt 时将 `${calculation_explanation_rules}` 替换为当前 profile 对应规则。
+- 保持 `_explanation_quality_warnings` 公共质量门不变。
+- 更新默认配置、配置校验、prompt 渲染和测试。
+
+本阶段不实施：
+
+- 不抽取 `json_output_contract`、`row_planning_rules`、`agent_review_rules`、`row_output_schema`、`fpa_name_path_rules`。
+- 不增加用户专属 harness。
+- 不增加 fragment 版本字段。
+- 不做历史用户配置迁移；当前系统尚未上线，不需要旧配置兼容路径。
+- 不为每个 profile 复制一套完整 `_explanation_quality_warnings`。
+
+#### 配置 schema
+
+默认配置建议新增：
+
+```yaml
+prompt_fragments:
+  calculation_explanation_rules:
+    default: |-
+      计算依据说明生成规则：
+      1. explanation 必须写成结构化证据说明，固定包含「来源场景」「业务数据」「业务规则」「计算说明」；只有输入中明确出现表、服务、接口、文件、外部系统等系统元素时，才输出「系统元素」。
+      2. 来源场景必须使用完整路径；EI/EQ/EO 事务功能使用「【客户端类型】一级模块-二级模块-三级模块-功能点名称」，ILF/EIF 数据功能使用「【客户端类型】一级模块-二级模块-三级模块-数据组名称」，并保留用户动作、系统动作或数据组识别来源。
+      3. 业务数据描述业务对象、逻辑数据组、字段或状态；可以合理归纳业务对象，但不得把数据库表直接等同为 ILF。
+      4. 系统元素只列出输入中明确出现的表、服务、接口、文件或外部系统；未明确出现时，正式 explanation 中省略「系统元素」，不要写“未识别到”。
+      5. 计算说明必须说明为什么纳入 FPA 功能点计量，并明确当前类型 EI / EO / EQ / ILF / EIF。
+      6. 计算依据归类中的短依据可以是模板判定原则原文，但 explanation 不要把“按后台数据库变更的表个数计量”“按数据库表个数计量”等归类依据改写成详细计量解释。
+      7. 每项 1 句，总体建议 80-180 字；不要为凑字数补充输入中没有的权限、审批、状态流、表名、服务名或接口名。
+    strict_fpa: |-
+      # 可选。缺省时回退 default。
+    unified_ui: |-
+      # 可选。缺省时回退 default。
+    multi_uis: |-
+      # 可选。缺省时回退 default。
+    ui_api_mapping: |-
+      # 可选。缺省时回退 default。
+```
+
+`default` 为必填非空字符串。profile override 为可选；为空、缺失或只包含空白时均回退 `default`。第一阶段默认配置可以只提供 `default`，等确有差异需要时再补 profile override。
+
+#### user prompt 模板
+
+四个默认 user prompt 都应引用：
+
+```text
+${calculation_explanation_rules}
+```
+
+示例位置建议放在行规划规则之后、`模块输入 JSON` 之前：
+
+```text
+...
+name 必须使用完整模块路径前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
+
+${calculation_explanation_rules}
+
+模块输入 JSON：
+${payload_json}
+```
+
+最终渲染后的 prompt 不应出现 `${calculation_explanation_rules}` 或任何 `${...}` 残留。
+
+#### 渲染规则
+
+渲染 `${calculation_explanation_rules}` 时按以下顺序取值：
+
+1. `prompt_fragments.calculation_explanation_rules.<profile_name>`
+2. `prompt_fragments.calculation_explanation_rules.default`
+3. 报错：`FPA 配置无效：prompt_fragments.calculation_explanation_rules.default 必须是非空字符串`
+
+如果 user prompt 未引用 `${calculation_explanation_rules}`，渲染不强制追加 fragment。默认配置中的四个官方 profile 必须引用它；用户自定义 prompt 可不引用，但运行时配置检查可以提示“当前 prompt 未引用 calculation_explanation_rules，计算依据说明可能不受统一规则约束”。
+
+#### 配置校验规则
+
+`FPA_USER_PROMPT_PLACEHOLDERS` 需要允许：
+
+```python
+{"core_rules", "judgement_rules", "payload_json", "calculation_explanation_rules"}
+```
+
+必填占位符建议分为两类：
+
+- 强制必填：`${core_rules}`、`${judgement_rules}`、`${payload_json}`。
+- 推荐引用：`${calculation_explanation_rules}`。
+
+如果继续沿用“所有允许占位符都必须出现”的旧逻辑，会导致用户自定义 prompt 必须引用 fragment，不符合运行时自定义边界。因此建议把 `calculation_explanation_rules` 设计为允许但非强制；默认配置测试再单独断言四个官方 profile 都引用并渲染该 fragment。
+
+如果 prompt 引用了 `${calculation_explanation_rules}`，但 fragment 缺失或解析为空，应阻断并给出明确错误。
+
+#### 代码修改点
+
+建议修改：
+
+- `config/fpa_config.yaml.example`
+  - 新增 `prompt_fragments.calculation_explanation_rules.default`。
+  - `strict_fpa_up`、`unified_ui_up`、`multi_uis_up`、`ui_api_mapping_up` 引用 `${calculation_explanation_rules}`。
+  - 移除 `strict_fpa_up`、`unified_ui_up` 中重复内联的完整 7 条规则。
+  - 补齐 `multi_uis_up`、`ui_api_mapping_up` 的说明规则引用。
+
+- `ai_gen_reimbursement_docs/config_utils.py`
+  - 扩展 user prompt 占位符白名单。
+  - 拆分强制必填占位符和允许占位符。
+  - 新增加载 `prompt_fragments.calculation_explanation_rules` 的函数或内部 helper。
+  - 校验 `default` 非空；profile override 可选。
+
+- `ai_gen_reimbursement_docs/fpa_profiles.py`
+  - `_render_configured_fpa_prompt` 注入 `calculation_explanation_rules`。
+  - 按 `profile.name` 获取 override，缺省回退 default。
+  - 保证最终 prompt 没有未替换占位符。
+
+- `tests/test_config_utils.py`
+  - 更新默认 prompt 断言：默认四个 profile 最终模板或渲染结果包含 `计算依据说明生成规则`。
+  - 增加 fragment 缺失、default 为空、非法占位符、未替换占位符等测试。
+  - 增加 `calculation_explanation_rules` 可选但被默认 profile 引用的断言。
+
+- `tests/test_fpa_profiles.py`
+  - 更新自定义最小配置 fixture；如其 user prompt 不引用 fragment，应仍可通过。
+  - 增加 build_prompt 渲染后无 `${calculation_explanation_rules}` 残留的测试。
+  - 增加 profile override 生效测试。
+
+- `tests/fpa_profiles/test_profile_prompt_payload_contract.py` 和 `tests/fpa_profiles/test_custom_profile_harness.py`
+  - 如测试 fixture 引用 `${calculation_explanation_rules}`，补 `prompt_fragments`。
+  - 如不引用，应确认最小配置仍能构建 payload，不被 fragment 机制强制阻断。
+
+#### 验收标准
+
+第一阶段完成后应满足：
+
+- 默认 `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping` prompt 都能渲染成功。
+- 四个默认 profile 的最终 prompt 都包含 `计算依据说明生成规则`。
+- `multi_uis` 和 `ui_api_mapping` 不再只依赖 JSON 示例获得说明结构约束。
+- `${calculation_explanation_rules}` 不会残留在最终 prompt 中。
+- 其它 `${...}` 占位符也不会残留在最终 prompt 中。
+- profile override 存在时优先使用 override。
+- profile override 缺失时回退 default。
+- prompt 未引用 `${calculation_explanation_rules}` 的自定义最小配置仍可通过基础 prompt 构建。
+- prompt 引用了 `${calculation_explanation_rules}` 但 fragment 缺失或 default 为空时，给出明确配置错误。
+- `_explanation_quality_warnings` 行为不变，check Excel warning 逻辑不受 prompt fragment 抽取影响。
 
 建议验证命令：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_gen_fpa_ai.py tests/test_config_utils.py
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_fpa_profiles.py tests/fpa_profiles/test_profile_prompt_payload_contract.py tests/fpa_profiles/test_custom_profile_harness.py tests/test_gen_fpa_ai.py
 ```
-
-主要风险：
-
-- 现有模板占位符校验若比较严格，新增占位符可能导致 prompt 未正确渲染或测试失败。
-- `multi_uis` 和 `ui_api_mapping` 补强后，真实模型输出会更稳定一致，但可能改变已有断言或快照预期。
