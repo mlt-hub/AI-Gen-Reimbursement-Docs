@@ -1,5 +1,6 @@
 import glob
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -8,6 +9,7 @@ from ai_gen_reimbursement_docs.spec_template_importer import (
     SpecTemplateImportResult,
     import_spec_word_template,
 )
+from ai_gen_reimbursement_docs.template_manifest import validate_output_template
 
 
 async def save_custom_templates_into(
@@ -81,3 +83,63 @@ async def import_spec_template_upload(
         import_dir,
         template_id=f"imported_spec_{import_id}",
     )
+
+
+def imported_spec_templates_root(target_root: Path) -> Path:
+    return target_root / "imported_templates" / "spec"
+
+
+def list_imported_spec_templates(target_root: Path) -> list[dict[str, Any]]:
+    """列出已导入的需求说明书 Word 模板草稿。"""
+    root = imported_spec_templates_root(target_root)
+    if not root.exists():
+        return []
+
+    items: list[dict[str, Any]] = []
+    for item_dir in sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.name, reverse=True):
+        template_path = item_dir / "项目需求说明书-输出模板.docx"
+        manifest_path = item_dir / "项目需求说明书-输出模板.manifest.yaml"
+        if not template_path.exists() or not manifest_path.exists():
+            continue
+
+        validation = validate_output_template("spec", str(template_path))
+        stat = template_path.stat()
+        items.append({
+            "id": item_dir.name,
+            "template_path": str(template_path),
+            "manifest_path": str(manifest_path),
+            "template_filename": template_path.name,
+            "manifest_filename": manifest_path.name,
+            "created_at": stat.st_mtime,
+            "size_bytes": stat.st_size,
+            "ok": validation.ok,
+            "warnings": [issue.message for issue in validation.warnings],
+            "errors": [issue.message for issue in validation.errors],
+            "capabilities": validation.capabilities,
+            "out_templates_patch": {
+                "spec_out_template": str(template_path),
+            },
+        })
+    return items
+
+
+def resolve_imported_spec_template_file(target_root: Path, import_id: str, filename: str) -> Path:
+    """Resolve an imported spec template file while preventing path traversal."""
+    if filename not in {"项目需求说明书-输出模板.docx", "项目需求说明书-输出模板.manifest.yaml"}:
+        raise FileNotFoundError(filename)
+    root = imported_spec_templates_root(target_root).resolve()
+    path = (root / import_id / filename).resolve()
+    if path.parent.parent != root:
+        raise FileNotFoundError(filename)
+    if not path.exists():
+        raise FileNotFoundError(filename)
+    return path
+
+
+def delete_imported_spec_template(target_root: Path, import_id: str) -> bool:
+    root = imported_spec_templates_root(target_root).resolve()
+    path = (root / import_id).resolve()
+    if path.parent != root or not path.exists() or not path.is_dir():
+        return False
+    shutil.rmtree(path)
+    return True

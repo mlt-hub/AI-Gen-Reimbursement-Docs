@@ -514,12 +514,12 @@ replacement_scopes:
 - `module_table.sample_table.marker` 可声明模块清单样例表，生成器会复制样例表样式并移除原样例表。
 - 已新增 Word 模板导入后端基础能力：`import_spec_word_template(...)` 可读取客户 `.docx`，扫描正文、表格、页眉、页脚，替换常见元数据字段为占位符，在功能需求章节附近插入 `{{模块清单表}}` 和 `{{功能过程详情}}`，并生成配套 manifest 与待确认项。
 - Web 已接入 Word 模板导入入口：配置页“模板”分区可以上传 `.docx`，调用 `/api/templates/spec/import` 生成模板草稿，并可将返回的 `spec_out_template` 路径应用到 `out_templates` 映射，仍需用户手动保存配置。
+- Web 已支持已导入模板草稿列表管理：可查看预检状态、下载模板和 manifest、应用到模板映射、删除草稿。
 
 尚未实施：
 
 - 文本框、内容控件、图片文字等复杂 Word 结构识别。
-- 导入后的在线预览、用户确认和保存流程。
-- 已导入模板的列表管理、删除和版本命名。
+- 导入后的在线预览、用户确认和版本命名。
 
 ### 当前默认 Word manifest
 
@@ -626,6 +626,9 @@ Web 入口：
 
 ```text
 POST /api/templates/spec/import
+GET /api/templates/spec/imported
+GET /api/templates/spec/imported/{import_id}/{filename}
+DELETE /api/templates/spec/imported/{import_id}
 ```
 
 导入输出：
@@ -669,9 +672,9 @@ custom_templates/
 
 下一阶段建议补齐导入后的确认和管理流程：
 
-1. 提供模板草稿预览或下载。
+1. 提供模板草稿在线预览。
 2. 让用户确认功能需求锚点位置和识别字段。
-3. 支持重命名、删除、选择已导入模板。
+3. 支持重命名和版本命名。
 4. 确认后保存到任务或用户自定义模板目录。
 
 这样可以把已生成的模板草稿纳入完整管理流程，同时继续避免承诺任意 Word 自动完美转换。
