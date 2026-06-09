@@ -483,3 +483,19 @@ def test_module_context_without_l3_user_requires_review():
     assert result.basis["function_user"]["matched"] is False
     assert result.basis["function_user"]["match_source"] == "module_context_only"
     assert result.basis["function_user"]["matched_term"] == "用户管理"
+
+
+def test_unique_function_user_governance_flags_conflicting_roles():
+    result = validate_cosmic_item(
+        _item(
+            module_l3="客户资料",
+            user="发起者：客户资料|接收者：订单管理",
+        ),
+        governance_config={"require_unique_function_user": True},
+    )
+
+    assert "FUNCTION_USER_ROLE_CONFLICT" in _codes(result)
+    assert result.status == "review_required"
+    issue = next(issue for issue in result.issues if issue.code == "FUNCTION_USER_ROLE_CONFLICT")
+    assert issue.details["matched_part"] == "客户资料"
+    assert issue.details["function_user_parts"] == ["客户资料", "订单管理"]

@@ -20,6 +20,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_cosmic_warn_marker,
     load_gen_cosmic_allow_draft_excel_output,
     load_gen_cosmic_cfp_policy,
+    load_gen_cosmic_governance_config,
     load_fpa_reduced_use_workload,
     load_fpa_adjustment_value_config,
     load_fpa_profile,
@@ -554,6 +555,49 @@ class TestBooleanLoaders:
                 "复用": 0.5,
                 "利旧": 0.0,
             }
+
+    def test_load_gen_cosmic_governance_config_default(self):
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=Path("/nonexistent")):
+            result = load_gen_cosmic_governance_config()
+
+        assert result["auto_apply_review_actions"] is False
+        assert result["auto_apply_issue_codes"] == []
+        assert result["function_user_role_map"] == {}
+        assert result["require_unique_function_user"] is False
+        assert result["cfp_formula_consistency_check"] is False
+        assert result["audit_hash_chain"] is True
+
+    def test_load_gen_cosmic_governance_config_nested(self, tmp_path):
+        (tmp_path / "system_config.yaml").write_text(
+            "\n".join([
+                "gen_cosmic:",
+                "  governance:",
+                "    auto_apply_review_actions: true",
+                "    auto_apply_issue_codes:",
+                "      - CONTROL_COMMAND_MOVEMENT",
+                "      - ''",
+                "    function_user_role_map:",
+                "      客户资料: 发起者：客户资料经办|接收者：客户资料经办",
+                "      '': ignored",
+                "    require_unique_function_user: true",
+                "    cfp_formula_consistency_check: true",
+                "    audit_hash_chain: false",
+            ]),
+            encoding="utf-8",
+        )
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir",
+                   return_value=tmp_path):
+            result = load_gen_cosmic_governance_config()
+
+        assert result["auto_apply_review_actions"] is True
+        assert result["auto_apply_issue_codes"] == ["CONTROL_COMMAND_MOVEMENT"]
+        assert result["function_user_role_map"] == {
+            "客户资料": "发起者：客户资料经办|接收者：客户资料经办",
+        }
+        assert result["require_unique_function_user"] is True
+        assert result["cfp_formula_consistency_check"] is True
+        assert result["audit_hash_chain"] is False
 
     def test_load_fpa_reduced_default(self):
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir",

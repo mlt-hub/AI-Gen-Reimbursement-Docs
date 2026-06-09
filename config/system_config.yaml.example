@@ -89,6 +89,19 @@ gen_cosmic:
     复用: 0.3333333333333333
     利旧: 0
     优化未改: 0
+  governance:
+    # 是否自动应用 review_items 中的 suggested_actions；默认 false，避免无人工确认时静默改写
+    auto_apply_review_actions: false
+    # 允许自动应用的 issue code 白名单；仅在 auto_apply_review_actions=true 时生效
+    auto_apply_issue_codes: []
+    # 组织级功能用户映射，确认动作 apply_function_user 未指定 suggested_user 时可按三级/二级/一级模块取值
+    function_user_role_map: {}
+    # 是否启用功能用户与功能过程一对一强绑定诊断
+    require_unique_function_user: false
+    # 是否诊断确认后 CFP policy 与 Excel 公式文本的明显不一致
+    cfp_formula_consistency_check: false
+    # 是否给 review_audit 写入前后相连的 SHA-256 hash
+    audit_hash_chain: true
 
 # 只对前N个功能过程调用SPEC AI（默认0）
 gen_spec_ai_limit: 0
