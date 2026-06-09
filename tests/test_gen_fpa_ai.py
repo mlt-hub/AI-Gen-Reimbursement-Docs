@@ -698,6 +698,38 @@ def test_explanation_quality_warns_for_fabricated_system_elements():
     assert any("客户信息表" in warning for warning in quality_hit["warnings"])
 
 
+def test_explanation_quality_warns_for_multiline_fabricated_system_elements():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["维护业务数据的外部输入，按 EI 识别。"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "新增客户",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-新增客户"
+                "\n业务数据：客户名称、证件号码。"
+                "\n业务规则：后台用户提交客户资料后系统保存。"
+                "\n系统元素："
+                "\n- 客户信息表，用于保存客户资料。"
+                "\n- 客户保存服务。"
+                "\n计算说明：该功能体现外部输入事务，按 EI 识别。"
+            ),
+        }],
+    )
+
+    assert any("客户信息表" in warning and "客户保存服务" in warning for warning in warnings)
+    quality_hit = next(
+        hit for hit in rows[0]["_规则命中详情"]
+        if hit["rule_id"] == "postprocess.explanation_quality"
+    )
+    assert any("客户信息表" in warning and "客户保存服务" in warning for warning in quality_hit["warnings"])
+
+
 def test_explanation_quality_accepts_explicit_system_elements_from_input():
     group = _group_rows_by_l3([
         {

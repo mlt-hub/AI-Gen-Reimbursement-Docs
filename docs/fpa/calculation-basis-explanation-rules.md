@@ -42,7 +42,7 @@
 - 已新增后端 prompt diagnostics helper：`ai_gen_reimbursement_docs.config_utils.diagnose_fpa_user_prompt(profile_name)` 可返回 user prompt 来源、`calculation_explanation_rules` 引用/解析状态、warning/error、未替换占位符和预览渲染结果。
 - 已新增 FPA prompt 样例试运行：`POST /api/web-config/fpa-prompt-sample-run` 使用内置样例模块调用当前 profile prompt，返回 prompt diagnostics、raw response、解析状态、后处理后的 FPA 行、普通 warning、`计算依据说明`质量 warning 和规则命中详情；prompt 配置错误时不调用模型。
 - Web 配置页 FPA 策略区已支持逐 profile 触发“试运行当前 prompt”，并展示最终 prompt、模型原始返回、样例 FPA 行、后处理 warning 和`计算依据说明` warning。
-- 已补充疑似编造系统元素检测：正式`计算依据说明`中的`系统元素`如包含输入未明确出现的表、服务、接口、文件或外部系统/平台，会通过 `postprocess.explanation_quality` 记录 warning；输入中明确出现的系统元素不报 warning。
+- 已补充疑似编造系统元素检测：正式`计算依据说明`中的`系统元素`如包含输入未明确出现的表、服务、接口、文件或外部系统/平台，会通过 `postprocess.explanation_quality` 记录 warning；支持同行说明和多行列表写法；输入中明确出现的系统元素不报 warning。
 
 已提交：
 

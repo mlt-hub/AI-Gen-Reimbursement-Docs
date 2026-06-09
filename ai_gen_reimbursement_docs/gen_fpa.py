@@ -78,6 +78,13 @@ FPA_PROJECT_DESCRIPTION_MAX_CHARS = 5000
 EXPLANATION_TABLE_COUNT_DETAIL_HINTS = ("数据库表个数=", "表个数=", "表数量", "1张表", "1 张表", "1个表", "1 个表")
 EXPLANATION_SYSTEM_ELEMENT_MARKERS = ("表", "服务", "接口", "文件", "系统", "平台")
 EXPLANATION_SYSTEM_ELEMENT_SKIP_HINTS = ("未识别到", "未明确", "无明确", "没有明确")
+EXPLANATION_STRUCTURED_LABELS = (
+    "来源场景：", "来源场景:",
+    "业务数据：", "业务数据:",
+    "业务规则：", "业务规则:",
+    "系统元素：", "系统元素:",
+    "计算说明：", "计算说明:",
+)
 FPA_TYPE_EXPLANATION_ALIASES = {
     "EI": (
         "外部输入", "输入事务", "维护类事务", "维护类EI", "维护类 EI",
@@ -261,10 +268,22 @@ def _source_text_for_explanation_system_elements(
 
 def _system_element_lines(explanation: str) -> list[str]:
     lines = []
+    in_system_element_block = False
     for line in str(explanation or "").splitlines():
         clean = line.strip()
         if clean.startswith("系统元素：") or clean.startswith("系统元素:"):
-            lines.append(clean.split("：", 1)[-1] if "：" in clean else clean.split(":", 1)[-1])
+            in_system_element_block = True
+            value = clean.split("：", 1)[-1] if "：" in clean else clean.split(":", 1)[-1]
+            if value.strip():
+                lines.append(value)
+            continue
+        if not in_system_element_block:
+            continue
+        if any(clean.startswith(label) for label in EXPLANATION_STRUCTURED_LABELS):
+            in_system_element_block = False
+            continue
+        if clean:
+            lines.append(re.sub(r"^[\-*•·\d.、）)\s]+", "", clean).strip())
     return lines
 
 
@@ -277,7 +296,7 @@ def _candidate_system_elements(system_element_text: str) -> list[str]:
         if not any(marker in item for marker in EXPLANATION_SYSTEM_ELEMENT_MARKERS):
             continue
         item = re.sub(r"^(?:涉及|调用|对接|访问|使用|通过|依赖|外部|本系统|系统元素)\s*", "", item).strip()
-        item = re.sub(r"(?:用于|支撑|完成|保存|返回|提供).*$", "", item).strip(" 。.：:（）()[]【】")
+        item = re.sub(r"(?:用于|支撑|完成|返回|提供).*$", "", item).strip(" 。.：:（）()[]【】")
         cn_match = re.search(r"[\u4e00-\u9fffA-Za-z0-9_（）()·-]{2,40}(?:表|服务|接口|文件|系统|平台)", item)
         if cn_match:
             candidates.append(cn_match.group(0).strip())
