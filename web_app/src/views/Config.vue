@@ -669,6 +669,9 @@
         </div>
       </div>
       <div class="grid gap-4 lg:grid-cols-2">
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-4 lg:col-span-2">
+          <SpecTemplateImport @apply="applyTemplateImportPatch" />
+        </div>
         <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-muted)] p-4">
           <TemplateUpload />
         </div>
@@ -991,6 +994,7 @@ import { normalizeApiKeyInput, useConfigStore } from '@/stores/config.ts'
 import { useSensitiveInputGuard } from '@/composables/useSensitiveInputGuard.ts'
 import { useFpaOptions } from '@/composables/useFpaOptions.ts'
 import { apiFetch, isBackendUnavailableMessage, normalizeApiError } from '@/lib/api.ts'
+import SpecTemplateImport from '@/components/SpecTemplateImport.vue'
 import TemplateDownload from '@/components/TemplateDownload.vue'
 import TemplateUpload from '@/components/TemplateUpload.vue'
 
@@ -2461,6 +2465,26 @@ async function saveTemplateSettings() {
       out_templates: { value: outTemplates },
     },
   }, '模板映射保存成功')
+}
+
+function applyTemplateImportPatch(patch: Record<string, string>) {
+  let current: Record<string, string> = {}
+  try {
+    const parsed = JSON.parse(webTemplateForm.outTemplatesJson || '{}')
+    if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
+      current = Object.fromEntries(
+        Object.entries(parsed).map(([key, value]) => [key, String(value)]),
+      )
+    }
+  } catch {
+    current = {}
+  }
+  webTemplateForm.outTemplatesJson = JSON.stringify({
+    ...current,
+    ...patch,
+  }, null, 2)
+  webConfigSaveOk.value = true
+  webConfigSaveMsg.value = '已应用到模板映射，请保存'
 }
 
 async function saveWebConfigPayload(payload: Record<string, unknown>, successMessage: string) {
