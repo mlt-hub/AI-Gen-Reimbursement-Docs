@@ -218,6 +218,7 @@ interface CosmicReport {
 
 const report = ref<CosmicReport | null>(null)
 const error = ref('')
+const confirmationStoreKey = ref('')
 
 const reviewItemsById = computed(() => {
   const map = new Map<string, CosmicReviewItem>()
@@ -240,9 +241,13 @@ async function loadJsonFile(event: Event) {
 
   try {
     const parsed = JSON.parse(await file.text())
-    report.value = normalizeReport(parsed)
+    const normalized = normalizeReport(parsed)
+    confirmationStoreKey.value = buildConfirmationStoreKey(normalized)
+    applyStoredConfirmations(normalized)
+    report.value = normalized
   } catch (err) {
     report.value = null
+    confirmationStoreKey.value = ''
     error.value = err instanceof Error ? err.message : '无法读取 COSMIC JSON'
   }
 }
@@ -250,6 +255,7 @@ async function loadJsonFile(event: Event) {
 function clearReport() {
   report.value = null
   error.value = ''
+  confirmationStoreKey.value = ''
 }
 
 function exportReport() {
@@ -298,6 +304,40 @@ function normalizeReviewItem(item: CosmicReviewItem): CosmicReviewItem {
   }
 }
 
+function buildConfirmationStoreKey(data: CosmicReport): string {
+  const ids = data.review_items.map(item => item.review_id).sort().join('|')
+  return `cosmic-preview-confirmations:${data.project || 'unknown'}:${ids}`
+}
+
+function applyStoredConfirmations(data: CosmicReport) {
+  if (!confirmationStoreKey.value) return
+  try {
+    const raw = window.localStorage.getItem(confirmationStoreKey.value)
+    if (!raw) return
+    const stored = JSON.parse(raw)
+    if (!stored || typeof stored !== 'object') return
+    for (const item of data.review_items) {
+      const confirmation = (stored as Record<string, unknown>)[item.review_id]
+      if (confirmation && typeof confirmation === 'object') {
+        item.confirmation = {
+          ...item.confirmation,
+          ...(confirmation as Record<string, string>),
+        }
+      }
+    }
+  } catch {
+    // Ignore corrupt local review state and keep the JSON defaults.
+  }
+}
+
+function saveConfirmations() {
+  if (!report.value || !confirmationStoreKey.value) return
+  const state = Object.fromEntries(
+    report.value.review_items.map(item => [item.review_id, item.confirmation || {}]),
+  )
+  window.localStorage.setItem(confirmationStoreKey.value, JSON.stringify(state))
+}
+
 function itemForRow(index: number): CosmicItem | undefined {
   return report.value?.items[index]
 }
@@ -321,6 +361,7 @@ function updateConfirmation(reviewId: string, patch: Record<string, string>) {
     confirmed_by: previous.confirmed_by ?? '',
     confirmed_at: nextStatus === 'unconfirmed' ? '' : statusChanged ? new Date().toISOString() : previous.confirmed_at ?? '',
   }
+  saveConfirmations()
 }
 
 function cfpForRow(index: number): string {

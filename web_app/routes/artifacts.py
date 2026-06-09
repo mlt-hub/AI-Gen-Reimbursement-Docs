@@ -50,6 +50,15 @@ def _read_text(path: Path | None) -> str:
     return ""
 
 
+def _cosmic_confirmation_path(session_manager: SessionManager, session_id: str) -> Path:
+    state = session_manager.get(session_id)
+    root = state.work_dir if state else None
+    if root is None:
+        raise HTTPException(404, "未知会话")
+    root.mkdir(parents=True, exist_ok=True)
+    return root / "cosmic-confirmation.json"
+
+
 def _record_function_points(record: dict) -> list[str]:
     values: list[str] = []
     for key in ("final_rows", "parsed_rows"):
@@ -257,6 +266,49 @@ def create_router(session_manager: SessionManager) -> APIRouter:
                     if name
                 }),
             },
+        }
+
+    @router.get("/api/sessions/{session_id}/cosmic/confirmation")
+    async def get_cosmic_confirmation(
+        session_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        """读取 COSMIC 预览人工确认 JSON。"""
+        require_session_access(session_manager, session_id, request, user)
+        path = _cosmic_confirmation_path(session_manager, session_id)
+        if not path.exists():
+            raise HTTPException(404, "COSMIC 确认 JSON 尚未保存")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(500, "COSMIC 确认 JSON 损坏") from exc
+        return {
+            "session_id": session_id,
+            "filename": path.name,
+            "payload": payload,
+        }
+
+    @router.put("/api/sessions/{session_id}/cosmic/confirmation")
+    async def save_cosmic_confirmation(
+        session_id: str,
+        payload: dict,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        """保存 COSMIC 预览人工确认 JSON。"""
+        require_session_access(session_manager, session_id, request, user)
+        if not isinstance(payload, dict):
+            raise HTTPException(400, "COSMIC 确认 JSON 必须是对象")
+        path = _cosmic_confirmation_path(session_manager, session_id)
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "filename": path.name,
         }
 
     return router

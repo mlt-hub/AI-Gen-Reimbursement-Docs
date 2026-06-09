@@ -657,8 +657,8 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `review_items` | `array` | 是 | 扁平审阅 issue 列表，包含全局 issue 和功能过程 issue；供预览页、筛选、人工确认列表直接消费。 |
 | `review_items[].review_id` | `string` | 是 | 稳定审阅项 ID，由 scope、item_index、code、field、movement_order 组成，用于前端保存人工确认状态；组成段内的 `:` 和 `\` 会转义。 |
 | `review_items[].item_index` | `number|null` | 是 | 对应 `items` 的 0 基序号；全局 issue 为 `null`。 |
-| `review_items[].confirmation` | `object` | 是 | 人工确认状态占位，默认 `status=unconfirmed`，供预览页按 `review_id` 持久化确认结果。 |
-| `review_items[].confirmation.status` | `string` | 是 | 默认 `unconfirmed`；后续预览页可扩展为 `accepted/rejected/overridden` 等人工确认状态。 |
+| `review_items[].confirmation` | `object` | 是 | 人工确认状态占位，默认 `status=unconfirmed`。COSMIC 预览页会按 `review_id` 在浏览器本地恢复确认状态，并可导出带确认结果的 JSON；Web session 也提供确认 JSON 保存/读取接口。 |
+| `review_items[].confirmation.status` | `string` | 是 | 默认 `unconfirmed`；预览页当前支持 `confirmed/rejected/waived`。 |
 | `review_items[].confirmation.decision` | `string` | 是 | 人工确认决定，默认空字符串。 |
 | `review_items[].confirmation.note` | `string` | 是 | 人工备注，默认空字符串。 |
 | `review_items[].confirmation.confirmed_by` | `string` | 是 | 确认人，默认空字符串。 |
@@ -895,7 +895,7 @@ md/3.4.gen-cosmic-校验报告.md
 | error | `FIRST_MOVE_NOT_ENTRY` | `movements[0].move_type` | 1 | 第一个子过程必须为输入 E |  |
 ```
 
-报告中不使用“功能点类型”“说明详情”等 FPA 禁用同义词。COSMIC 审阅页尚未实现，本阶段报告里的业务对象统一称为“功能过程”“数据移动”“数据移动类型”“计算依据说明”。后续 `/preview/cosmic` 的用户可见文案必须遵循 [`docs/fpa/result-review-terminology.md`](../fpa/result-review-terminology.md) 中的 COSMIC 审阅术语映射。
+报告中不使用“功能点类型”“说明详情”等 FPA 禁用同义词。`/preview/cosmic` 已提供基于结构化 JSON 的最小审阅页，用户可加载 COSMIC JSON 草稿、查看功能过程/数据移动/审阅项、编辑人工确认状态和备注，并导出带确认结果的 JSON。浏览器会按当前项目和 `review_id` 集合本地恢复确认状态；后端 session 接口 `GET/PUT /api/sessions/{session_id}/cosmic/confirmation` 可保存和读取 `cosmic-confirmation.json`。页面用户可见文案必须遵循 [`docs/fpa/result-review-terminology.md`](../fpa/result-review-terminology.md) 中的 COSMIC 审阅术语映射。
 
 ### CFP 处理
 

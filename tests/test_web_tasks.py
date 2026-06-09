@@ -1480,3 +1480,57 @@ def test_session_status_hides_other_users_session(monkeypatch, tmp_path):
 
     assert resp.status_code == 404
     server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_confirmation_can_be_saved_and_loaded(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_confirmation"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    payload = {
+        "project": "测试项目",
+        "review_items": [
+            {
+                "review_id": "item::0::GENERIC_FUNCTION_USER::user::",
+                "confirmation": {
+                    "status": "confirmed",
+                    "decision": "confirmed",
+                    "note": "已确认功能用户",
+                    "confirmed_by": "",
+                    "confirmed_at": "2026-06-09T00:00:00Z",
+                },
+            }
+        ],
+    }
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+    load_resp = client.get(f"/api/sessions/{session_id}/cosmic/confirmation")
+
+    assert save_resp.status_code == 200
+    assert save_resp.json()["filename"] == "cosmic-confirmation.json"
+    assert load_resp.status_code == 200
+    assert load_resp.json()["payload"] == payload
+    saved = json.loads((tmp_path / "cosmic-confirmation.json").read_text(encoding="utf-8"))
+    assert saved == payload
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_confirmation_requires_session_access(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="bob")
+    session_id = "cosmic_confirmation_other_user"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json={"project": "测试项目"})
+
+    assert resp.status_code == 404
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_confirmation_get_missing_returns_404(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_confirmation_missing"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    resp = client.get(f"/api/sessions/{session_id}/cosmic/confirmation")
+
+    assert resp.status_code == 404
+    server.session_manager.cleanup_download(session_id)
