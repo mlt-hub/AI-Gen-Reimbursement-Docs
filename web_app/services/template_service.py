@@ -9,6 +9,8 @@ from typing import Any
 from uuid import uuid4
 
 from docx import Document
+from docx.text.paragraph import Paragraph
+from docx.oxml import OxmlElement
 
 from ai_gen_reimbursement_docs.spec_template_importer import (
     SpecTemplateImportResult,
@@ -185,6 +187,175 @@ def update_imported_spec_template_metadata(
         encoding="utf-8",
     )
     return current
+
+
+def adjust_imported_spec_template(
+    target_root: Path,
+    import_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply basic online adjustments to an imported spec template draft."""
+    item_dir = _resolve_imported_spec_template_dir(target_root, import_id)
+    template_path = item_dir / "项目需求说明书-输出模板.docx"
+    manifest, _, _ = load_template_manifest("spec", str(template_path))
+    doc = Document(str(template_path))
+    changed: list[str] = []
+
+    placeholders = payload.get("placeholders", [])
+    if isinstance(placeholders, list):
+        for item in placeholders:
+            if not isinstance(item, dict):
+                continue
+            if _apply_placeholder_adjustment(doc, item):
+                changed.append("placeholders")
+
+    anchors = payload.get("anchors", {})
+    if isinstance(anchors, dict):
+        anchor_tokens = _spec_anchor_tokens(manifest)
+        anchor_moves = {
+            key: str(anchors.get(key) or "").strip()
+            for key in ("module_table", "module_details")
+            if str(anchors.get(key) or "").strip()
+        }
+        if anchor_moves:
+            moved = _move_body_anchors(doc, anchor_tokens, anchor_moves)
+            changed.extend(f"anchors.{key}" for key in moved)
+
+    if not changed:
+        return {
+            "id": import_id,
+            "changed_fields": [],
+            "preview": build_imported_spec_template_preview(target_root, import_id),
+        }
+
+    doc.save(template_path)
+    metadata = read_imported_spec_template_metadata(target_root, import_id)
+    now = str(int(time.time()))
+    metadata.update({
+        "confirmed": False,
+        "confirmed_at": "",
+        "published": False,
+        "published_at": "",
+        "published_template_path": "",
+        "published_manifest_path": "",
+        "updated_at": now,
+    })
+    (item_dir / "metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return {
+        "id": import_id,
+        "changed_fields": sorted(set(changed)),
+        "preview": build_imported_spec_template_preview(target_root, import_id),
+    }
+
+
+def _spec_anchor_tokens(manifest: dict[str, Any]) -> dict[str, str]:
+    anchors = manifest.get("anchors", {}) or {}
+    if not isinstance(anchors, dict):
+        anchors = {}
+    return {
+        "module_table": str(anchors.get("module_table", "{{模块清单表}}")),
+        "module_details": str(anchors.get("module_details", "{{功能过程详情}}")),
+    }
+
+
+def _apply_placeholder_adjustment(doc: Document, item: dict[str, Any]) -> bool:
+    scope = str(item.get("scope") or "body")
+    location = str(item.get("location") or "").strip()
+    find_text = str(item.get("text") or "").strip()
+    token = str(item.get("token") or "").strip()
+    if not token or not token.startswith("{{") or not token.endswith("}}"):
+        raise ValueError("占位符 token 必须使用 {{字段名}} 格式")
+    if not location.startswith("paragraph:"):
+        raise ValueError("当前仅支持调整段落中的识别字段")
+    paragraph = _resolve_paragraph(doc, scope, location)
+    old = paragraph.text
+    if find_text:
+        if find_text not in old:
+            raise ValueError(f"段落中未找到待替换文本：{find_text}")
+        paragraph.text = old.replace(find_text, token, 1)
+    else:
+        paragraph.text = token
+    return paragraph.text != old
+
+
+def _resolve_paragraph(doc: Document, scope: str, location: str) -> Paragraph:
+    try:
+        index = int(location.split(":", 1)[1])
+    except (IndexError, ValueError) as exc:
+        raise ValueError(f"段落位置无效：{location}") from exc
+    paragraphs: list[Paragraph]
+    if scope == "body":
+        paragraphs = list(doc.paragraphs)
+    elif scope == "headers":
+        paragraphs = [paragraph for section in doc.sections for paragraph in section.header.paragraphs]
+    elif scope == "footers":
+        paragraphs = [paragraph for section in doc.sections for paragraph in section.footer.paragraphs]
+    else:
+        raise ValueError(f"当前不支持的段落范围：{scope}")
+    if index < 0 or index >= len(paragraphs):
+        raise ValueError(f"段落位置不存在：{scope}/{location}")
+    return paragraphs[index]
+
+
+def _move_body_anchors(
+    doc: Document,
+    anchor_tokens: dict[str, str],
+    moves: dict[str, str],
+) -> list[str]:
+    order = ("module_table", "module_details")
+    target_paragraphs: dict[str, Paragraph | None] = {}
+    for location in set(moves.values()):
+        if location == "document_end":
+            target_paragraphs[location] = None
+        elif location.startswith("after:paragraph:"):
+            try:
+                target_index = int(location.rsplit(":", 1)[1])
+            except ValueError as exc:
+                raise ValueError(f"锚点位置无效：{location}") from exc
+            if target_index < 0 or target_index >= len(doc.paragraphs):
+                raise ValueError(f"锚点目标段落不存在：{location}")
+            target_paragraphs[location] = doc.paragraphs[target_index]
+        else:
+            raise ValueError("锚点位置必须是 document_end 或 after:paragraph:{index}")
+
+    tokens_to_remove = {
+        anchor_tokens[key]
+        for key in moves
+        if anchor_tokens.get(key)
+    }
+    for paragraph in list(doc.paragraphs):
+        if any(token in paragraph.text for token in tokens_to_remove):
+            _delete_paragraph(paragraph)
+
+    moved: list[str] = []
+    for location in dict.fromkeys(moves.values()):
+        keys = [key for key in order if moves.get(key) == location and anchor_tokens.get(key)]
+        target = target_paragraphs[location]
+        if target is None:
+            for key in keys:
+                doc.add_paragraph(anchor_tokens[key])
+                moved.append(key)
+        else:
+            for key in reversed(keys):
+                _insert_paragraph_after(target, anchor_tokens[key])
+                moved.append(key)
+    return moved
+
+
+def _delete_paragraph(paragraph: Paragraph) -> None:
+    element = paragraph._element
+    element.getparent().remove(element)
+
+
+def _insert_paragraph_after(paragraph: Paragraph, text: str) -> Paragraph:
+    new_element = OxmlElement("w:p")
+    paragraph._p.addnext(new_element)
+    new_paragraph = Paragraph(new_element, paragraph._parent)
+    new_paragraph.text = text
+    return new_paragraph
 
 
 def _default_imported_spec_template_metadata(import_id: str) -> dict[str, Any]:

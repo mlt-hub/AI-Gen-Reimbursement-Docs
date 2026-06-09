@@ -189,6 +189,54 @@
                 </ul>
               </div>
 
+              <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
+                <p class="text-xs font-semibold text-[var(--color-ink-soft)]">在线调整</p>
+                <div class="mt-3 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label class="field-label text-xs">模块清单锚点</label>
+                    <select v-model="adjustmentForm.moduleTableLocation" class="field-control text-xs">
+                      <option value="">不调整</option>
+                      <option value="document_end">文档末尾</option>
+                      <option v-for="candidate in activePreview.section_candidates" :key="'module-table-' + candidate.location" :value="anchorAfterLocation(candidate.location)">
+                        {{ candidate.location }} / {{ candidate.text }}
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label text-xs">功能过程详情锚点</label>
+                    <select v-model="adjustmentForm.moduleDetailsLocation" class="field-control text-xs">
+                      <option value="">不调整</option>
+                      <option value="document_end">文档末尾</option>
+                      <option v-for="candidate in activePreview.section_candidates" :key="'module-details-' + candidate.location" :value="anchorAfterLocation(candidate.location)">
+                        {{ candidate.location }} / {{ candidate.text }}
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label text-xs">字段段落</label>
+                    <select v-model="adjustmentForm.placeholderLocation" class="field-control text-xs">
+                      <option value="">不调整字段</option>
+                      <option v-for="option in adjustableParagraphOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label text-xs">替换为占位符</label>
+                    <input v-model.trim="adjustmentForm.placeholderToken" type="text" class="field-control font-mono text-xs" placeholder="{{字段名}}" />
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="field-label text-xs">待替换文本</label>
+                    <input v-model.trim="adjustmentForm.placeholderText" type="text" class="field-control text-xs" />
+                  </div>
+                  <div class="md:col-span-2">
+                    <button class="btn-primary min-h-0 px-2 py-1 text-xs" :disabled="adjustmentSavingId === item.id" @click="saveAdjustments(item)">
+                      {{ adjustmentSavingId === item.id ? '保存中' : '保存调整' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div v-if="activePreview.placeholders.length">
                 <p class="text-xs font-semibold text-[var(--color-ink-soft)]">占位符位置</p>
                 <div class="mt-2 max-h-48 overflow-auto rounded border border-[var(--color-rule)] bg-[var(--color-surface)]">
@@ -348,6 +396,11 @@ interface ImportedDraftPreview {
   scopes: PreviewScope[]
 }
 
+interface AdjustmentResponse {
+  changed_fields: string[]
+  preview: ImportedDraftPreview
+}
+
 const emit = defineEmits<{
   apply: [patch: Record<string, string>]
 }>()
@@ -368,7 +421,15 @@ const activePreview = ref<ImportedDraftPreview | null>(null)
 const metadataEditorId = ref('')
 const metadataSavingId = ref('')
 const publishingId = ref('')
+const adjustmentSavingId = ref('')
 const draftEdits = ref<Record<string, { display_name: string; note: string; confirmed: boolean }>>({})
+const adjustmentForm = ref({
+  moduleTableLocation: '',
+  moduleDetailsLocation: '',
+  placeholderLocation: '',
+  placeholderText: '',
+  placeholderToken: '',
+})
 
 const statusText = computed(() => {
   if (loading.value) return '导入中'
@@ -382,6 +443,21 @@ const statusClass = computed(() => {
   if (message.value && !ok.value) return 'status-badge--warning'
   if (result.value) return 'status-badge--success'
   return 'status-badge--neutral'
+})
+
+const adjustableParagraphOptions = computed(() => {
+  const preview = activePreview.value
+  if (!preview) return []
+  const options: Array<{ value: string; label: string }> = []
+  for (const scope of preview.scopes) {
+    for (const paragraph of scope.paragraphs) {
+      options.push({
+        value: `${scope.scope}|paragraph:${paragraph.index}`,
+        label: `${scopeLabel(scope.scope)} paragraph:${paragraph.index} / ${paragraph.text}`,
+      })
+    }
+  }
+  return options
 })
 
 function onFileChange(event: Event) {
@@ -549,6 +625,7 @@ async function loadPreview(item: ImportedDraft) {
       `/api/templates/spec/imported/${encodeURIComponent(item.id)}/preview`,
     )
     activePreviewId.value = item.id
+    resetAdjustmentForm()
     draftsOk.value = true
   } catch (error) {
     activePreview.value = null
@@ -557,6 +634,55 @@ async function loadPreview(item: ImportedDraft) {
     draftsMessage.value = normalizeApiError(error)
   } finally {
     previewLoadingId.value = ''
+  }
+}
+
+async function saveAdjustments(item: ImportedDraft) {
+  adjustmentSavingId.value = item.id
+  draftsMessage.value = ''
+  try {
+    const anchors: Record<string, string> = {}
+    if (adjustmentForm.value.moduleTableLocation) anchors.module_table = adjustmentForm.value.moduleTableLocation
+    if (adjustmentForm.value.moduleDetailsLocation) anchors.module_details = adjustmentForm.value.moduleDetailsLocation
+    const placeholders = []
+    if (adjustmentForm.value.placeholderLocation && adjustmentForm.value.placeholderToken) {
+      const [scope, location] = adjustmentForm.value.placeholderLocation.split('|')
+      placeholders.push({
+        scope,
+        location,
+        text: adjustmentForm.value.placeholderText,
+        token: adjustmentForm.value.placeholderToken,
+      })
+    }
+    const data = await apiFetch<AdjustmentResponse>(
+      `/api/templates/spec/imported/${encodeURIComponent(item.id)}/adjustments`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ anchors, placeholders }),
+      },
+    )
+    activePreview.value = data.preview
+    activePreviewId.value = item.id
+    draftsOk.value = true
+    draftsMessage.value = data.changed_fields.length ? '模板草稿调整已保存，确认状态已重置' : '没有可保存的调整'
+    resetAdjustmentForm()
+    await loadDrafts()
+  } catch (error) {
+    draftsOk.value = false
+    draftsMessage.value = normalizeApiError(error)
+  } finally {
+    adjustmentSavingId.value = ''
+  }
+}
+
+function resetAdjustmentForm() {
+  adjustmentForm.value = {
+    moduleTableLocation: '',
+    moduleDetailsLocation: '',
+    placeholderLocation: '',
+    placeholderText: '',
+    placeholderToken: '',
   }
 }
 
@@ -574,6 +700,10 @@ function anchorLocationLabel(location: string) {
   if (location === 'document_end') return '文档末尾'
   if (location.startsWith('after:')) return `位于 ${location.slice(6)} 之后`
   return location
+}
+
+function anchorAfterLocation(location: string) {
+  return location.startsWith('paragraph:') ? `after:${location}` : ''
 }
 
 function draftDownloadUrl(item: ImportedDraft, filename: string) {

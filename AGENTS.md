@@ -61,7 +61,8 @@
 - Web 配置页已支持输出模板 profile 基础选择能力：读取 `output_template_profiles`、选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。
 - Web/API 保存 `active_output_template_profile` 时已支持联动 profile 中的 `fpa_profile`、`fpa_rule_set`、`fpa_strategy` 和 `fpa_confirmation_mode`。
 - Word 导入模板草稿已支持发布为正式用户模板版本，发布后返回可应用到 `spec_out_template` 的正式模板路径。
-- 尚未完成的输出模板方向包括：Word 导入模板的版式渲染预览、锚点/字段在线调整、复杂 Word 结构识别，以及 COSMIC/FPA 更复杂 Excel 锚点、列映射和公式重写。
+- Word 导入模板草稿已支持基础在线调整：可移动 `{{模块清单表}}` / `{{功能过程详情}}` 锚点，并可将指定段落文本替换为 `{{字段名}}` 占位符；调整后会重置确认/发布状态。
+- 尚未完成的输出模板方向包括：Word 导入模板的版式渲染预览、复杂 Word 结构识别，以及 COSMIC/FPA 更复杂 Excel 锚点、列映射和公式重写。
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph
