@@ -1,10 +1,12 @@
 import pytest
 
 from ai_gen_reimbursement_docs import pipeline
+from ai_gen_reimbursement_docs.cli.logging import render_pipeline_event
 from ai_gen_reimbursement_docs.exceptions import CancelledError
 from ai_gen_reimbursement_docs.llm_client import call_llm
 from ai_gen_reimbursement_docs.pipeline_callbacks import PipelineCallbacks
 from ai_gen_reimbursement_docs.runtime_context import callbacks_var, current_callbacks
+from ai_gen_reimbursement_docs.template_manifest import TemplateValidationResult
 
 
 def test_pipeline_callbacks_default_cli_behavior():
@@ -60,6 +62,81 @@ def test_pipeline_activity_uses_shared_event_model():
         "step": "spec",
         "message": "正在写入需求说明书 Word 模板",
     }]
+
+
+def test_cli_renders_template_preflight_details(capsys):
+    render_pipeline_event({
+        "type": "activity",
+        "step": "basedata",
+        "message": "输出模板预检通过",
+        "payload": {
+            "summary_type": "template_preflight",
+            "templates": [{
+                "kind": "spec",
+                "template_id": "spec_default_v1",
+                "source": "manifest",
+                "manifest_path": "spec.manifest.yaml",
+                "capabilities": {
+                    "anchor_mode": "split",
+                    "module_table": {
+                        "column_count": 4,
+                        "supports_sample_table": True,
+                    },
+                },
+                "warnings": [],
+            }],
+        },
+    })
+
+    output = capsys.readouterr().out
+    assert "输出模板预检通过" in output
+    assert "spec: manifest" in output
+    assert "Word=拆分锚点" in output
+    assert "模块表列数=4" in output
+    assert "支持样例表" in output
+
+
+def test_pipeline_template_preflight_event_includes_capabilities(monkeypatch, tmp_path):
+    input_file = tmp_path / "input.xlsx"
+    input_file.write_bytes(b"xlsx")
+    events = []
+
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_templates",
+        lambda *_args, **_kwargs: {"spec": "spec.docx"},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "validate_output_templates",
+        lambda *_args, **_kwargs: [
+            TemplateValidationResult(
+                kind="spec",
+                template_path="spec.docx",
+                manifest_path="spec.manifest.yaml",
+                template_id="spec_default_v1",
+                source="manifest",
+                capabilities={"anchor_mode": "split"},
+            )
+        ],
+    )
+
+    def stop_after_preflight(*_args, **_kwargs):
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(pipeline, "_ensure_basedata_impl", stop_after_preflight)
+
+    with pytest.raises(RuntimeError, match="stop"):
+        pipeline.run_pipeline(
+            mode="gen-spec",
+            file_path=str(input_file),
+            output_dir=str(tmp_path / "out"),
+            callbacks=PipelineCallbacks(emit_event=events.append),
+        )
+
+    preflight = next(event for event in events if event.get("message") == "输出模板预检通过")
+    assert preflight["payload"]["summary_type"] == "template_preflight"
+    assert preflight["payload"]["templates"][0]["capabilities"]["anchor_mode"] == "split"
 
 
 def test_pipeline_emits_step_failed_for_stage_error(monkeypatch, tmp_path):

@@ -32,6 +32,9 @@ def render_pipeline_event(event: PipelineEvent) -> None:
         print(f"\n▶ {message}")
     elif event_type == "activity":
         print(f"  · {message}")
+        if payload.get("summary_type") == "template_preflight":
+            for line in _render_template_preflight_lines(payload):
+                print(f"    - {line}")
     elif event_type == "artifact":
         print(f"  ✓ {payload.get('label', '产物')}: {payload.get('path', '')}")
     elif event_type == "input_required":
@@ -44,6 +47,36 @@ def render_pipeline_event(event: PipelineEvent) -> None:
 
 def build_cli_callbacks() -> PipelineCallbacks:
     return PipelineCallbacks(emit_event=render_pipeline_event)
+
+
+def _render_template_preflight_lines(payload: dict) -> list[str]:
+    lines: list[str] = []
+    for item in payload.get("templates", []) or []:
+        if not isinstance(item, dict):
+            continue
+        source = "manifest" if item.get("source") == "manifest" else "默认契约"
+        manifest = item.get("manifest_path") or item.get("source") or ""
+        line = f"{item.get('kind', '')}: {source}"
+        if manifest:
+            line += f" ({manifest})"
+        capabilities = item.get("capabilities") or {}
+        if item.get("kind") == "spec" and isinstance(capabilities, dict):
+            mode_label = {
+                "split": "拆分锚点",
+                "full": "完整章节锚点",
+                "legacy_full": "历史完整章节锚点",
+                "optional": "可选锚点",
+            }.get(str(capabilities.get("anchor_mode") or ""), str(capabilities.get("anchor_mode") or ""))
+            module_table = capabilities.get("module_table") or {}
+            if isinstance(module_table, dict):
+                sample = "，支持样例表" if module_table.get("supports_sample_table") else ""
+                line += f"，Word={mode_label}，模块表列数={module_table.get('column_count', 0)}{sample}"
+            else:
+                line += f"，Word={mode_label}"
+        lines.append(line)
+        for warning in item.get("warnings", []) or []:
+            lines.append(f"{item.get('kind', '')} warning: {warning}")
+    return lines
 
 
 def _replace_path(text: str, old: str, new: str) -> str:

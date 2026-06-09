@@ -28,6 +28,24 @@
         <p v-if="step.error" class="mt-3 rounded-md bg-[var(--color-danger-soft)] px-3 py-2 text-xs text-[var(--color-danger)]">
           {{ step.error }}
         </p>
+        <div v-if="templatePreflightPayloads(step).length" class="mt-3 border-t border-[var(--color-rule)] pt-3">
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">输出模板</p>
+          <div
+            v-for="template in templatePreflightTemplates(step)"
+            :key="template.kind + template.template_id"
+            class="mt-2 grid gap-1 text-xs text-[var(--color-ink-muted)] sm:grid-cols-[5rem_1fr]"
+          >
+            <span class="font-semibold text-[var(--color-ink)]">{{ templateKindLabel(template.kind) }}</span>
+            <span class="min-w-0">
+              {{ templateSourceLabel(template) }}
+              <template v-if="template.kind === 'spec' && template.capabilities">
+                · {{ specAnchorModeLabel(template.capabilities) }}
+                · 模块表 {{ specModuleColumnCount(template.capabilities) }} 列
+                <template v-if="specSupportsSampleTable(template.capabilities)"> · 样例表</template>
+              </template>
+            </span>
+          </div>
+        </div>
         <div v-if="step.artifacts.length" class="mt-3 border-t border-[var(--color-rule)] pt-3">
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">阶段产物</p>
           <div v-for="artifact in step.artifacts" :key="artifact.path || artifact.name" class="mt-2 flex items-center justify-between gap-3 text-xs">
@@ -56,6 +74,7 @@ import { useSessionStore } from '@/stores/session.ts'
 import { useConfigStore } from '@/stores/config.ts'
 import { useToastStore } from '@/stores/toast.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
+import type { StepProgress } from '@/stores/steps.ts'
 
 const stepsStore = useStepsStore()
 const session = useSessionStore()
@@ -70,6 +89,19 @@ const canUseArtifactAction = computed(() => {
 const artifactActionLabel = computed(() => (
   config.workMode === 'local' ? '打开目录' : '下载 ZIP'
 ))
+
+interface TemplatePreflightItem {
+  kind: string
+  template_id?: string
+  manifest_path?: string
+  source?: string
+  capabilities?: Record<string, unknown>
+}
+
+interface TemplatePreflightPayload {
+  summary_type?: string
+  templates?: TemplatePreflightItem[]
+}
 
 function statusLabel(status: StepStatus) {
   return {
@@ -101,6 +133,48 @@ function badgeClass(status: StepStatus) {
     waiting_input: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
     cancelled: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
   }[status]
+}
+
+function templatePreflightPayloads(step: StepProgress): TemplatePreflightPayload[] {
+  return (step.activity_payloads || [])
+    .filter((payload) => payload && payload.summary_type === 'template_preflight') as TemplatePreflightPayload[]
+}
+
+function templatePreflightTemplates(step: StepProgress): TemplatePreflightItem[] {
+  return templatePreflightPayloads(step).flatMap((payload) => payload.templates || [])
+}
+
+function templateKindLabel(kind: string) {
+  return {
+    fpa: 'FPA',
+    cosmic: 'COSMIC',
+    list: '需求清单',
+    spec: '需求说明书',
+  }[kind] || kind
+}
+
+function templateSourceLabel(template: TemplatePreflightItem) {
+  if (template.source === 'manifest') return `manifest：${template.template_id || template.manifest_path || '已加载'}`
+  return `默认契约：${template.template_id || '已加载'}`
+}
+
+function specAnchorModeLabel(capabilities: Record<string, unknown>) {
+  return {
+    split: '拆分锚点',
+    full: '完整章节锚点',
+    legacy_full: '历史完整锚点',
+    optional: '可选锚点',
+  }[String(capabilities.anchor_mode || '')] || '锚点已配置'
+}
+
+function specModuleColumnCount(capabilities: Record<string, unknown>) {
+  const moduleTable = capabilities.module_table as Record<string, unknown> | undefined
+  return Number(moduleTable?.column_count || 0)
+}
+
+function specSupportsSampleTable(capabilities: Record<string, unknown>) {
+  const moduleTable = capabilities.module_table as Record<string, unknown> | undefined
+  return Boolean(moduleTable?.supports_sample_table)
 }
 
 function useArtifactAction() {

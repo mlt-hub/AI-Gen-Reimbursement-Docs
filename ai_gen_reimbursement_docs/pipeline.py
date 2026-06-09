@@ -314,10 +314,12 @@ def run_pipeline(
                         "manifest_path": item.manifest_path,
                         "template_id": item.template_id,
                         "source": item.source,
+                        "capabilities": item.capabilities,
                         "warnings": [issue.message for issue in item.warnings],
                     }
                     for item in template_validation_results
-                ]
+                ],
+                "summary_type": "template_preflight",
             },
         )
 

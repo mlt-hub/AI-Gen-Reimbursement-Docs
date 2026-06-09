@@ -38,6 +38,16 @@ def test_fixture_templates_pass_default_manifest(kind, filename):
     assert result.template_id.endswith("_default_v1")
 
 
+def test_spec_template_reports_anchor_capabilities():
+    result = validate_output_template("spec", str(FIXTURES / "项目需求说明书-输出模板.docx"))
+
+    assert result.capabilities["anchor_mode"] == "split"
+    assert result.capabilities["anchors"]["module_table"] == "{{模块清单表}}"
+    assert result.capabilities["anchors"]["module_details"] == "{{功能过程详情}}"
+    assert result.capabilities["module_table"]["column_count"] == 4
+    assert result.capabilities["module_table"]["supports_sample_table"] is False
+
+
 def test_excel_template_preflight_reports_missing_required_header(tmp_path):
     template = tmp_path / "bad-list.xlsx"
     wb = openpyxl.Workbook()

@@ -15,6 +15,7 @@ export interface StepProgress {
   label: string
   status: StepStatus
   current_action: string
+  activity_payloads: Record<string, unknown>[]
   artifacts: StepArtifact[]
   started_at?: string | null
   finished_at?: string | null
@@ -44,6 +45,7 @@ function createStep(key: string): StepProgress {
     label: STEP_LABELS[key] || key,
     status: 'pending',
     current_action: '',
+    activity_payloads: [],
     artifacts: [],
     started_at: null,
     finished_at: null,
@@ -91,6 +93,9 @@ export const useStepsStore = defineStore('steps', () => {
         return
       case 'activity':
         step.current_action = event.message || step.current_action
+        if (event.payload && !step.activity_payloads.includes(event.payload)) {
+          step.activity_payloads.push(event.payload)
+        }
         return
       case 'artifact':
         if (event.payload) {
@@ -133,6 +138,7 @@ export const useStepsStore = defineStore('steps', () => {
         ...createStep(item.key),
         ...item,
         label: STEP_LABELS[item.key] || item.label || item.key,
+        activity_payloads: item.activity_payloads || [],
         artifacts: item.artifacts || [],
       }
     }

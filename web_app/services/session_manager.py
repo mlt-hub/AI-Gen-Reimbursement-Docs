@@ -194,6 +194,7 @@ class SessionManager:
                 "key": step,
                 "status": "pending",
                 "current_action": "",
+                "activity_payloads": [],
                 "artifacts": [],
                 "started_at": None,
                 "finished_at": None,
@@ -207,6 +208,9 @@ class SessionManager:
                 progress["error"] = ""
             elif event_type == "activity":
                 progress["current_action"] = message
+                payload = dict(event.get("payload") or {})
+                if payload and payload not in progress["activity_payloads"]:
+                    progress["activity_payloads"].append(payload)
             elif event_type == "artifact":
                 artifact = dict(event.get("payload") or {})
                 if artifact and artifact not in progress["artifacts"]:

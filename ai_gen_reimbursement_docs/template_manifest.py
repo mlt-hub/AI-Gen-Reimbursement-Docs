@@ -36,6 +36,7 @@ class TemplateValidationResult:
     template_id: str
     source: str
     issues: list[TemplateIssue] = field(default_factory=list)
+    capabilities: dict[str, Any] = field(default_factory=dict)
 
     @property
     def errors(self) -> list[TemplateIssue]:
@@ -179,7 +180,96 @@ def _result(
         template_id=str(manifest.get("template_id", "")),
         source=source,
         issues=issues,
+        capabilities=_template_capabilities(kind, manifest),
     )
+
+
+def _template_capabilities(kind: str, manifest: dict[str, Any]) -> dict[str, Any]:
+    if kind == "spec":
+        return _spec_template_capabilities(manifest)
+    features = manifest.get("features", {}) or {}
+    return dict(features) if isinstance(features, dict) else {}
+
+
+def _spec_template_capabilities(manifest: dict[str, Any]) -> dict[str, Any]:
+    anchors = manifest.get("anchors", {}) or {}
+    if not isinstance(anchors, dict):
+        anchors = {}
+    placeholders = manifest.get("placeholders", {}) or {}
+    if not isinstance(placeholders, dict):
+        placeholders = {}
+    module_table = manifest.get("module_table", {}) or {}
+    if not isinstance(module_table, dict):
+        module_table = {}
+    replacement_scopes = manifest.get("replacement_scopes") or ["body", "tables", "headers", "footers"]
+    if not isinstance(replacement_scopes, list):
+        replacement_scopes = []
+
+    required_placeholders = []
+    for key, spec in placeholders.items():
+        if isinstance(spec, str):
+            required = True
+            token = spec
+        elif isinstance(spec, dict):
+            required = bool(spec.get("required", True))
+            token = str(spec.get("token", "") or "")
+        else:
+            continue
+        if required:
+            required_placeholders.append({"key": str(key), "token": token})
+
+    split_required = all(
+        item.get("token") in {"{{模块清单表}}", "{{功能过程详情}}"}
+        for item in required_placeholders
+        if item.get("key") in {"module_table", "module_details"}
+    ) and {
+        item.get("key") for item in required_placeholders
+    }.issuperset({"module_table", "module_details"})
+
+    legacy_required = any(
+        item.get("key") == "functional_requirements" and item.get("token") == "{{功能需求详情}}"
+        for item in required_placeholders
+    )
+    full_required = any(
+        item.get("key") == "functional_requirements_section" and item.get("token") == "{{功能需求章节}}"
+        for item in required_placeholders
+    )
+    if split_required:
+        anchor_mode = "split"
+    elif full_required:
+        anchor_mode = "full"
+    elif legacy_required:
+        anchor_mode = "legacy_full"
+    else:
+        anchor_mode = "optional"
+
+    columns = module_table.get("columns") or []
+    column_count = len(columns) if isinstance(columns, list) else 0
+    sample_table = module_table.get("sample_table")
+    sample_table_marker = ""
+    if isinstance(sample_table, str):
+        sample_table_marker = sample_table
+    elif isinstance(sample_table, dict):
+        sample_table_marker = str(sample_table.get("marker", "") or "")
+
+    return {
+        "kind": "spec",
+        "anchor_mode": anchor_mode,
+        "anchors": {
+            "legacy_functional_requirements": str(anchors.get("legacy_functional_requirements", "{{功能需求详情}}")),
+            "functional_requirements": str(anchors.get("functional_requirements", "{{功能需求章节}}")),
+            "module_table": str(anchors.get("module_table", "{{模块清单表}}")),
+            "module_details": str(anchors.get("module_details", "{{功能过程详情}}")),
+        },
+        "required_placeholders": required_placeholders,
+        "replacement_scopes": [str(item) for item in replacement_scopes],
+        "module_table": {
+            "style": str(module_table.get("style", "") or ""),
+            "column_count": column_count,
+            "sample_table_marker": sample_table_marker,
+            "supports_sample_table": bool(sample_table_marker),
+        },
+    }
 
 
 def _find_manifest_path(template_path: str) -> str:

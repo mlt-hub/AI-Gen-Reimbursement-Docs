@@ -306,6 +306,26 @@ Word 预检当前支持：
 
 warning 只记录日志和 pipeline activity payload，不阻断生成。当前默认契约以必要结构为主，主要产生 error。
 
+### Web/CLI 展示
+
+预检通过后，pipeline 会发出 `summary_type=template_preflight` 的 activity payload。CLI 会打印每类模板的 manifest 来源；Web 生成进度会在“输出模板”区域展示同一份摘要。
+
+payload 中每个模板包含：
+
+- `kind`：模板类型。
+- `template_path`：实际使用的模板路径。
+- `manifest_path`、`source`、`template_id`：manifest 来源和模板契约版本。
+- `warnings`：预检 warning。
+- `capabilities`：模板能力摘要。
+
+`gen-spec` 的 `capabilities` 当前包括：
+
+- `anchor_mode`：`split`、`full`、`legacy_full` 或 `optional`。
+- `anchors`：完整章节、拆分章节和历史兼容锚点。
+- `replacement_scopes`：占位符替换范围。
+- `module_table.column_count`：模块清单表列数。
+- `module_table.supports_sample_table`：是否启用样例表复制。
+
 ### gen-spec manifest 当前生成行为
 
 `gen-spec` 当前使用 manifest 的范围：

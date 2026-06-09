@@ -118,6 +118,7 @@ def test_pipeline_events_build_progress_snapshot():
         "type": "activity",
         "step": "fpa",
         "message": "正在写入 FPA Excel 模板",
+        "payload": {"summary_type": "template_preflight", "templates": [{"kind": "fpa"}]},
     })
     manager.record_pipeline_event("s1", {
         "type": "artifact",
@@ -135,6 +136,9 @@ def test_pipeline_events_build_progress_snapshot():
     assert progress[0]["key"] == "fpa"
     assert progress[0]["status"] == "done"
     assert progress[0]["current_action"] == "FPA 工作量评估已生成"
+    assert progress[0]["activity_payloads"] == [
+        {"summary_type": "template_preflight", "templates": [{"kind": "fpa"}]}
+    ]
     assert progress[0]["artifacts"] == [{"label": "FPA 工作量评估", "path": "fpa.xlsx"}]
     assert progress[0]["started_at"]
     assert progress[0]["finished_at"]
