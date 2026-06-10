@@ -219,6 +219,8 @@ npm run build
 - 切换到 `custom_profile` 时，默认拷贝上一个 profile 的细项值，用户可以在此基础上调整。
 - 切回官方 profile 时，保留用户上次自定义选择，但当前显示和任务提交以官方 profile 绑定值为准。
 - `开始生成` 提交时，高级参数随新任务固化为本次任务参数快照。
+- FPA 审核副本 `*-FPA工作量评估-check.xlsx` 必须写入本次任务最终解析后的 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode`，用于排查 profile 口径、规则集和 prompt 模板选择。
+- check Excel 中的 `system_prompt`、`user_prompt` 记录配置 key，不写入 prompt 正文；`core_rules` 同样记录配置 key，不写入规则正文。
 
 ### API 与数据契约
 
@@ -251,6 +253,8 @@ npm run build
 - `custom_profile` 缺少任一必填细项时，后端返回明确 400 错误，不静默回退官方 profile。
 - `fpa_core_rules`、`fpa_system_prompt`、`fpa_user_prompt` 必须引用已存在的配置 key，不能直接传大段 prompt 文本。
 - 运行历史 `run_config` 需要保存 profile 和最终细项 key，方便重跑和排错。
+- FPA audit trace 和 check Excel 需要保存同一组最终细项 key：`strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode`。
+- 生成 check Excel 时必须以 audit trace 或任务最终解析配置为准，不能只回显前端原始提交值；官方 profile 被前端篡改细项时，check Excel 仍展示后端解析后的官方绑定值。
 
 ### 修改范围
 
@@ -276,8 +280,9 @@ npm run build
 8. 后端任务配置快照保存最终 profile 和细项 key。
 9. 后端执行配置解析区分官方 profile 和 `custom_profile`。
 10. 重跑任务时恢复原任务快照中的 profile 和细项 key。
-11. 更新配置示例，说明 `custom_profile` 是 Web/API 运行时自定义入口，不复用旧 `custom_rules` 语义。
-12. 更新测试，覆盖官方 profile 灰掉、自定义 profile 可选、任务提交和重跑快照。
+11. 将最终解析后的 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode` 写入 FPA audit trace 和 `*-FPA工作量评估-check.xlsx`。
+12. 更新配置示例，说明 `custom_profile` 是 Web/API 运行时自定义入口，不复用旧 `custom_rules` 语义。
+13. 更新测试，覆盖官方 profile 灰掉、自定义 profile 可选、任务提交、重跑快照和 check Excel 审计字段。
 
 ### 验收标准
 
@@ -289,12 +294,16 @@ npm run build
 - `custom_profile` 提交任务时，后端使用用户显式选择的细项 key。
 - `custom_profile` 缺少必填细项时，后端返回明确错误。
 - 运行历史和重跑能保留并复用本次任务的 profile 与最终细项 key。
+- `*-FPA工作量评估-check.xlsx` 能查看本次任务最终解析后的 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode`。
+- 官方 profile 提交时，即使请求里携带被篡改的细项，check Excel 也记录后端按官方 profile 解析出的绑定值。
+- check Excel 中 `core_rules`、`system_prompt`、`user_prompt` 只记录配置 key，不写入规则或 prompt 正文。
 
 ### 验证方式
 
 - `cd web_app && npm run build`
 - `.\.venv\Scripts\python.exe -m pytest tests/test_web_tasks.py`
 - 视实际落点补充并运行 FPA options、FPA config 或任务配置快照相关测试。
+- 使用 `openpyxl` 断言生成的 `*-FPA工作量评估-check.xlsx` 包含 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode`，且值为后端最终解析 key。
 - 人工检查生成页高级参数：官方 profile 灰掉、自定义 profile 可编辑、切换后显示值符合预期。
 
 ### 风险
@@ -630,6 +639,7 @@ npm run build
 - 多任务查看：任务列表可同时展示多个任务，运行详情可并行打开多个任务详情。列表已有基础能力，详情并行属于第二期和第三期。
 - 多任务隔离：每个详情绑定独立 `session_id`，日志、阶段进展、生成过程、排错信息按任务隔离。属于第三期。
 - FPA 人工确认：弹窗和提交结果必须绑定具体 `session_id`，不能依赖全局单一当前 session。属于第三期。
+- FPA Profile check Excel：`strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode` 都必须写入 FPA 审核副本 `*-FPA工作量评估-check.xlsx`；写入值为后端最终解析后的配置 key，不写入 prompt 或规则正文。属于独立实施项 `FPA Profile 参数联动与自定义 Profile`。
 - 并发控制：超限时新任务进入排队并提示用户，排队任务可取消。属于第四期。
 - 输出隔离：每个任务必须使用独立输出目录和临时工作目录。属于第四期。
 - 刷新策略：详情页使用实时连接，列表页使用轮询刷新。第二期建立详情页职责，第三期和第四期完善多任务与队列场景。
