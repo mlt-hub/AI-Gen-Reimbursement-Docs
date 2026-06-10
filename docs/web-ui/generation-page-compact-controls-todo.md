@@ -297,6 +297,7 @@ npm run build
 - `*-FPA工作量评估-check.xlsx` 能查看本次任务最终解析后的 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode`。
 - 官方 profile 提交时，即使请求里携带被篡改的细项，check Excel 也记录后端按官方 profile 解析出的绑定值。
 - check Excel 中 `core_rules`、`system_prompt`、`user_prompt` 只记录配置 key，不写入规则或 prompt 正文。
+- AI cache 命中时，check Excel 仍能展示本行或本模块对应的最终 profile 细项 key，并能区分 `ai` 与 `ai_cache` 来源。
 
 ### 验证方式
 
@@ -304,6 +305,7 @@ npm run build
 - `.\.venv\Scripts\python.exe -m pytest tests/test_web_tasks.py`
 - 视实际落点补充并运行 FPA options、FPA config 或任务配置快照相关测试。
 - 使用 `openpyxl` 断言生成的 `*-FPA工作量评估-check.xlsx` 包含 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode`，且值为后端最终解析 key。
+- 补充或保留 AI cache 测试，确认 cache key 覆盖 `profile`、`strategy`、`rule_set`、`rule_set_config`、`core_rules`、`system_prompt`、`user_prompt`、`domain_context`、`judgement_rules`、模块 group 和 model；任一口径变化都不能命中旧 cache。
 - 人工检查生成页高级参数：官方 profile 灰掉、自定义 profile 可编辑、切换后显示值符合预期。
 
 ### 风险
@@ -312,6 +314,8 @@ npm run build
 - `custom_profile` 需要避开旧 `custom_rules` 语义，避免恢复已移除的旧配置路径。
 - 如果官方 profile 的灰掉控件仍随 FormData 提交，后端必须忽略这些覆盖值，防止用户绕过 UI 篡改 profile 口径。
 - Prompt 选择项只允许 key 选择，不允许运行页直接编辑大段 prompt 文本；大段 prompt 文本仍应在配置页或配置文件维护。
+- 当前 FPA AI cache key 已包含 profile、strategy、rule_set、rule_set_config、core_rules 正文、system_prompt 正文、user_prompt 正文、domain_context、judgement_rules、模块 group 和 model，正常不应跨 profile 或跨 prompt 复用；实施 check Excel 字段时仍需保留该隔离测试。
+- 如果后续引入或扩大预览缓存、FPA MD 结果缓存、跨任务复用等能力，缓存键也必须纳入最终 profile 细项 key；不能只按输入 Excel 或模块名称复用结果。
 
 ## 第二期：单任务运行详情页
 
