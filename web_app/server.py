@@ -118,6 +118,11 @@ async def static_dist_spa_page():
     return _spa_index()
 
 
+@app.get("/static/dist/tasks/{path:path}")
+async def static_dist_tasks_page(path: str):
+    return _spa_index()
+
+
 @app.get("/static/dist/preview/{path:path}")
 async def static_dist_preview_page(path: str):
     return _spa_index()
@@ -161,6 +166,11 @@ async def license_page():
 
 @app.get("/tasks")
 async def tasks_page():
+    return _spa_index()
+
+
+@app.get("/tasks/{path:path}")
+async def task_detail_page(path: str):
     return _spa_index()
 
 

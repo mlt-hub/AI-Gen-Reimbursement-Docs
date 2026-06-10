@@ -32,6 +32,7 @@ class SessionState:
     last_error: str | None = None
     done_files: list[dict[str, Any]] = field(default_factory=list)
     progress_steps: dict[str, dict[str, Any]] = field(default_factory=dict)
+    log_entries: list[dict[str, Any]] = field(default_factory=list)
 
 
 class SessionManager:
@@ -178,6 +179,7 @@ class SessionManager:
                 state.updated_at = _now_utc()
 
     def record_pipeline_event(self, session_id: str, event: dict[str, Any]) -> None:
+        self.record_log_event(session_id, event)
         step = str(event.get("step") or "")
         event_type = str(event.get("type") or "")
         if not step or event_type not in {
@@ -231,6 +233,40 @@ class SessionManager:
                 progress["current_action"] = message
                 progress["finished_at"] = now.isoformat()
             state.updated_at = now
+
+    def record_log_event(self, session_id: str, event: dict[str, Any]) -> None:
+        event_type = str(event.get("type") or "")
+        if event_type not in {
+            "log",
+            "done",
+            "error",
+            "cancelled",
+            "prompt",
+            "prompt_list",
+            "fpa_confirmation_required",
+            "step_started",
+            "activity",
+            "artifact",
+            "input_required",
+            "step_done",
+            "step_failed",
+            "step_cancelled",
+        }:
+            return
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return
+            state.log_entries.append(dict(event))
+            if len(state.log_entries) > 2000:
+                state.log_entries = state.log_entries[-2000:]
+            state.updated_at = _now_utc()
+
+    def get_log_entries(self, session_id: str) -> list[dict[str, Any]]:
+        state = self.get(session_id)
+        if state is None:
+            return []
+        return [dict(entry) for entry in state.log_entries]
 
     def cancel_active_progress(self, session_id: str, message: str = "任务已被用户停止") -> None:
         with self._lock:

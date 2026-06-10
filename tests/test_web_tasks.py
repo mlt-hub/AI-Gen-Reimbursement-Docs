@@ -1332,7 +1332,7 @@ def test_static_dist_spa_routes_return_spa_index(monkeypatch, path):
 
 @pytest.mark.parametrize(
     "path",
-    ["/login", "/tasks", "/preview/fpa", "/sessions/demo-session/fpa/debug"],
+    ["/login", "/tasks", "/tasks/demo-session", "/preview/fpa", "/sessions/demo-session/fpa/debug"],
 )
 def test_top_level_spa_routes_return_spa_index(monkeypatch, path):
     client = _client(monkeypatch, user="alice")
@@ -1358,6 +1358,29 @@ def test_log_stream_returns_existing_events_and_removes_queue(monkeypatch):
     assert 'data: {"type": "log"' in resp.text
     assert 'data: {"type": "done"' in resp.text
     assert server.session_manager.get_queue(session_id) is None
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_session_logs_returns_retained_log_snapshot(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+    session_id = "task_logs"
+    server.session_manager.create(session_id, mode="remote", owner="alice")
+    server.session_manager.record_log_event(session_id, {
+        "type": "log",
+        "level": "INFO",
+        "msg": "hello",
+        "time": "10:00:00",
+    })
+
+    resp = client.get(f"/api/sessions/{session_id}/logs")
+
+    assert resp.status_code == 200
+    assert resp.json()["entries"] == [{
+        "type": "log",
+        "level": "INFO",
+        "msg": "hello",
+        "time": "10:00:00",
+    }]
     server.session_manager.cleanup_download(session_id)
 
 

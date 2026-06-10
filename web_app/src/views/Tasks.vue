@@ -87,6 +87,13 @@
                   >
                     继续
                   </button>
+                  <RouterLink
+                    v-if="item.session_id"
+                    :to="`/tasks/${item.session_id}`"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                  >
+                    详情
+                  </RouterLink>
                   <span
                     v-else-if="isUnrecoverableRunning(item)"
                     class="status-badge status-badge--neutral"
@@ -288,7 +295,7 @@ async function rerun(item: TaskItem) {
   try {
     const data = await apiFetch<{ session_id: string }>(`/api/tasks/${item.run_id}/rerun`, { method: 'POST' })
     notice.value = `已创建重跑任务 ${data.session_id}`
-    await loadTasks()
+    await router.push(`/tasks/${data.session_id}`)
   } catch (err) {
     error.value = normalizeApiError(err)
   } finally {

@@ -7,9 +7,9 @@
 
     <div class="grid w-full min-w-0 gap-4 lg:grid-cols-[minmax(13rem,0.9fr)_minmax(22rem,2fr)_auto] lg:items-start">
       <!-- 操作模式选择 -->
-      <div class="min-w-0">
+      <div id="generation-mode-control" class="min-w-0" data-focus-target="mode">
         <label class="field-label">操作模式</label>
-        <select v-model="config.pipelineMode"
+        <select id="pipeline-mode" v-model="config.pipelineMode"
           class="field-control"
           :disabled="config.backendStatus === 'offline' && modesOffline">
           <option v-for="(info, value) in modes" :key="value" :value="value">{{ info.label }}</option>

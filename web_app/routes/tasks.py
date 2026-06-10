@@ -696,6 +696,22 @@ def create_router(
             raise HTTPException(404, "未知会话")
         return _session_status_payload(session_id, state)
 
+    @router.get("/api/sessions/{session_id}/logs")
+    async def get_session_logs(
+        session_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        """返回当前进程内保留的 session 事件日志快照。"""
+        require_session_access(session_manager, session_id, request, user)
+        state = session_manager.get(session_id)
+        if state is None:
+            raise HTTPException(404, "未知会话")
+        return {
+            "session_id": session_id,
+            "entries": session_manager.get_log_entries(session_id),
+        }
+
     @router.post("/api/cancel/{session_id}")
     async def cancel_session(
         session_id: str,

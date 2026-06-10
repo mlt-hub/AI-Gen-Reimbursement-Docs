@@ -20,9 +20,25 @@
             <p class="text-xs font-semibold text-[var(--color-ink-soft)]">执行监控</p>
             <h2 class="mt-1 truncate text-lg font-bold text-[var(--color-ink)]">{{ runTitle }}</h2>
           </div>
-          <div :class="['inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
-            <span class="h-2 w-2 rounded-full" :class="runDotClass" />
-            {{ runStateText }}
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <RouterLink
+              v-if="session.sessionId"
+              :to="`/tasks/${session.sessionId}`"
+              class="btn-secondary w-fit"
+            >
+              运行详情 / 排错信息
+            </RouterLink>
+            <span
+              v-else
+              class="inline-flex w-fit cursor-not-allowed rounded-md border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-1.5 text-sm font-semibold text-[var(--color-ink-soft)]"
+              title="任务启动后可查看"
+            >
+              运行详情 / 排错信息
+            </span>
+            <div :class="['inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
+              <span class="h-2 w-2 rounded-full" :class="runDotClass" />
+              {{ runStateText }}
+            </div>
           </div>
         </div>
       </div>
@@ -227,8 +243,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import { useSessionStore } from '@/stores/session.ts'
 import type { DoneFile, FpaConfirmationQuestion, RunState } from '@/stores/session.ts'
 import { useConfigStore } from '@/stores/config.ts'
@@ -289,6 +305,13 @@ const route = useRoute()
 const LAST_SESSION_KEY = 'ard:lastSessionId'
 const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无法继续当前执行'
 const startupError = ref<StartupErrorMessage | null>(null)
+const FOCUS_HIGHLIGHT_CLASSES = [
+  'outline',
+  'outline-2',
+  'outline-offset-4',
+  'outline-[var(--color-focus)]',
+  'rounded-lg',
+]
 
 const runStateLabels = { idle: '就绪', running: '运行中', done: '已完成', error: '出错', cancelled: '已停止' }
 const runTitle = computed(() => {
@@ -559,6 +582,32 @@ async function restoreLastSession() {
   await restoreSessionById(sid)
 }
 
+function focusGenerationField() {
+  const rawFocus = route.query.focus
+  const focus = Array.isArray(rawFocus) ? rawFocus[0] : rawFocus
+  if (!focus) return
+  const selectorMap: Record<string, string> = {
+    mode: '[data-focus-target="mode"]',
+    input: '[data-focus-target="input"]',
+    advanced: '[data-focus-target="advanced"]',
+    'fpa-profile': '#fpa-profile',
+    'fpa-strategy': '#fpa-strategy',
+    'fpa-rule-set': '#fpa-rule-set',
+    'fpa-confirmation-mode': '#fpa-confirmation-mode',
+  }
+  const selector = selectorMap[focus]
+  if (!selector) return
+  nextTick(() => {
+    const element = document.querySelector<HTMLElement>(selector)
+    if (!element) return
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    element.classList.add(...FOCUS_HIGHLIGHT_CLASSES)
+    window.setTimeout(() => {
+      element.classList.remove(...FOCUS_HIGHLIGHT_CLASSES)
+    }, 1800)
+  })
+}
+
 // ── AI 交互弹窗 ──
 const aiModalOpen = ref(false)
 const aiTab = ref('list')
@@ -619,8 +668,9 @@ onMounted(() => {
   const sid = Array.isArray(requestedSession) ? requestedSession[0] : requestedSession
   if (sid) {
     restoreSessionById(sid, { explicit: true })
-    return
+  } else {
+    restoreLastSession()
   }
-  restoreLastSession()
+  focusGenerationField()
 })
 </script>

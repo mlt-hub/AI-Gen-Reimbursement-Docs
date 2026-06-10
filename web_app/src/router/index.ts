@@ -30,6 +30,12 @@ const router = createRouter({
       meta: { nav: 'tasks' },
     },
     {
+      path: '/tasks/:sessionId',
+      name: 'task-detail',
+      component: () => import('@/views/TaskDetail.vue'),
+      meta: { nav: 'tasks' },
+    },
+    {
       path: '/license',
       name: 'license',
       component: () => import('@/views/License.vue'),

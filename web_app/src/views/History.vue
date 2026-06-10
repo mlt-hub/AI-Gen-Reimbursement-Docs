@@ -90,6 +90,13 @@
                     打开目录
                   </button>
                   <RouterLink
+                    v-if="item.source === 'web' && item.session_id"
+                    :to="`/tasks/${item.session_id}`"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                  >
+                    详情
+                  </RouterLink>
+                  <RouterLink
                     v-if="canOpenFpaDebug(item)"
                     :to="`/sessions/${item.session_id}/fpa/debug`"
                     class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
@@ -129,7 +136,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
 interface DoneFile {
@@ -178,6 +185,7 @@ const notice = ref('')
 const items = ref<HistoryItem[]>([])
 const retentionDays = ref(1)
 const filters = reactive({ source: 'all', mode: 'all', state: 'all' })
+const router = useRouter()
 
 const query = computed(() => new URLSearchParams({
   source: filters.source,
@@ -280,7 +288,7 @@ async function rerun(item: HistoryItem) {
   try {
     const data = await apiFetch<{ session_id: string }>(`/api/tasks/${item.run_id}/rerun`, { method: 'POST' })
     notice.value = `已创建重跑任务 ${data.session_id}`
-    await loadHistory()
+    await router.push(`/tasks/${data.session_id}`)
   } catch (err) {
     error.value = normalizeApiError(err)
   } finally {

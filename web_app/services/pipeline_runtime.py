@@ -126,16 +126,16 @@ class SessionHandler(logging.Handler):
     def emit(self, record):
         sid = session_var.get()
         q = self.session_manager.get_queue(sid) if sid else None
+        event = {
+            "type": "log",
+            "level": record.levelname,
+            "msg": self.format(record),
+            "time": datetime.fromtimestamp(record.created).strftime("%H:%M:%S"),
+        }
+        if sid:
+            self.session_manager.record_log_event(sid, event)
         if q is not None:
-            msg = json.dumps(
-                {
-                    "type": "log",
-                    "level": record.levelname,
-                    "msg": self.format(record),
-                    "time": datetime.fromtimestamp(record.created).strftime("%H:%M:%S"),
-                },
-                ensure_ascii=False,
-            )
+            msg = json.dumps(event, ensure_ascii=False)
             try:
                 q.put_nowait(msg)
             except queue.Full:

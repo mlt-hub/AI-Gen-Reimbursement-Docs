@@ -1,5 +1,5 @@
 <template>
-  <details :open="defaultOpen" class="surface rounded-lg">
+  <details id="advanced-run-settings" :open="defaultOpen" class="surface rounded-lg" data-focus-target="advanced">
     <summary class="flex cursor-pointer select-none flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <span class="min-w-0">
         <span class="block text-xs font-semibold text-[var(--color-ink-soft)]">高级参数</span>

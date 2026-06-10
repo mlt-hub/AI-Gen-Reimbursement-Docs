@@ -9,7 +9,7 @@
     </div>
     <div class="grid gap-3 xl:grid-cols-2">
       <article
-        v-for="step in stepsStore.steps"
+        v-for="step in displaySteps"
         :key="step.key"
         class="rounded-lg border bg-[var(--color-surface)] p-4"
         :class="cardClass(step.status)"
@@ -69,25 +69,35 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useStepsStore } from '@/stores/steps.ts'
-import type { StepStatus } from '@/stores/steps.ts'
+import type { StepProgress, StepStatus } from '@/stores/steps.ts'
 import { useSessionStore } from '@/stores/session.ts'
 import { useConfigStore } from '@/stores/config.ts'
 import { useToastStore } from '@/stores/toast.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
-import type { StepProgress } from '@/stores/steps.ts'
+
+const props = defineProps<{
+  steps?: StepProgress[]
+  sessionId?: string
+  mode?: 'local' | 'remote'
+  isDone?: boolean
+}>()
 
 const stepsStore = useStepsStore()
 const session = useSessionStore()
 const config = useConfigStore()
 const toast = useToastStore()
+const displaySteps = computed(() => props.steps || stepsStore.steps)
+const effectiveSessionId = computed(() => props.sessionId || session.sessionId || '')
+const effectiveMode = computed(() => props.mode || config.workMode)
+const effectiveIsDone = computed(() => props.isDone ?? session.isDone)
 
 const canUseArtifactAction = computed(() => {
-  if (!session.sessionId) return false
-  if (config.workMode === 'local') return true
-  return session.isDone
+  if (!effectiveSessionId.value) return false
+  if (effectiveMode.value === 'local') return true
+  return effectiveIsDone.value
 })
 const artifactActionLabel = computed(() => (
-  config.workMode === 'local' ? '打开目录' : '下载 ZIP'
+  effectiveMode.value === 'local' ? '打开目录' : '下载 ZIP'
 ))
 
 interface TemplatePreflightItem {
@@ -178,16 +188,16 @@ function specSupportsSampleTable(capabilities: Record<string, unknown>) {
 }
 
 function useArtifactAction() {
-  if (!session.sessionId) return
-  if (config.workMode === 'local') {
-    apiFetch('/api/open-folder?session=' + session.sessionId).catch((e) => {
+  if (!effectiveSessionId.value) return
+  if (effectiveMode.value === 'local') {
+    apiFetch('/api/open-folder?session=' + effectiveSessionId.value).catch((e) => {
       toast.show('error', normalizeApiError(e))
     })
     return
   }
-  if (!session.isDone) return
+  if (!effectiveIsDone.value) return
   const a = document.createElement('a')
-  a.href = '/api/download/' + session.sessionId
+  a.href = '/api/download/' + effectiveSessionId.value
   a.click()
 }
 </script>

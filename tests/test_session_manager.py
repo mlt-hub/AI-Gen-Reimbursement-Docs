@@ -144,6 +144,39 @@ def test_pipeline_events_build_progress_snapshot():
     assert progress[0]["finished_at"]
 
 
+def test_pipeline_events_are_retained_as_log_snapshot():
+    manager = SessionManager()
+    manager.create("s1", mode="local")
+
+    manager.record_pipeline_event("s1", {
+        "type": "step_started",
+        "step": "fpa",
+        "message": "生成 FPA 工作量评估",
+    })
+    manager.record_log_event("s1", {
+        "type": "log",
+        "level": "INFO",
+        "msg": "hello",
+        "time": "10:00:00",
+    })
+
+    logs = manager.get_log_entries("s1")
+
+    assert logs == [
+        {
+            "type": "step_started",
+            "step": "fpa",
+            "message": "生成 FPA 工作量评估",
+        },
+        {
+            "type": "log",
+            "level": "INFO",
+            "msg": "hello",
+            "time": "10:00:00",
+        },
+    ]
+
+
 def test_cancel_active_progress_marks_running_step_cancelled():
     manager = SessionManager()
     manager.create("s1", mode="local")

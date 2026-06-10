@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-3">
     <!-- 本机模式 -->
-    <div v-if="config.workMode === 'local'">
+    <div v-if="config.workMode === 'local'" id="generation-input-control" data-focus-target="input">
       <label for="xlsx-path" class="field-label">功能清单 .xlsx 路径（或项目目录）</label>
       <input id="xlsx-path" type="text" v-model="config.xlsxPath"
         placeholder="C:\...\功能清单.xlsx  或  C:\...\项目目录\"
@@ -9,7 +9,7 @@
       <p class="mt-1 text-xs leading-5 text-[var(--color-ink-soft)]">可填写单个功能清单文件，也可填写包含项目资料的目录。</p>
     </div>
     <!-- 远程模式 -->
-    <div v-else>
+    <div v-else id="generation-input-control" data-focus-target="input">
       <label class="field-label">上传功能清单 .xlsx</label>
       <div class="relative rounded-lg border border-dashed border-[var(--color-rule-strong)] bg-[var(--color-surface)] p-3">
         <input type="file" accept=".xlsx" @change="onFileChange"
