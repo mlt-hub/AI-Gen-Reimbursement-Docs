@@ -286,11 +286,112 @@ npm run build
 - 每个任务使用独立输出目录和临时工作目录。
 - 详情页实时连接与列表页轮询职责分离。
 
+### 工程设计决策
+
+#### 配置来源
+
+- 新增后端配置项 `web.max_concurrent_tasks`，默认值为 `1`。
+- 配置项由后端任务启动逻辑读取，前端不自行判断并发额度。
+- 若配置值为空、非法或小于 `1`，后端按 `1` 处理。
+- 前端可以从任务状态接口或后续配置摘要接口展示当前并发上限，但不能依赖前端判断来保证队列行为。
+
+#### 状态契约
+
+- 后端 session 和运行历史新增 `queued` 状态。
+- 状态流转：
+  - `queued -> running`：调度器取得运行名额并启动 pipeline。
+  - `queued -> cancelled`：用户取消排队任务，或服务重启后判定排队任务不可恢复。
+  - `running -> done | error | cancelled`：沿用现有任务生命周期。
+- `queued` 状态下必须有 session 和运行历史记录，因此任务列表、运行详情和刷新接口都能看到该任务。
+- `queued` 状态下不应创建实时日志长连接；详情页展示等待状态并轮询摘要，进入 `running` 后再建立日志流。
+
+#### 队列服务边界
+
+- 新增轻量队列调度模块，建议文件名为 `web_app/services/task_queue.py`。
+- 队列服务负责：
+  - 维护排队顺序。
+  - 计算当前运行任务数量。
+  - 判断新任务立即运行还是进入排队。
+  - 取消排队任务。
+  - 运行任务结束后启动下一个排队任务。
+- `task_runner.start_background_task` 继续只负责启动单个后台任务和记录生命周期，不直接承载排队策略。
+- `routes/tasks.py` 负责构造任务上下文、创建 session 和运行历史，再把可运行的 target 交给队列服务。
+
+#### 任务上下文
+
+- 队列中保存的是可启动任务上下文，而不是已经运行的线程或协程。
+- 任务上下文至少包含：
+  - `session_id`
+  - `mode`：`local` 或 `remote`
+  - `owner`
+  - `run_id`
+  - `target`：真正运行 pipeline 的 callable
+  - `created_at`
+  - `queue_position`
+- 本机和远程任务都必须先完成输入解析、参数快照、输出目录/临时目录准备、session 创建和历史记录创建，再进入队列判断。
+- 进入 `queued` 的任务不能提前调用 `mark_task_started`，也不能提前执行 pipeline。
+
+#### 取消接口
+
+- 排队取消复用现有 `/api/cancel/{session_id}`。
+- 后端收到取消请求时：
+  - 如果任务是 `queued`，从队列移除，session 标记为 cancelled，运行历史标记为 `cancelled`，不启动 pipeline。
+  - 如果任务是 `running`，沿用现有取消逻辑。
+  - 如果任务已完成、失败或已取消，接口保持幂等，返回当前状态。
+
+#### 调度触发
+
+- 所有后台任务结束后都必须触发一次 `schedule_next()`。
+- 触发点建议放在队列服务包装的任务完成回调中，而不是散落在各个 route 的 target 内部。
+- 如果任务启动失败，必须释放运行名额、标记当前任务失败，并继续调度下一个排队任务。
+- 调度器需要加锁，避免两个任务几乎同时结束时重复启动同一个排队任务。
+
+#### 输出目录命名
+
+- 远程模式继续使用 `tempfile.mkdtemp(prefix=f"ard_web_{session_id}_")`，并在临时目录内使用独立 `input`、`output` 和 `custom_templates` 子目录。
+- 本机模式用户填写输出目录时，实际输出目录为：
+
+```text
+<用户填写输出目录>/<project_name_or_input_name>_<session_id>
+```
+
+- `project_name_or_input_name` 取值优先级：
+  1. 本次参数快照中的 `project_name`
+  2. 输入 Excel 文件名去扩展名
+  3. `task`
+- 目录名需要做文件系统安全化处理：去掉路径分隔符、控制字符和首尾空白；空值回退为 `task`。
+- 如果目标子目录已存在，后端应继续保证不覆盖已有交付物。建议追加短后缀或直接报错；第一版优先报错，便于暴露异常。
+
+#### 历史记录
+
+- 创建任务时立即写入运行历史，`run_state` 为 `queued` 或 `running`。
+- 进入排队的任务也必须保存完整 `run_config`、输入名称、来源、模式、输出目录和 artifact 类型。
+- `queued -> running` 时更新历史状态和开始时间。
+- `queued -> cancelled` 时更新历史状态和更新时间。
+- 服务启动时扫描历史记录：仍为 `queued` 的 Web 任务标记为 `cancelled` 或不可恢复；第一版不恢复队列。
+
+#### 接口返回
+
+- `/api/run-local` 和 `/api/run-upload` 返回中增加：
+  - `session_id`
+  - `run_state`
+  - `queue_position`
+  - `output_dir` 或 `has_download`
+- `/api/sessions/{session_id}` 返回中增加：
+  - `run_state: queued`
+  - `queue_position`
+  - `progress_steps`
+  - `done_files`
+- `/api/tasks` 和 `/api/history` 支持展示 `queued` 状态。
+- `/api/log-stream?session=<session_id>` 对 `queued` 状态不建立长期等待流；如果调用，返回明确事件或错误提示，前端应改用轮询。
+
 ### 修改范围
 
 - `web_app/services/session_manager.py`
+- 新增 `web_app/services/task_queue.py`
 - `web_app/services/task_runner.py`
 - `web_app/services/run_history_service.py`
+- `web_app/services/config_service.py`
 - `web_app/routes/tasks.py`
 - `web_app/routes/artifacts.py`
 - `web_app/src/stores/session.ts`
@@ -302,13 +403,16 @@ npm run build
 
 1. 增加后端并发上限配置。
 2. 增加 `queued` 状态和队列位置字段。
-3. 修改任务提交逻辑：超限时创建 session 和历史记录，但不立即启动 pipeline。
-4. 实现队列调度：运行任务结束后启动下一个排队任务。
-5. 实现取消排队任务，不影响运行中任务。
-6. 确保远程模式工作目录包含 session id。
-7. 确保本机模式输出目录不会被多个任务共享写入。
-8. 任务列表轮询展示 `queued`、排队位置和取消入口。
-9. 详情页展示 `queued` 状态，并等待任务启动后建立或恢复实时连接。
+3. 新增队列服务，封装排队、启动、取消和完成后调度。
+4. 修改任务提交逻辑：先创建 session 和历史记录，再由队列服务决定立即运行或进入排队。
+5. 修改 `start_background_task` 调用边界：由队列服务启动实际 target，并在任务结束后调度下一个任务。
+6. 复用 `/api/cancel/{session_id}` 实现排队取消，不影响运行中任务。
+7. 确保远程模式工作目录包含 session id。
+8. 确保本机模式输出目录始终写入 `<project_name_or_input_name>_<session_id>` 子目录。
+9. 服务启动时把历史中遗留的 `queued` Web 任务标记为已取消或不可恢复。
+10. 任务列表轮询展示 `queued`、排队位置和取消入口。
+11. 详情页展示 `queued` 状态，并等待任务启动后建立或恢复实时连接。
+12. 更新历史页和重跑入口，确保 `queued` 不可重跑，取消后才可重跑。
 
 ### 验收标准
 
@@ -318,19 +422,35 @@ npm run build
 - 运行任务结束后，队列中的下一个任务自动开始。
 - 每个任务都有独立输出目录和临时工作目录；本机模式用户填写输出目录时，实际输出写入 `<project_name_or_input_name>_<session_id>` 子目录。
 - 任务列表只轮询摘要；详情页负责当前任务实时连接。
+- 运行历史能看到排队、运行、取消和完成状态的完整流转。
+- `/api/cancel/{session_id}` 对 queued、running 和终态任务保持可预测且幂等。
 
 ### 验证方式
 
 - `.\.venv\Scripts\python.exe -m pytest tests/test_web_tasks.py`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_session_manager.py`
+- 新增队列服务测试后运行对应测试文件。
 - 视影响范围运行更多后端测试。
 - `cd web_app && npm run build`
 - 人工验证两个以上任务的排队、取消和自动启动。
+
+### 推荐测试切片
+
+- `max_concurrent_tasks=1` 时提交两个任务，第一个进入 `running`，第二个进入 `queued`。
+- 第一个任务结束后，第二个任务自动进入 `running`。
+- 取消 `queued` 任务后，pipeline target 不会被调用，历史状态为 `cancelled`。
+- 取消 `running` 任务仍沿用现有取消逻辑。
+- 服务启动清理时，历史中遗留的 `queued` 任务被标记为 `cancelled` 或不可恢复。
+- 本机模式用户填写输出目录时，两个任务写入不同 session 子目录。
+- 远程模式两个任务使用不同 `work_dir` 和不同 zip。
+- `queued` 任务在 `/api/tasks`、`/api/history`、`/api/sessions/{session_id}` 中展示一致。
 
 ### 风险
 
 - 队列调度涉及线程、取消和历史记录一致性，需要覆盖异常退出和取消场景。
 - 本机输出目录兼容用户显式路径时要谨慎，必须始终写入 session 子目录，不能悄悄覆盖已有交付物。
 - 如果后续需要恢复队列，需要单独设计持久化恢复策略；本期明确不支持队列跨进程恢复。
+- 队列服务需要避免和现有 session 日志队列概念混淆；`SessionState.queue` 当前用于日志事件，不应直接复用为任务等待队列。
 
 ## 对话覆盖检查
 
