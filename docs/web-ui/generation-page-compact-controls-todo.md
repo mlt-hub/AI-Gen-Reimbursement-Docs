@@ -6,6 +6,8 @@
 
 当前四期均已达到可实施状态，但必须分期推进、分别验证和提交。第四期涉及后端任务生命周期、队列调度和输出目录隔离，必须作为独立任务、独立提交组或独立 PR 实施，不应和第一到第三期的前端页面调整混做。
 
+除四期主线外，本文档还记录一个独立实施项：`FPA Profile 参数联动与自定义 Profile`。该项属于生成页高级参数能力增强，可单独实施和提交。
+
 ## 总目标
 
 - 生成页把主流程收紧到同一视觉区域：`操作模式`、`功能清单 .xlsx 路径（或项目目录）`、`开始生成` 在桌面视口中并排或紧凑展示，窄屏自然换行。
@@ -16,6 +18,7 @@
 - 任务列表和运行详情支持按 `session_id` 隔离查看，避免日志、确认弹窗和提交结果串到其他任务。
 - 任务达到并发上限时进入排队状态，并允许取消排队任务。
 - 任务页和历史页完整展示项目名，长项目名不能只靠截断隐藏关键信息。
+- `FPA 策略与运行参数` 以 FPA profile 为主控项：官方 profile 展示其绑定的策略、规则集、核心规则和 prompt 模板但不可改；只有自定义 profile 允许用户手动选择这些细项。
 
 ## 已确认决策
 
@@ -89,6 +92,24 @@
 - 本机模式如果用户提供的是输出根目录，则后端应为每个 session 创建独立子目录。
 - 本机模式如果用户填写输出目录，新任务统一在该目录下创建独立子目录，不直接写入用户填写的根目录。
 - 具体目录命名为：`<project_name_or_input_name>_<session_id>`。
+
+### FPA Profile 参数联动
+
+- `FPA 方案` 是 FPA 运行参数的主控项。
+- 官方 profile 包括当前内置 profile，例如 `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping`。
+- 新增一个自定义 profile，名称固定为 `custom_profile`，不要复用旧语义中的 `custom_rules`。
+- 每个 profile 都应能展示其绑定的：
+  - `strategy`
+  - `rule_set`
+  - `core_rules`
+  - `system_prompt`
+  - `user_prompt`
+  - `confirmation_mode`
+- 选择官方 profile 时，上述细项控件灰掉不可编辑，但必须显示该 profile 当前绑定的选项。
+- 只有选择 `custom_profile` 时，上述细项控件才可编辑。
+- 从官方 profile 切换到 `custom_profile` 时，自定义细项默认拷贝切换前 profile 的当前绑定值，方便用户在既有口径基础上微调。
+- 从 `custom_profile` 切回官方 profile 时，前端保留上一次自定义选择，但页面展示和提交以官方 profile 绑定值为准。
+- 任务提交时，官方 profile 由后端按 profile 绑定解析最终细项；`custom_profile` 使用用户显式选择的细项。
 
 ### 测试策略
 
@@ -180,6 +201,108 @@ npm run build
 - 移除生成页按钮时要避免删除 `预览 -> FPA预览` 入口和仍被其他页面复用的预览组件。
 - 启动失败错误摘要属于本次页面启动尝试，不应在恢复历史 session、成功启动新 session 或点击 `新任务` 后继续残留。
 - 项目名不能简单移除截断，需要稳定的换行、列宽或详情展示策略，避免表格布局被撑坏。
+
+## 独立实施项：FPA Profile 参数联动与自定义 Profile
+
+### 独立实施边界
+
+本项可独立于第二到第四期实施。它属于生成页高级参数能力增强，建议任务标题为：`实现 FPA Profile 参数联动与自定义 Profile`。
+
+本项不改变 FPA 结果审阅术语，不新增 FPA 审阅页字段；用户可见文案仍需遵循 `docs/fpa/result-review-terminology.md`。
+
+### 目标行为
+
+- `FPA 策略与运行参数` 增加可选择项：`strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode`。
+- `FPA 方案` 作为主控项，切换 profile 时联动显示对应细项。
+- 官方 profile 的细项只读：显示该 profile 对应选项，但控件灰掉不可选。
+- 新增 `custom_profile`，只有选择该 profile 时，细项控件才可编辑。
+- 切换到 `custom_profile` 时，默认拷贝上一个 profile 的细项值，用户可以在此基础上调整。
+- 切回官方 profile 时，保留用户上次自定义选择，但当前显示和任务提交以官方 profile 绑定值为准。
+- `开始生成` 提交时，高级参数随新任务固化为本次任务参数快照。
+
+### API 与数据契约
+
+- `/api/fpa/options` 返回值需要扩展 profile 绑定信息。
+- 每个 profile 选项至少包含：
+  - `value`
+  - `label`
+  - `editable`
+  - `strategy`
+  - `rule_set`
+  - `core_rules`
+  - `system_prompt`
+  - `user_prompt`
+  - `confirmation_mode`
+- options 顶层需要返回可选列表：
+  - `strategies`
+  - `rule_sets`
+  - `core_rules`
+  - `system_prompt_sets`
+  - `user_prompt_sets`
+  - `confirmation_modes`
+- 官方 profile 的 `editable` 为 `false`。
+- `custom_profile` 的 `editable` 为 `true`。
+- `custom_profile` 不需要在默认配置中真实定义为业务 profile；后端可以把它作为 Web/API 运行时 profile alias 处理，并用显式细项解析实际 FPA 运行配置。
+
+### 后端解析规则
+
+- 官方 profile：后端忽略前端传入的细项覆盖值，只按 profile 配置中的绑定解析 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`。
+- `custom_profile`：后端使用前端显式提交的 `fpa_strategy`、`fpa_rule_set`、`fpa_core_rules`、`fpa_system_prompt`、`fpa_user_prompt`、`fpa_confirmation_mode`。
+- `custom_profile` 缺少任一必填细项时，后端返回明确 400 错误，不静默回退官方 profile。
+- `fpa_core_rules`、`fpa_system_prompt`、`fpa_user_prompt` 必须引用已存在的配置 key，不能直接传大段 prompt 文本。
+- 运行历史 `run_config` 需要保存 profile 和最终细项 key，方便重跑和排错。
+
+### 修改范围
+
+- `web_app/src/components/run/FpaRunSettingsSection.vue`
+- `web_app/src/composables/useFpaOptions.ts`
+- `web_app/src/stores/config.ts`
+- `web_app/src/views/Home.vue`
+- `web_app/routes/tasks.py`
+- `/api/fpa/options` 对应路由或 service
+- FPA 配置读取和任务配置快照相关代码
+- `config/fpa_config.yaml.example`
+- 相关 FPA 配置和 Web 任务测试
+
+### 待办
+
+1. 扩展 `/api/fpa/options`，返回 profile 绑定值、`editable` 和新增 options 列表。
+2. 在 options 中新增 `custom_profile` 选项。
+3. 前端 config store 增加 `fpaCoreRules`、`fpaSystemPrompt`、`fpaUserPrompt`。
+4. `FpaRunSettingsSection` 增加 `core_rules`、`system_prompt`、`user_prompt` 三个选择控件。
+5. 实现 profile 切换联动：官方 profile 覆盖显示细项并禁用控件，`custom_profile` 启用控件。
+6. 切换到 `custom_profile` 时，初始化为上一个 profile 的细项值；用户修改后保留自定义值。
+7. `Home.vue` 任务提交 FormData 增加 `fpa_core_rules`、`fpa_system_prompt`、`fpa_user_prompt`。
+8. 后端任务配置快照保存最终 profile 和细项 key。
+9. 后端执行配置解析区分官方 profile 和 `custom_profile`。
+10. 重跑任务时恢复原任务快照中的 profile 和细项 key。
+11. 更新配置示例，说明 `custom_profile` 是 Web/API 运行时自定义入口，不复用旧 `custom_rules` 语义。
+12. 更新测试，覆盖官方 profile 灰掉、自定义 profile 可选、任务提交和重跑快照。
+
+### 验收标准
+
+- 选择官方 profile 时，`strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode` 均显示对应绑定值但不可修改。
+- 选择 `custom_profile` 时，上述细项均可修改。
+- 从官方 profile 切到 `custom_profile` 时，初始细项等于切换前官方 profile 绑定值。
+- 从 `custom_profile` 切回官方 profile 后，官方 profile 细项恢复只读绑定值；再次切回 `custom_profile` 时仍保留用户上次自定义选择。
+- 官方 profile 提交任务时，后端按官方 profile 绑定解析，不接受前端细项篡改。
+- `custom_profile` 提交任务时，后端使用用户显式选择的细项 key。
+- `custom_profile` 缺少必填细项时，后端返回明确错误。
+- 运行历史和重跑能保留并复用本次任务的 profile 与最终细项 key。
+
+### 验证方式
+
+- `cd web_app && npm run build`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_web_tasks.py`
+- 视实际落点补充并运行 FPA options、FPA config 或任务配置快照相关测试。
+- 人工检查生成页高级参数：官方 profile 灰掉、自定义 profile 可编辑、切换后显示值符合预期。
+
+### 风险
+
+- 当前配置已有 `profiles -> core_rules/system_prompt/user_prompt` 绑定，实施时必须以后端解析为准，不能只做前端假联动。
+- `custom_profile` 需要避开旧 `custom_rules` 语义，避免恢复已移除的旧配置路径。
+- 如果官方 profile 的灰掉控件仍随 FormData 提交，后端必须忽略这些覆盖值，防止用户绕过 UI 篡改 profile 口径。
+- Prompt 选择项只允许 key 选择，不允许运行页直接编辑大段 prompt 文本；大段 prompt 文本仍应在配置页或配置文件维护。
 
 ## 第二期：单任务运行详情页
 
