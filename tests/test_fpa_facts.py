@@ -12,19 +12,19 @@ def _group():
                 "process_id": "m1_p1",
                 "process_name": "查询垂直行业数据",
                 "description": "按行业名称查询垂直行业列表，支持分页。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p2",
                 "process_name": "添加垂直行业",
                 "description": "输入垂直行业名称并保存。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p3",
                 "process_name": "删除垂直行业",
                 "description": "删除指定垂直行业。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }
@@ -34,14 +34,14 @@ def _by_id(facts):
     return {fact["process_id"]: fact for fact in facts}
 
 
-def test_extract_process_facts_uses_name_and_description_before_input_type():
+def test_extract_process_facts_keeps_change_status_separate_from_operation():
     facts = _by_id(extract_fpa_process_facts(_group()))
 
     query = facts["m1_p1"]
     assert query["operation"] == "query"
     assert query["query_only"] is True
     assert query["changes_internal_data"] is False
-    assert query["input_type"] == "新增"
+    assert query["change_status"] == "新增"
 
     create = facts["m1_p2"]
     assert create["operation"] == "create"
@@ -59,7 +59,7 @@ def test_extract_process_facts_marks_import_operation_as_internal_change():
             "process_id": "p1",
             "process_name": "导入客户名单",
             "description": "上传 Excel 文件，校验手机号并保存有效记录。",
-            "type": "新增",
+            "change_status": "新增",
         }],
     })
 
@@ -74,7 +74,7 @@ def test_extract_process_facts_marks_ordinary_external_service_without_eif_evide
             "process_id": "m1_p1",
             "process_name": "发送测试短信",
             "description": "调用短信平台发送测试短信。",
-            "type": "新增",
+            "change_status": "新增",
         }],
     })
 
@@ -91,13 +91,13 @@ def test_extract_process_facts_treats_payment_gateway_result_as_service_not_eif(
                 "process_id": "m1_p1",
                 "process_name": "发起退款",
                 "description": "调用支付网关提交退款请求，并记录本系统退款申请状态。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p2",
                 "process_name": "查看退款结果",
                 "description": "查询支付网关返回的退款状态、失败原因和处理时间。",
-                "type": "查询",
+                "change_status": "修改",
             },
         ],
     }))
@@ -117,7 +117,7 @@ def test_extract_process_facts_keeps_external_data_group_evidence():
             "process_id": "m1_p1",
             "process_name": "引用统一用户中心账号",
             "description": "读取统一用户中心维护的人员账号，本系统不维护账号主数据。",
-            "type": "新增",
+            "change_status": "新增",
         }],
     })
 
@@ -136,7 +136,7 @@ def test_extract_process_facts_uses_module_description_for_external_data_evidenc
             "process_id": "m1_p1",
             "process_name": "选择归属组织",
             "description": "从主数据平台组织主数据中选择归属组织并保存到当前业务对象。",
-            "type": "新增",
+            "change_status": "新增",
         }],
     })
 

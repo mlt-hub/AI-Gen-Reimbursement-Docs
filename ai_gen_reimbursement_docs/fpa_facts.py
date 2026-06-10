@@ -41,7 +41,7 @@ LOCAL_CHANGE_HINTS = (
 class FpaProcessFact:
     process_id: str
     process_name: str
-    input_type: str
+    change_status: str
     operation: str
     target_data_group: str
     query_only: bool
@@ -80,7 +80,7 @@ def _extract_process_fact(
     process_id = str(process.get("process_id", "") or "").strip()
     name = str(process.get("process_name", "") or process.get("name", "") or "").strip()
     desc = str(process.get("description", "") or process.get("desc", "") or "").strip()
-    input_type = str(process.get("type", "") or "").strip()
+    change_status = str(process.get("change_status", "") or "").strip()
     text = f"{name}。{desc}"
     evidence_text = f"{text}。{module_text}" if module_text else text
     operation, operation_evidence = _operation(text)
@@ -90,12 +90,10 @@ def _extract_process_fact(
     ordinary_service = _has_any(text, EXTERNAL_SERVICE_HINTS) and not external_evidence
     changes_internal = operation in {"create", "update", "delete", "enable_disable", "import", "maintain"}
     evidence = [item for item in [operation_evidence, external_evidence] if item]
-    if input_type and input_type not in evidence:
-        evidence.append(f"input_type={input_type}")
     return FpaProcessFact(
         process_id=process_id,
         process_name=name,
-        input_type=input_type,
+        change_status=change_status,
         operation=operation,
         target_data_group=_target_data_group(evidence_text if external_evidence else text, module_data_group),
         query_only=query_only,

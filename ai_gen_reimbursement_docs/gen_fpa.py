@@ -307,7 +307,6 @@ def _source_text_for_explanation_system_elements(
                 str(process.get("process_name", "") or ""),
                 str(process.get("desc", "") or ""),
                 str(process.get("description", "") or ""),
-                str(process.get("type", "") or ""),
             ])
     return "\n".join(part for part in parts if part)
 
@@ -598,7 +597,7 @@ def _group_rows_by_l3(rows: list[dict[str, str]]) -> list[dict[str, object]]:
                 "process_name": process_name,
                 "description": process_desc,
                 "name": process_name,
-                "type": str(r.get("功能过程类型", "") or "").strip(),
+                "change_status": str(r.get("变更状态", "") or "").strip(),
                 "desc": process_desc,
             })
     return groups

@@ -364,9 +364,9 @@ def adjust_value_for_type(fpa_type: str) -> int | float:
 
 def module_change_status(processes: list[object]) -> str:
     statuses = [
-        str(p.get("type", "")).strip()
+        str(p.get("change_status", "")).strip()
         for p in processes
-        if isinstance(p, dict) and str(p.get("type", "")).strip()
+        if isinstance(p, dict) and str(p.get("change_status", "")).strip()
     ]
     if not statuses:
         return ""
@@ -467,7 +467,7 @@ def _prompt_payload(
                 "process_id": str(process.get("process_id", "") or ""),
                 "process_name": str(process.get("process_name", "") or process.get("name", "") or ""),
                 "description": str(process.get("description", "") or process.get("desc", "") or ""),
-                "type": str(process.get("type", "") or ""),
+                "change_status": str(process.get("change_status", "") or ""),
             }
             for process in group.get("processes", [])
             if isinstance(process, dict)
@@ -1092,7 +1092,7 @@ class CustomRulesProfile:
                     name=point_name,
                     description=desc or name,
                 ),
-                "变更状态": str(p.get("type", "") or module_change_status(process_list)),
+                "变更状态": str(p.get("change_status", "") or module_change_status(process_list)),
                 "调整值": adjust_value_for_type(fpa_type),
                 "要素数量": 1,
                 "生成方式": "fallback",
@@ -1396,7 +1396,7 @@ class StrictFpaProfile(CustomRulesProfile):
                 "desc": desc,
                 "type": fpa_type,
                 "reason": reason,
-                "change_status": str(p.get("type", "") or ""),
+                "change_status": str(p.get("change_status", "") or ""),
             }
             group_key = self._logical_transaction_group_key(point_name, desc, fpa_type)
             if group_key is None:
@@ -1867,7 +1867,7 @@ class UiApiMappingProfile(CustomRulesProfile):
             desc = str(p.get("desc", "") or "").strip()
             if not raw_name:
                 continue
-            status = str(p.get("type", "") or module_change_status(process_list))
+            status = str(p.get("change_status", "") or module_change_status(process_list))
             for suffix, fpa_type, reason in (
                 ("界面开发", "EI", "功能过程默认生成 1 条界面开发行。"),
                 ("接口开发", "ILF", "功能过程默认生成 1 条接口开发行。"),

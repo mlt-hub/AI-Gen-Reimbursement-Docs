@@ -149,7 +149,7 @@ def read_base_data_from_excel(excel_path: str) -> dict[str, object]:
 
     tree_headers = [
         "入口", "一级模块", "二级模块", "三级模块", "客户端类型",
-        "三级模块整体功能描述", "功能过程", "功能过程类型", "功能过程描述",
+        "三级模块整体功能描述", "功能过程", "功能过程描述", "变更状态",
     ]
     tree_rows = [
         {key: row[idx] if idx < len(row) else "" for idx, key in enumerate(tree_headers)}
@@ -188,10 +188,10 @@ def generate_md_files(excel_path: str, output_dir: str = "") -> dict[str, str]:
         f.write("# 功能清单模块树\n\n")
         f.write(f"**来源文件**：{os.path.basename(excel_path)}\n")
         f.write(f"**生成日期**：{datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
-        f.write("| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程类型 | 功能过程描述 |\n")
+        f.write("| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程描述 | 变更状态 |\n")
         f.write("|------|---------|---------|---------|-----------|-------------------|---------|-----------|-------------|\n")
         for row in func_rows:
-            # row: [入口, 一级模块, 二级模块, 三级模块, 客户端类型, 三级模块整体功能描述, 功能过程, 功能过程类型, 功能过程描述]
+            # row: [入口, 一级模块, 二级模块, 三级模块, 客户端类型, 三级模块整体功能描述, 功能过程, 功能过程描述, 变更状态]
             vals = [cell.replace('|', '\\|').replace('\n', ' ') for cell in row[:9]]
             line = " | ".join(vals)
             f.write(f"| {line} |\n")
@@ -372,7 +372,7 @@ def parse_module_tree_md(tree_md_path: str) -> list[dict[str, str]]:
     """解析 功能清单-模块树.md 表格为行字典列表。
 
     表格列：入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 |
-            三级模块整体功能描述 | 功能过程 | 功能过程类型 | 功能过程描述
+            三级模块整体功能描述 | 功能过程 | 功能过程描述 | 变更状态
     """
     from ai_gen_reimbursement_docs.md_table import parse_md_table_row
     rows = []
@@ -395,8 +395,8 @@ def parse_module_tree_md(tree_md_path: str) -> list[dict[str, str]]:
                         "客户端类型": cells[4],
                         "三级模块整体功能描述": cells[5],
                         "功能过程": cells[6],
-                        "功能过程类型": cells[7],
-                        "功能过程描述": cells[8],
+                        "功能过程描述": cells[7],
+                        "变更状态": cells[8],
                     })
     return rows
 

@@ -275,7 +275,7 @@ def generate_list_xlsx_from_md(
             _req_data = {
                 "序号": seq, "项目名称": project_name, "子系统": subsystem,
                 "一级模块": r["一级模块"], "二级模块": r["二级模块"],
-                "三级模块": r["三级模块"], "功能过程类型": r["功能过程类型"],
+                "三级模块": r["三级模块"], "功能过程类型": "",
             }
             for col_idx in range(1, total_cols + 1):
                 c = ws2.cell(row_idx, col_idx)

@@ -41,7 +41,7 @@ def _write_meta_md(path: Path, meta: dict[str, str]) -> None:
 
 def _write_tree_md(path: Path, rows: list[dict[str, str]]) -> None:
     lines = [
-        "| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程类型 | 功能过程描述 |",
+        "| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程描述 | 变更状态 |",
         "|------|---------|---------|---------|----------|----------------------|----------|--------------|--------------|",
     ]
     for row in rows:
@@ -56,8 +56,8 @@ def _write_tree_md(path: Path, rows: list[dict[str, str]]) -> None:
                     row.get("客户端类型", ""),
                     row.get("三级模块整体功能描述", ""),
                     row.get("功能过程", ""),
-                    row.get("功能过程类型", ""),
                     row.get("功能过程描述", ""),
+                    row.get("变更状态", ""),
                 ]
             )
             + " |"

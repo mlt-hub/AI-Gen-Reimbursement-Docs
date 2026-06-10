@@ -1367,7 +1367,8 @@ prompt_fragments:
         assert explanation_rules.source_label == (
             "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.default）"
         )
-        assert "功能过程类型只能作为参考" in strict
+        assert "变更状态只能作为源需求状态参考" in strict
+        assert "不作为 FPA 类型判定依据" in strict
         assert "不是功能点计数单位" in strict
         assert "必须合并为一个维护类 EI" in strict
         assert "必须合并为一个查询类 EQ" in strict

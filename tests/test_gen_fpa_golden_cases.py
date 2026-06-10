@@ -5,7 +5,7 @@ def _meta():
     return {"子系统（模块）": "测试系统", "资产标识": "TEST-001"}
 
 
-def _row(client_type, l1, l2, l3, l3_desc, proc, proc_desc, proc_type="新增"):
+def _row(client_type, l1, l2, l3, l3_desc, proc, proc_desc, change_status="新增"):
     return {
         "客户端类型": client_type,
         "一级模块": l1,
@@ -13,7 +13,7 @@ def _row(client_type, l1, l2, l3, l3_desc, proc, proc_desc, proc_type="新增"):
         "三级模块": l3,
         "三级模块整体功能描述": l3_desc,
         "功能过程": proc,
-        "功能过程类型": proc_type,
+        "变更状态": change_status,
         "功能过程描述": proc_desc,
     }
 

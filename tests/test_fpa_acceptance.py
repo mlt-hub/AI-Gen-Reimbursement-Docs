@@ -3,8 +3,9 @@ from pathlib import Path
 
 import openpyxl
 
-from ai_gen_reimbursement_docs.excel_source import generate_md_files
+from ai_gen_reimbursement_docs.excel_source import generate_md_files, parse_module_tree_md
 from ai_gen_reimbursement_docs.gen_fpa import (
+    _group_rows_by_l3,
     calculate_fpa_excel_formula_projection,
     _read_fpa_rows_md_for_audit,
     generate_fpa_check_xlsx_from_md,
@@ -24,7 +25,7 @@ def _write_meta_md(path: Path, meta: dict[str, str]) -> None:
 
 def _write_tree_md(path: Path, rows: list[dict[str, str]]) -> None:
     lines = [
-        "| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程类型 | 功能过程描述 |",
+        "| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程描述 | 变更状态 |",
         "|------|---------|---------|---------|----------|----------------------|----------|--------------|--------------|",
     ]
     for row in rows:
@@ -38,8 +39,8 @@ def _write_tree_md(path: Path, rows: list[dict[str, str]]) -> None:
                 row.get("客户端类型", ""),
                 row.get("三级模块整体功能描述", ""),
                 row.get("功能过程", ""),
-                row.get("功能过程类型", ""),
                 row.get("功能过程描述", ""),
+                row.get("变更状态", ""),
             ])
             + " |"
         )
@@ -84,7 +85,7 @@ def _write_minimal_excel(path: Path, rows: list[dict[str, str]], meta: dict[str,
     ws_func = wb["2、功能清单-内容录入"]
     ws_func.append([
         "入口", "一级模块", "二级模块", "三级模块", "客户端类型",
-        "三级模块整体功能描述", "功能过程", "功能过程类型", "功能过程描述",
+        "三级模块整体功能描述", "功能过程", "功能过程描述", "变更状态",
     ])
     for row in rows:
         ws_func.append([
@@ -95,11 +96,34 @@ def _write_minimal_excel(path: Path, rows: list[dict[str, str]], meta: dict[str,
             row.get("客户端类型", ""),
             row.get("三级模块整体功能描述", ""),
             row.get("功能过程", ""),
-            row.get("功能过程类型", ""),
             row.get("功能过程描述", ""),
+            row.get("变更状态", ""),
         ])
     wb.save(path)
     wb.close()
+
+
+def test_module_tree_maps_description_and_change_status_to_distinct_fields(tmp_path):
+    tree_md = tmp_path / "tree.md"
+    _write_tree_md(tree_md, [{
+        "客户端类型": "地市后台",
+        "一级模块": "客户管理",
+        "二级模块": "客户档案",
+        "三级模块": "客户维护",
+        "三级模块整体功能描述": "维护客户档案。",
+        "功能过程": "修改客户",
+        "功能过程描述": "编辑客户名称并保存。",
+        "变更状态": "修改",
+    }])
+
+    parsed = parse_module_tree_md(str(tree_md))
+    assert parsed[0]["功能过程描述"] == "编辑客户名称并保存。"
+    assert parsed[0]["变更状态"] == "修改"
+
+    process = _group_rows_by_l3(parsed)[0]["processes"][0]
+    assert process["description"] == "编辑客户名称并保存。"
+    assert process["change_status"] == "修改"
+    assert "type" not in process
 
 
 def test_fpa_acceptance_formula_projection_matches_summary_across_type_strategies(tmp_path):
@@ -308,7 +332,7 @@ def test_fpa_acceptance_mock_ai_warning_source_reaches_check_workbook(monkeypatc
             "三级模块": "客户查询",
             "三级模块整体功能描述": "按条件查询客户。",
             "功能过程": "查询客户",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "按客户名称查询客户列表。",
         }
     ]
@@ -380,7 +404,7 @@ def test_fpa_acceptance_check_workbook_does_not_report_type_conflict_when_types_
             "三级模块": "垂直行业管理",
             "三级模块整体功能描述": "维护垂直行业基础信息和管理员。",
             "功能过程": "添加垂直行业",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "点击添加按钮，在弹窗输入垂直行业名称并保存。",
         }
     ]
@@ -436,7 +460,7 @@ def test_fpa_acceptance_check_workbook_type_conflict_metadata_is_consistent(monk
             "三级模块": "短信通知",
             "三级模块整体功能描述": "系统调用短信平台发送通知短信。",
             "功能过程": "发送测试短信",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "调用短信平台发送测试短信。",
         }
     ]
@@ -504,7 +528,7 @@ def test_fpa_acceptance_check_workbook_distinguishes_data_function_supplement_fr
             "三级模块": "客户档案",
             "三级模块整体功能描述": "维护客户档案。",
             "功能过程": "添加客户档案",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "保存客户档案。",
         }
     ]
@@ -572,7 +596,7 @@ def test_fpa_acceptance_check_workbook_reports_missing_process_supplement(monkey
             "三级模块": "客户查询",
             "三级模块整体功能描述": "查询和导出客户。",
             "功能过程": "查询客户",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "按客户名称查询客户列表。",
         },
         {
@@ -582,7 +606,7 @@ def test_fpa_acceptance_check_workbook_reports_missing_process_supplement(monkey
             "三级模块": "客户查询",
             "三级模块整体功能描述": "查询和导出客户。",
             "功能过程": "导出客户",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "导出客户列表。",
         },
     ]
@@ -643,7 +667,7 @@ def test_fpa_acceptance_rules_first_check_workbook_explains_rules_without_ai(mon
             "三级模块": "客户查询",
             "三级模块整体功能描述": "按条件查询客户。",
             "功能过程": "查询客户",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "按客户名称查询客户列表。",
         }
     ]
@@ -690,7 +714,7 @@ def test_fpa_acceptance_rules_first_low_confidence_check_workbook_explains_ai_re
             "三级模块": "垂直行业管理",
             "三级模块整体功能描述": "维护垂直行业基础信息。",
             "功能过程": "添加垂直行业",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "输入垂直行业名称并保存。",
         }
     ]
@@ -770,7 +794,7 @@ def test_fpa_acceptance_ai_cache_hit_is_visible_in_audit_and_check(monkeypatch, 
             "三级模块": "客户查询",
             "三级模块整体功能描述": "按条件查询客户。",
             "功能过程": "查询客户",
-            "功能过程类型": "新增",
+            "变更状态": "新增",
             "功能过程描述": "按客户名称查询客户列表。",
         }
     ]

@@ -296,10 +296,10 @@ def test_ui_api_mapping_fallback_generates_default_and_explicit_backend_rows():
         "l2": "合同中心",
         "l3": "合同管理",
         "processes": [
-            {"name": "查询合同列表", "type": "新增", "desc": "查询合同列表。"},
-            {"name": "提交合同审批", "type": "新增", "desc": "提交合同审批，调用 OA 审批接口。"},
-            {"name": "再次提交合同审批", "type": "新增", "desc": "再次提交合同审批，调用 OA 审批接口。"},
-            {"name": "同步客户信息", "type": "新增", "desc": "同步客户信息，调用 CRM 客户查询服务。"},
+            {"name": "查询合同列表", "change_status": "新增", "desc": "查询合同列表。"},
+            {"name": "提交合同审批", "change_status": "新增", "desc": "提交合同审批，调用 OA 审批接口。"},
+            {"name": "再次提交合同审批", "change_status": "新增", "desc": "再次提交合同审批，调用 OA 审批接口。"},
+            {"name": "同步客户信息", "change_status": "新增", "desc": "同步客户信息，调用 CRM 客户查询服务。"},
         ],
     }
 
@@ -332,8 +332,8 @@ def test_ui_api_mapping_keeps_multiple_explicit_backend_rows_and_duplicate_defau
         "l2": "合同中心",
         "l3": "合同管理",
         "processes": [
-            {"name": "提交合同审批", "type": "新增", "desc": "调用 OA 审批接口，请求 风控校验服务。"},
-            {"name": "提交合同审批", "type": "新增", "desc": "再次提交合同审批。"},
+            {"name": "提交合同审批", "change_status": "新增", "desc": "调用 OA 审批接口，请求 风控校验服务。"},
+            {"name": "提交合同审批", "change_status": "新增", "desc": "再次提交合同审批。"},
         ],
     }
 
@@ -360,10 +360,10 @@ def test_strict_profile_merges_same_name_same_type_and_keeps_type_conflict():
         "l2": "客户中心",
         "l3": "客户查询",
         "processes": [
-            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
-            {"name": "查询客户", "type": "新增", "desc": "按手机号查询客户列表。"},
-            {"name": "客户处理", "type": "新增", "desc": "导出客户报表。"},
-            {"name": "客户处理", "type": "新增", "desc": "查询客户列表。"},
+            {"name": "查询客户", "change_status": "新增", "desc": "按客户名称查询客户列表。"},
+            {"name": "查询客户", "change_status": "新增", "desc": "按手机号查询客户列表。"},
+            {"name": "客户处理", "change_status": "新增", "desc": "导出客户报表。"},
+            {"name": "客户处理", "change_status": "新增", "desc": "查询客户列表。"},
         ],
     }
 
@@ -388,8 +388,8 @@ def test_unified_ui_fallback_merges_duplicate_non_ui_process_rows(tmp_path):
         "l2": "客户中心",
         "l3": "客户档案",
         "processes": [
-            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
-            {"name": "查询客户", "type": "新增", "desc": "按手机号查询客户列表。"},
+            {"name": "查询客户", "change_status": "新增", "desc": "按客户名称查询客户列表。"},
+            {"name": "查询客户", "change_status": "新增", "desc": "按手机号查询客户列表。"},
         ],
     }
 
@@ -448,7 +448,7 @@ def test_custom_rule_set_row_planning_rules_affect_fallback_rows(tmp_path):
         "l2": "管理",
         "l3": "客户管理",
         "processes": [
-            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
+            {"name": "查询客户", "change_status": "新增", "desc": "按客户名称查询客户列表。"},
         ],
     }
 
@@ -476,7 +476,7 @@ def test_custom_rule_set_can_disable_ui_fallback_row(tmp_path):
         "l2": "管理",
         "l3": "客户管理",
         "processes": [
-            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
+            {"name": "查询客户", "change_status": "新增", "desc": "按客户名称查询客户列表。"},
         ],
     }
 
@@ -585,7 +585,7 @@ def test_rule_set_internal_data_rules_affect_strict_profile(tmp_path):
         "processes": [
             {
                 "name": "维护认证授权关系",
-                "type": "新增",
+                "change_status": "新增",
                 "desc": "本系统维护认证授权关系，并支持新增和删除授权。",
             }
         ],
@@ -761,7 +761,7 @@ def test_prompt_payload_includes_extracted_process_facts(tmp_path):
                         "process_id": "m1_p1",
                         "process_name": "查询客户",
                         "description": "按客户名称查询客户列表。",
-                        "type": "新增",
+                        "change_status": "新增",
                     }
                 ],
             },
@@ -774,7 +774,7 @@ def test_prompt_payload_includes_extracted_process_facts(tmp_path):
     assert fact["operation"] == "query"
     assert fact["query_only"] is True
     assert fact["changes_internal_data"] is False
-    assert fact["input_type"] == "新增"
+    assert fact["change_status"] == "新增"
     assert payload["merge_review"]["groups"] == []
     assert payload["type_judgement"]["judgements"][0]["suggested_type"] == "EQ"
 
@@ -795,13 +795,13 @@ def test_prompt_payload_includes_merge_review(tmp_path):
                         "process_id": "m1_p1",
                         "process_name": "添加客户",
                         "description": "输入客户名称并保存。",
-                        "type": "新增",
+                        "change_status": "新增",
                     },
                     {
                         "process_id": "m1_p2",
                         "process_name": "编辑客户",
                         "description": "修改客户名称并保存。",
-                        "type": "新增",
+                        "change_status": "新增",
                     },
                 ],
             },
@@ -831,13 +831,13 @@ def test_prompt_payload_includes_agent_review_contract(tmp_path):
                         "process_id": "m1_p1",
                         "process_name": "添加客户",
                         "description": "输入客户名称并保存。",
-                        "type": "新增",
+                        "change_status": "新增",
                     },
                     {
                         "process_id": "m1_p2",
                         "process_name": "编辑客户",
                         "description": "修改客户名称并保存。",
-                        "type": "新增",
+                        "change_status": "新增",
                     },
                 ],
             },

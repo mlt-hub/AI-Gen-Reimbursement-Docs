@@ -140,7 +140,6 @@ def _processes_by_id(group: dict[str, object]) -> dict[str, dict[str, str]]:
         result[process_id] = {
             "name": str(process.get("process_name", "") or process.get("name", "") or "").strip(),
             "description": str(process.get("description", "") or process.get("desc", "") or "").strip(),
-            "type": str(process.get("type", "") or "").strip(),
         }
     return result
 

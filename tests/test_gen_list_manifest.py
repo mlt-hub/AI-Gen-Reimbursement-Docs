@@ -28,9 +28,9 @@ def _write_tree(path: Path) -> None:
     path.write_text(
         """# 模块树
 
-| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程类型 | 功能过程描述 |
+| 入口 | 一级模块 | 二级模块 | 三级模块 | 客户端类型 | 三级模块整体功能描述 | 功能过程 | 功能过程描述 | 变更状态 |
 |------|----------|----------|----------|------------|----------------------|----------|--------------|--------------|
-| Web | 费用管理 | 报销单 | 新建报销单 | PC | 支持员工新建报销单 | 提交报销单 | EI | 员工录入并提交报销单 |
+| Web | 费用管理 | 报销单 | 新建报销单 | PC | 支持员工新建报销单 | 提交报销单 | 员工录入并提交报销单 | 新增 |
 """,
         encoding="utf-8",
     )
@@ -147,7 +147,7 @@ def test_generate_list_uses_manifest_sheet_rows_and_headers(tmp_path):
     assert ws1.cell(5, 4).value == "财务部"
 
     ws2 = wb["清单自定义"]
-    assert ws2.cell(5, 1).value == "EI"
+    assert ws2.cell(5, 1).value is None
     assert ws2.cell(5, 2).value == "新建报销单"
     assert ws2.cell(5, 3).value == "费用管理"
     assert ws2.cell(5, 4).value == "报销单"
@@ -252,5 +252,5 @@ sheets:
     assert ws1["B5"].value == 12.5
 
     ws2 = wb["清单自定义"]
-    assert ws2.cell(5, 1).value == "EI"
+    assert ws2.cell(5, 1).value is None
     assert ws2.cell(5, 9).value == 1

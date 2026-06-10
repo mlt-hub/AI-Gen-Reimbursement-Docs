@@ -63,7 +63,7 @@ class TestBuildFpaRuleRows:
             "客户端类型": kwargs.get("client_type", "后台"),
             "三级模块整体功能描述": "",
             "功能过程": kwargs.get("proc", "注册新用户"),
-            "功能过程类型": kwargs.get("proc_type", "新增"),
+            "变更状态": kwargs.get("change_status", "新增"),
             "功能过程描述": "用户通过表单注册新账户",
         }
 
