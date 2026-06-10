@@ -61,8 +61,8 @@
                 <div class="font-semibold">{{ item.task_mode || '-' }}</div>
                 <div class="text-xs font-mono text-[var(--color-ink-soft)]">{{ item.run_id }}</div>
               </td>
-              <td class="max-w-[12rem] px-4 py-3 align-top">
-                <div class="truncate" :title="projectName(item)">{{ projectName(item) }}</div>
+              <td class="w-56 px-4 py-3 align-top">
+                <div class="max-w-56 whitespace-normal break-words leading-5" :title="projectName(item)">{{ projectName(item) }}</div>
               </td>
               <td class="px-4 py-3 align-top">
                 <div class="font-semibold">{{ sourceLabel(item) }}</div>

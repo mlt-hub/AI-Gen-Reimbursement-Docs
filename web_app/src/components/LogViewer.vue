@@ -33,7 +33,7 @@
     >
       <div v-if="!hasEntries" class="flex h-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--color-rule)] bg-[var(--color-surface)] px-4 py-8 text-center text-sm text-[var(--color-ink-muted)]">
         <p class="font-semibold text-[var(--color-ink)]">等待任务启动</p>
-        <p class="max-w-md leading-5">实时日志会在生成任务开始后显示。当前可以先填写功能清单路径，或进入 FPA 预览做功能点估算。</p>
+        <p class="max-w-md leading-5">实时日志会在生成任务开始后显示。当前可以先填写主操作区参数并启动生成。</p>
         <p v-if="config.backendStatus === 'offline'" class="text-xs text-[var(--color-warning)]">未检测到后端服务，启动后端后才可运行生成任务。</p>
       </div>
       <template v-for="(entry, i) in filteredEntries" :key="i">

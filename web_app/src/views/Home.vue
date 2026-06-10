@@ -5,9 +5,12 @@
       <div class="mb-5 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">主操作区</p>
         <h2 class="mt-1 text-xl font-bold text-[var(--color-ink)]">生成任务</h2>
-        <p class="mt-1 text-sm text-[var(--color-ink-muted)]">选择生成内容，填写功能清单路径，然后启动生成或先预览 FPA 功能点。</p>
+        <p class="mt-1 text-sm text-[var(--color-ink-muted)]">选择生成内容，填写功能清单路径，然后启动生成任务。</p>
       </div>
       <ConfigPanel @start="startTask" />
+      <div class="mt-4 border-t border-[var(--color-rule)] pt-4">
+        <FpaRunSettingsSection :default-open="false" />
+      </div>
     </section>
 
     <section class="surface flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-xl">
@@ -23,11 +26,18 @@
           </div>
         </div>
       </div>
+      <div v-if="startupError" class="border-b border-[var(--color-rule)] bg-[var(--color-danger-soft)] px-5 py-4 text-sm text-[var(--color-danger)]">
+        <div class="font-semibold">{{ startupError.title }}</div>
+        <p class="mt-1 whitespace-pre-wrap break-words leading-6">{{ startupError.detail }}</p>
+        <p v-if="startupError.nextStep" class="mt-2 leading-6">{{ startupError.nextStep }}</p>
+      </div>
       <GenerationProgress v-if="session.isRunning || session.isDone || session.runState === 'cancelled' || steps.hasProgress" />
       <div v-else class="flex min-h-[160px] flex-1 items-center justify-center bg-[var(--color-page)] p-5 text-center">
         <div>
-          <p class="text-sm font-semibold text-[var(--color-ink)]">等待任务启动</p>
-          <p class="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">任务开始后，这里会显示阶段进展、日志入口和交付物操作。</p>
+          <p class="text-sm font-semibold text-[var(--color-ink)]">{{ startupError ? '任务未启动' : '等待任务启动' }}</p>
+          <p class="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
+            {{ startupError ? '请处理上方错误后重新启动生成任务。' : '任务开始后，这里会显示阶段进展、日志入口和交付物操作。' }}
+          </p>
         </div>
       </div>
       <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
@@ -40,8 +50,6 @@
       </details>
       <ActionBar @ai="openAIModal" @reset="resetTask" />
     </section>
-
-    <FpaRunSettingsSection :default-open="false" />
 
     <!-- FPA核减后的工作量输入弹窗 -->
     <Teleport to="body">
@@ -266,6 +274,12 @@ interface AiLogResponse {
 
 type FpaConfirmationScope = 'current_run' | 'project_profile'
 
+interface StartupErrorMessage {
+  title: string
+  detail: string
+  nextStep?: string
+}
+
 const session = useSessionStore()
 const config = useConfigStore()
 const log = useLogStore()
@@ -274,6 +288,7 @@ const steps = useStepsStore()
 const route = useRoute()
 const LAST_SESSION_KEY = 'ard:lastSessionId'
 const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无法继续当前执行'
+const startupError = ref<StartupErrorMessage | null>(null)
 
 const runStateLabels = { idle: '就绪', running: '运行中', done: '已完成', error: '出错', cancelled: '已停止' }
 const runTitle = computed(() => {
@@ -422,6 +437,7 @@ async function cancelTask() {
 
 // ── 任务启动 ──
 async function startTask() {
+  startupError.value = null
   const mode = config.pipelineMode
   const body = new FormData()
   body.append('mode', mode)
@@ -439,7 +455,13 @@ async function startTask() {
   let url: string
   if (config.workMode === 'local') {
     if (!config.xlsxPath.trim()) {
-      toast.show('error', '请输入功能清单 .xlsx 路径')
+      const msg = '请输入功能清单 .xlsx 路径'
+      startupError.value = {
+        title: '任务启动失败',
+        detail: msg,
+        nextStep: '请检查主操作区中的功能清单路径，然后重新启动生成任务。',
+      }
+      toast.show('error', msg)
       return
     }
     url = '/api/run-local'
@@ -447,7 +469,13 @@ async function startTask() {
     body.append('output_dir', config.outputDir)
   } else {
     if (!config.selectedFile) {
-      toast.show('error', '请选择要上传的 .xlsx 文件')
+      const msg = '请选择要上传的 .xlsx 文件'
+      startupError.value = {
+        title: '任务启动失败',
+        detail: msg,
+        nextStep: '请在主操作区选择功能清单 .xlsx 文件，然后重新启动生成任务。',
+      }
+      toast.show('error', msg)
       return
     }
     url = '/api/run-upload'
@@ -461,10 +489,18 @@ async function startTask() {
   try {
     const data = await apiFetch<RunTaskResponse>(url, { method: 'POST', body })
     session.start(data.session_id, data.output_dir || '')
+    startupError.value = null
     localStorage.setItem(LAST_SESSION_KEY, data.session_id)
     log.connect()
   } catch (e) {
     const msg = normalizeApiError(e)
+    startupError.value = {
+      title: '任务启动失败',
+      detail: msg,
+      nextStep: config.workMode === 'local'
+        ? '请检查主操作区中的功能清单路径，然后重新启动生成任务。'
+        : '请检查主操作区中的上传文件，然后重新启动生成任务。',
+    }
     log.append({ level: 'ERROR', msg: msg, time: '' })
     toast.show('error', msg)
     session.setError()
@@ -472,6 +508,7 @@ async function startTask() {
 }
 
 async function restoreSessionById(sid: string, options: { explicit?: boolean } = {}) {
+  startupError.value = null
   const explicit = Boolean(options.explicit)
   if (session.sessionId) {
     if (!explicit || session.sessionId === sid) return
@@ -570,6 +607,7 @@ watch(aiTab, (t) => {
 })
 
 function resetTask() {
+  startupError.value = null
   session.reset()
   log.clear()
   steps.reset()

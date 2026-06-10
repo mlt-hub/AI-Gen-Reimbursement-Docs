@@ -49,10 +49,11 @@
             <ChatBubbleLeftEllipsisIcon class="w-4 h-4" />
             AI 交互
           </button>
-          <button @click="resetTask" class="btn-quiet">
-            新任务
-          </button>
         </template>
+
+        <button v-if="canStartNewTask" @click="resetTask" class="btn-quiet">
+          新任务
+        </button>
       </div>
     </div>
   </div>
@@ -63,19 +64,18 @@ import { computed, ref, watch } from 'vue'
 import { FolderOpenIcon, ArrowDownTrayIcon, ChatBubbleLeftEllipsisIcon, XCircleIcon } from '@heroicons/vue/24/outline'
 import { useSessionStore } from '@/stores/session.ts'
 import { useConfigStore } from '@/stores/config.ts'
-import { useLogStore } from '@/stores/log.ts'
 import { useToastStore } from '@/stores/toast.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
-const emit = defineEmits<{ ai: [] }>()
+const emit = defineEmits<{ ai: [], reset: [] }>()
 
 const session = useSessionStore()
 const config = useConfigStore()
-const log = useLogStore()
 const toast = useToastStore()
 const actionHint = computed(() => (
   session.isRunning ? '任务运行中，可在需要时停止。' : '任务启动后，这里会显示交付物操作。'
 ))
+const canStartNewTask = computed(() => ['done', 'error', 'cancelled'].includes(session.runState))
 
 function openFolder() {
   if (!session.sessionId) return
@@ -102,8 +102,7 @@ function cancelTask() {
 }
 
 function resetTask() {
-  session.reset()
-  log.clear()
+  emit('reset')
 }
 
 // ── 完成提示音 ──

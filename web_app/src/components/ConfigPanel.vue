@@ -1,38 +1,32 @@
 <template>
-  <div class="flex w-full max-w-full min-w-0 flex-col gap-5">
+  <div class="flex w-full max-w-full min-w-0 flex-col gap-4">
     <div v-if="config.backendStatus === 'offline'" class="min-w-0 max-w-full break-words rounded-lg border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-3 py-2 text-sm text-[var(--color-warning)]">
       <div class="font-semibold">后端服务未连接</div>
       <p class="mt-1 leading-5">当前只能查看界面。启动后端服务后可运行生成任务。</p>
     </div>
 
-    <!-- 操作模式选择 -->
-    <div>
-      <label class="field-label">操作模式</label>
-      <select v-model="config.pipelineMode"
-        class="field-control"
-        :disabled="config.backendStatus === 'offline' && modesOffline">
-        <option v-for="(info, value) in modes" :key="value" :value="value">{{ info.label }}</option>
-      </select>
-      <p class="mt-2 text-xs leading-5 text-[var(--color-ink-soft)]">{{ modes[config.pipelineMode]?.desc }}</p>
-    </div>
+    <div class="grid w-full min-w-0 gap-4 lg:grid-cols-[minmax(13rem,0.9fr)_minmax(22rem,2fr)_auto] lg:items-start">
+      <!-- 操作模式选择 -->
+      <div class="min-w-0">
+        <label class="field-label">操作模式</label>
+        <select v-model="config.pipelineMode"
+          class="field-control"
+          :disabled="config.backendStatus === 'offline' && modesOffline">
+          <option v-for="(info, value) in modes" :key="value" :value="value">{{ info.label }}</option>
+        </select>
+        <p class="mt-2 text-xs leading-5 text-[var(--color-ink-soft)]">{{ modes[config.pipelineMode]?.desc }}</p>
+      </div>
 
-    <FileInput />
+      <FileInput />
 
-    <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-stretch">
-      <button @click="$emit('start')"
-        :disabled="!config.isValid || session.isRunning || config.backendStatus === 'offline'"
-        class="btn-primary w-full text-base">
-        <PlayIcon class="h-4 w-4" />
-        开始生成
-      </button>
-
-      <router-link
-        to="/preview/fpa"
-        class="btn-secondary w-full text-sm sm:w-auto"
-      >
-        <EyeIcon class="h-4 w-4" />
-        预览 FPA 功能点
-      </router-link>
+      <div class="flex min-w-[9rem] flex-col lg:pt-6">
+        <button @click="$emit('start')"
+          :disabled="!config.isValid || session.isRunning || config.backendStatus === 'offline'"
+          class="btn-primary w-full whitespace-nowrap text-base">
+          <PlayIcon class="h-4 w-4" />
+          开始生成
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -42,7 +36,7 @@ import { useConfigStore } from '@/stores/config.ts'
 import { useSessionStore } from '@/stores/session.ts'
 import FileInput from './FileInput.vue'
 import { apiFetch } from '@/lib/api.ts'
-import { EyeIcon, PlayIcon } from '@heroicons/vue/24/outline'
+import { PlayIcon } from '@heroicons/vue/24/outline'
 
 import { ref, onMounted } from 'vue'
 
