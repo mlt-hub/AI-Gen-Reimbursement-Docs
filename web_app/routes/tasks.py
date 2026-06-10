@@ -758,24 +758,26 @@ def create_router(
         user: str = Depends(require_auth),
     ):
         require_session_access(session_manager, session, request, user)
-        q = session_manager.get_queue(session)
-        if q is None:
+        subscription = session_manager.subscribe_log_stream(session)
+        if subscription is None:
             raise HTTPException(404, "未知会话")
+        stream_id, q = subscription
 
         async def generate():
-            while True:
-                try:
-                    msg = await asyncio.get_event_loop().run_in_executor(
-                        None, lambda: q.get(timeout=0.1)
-                    )
-                    data = json.loads(msg)
-                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-                    if data.get("type") in ("done", "cancelled", "error"):
-                        break
-                except queue.Empty:
-                    yield ": heartbeat\n\n"
-
-            session_manager.remove_queue(session)
+            try:
+                while True:
+                    try:
+                        msg = await asyncio.get_event_loop().run_in_executor(
+                            None, lambda: q.get(timeout=0.1)
+                        )
+                        data = json.loads(msg)
+                        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                        if data.get("type") in ("done", "cancelled", "error"):
+                            break
+                    except queue.Empty:
+                        yield ": heartbeat\n\n"
+            finally:
+                session_manager.remove_log_stream(session, stream_id)
 
         return StreamingResponse(
             generate(),

@@ -177,6 +177,30 @@ def test_pipeline_events_are_retained_as_log_snapshot():
     ]
 
 
+def test_log_stream_subscribers_receive_independent_event_copies():
+    manager = SessionManager()
+    manager.create("s1", mode="local")
+    first = manager.subscribe_log_stream("s1")
+    second = manager.subscribe_log_stream("s1")
+
+    assert first is not None
+    assert second is not None
+    first_id, first_queue = first
+    second_id, second_queue = second
+
+    manager.publish_log_event("s1", {"type": "log", "level": "INFO", "msg": "hello"})
+
+    assert first_queue.get_nowait() == '{"type": "log", "level": "INFO", "msg": "hello"}'
+    assert second_queue.get_nowait() == '{"type": "log", "level": "INFO", "msg": "hello"}'
+
+    manager.remove_log_stream("s1", first_id)
+    manager.publish_log_event("s1", {"type": "done", "files": []})
+
+    assert second_queue.get_nowait() == '{"type": "done", "files": []}'
+    assert first_queue.empty()
+    manager.remove_log_stream("s1", second_id)
+
+
 def test_cancel_active_progress_marks_running_step_cancelled():
     manager = SessionManager()
     manager.create("s1", mode="local")
