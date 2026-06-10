@@ -1344,7 +1344,7 @@ def test_top_level_spa_routes_return_spa_index(monkeypatch, path):
     assert "id=\"app\"" in resp.text or "前端未构建" in resp.text
 
 
-def test_log_stream_returns_existing_events_and_removes_queue(monkeypatch):
+def test_log_stream_receives_published_events_without_removing_session_queue(monkeypatch):
     client = _client(monkeypatch, user="alice")
     session_id = "task_stream"
     state = server.session_manager.create(session_id, mode="remote", owner="alice")
@@ -1357,7 +1357,8 @@ def test_log_stream_returns_existing_events_and_removes_queue(monkeypatch):
     assert resp.status_code == 200
     assert 'data: {"type": "log"' in resp.text
     assert 'data: {"type": "done"' in resp.text
-    assert server.session_manager.get_queue(session_id) is None
+    assert server.session_manager.get_queue(session_id) is not None
+    assert state.log_streams == {}
     server.session_manager.cleanup_download(session_id)
 
 

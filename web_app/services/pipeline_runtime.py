@@ -1,6 +1,4 @@
-import json
 import logging
-import queue
 import threading
 from datetime import datetime
 
@@ -15,9 +13,7 @@ def emit_session_event(session_manager: SessionManager, data: dict) -> None:
     if not sid:
         return
     session_manager.record_pipeline_event(sid, data)
-    q = session_manager.get_queue(sid)
-    if q:
-        q.put(json.dumps(data, ensure_ascii=False))
+    session_manager.publish_log_event(sid, data)
 
 
 def wait_for_fpa_input(session_manager: SessionManager, default_fpa: float) -> float:
@@ -125,7 +121,6 @@ class SessionHandler(logging.Handler):
 
     def emit(self, record):
         sid = session_var.get()
-        q = self.session_manager.get_queue(sid) if sid else None
         event = {
             "type": "log",
             "level": record.levelname,
@@ -134,9 +129,4 @@ class SessionHandler(logging.Handler):
         }
         if sid:
             self.session_manager.record_log_event(sid, event)
-        if q is not None:
-            msg = json.dumps(event, ensure_ascii=False)
-            try:
-                q.put_nowait(msg)
-            except queue.Full:
-                pass
+            self.session_manager.publish_log_event(sid, event)

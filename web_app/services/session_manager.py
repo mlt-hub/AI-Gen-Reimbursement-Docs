@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import queue
 import threading
+from uuid import uuid4
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -10,6 +12,10 @@ from typing import Any, Literal
 
 def _now_utc() -> datetime:
     return datetime.now(UTC)
+
+
+def queue_msg(event: dict[str, Any]) -> str:
+    return json.dumps(event, ensure_ascii=False)
 
 
 @dataclass
@@ -33,6 +39,7 @@ class SessionState:
     done_files: list[dict[str, Any]] = field(default_factory=list)
     progress_steps: dict[str, dict[str, Any]] = field(default_factory=dict)
     log_entries: list[dict[str, Any]] = field(default_factory=list)
+    log_streams: dict[str, queue.Queue] = field(default_factory=dict)
 
 
 class SessionManager:
@@ -75,6 +82,52 @@ class SessionManager:
     def get_queue(self, session_id: str) -> queue.Queue | None:
         state = self.get(session_id)
         return state.queue if state else None
+
+    def subscribe_log_stream(
+        self,
+        session_id: str,
+        *,
+        queue_size: int = 2000,
+    ) -> tuple[str, queue.Queue] | None:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return None
+            stream_id = uuid4().hex
+            q: queue.Queue = queue.Queue(maxsize=queue_size)
+            legacy_queue = state.queue
+            if legacy_queue is not None:
+                while True:
+                    try:
+                        q.put_nowait(legacy_queue.get_nowait())
+                    except queue.Empty:
+                        break
+                    except queue.Full:
+                        break
+            state.log_streams[stream_id] = q
+            state.updated_at = _now_utc()
+            return stream_id, q
+
+    def remove_log_stream(self, session_id: str, stream_id: str) -> None:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return
+            state.log_streams.pop(stream_id, None)
+            state.updated_at = _now_utc()
+
+    def publish_log_event(self, session_id: str, event: dict[str, Any]) -> None:
+        msg = queue_msg(event)
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return
+            streams = list(state.log_streams.values())
+        for stream_queue in streams:
+            try:
+                stream_queue.put_nowait(msg)
+            except queue.Full:
+                pass
 
     def can_access(
         self,
