@@ -4,12 +4,14 @@ import { defineStore } from 'pinia'
 export type RunState = 'idle' | 'running' | 'done' | 'error' | 'cancelled'
 
 export interface InputPrompt {
+  sessionId: string
   field: string
   default: number
   msg: string
 }
 
 export interface ListPrompt {
+  sessionId: string
   cfpDefault: number
   fpaDefault: number
 }
@@ -30,6 +32,7 @@ export interface FpaConfirmationQuestion {
 }
 
 export interface FpaConfirmationPrompt {
+  sessionId: string
   confirmationMode: string
   module: {
     index?: number
@@ -130,17 +133,36 @@ export const useSessionStore = defineStore('session', () => {
     doneFiles.value = []
   }
 
+  function isCurrentSession(promptSessionId: string) {
+    return Boolean(sessionId.value && sessionId.value === promptSessionId)
+  }
+
   function showInputPrompt(prompt: InputPrompt) {
+    if (!isCurrentSession(prompt.sessionId)) return
     inputPrompt.value = prompt
   }
 
   function showListPrompt(prompt: ListPrompt) {
+    if (!isCurrentSession(prompt.sessionId)) return
     listPrompt.value = prompt
   }
 
   function showFpaConfirmationPrompt(prompt: FpaConfirmationPrompt) {
+    if (!isCurrentSession(prompt.sessionId)) return
     fpaConfirmationPrompt.value = prompt
   }
 
-  return { sessionId, runState, outputDir, inputPrompt, listPrompt, fpaConfirmationPrompt, doneFiles, isRunning, isDone, start, restore, finish, upsertDoneFile, setError, setCancelled, reset, showInputPrompt, showListPrompt, showFpaConfirmationPrompt }
+  function clearInputPrompt(promptSessionId: string) {
+    if (inputPrompt.value?.sessionId === promptSessionId) inputPrompt.value = null
+  }
+
+  function clearListPrompt(promptSessionId: string) {
+    if (listPrompt.value?.sessionId === promptSessionId) listPrompt.value = null
+  }
+
+  function clearFpaConfirmationPrompt(promptSessionId: string) {
+    if (fpaConfirmationPrompt.value?.sessionId === promptSessionId) fpaConfirmationPrompt.value = null
+  }
+
+  return { sessionId, runState, outputDir, inputPrompt, listPrompt, fpaConfirmationPrompt, doneFiles, isRunning, isDone, start, restore, finish, upsertDoneFile, setError, setCancelled, reset, showInputPrompt, showListPrompt, showFpaConfirmationPrompt, clearInputPrompt, clearListPrompt, clearFpaConfirmationPrompt }
 })

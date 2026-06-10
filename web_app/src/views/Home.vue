@@ -393,10 +393,11 @@ function optionLabel(question: FpaConfirmationQuestion, value: string) {
 }
 
 async function submitFpaInput() {
-  if (!session.sessionId) return
+  const promptSessionId = session.inputPrompt?.sessionId
+  if (!promptSessionId) return
   const val = parseFloat(String(fpaInputValue.value)) || 0
   try {
-    await apiFetch('/api/continue/' + session.sessionId, {
+    await apiFetch('/api/continue/' + promptSessionId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ field: 'fpa_reduced', fpa_reduced: val }),
@@ -405,13 +406,14 @@ async function submitFpaInput() {
     toast.show('error', normalizeApiError(e))
     return
   }
-  session.inputPrompt = null
+  session.clearInputPrompt(promptSessionId)
 }
 
 async function submitListInput() {
-  if (!session.sessionId) return
+  const promptSessionId = session.listPrompt?.sessionId
+  if (!promptSessionId) return
   try {
-    await apiFetch('/api/continue/' + session.sessionId, {
+    await apiFetch('/api/continue/' + promptSessionId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -423,20 +425,21 @@ async function submitListInput() {
     toast.show('error', normalizeApiError(e))
     return
   }
-  session.listPrompt = null
+  session.clearListPrompt(promptSessionId)
 }
 
 async function submitFpaConfirmation() {
-  if (!session.sessionId || !session.fpaConfirmationPrompt || !canSubmitFpaConfirmation.value) return
+  const prompt = session.fpaConfirmationPrompt
+  if (!prompt || !canSubmitFpaConfirmation.value) return
   const confirmedDecisions: Record<string, { value: string; scope: FpaConfirmationScope }> = {}
-  for (const question of session.fpaConfirmationPrompt.questions) {
+  for (const question of prompt.questions) {
     confirmedDecisions[question.id] = {
       value: fpaConfirmationSelections.value[question.id],
       scope: fpaConfirmationScope.value,
     }
   }
   try {
-    await apiFetch('/api/continue/' + session.sessionId, {
+    await apiFetch('/api/continue/' + prompt.sessionId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -448,7 +451,7 @@ async function submitFpaConfirmation() {
     toast.show('error', normalizeApiError(e))
     return
   }
-  session.fpaConfirmationPrompt = null
+  session.clearFpaConfirmationPrompt(prompt.sessionId)
 }
 
 async function cancelTask() {
@@ -514,7 +517,7 @@ async function startTask() {
     session.start(data.session_id, data.output_dir || '')
     startupError.value = null
     localStorage.setItem(LAST_SESSION_KEY, data.session_id)
-    log.connect()
+    log.connect(data.session_id)
   } catch (e) {
     const msg = normalizeApiError(e)
     startupError.value = {
@@ -553,7 +556,7 @@ async function restoreSessionById(sid: string, options: { explicit?: boolean } =
     localStorage.setItem(LAST_SESSION_KEY, data.session_id)
     if (data.run_state === 'running') {
       log.append({ level: 'INFO', msg: '已恢复正在运行的任务，继续接收后续日志', time: '' })
-      log.connect()
+      log.connect(data.session_id)
     } else if (data.run_state === 'done') {
       log.append({ level: 'DONE', msg: '已恢复已完成的任务，可下载交付物', time: '' })
       steps.finishAll()

@@ -15,6 +15,7 @@ export const useLogStore = defineStore('log', () => {
   const entries = ref<LogEntry[]>([])
   const eventSource = ref<EventSource | null>(null)
   const logPanelEl = ref<HTMLElement | null>(null)
+  const activeSessionId = ref<string | null>(null)
   let _wasConnected = false
 
   function append(entry: LogEntry) {
@@ -32,14 +33,17 @@ export const useLogStore = defineStore('log', () => {
     entries.value = []
   }
 
-  function connect() {
+  function connect(sessionId?: string) {
     const session = useSessionStore()
-    if (!session.sessionId) return
+    const targetSessionId = sessionId || session.sessionId
+    if (!targetSessionId) return
     close()
     _wasConnected = false
-    const es = new EventSource('/api/log-stream?session=' + session.sessionId)
+    activeSessionId.value = targetSessionId
+    const es = new EventSource('/api/log-stream?session=' + targetSessionId)
     es.onmessage = (e) => {
       try {
+        if (activeSessionId.value !== targetSessionId || session.sessionId !== targetSessionId) return
         if (!_wasConnected) {
           _wasConnected = true
         }
@@ -66,6 +70,7 @@ export const useLogStore = defineStore('log', () => {
           case 'prompt':
             append({ level: 'INFO', msg: `⏸ ${data.msg || '等待用户输入...'}`, time: data.time || '' })
             session.showInputPrompt({
+              sessionId: targetSessionId,
               field: data.field || '',
               default: data.default || 0,
               msg: data.msg || '',
@@ -74,6 +79,7 @@ export const useLogStore = defineStore('log', () => {
           case 'prompt_list':
             append({ level: 'INFO', msg: '⏸ 等待确认送审工作量和送审功能点...', time: data.time || '' })
             session.showListPrompt({
+              sessionId: targetSessionId,
               cfpDefault: data.cfp_default || 0,
               fpaDefault: data.fpa_default || 0,
             })
@@ -81,6 +87,7 @@ export const useLogStore = defineStore('log', () => {
           case 'fpa_confirmation_required':
             append({ level: 'INFO', msg: '⏸ 等待确认 FPA 计量口径...', time: data.time || '' })
             session.showFpaConfirmationPrompt({
+              sessionId: targetSessionId,
               confirmationMode: data.confirmation_mode || 'cautious',
               module: data.module || {},
               questions: data.confirmation_questions || [],
@@ -130,8 +137,9 @@ export const useLogStore = defineStore('log', () => {
       eventSource.value.close()
       eventSource.value = null
     }
+    activeSessionId.value = null
     _wasConnected = false
   }
 
-  return { entries, logPanelEl, append, clear, connect, close }
+  return { entries, logPanelEl, append, clear, connect, close, activeSessionId }
 })
