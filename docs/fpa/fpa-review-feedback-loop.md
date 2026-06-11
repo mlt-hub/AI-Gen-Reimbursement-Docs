@@ -204,6 +204,87 @@ AI原始返回：包含传入 AI 的人工审阅反馈摘要
 
 ## 实施切片
 
+### 前置切片：规则兜底计算依据说明配置化
+
+目标：
+
+```text
+将 rules_first / rules_only 规则兜底行的“计算依据说明”模板从代码迁移到 FPA 配置。
+不同 profile 可以绑定不同 fallback 说明模板。
+unified_ui 的兜底说明应与 unified_ui_ce 的统一界面建设口径保持一致。
+```
+
+当前问题：
+
+```text
+fallback 行会由代码补成固定四段式结构：
+来源场景 / 业务数据 / 业务规则 / 计算说明。
+这能保证说明完整，但属于业务口径文案，放在 fpa_profiles.py 中会形成代码内置规则。
+当 unified_ui_ce 调整后，fallback 实际输出可能仍沿用旧代码模板。
+```
+
+建议配置形态：
+
+```yaml
+profiles:
+  unified_ui:
+    fallback_explanation_template: unified_ui_fallback
+
+fallback_explanation_templates:
+  unified_ui_fallback: |-
+    来源场景：来自“${point_name}”。
+    业务数据：${business_data}
+    业务规则：${business_rules}
+    计算说明：该功能点由统一界面规则生成，按当前 profile 的建设内容口径识别为 ${fpa_type}。
+```
+
+建议占位符白名单：
+
+```text
+point_name
+fpa_type
+source_processes
+type_reason
+business_data
+business_rules
+original_explanation
+```
+
+拟修改范围：
+
+```text
+config/fpa_config.yaml.example
+  增加 fallback_explanation_templates，并在默认 profile 下显式绑定。
+
+ai_gen_reimbursement_docs/config_utils.py
+  增加 fallback_explanation_template 加载与校验。
+  校验模板 key 存在、文本非空、占位符属于白名单。
+
+ai_gen_reimbursement_docs/fpa_profiles.py
+  将 _structured_fallback_explanation 中的固定 join 文案改为读取 profile 绑定模板。
+  business_data、business_rules 等上下文变量仍由代码生成。
+
+tests/test_config_utils.py / tests/test_fpa_profiles.py
+  覆盖模板解析、占位符替换、缺失配置报错和 unified_ui fallback 输出。
+```
+
+验收：
+
+```text
+unified_ui + rules_first 不调用 AI 时，fallback 行的计算依据说明来自 unified_ui 绑定模板。
+strict_fpa / unified_ui / multi_uis / ui_api_mapping 均有明确 fallback 模板绑定。
+模板占位符拼错时配置校验失败，并给出可定位的错误信息。
+fallback 行仍满足审阅页对“来源场景、业务数据、业务规则、计算说明”的结构要求。
+```
+
+风险：
+
+```text
+配置项增加后，用户自定义 profile 需要同步绑定模板。
+模板过度自由可能破坏审阅页结构化说明要求。
+为降低风险，应固定占位符白名单，并在默认模板中保留四段式标签。
+```
+
 ### 第一切片：读取审阅反馈
 
 目标：
