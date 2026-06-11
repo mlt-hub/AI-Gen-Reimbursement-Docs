@@ -568,7 +568,7 @@ def _keyword_rule_from_dict(item: dict[str, object]) -> KeywordTypeRule | None:
     fpa_type = str(item.get("type") or "").strip().upper()
     keywords = item.get("keywords", [])
     reason = str(item.get("reason") or "").strip()
-    if not isinstance(keywords, list) or fpa_type not in VALID_TRANSACTION_FPA_TYPES:
+    if not isinstance(keywords, list) or fpa_type not in VALID_FPA_TYPES:
         return None
     keyword_values = tuple(str(keyword).strip() for keyword in keywords if str(keyword).strip())
     if not keyword_values:
@@ -1012,6 +1012,12 @@ class CustomRulesProfile:
         if process_rule is None or process_rule.enabled is False:
             return name
         for rule in self._configured_keyword_rules():
+            if not rule.matches(text):
+                continue
+            suffix = process_rule.type_suffixes.get(rule.fpa_type)
+            if suffix:
+                return f"{name}-{suffix}"
+        for rule in self._configured_type_mapping_rules():
             if not rule.matches(text):
                 continue
             suffix = process_rule.type_suffixes.get(rule.fpa_type)
@@ -1824,7 +1830,14 @@ class StrictFpaProfile(CustomRulesProfile):
         return result
 
     def _transaction_name(self, name: str) -> str:
-        return name.replace("-逻辑处理开发", "").replace("-接口处理开发", "").replace("-界面开发", "").strip()
+        return (
+            name
+            .replace("-逻辑接口开发", "")
+            .replace("-逻辑处理开发", "")
+            .replace("-接口处理开发", "")
+            .replace("-界面开发", "")
+            .strip()
+        )
 
 
 @dataclass(frozen=True)

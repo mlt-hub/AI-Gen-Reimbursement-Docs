@@ -33,13 +33,13 @@ ui_api_mapping  -> kind: ui_api_mapping
 
 `multi_uis` 暂时不是独立 kind，而是通过 `unified_ui` kind + `multi_uis_rs` + `multi_uis` prompt 形成的多界面口径变体。后续如果需要稳定的规则兜底拆分算法，再考虑新增独立 `kind: multi_uis`。
 
-用户配置可以只保留实际需要的 profile，也可以新增自定义 profile。自定义 profile 只要绑定支持的 `kind`，并引用存在的 `rule_set/core_rules/system_prompt/user_prompt` 即可。
+用户配置可以只保留实际需要的 profile，也可以新增自定义 profile。自定义 profile 只要绑定支持的 `kind`，并引用存在的 `rule_set/core_rules/system_prompt/user_prompt` 即可；如果 user prompt 引用了 `${calculation_explanation_rules}`，还必须显式绑定 `profiles.<profile>.calculation_explanation_rules` 到顶层 `calculation_explanation_rules` 中存在的 key。
 
 ## 如何选择
 
 `strict_fpa` 适合标准 FPA 复核：按数据功能和事务功能拆分，不生成“界面开发”“接口开发”“逻辑处理开发”等开发工作项表达。
 
-`unified_ui` 适合报账模板友好口径：同一三级模块默认合并一条界面开发行，查询、导出、导入和逻辑处理按功能动作补充。
+`unified_ui` 适合报账模板友好口径：同一三级模块默认合并一条界面开发行；添加、编辑、查询、删除、状态更新、数据表新增修改等非界面能力按“逻辑接口开发 / ILF”补充；导入按“导入处理开发 / EQ”补充；导出、下载、报表输出和生成文件按“导出处理开发 / EO”补充；有明确外部边界证据时按“外部接口联调调用 / EIF”补充。
 
 `multi_uis` 适合确有多个独立界面时使用：可按独立页面、独立业务对象、独立业务流程或独立用户端拆分多条界面开发行，拆分理由进入 check/review 元数据。
 
@@ -123,6 +123,7 @@ profiles:
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
+    calculation_explanation_rules: strict_fpa_ce
   unified_ui:
     kind: unified_ui
     strategy: rules_first
@@ -130,6 +131,13 @@ profiles:
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
+    calculation_explanation_rules: unified_ui_ce
+
+calculation_explanation_rules:
+  strict_fpa_ce: |-
+    计算依据说明生成规则...
+  unified_ui_ce: |-
+    统一界面口径计算依据说明生成规则...
 ```
 
 命名约定：
@@ -139,6 +147,7 @@ rule_set: <profile>_rs
 core_rules: <profile>_cr
 system_prompt: <profile>_sp
 user_prompt: <profile>_up
+calculation_explanation_rules: <profile>_ce
 ```
 
 `default-profile` 必须是非空字符串并存在于 `profiles`。profile entry 必须显式配置 `kind`，且只允许 `strict_fpa`、`unified_ui`、`ui_api_mapping`。
@@ -153,7 +162,7 @@ FPA AI prompt 会把部分上下文放入 `payload_json.domain_context`。其中
 
 `keyword_rules` 和 `type_mapping_rules` 都是按关键词辅助判断 FPA 类型，但用途不同。
 
-`keyword_rules` 是事务动作关键词规则，主要用于 `EI/EQ/EO`：导出、报表、下载等通常映射为 `EO`；查询、查看、检索等通常映射为 `EQ`；新增、提交、保存、导入等通常映射为 `EI`。它适合描述“这个功能过程动作像哪类事务功能”。
+`keyword_rules` 是动作关键词规则，可用于 `EI/EQ/EO/ILF/EIF`。在 `unified_ui` 中，查询、查看、检索等可直接映射为 `ILF` 以表达逻辑接口/表能力，导入映射为 `EQ`，导出、报表、下载等映射为 `EO`；在 `strict_fpa` 中，它仍主要用于标准事务功能 `EI/EQ/EO`。
 
 `type_mapping_rules` 是更通用的直接类型映射，支持 `EI/EQ/EO/ILF/EIF`。它适合项目级特例、业务对象或数据组边界，例如“本地报表快照”虽然包含“报表”，但如果本系统持久化维护它，可以直接映射为 `ILF`。
 

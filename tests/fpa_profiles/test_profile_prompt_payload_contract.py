@@ -110,7 +110,7 @@ def test_unified_ui_prompt_payload_exposes_profile_agent_review_contract(tmp_pat
     assert review["profile"] == "unified_ui"
     assert review["applicability"] == "debug_only"
     assert review["contract_outputs"]["judgement"] == "workload_judgement"
-    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "查询处理开发"]
+    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "逻辑接口开发"]
     assert review["unified_merge_review"]["groups"][0]["kind"] == "same_module_ui"
 
 
@@ -173,7 +173,7 @@ def test_custom_unified_ui_profile_prompt_payload_inherits_kind_contract(tmp_pat
     assert review["profile_kind"] == "unified_ui"
     assert review["contract"] == "unified_ui_contract"
     assert review["contract_outputs"]["quality_review"] == "unified_quality_review"
-    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "查询处理开发"]
+    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "逻辑接口开发"]
 
 
 def test_multi_uis_prompt_payload_uses_multi_uis_contract_variant(tmp_path):

@@ -131,21 +131,26 @@ def _custom_default_rule_set() -> FpaRuleSetConfig:
             process_rows=FpaProcessRowsPlanningRule(
                 enabled=True,
                 one_row_per_process=True,
-                default_name_suffix="逻辑处理开发",
-                type_suffixes={"EQ": "查询处理开发", "EO": "导出处理开发", "EI": "导入处理开发"},
+                default_name_suffix="逻辑接口开发",
+                type_suffixes={
+                    "ILF": "逻辑接口开发",
+                    "EQ": "导入处理开发",
+                    "EO": "导出处理开发",
+                    "EIF": "外部接口联调调用",
+                },
                 explanation_template="{name}，具体为以下：\n1、{description}",
             ),
         ),
         type_mapping_rules=(
             TypeMappingRule("EI", ("界面开发", "页面")),
-            TypeMappingRule("EIF", ("外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据")),
-            TypeMappingRule("ILF", ("添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新")),
+            TypeMappingRule("EIF", ("外部接口联调", "外部系统调用", "调用外部系统", "外部数据引用", "外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据", "主数据平台", "CRM", "OA 系统", "OA系统")),
+            TypeMappingRule("ILF", ("添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新", "查询", "查看", "详情", "列表检索", "检索", "状态更新", "数据表新增", "新增表", "修改字段")),
             TypeMappingRule("ILF", ("外部接口", "外部数据")),
         ),
         keyword_rules=(
             KeywordTypeRule("EO", ("导出", "报表输出", "生成文件", "下载", "下载模板", "下载文件")),
-            KeywordTypeRule("EQ", ("查询", "查看", "详情", "列表检索", "检索")),
-            KeywordTypeRule("EI", ("导入",)),
+            KeywordTypeRule("ILF", ("查询", "查看", "详情", "列表检索", "检索")),
+            KeywordTypeRule("EQ", ("导入",)),
         ),
     )
 
@@ -237,11 +242,12 @@ rule_sets:
       process_rows:
         enabled: true
         one_row_per_process: true
-        default_name_suffix: "逻辑处理开发"
+        default_name_suffix: "逻辑接口开发"
         type_suffixes:
-          EQ: "查询处理开发"
+          ILF: "逻辑接口开发"
           EO: "导出处理开发"
-          EI: "导入处理开发"
+          EQ: "导入处理开发"
+          EIF: "外部接口联调调用"
         explanation_template: "{name}，具体为以下：\n1、{description}"
     type_mapping_rules:
       merge: append
@@ -249,15 +255,15 @@ rule_sets:
         - type: EI
           keywords: ["界面开发", "页面"]
         - type: ILF
-          keywords: ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新"]
+          keywords: ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新", "查询", "查看", "详情", "列表检索", "检索"]
     keyword_rules:
       merge: append
       items:
         - type: EO
           keywords: ["导出", "报表输出", "生成文件", "下载", "下载模板", "下载文件"]
-        - type: EQ
+        - type: ILF
           keywords: ["查询", "查看", "详情", "列表检索", "检索"]
-        - type: EI
+        - type: EQ
           keywords: ["导入"]
     coverage_rules:
       require_process_coverage: true
@@ -339,7 +345,7 @@ def test_normalize_ai_rows_maps_basis_and_types():
                     "explanation": "垂直行业管理界面开发，具体为以下：1、新增列表和查询条件。",
                 },
                 {
-                    "name": "添加垂直行业-逻辑处理开发",
+                    "name": "添加垂直行业-逻辑接口开发",
                     "type": "ILF",
                     "classification_basis_index": 2,
                     "explanation": "保存垂直行业基础信息。",
@@ -352,7 +358,7 @@ def test_normalize_ai_rows_maps_basis_and_types():
     assert any("AI 行名称前缀已按源功能清单规范化" in w for w in warnings)
     assert [r["类型"] for r in rows] == ["EI", "ILF"]
     assert rows[0]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业管理界面开发"
-    assert rows[1]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-添加垂直行业-逻辑处理开发"
+    assert rows[1]["新增/修改功能点"] == "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-添加垂直行业-逻辑接口开发"
     assert rows[0]["计算依据归类"] == "规则一"
     assert rows[1]["计算依据归类"] == "规则二"
 
@@ -365,8 +371,8 @@ def test_invalid_index_warns_and_leaves_basis_empty():
         judgement_rules=["规则一"],
         start_seq=1,
         ai_rows=[{
-            "name": "查询垂直行业-查询处理开发",
-            "type": "EQ",
+            "name": "查询垂直行业-逻辑接口开发",
+            "type": "ILF",
             "classification_basis_index": 99,
             "explanation": "查询垂直行业列表。",
         }],
@@ -1558,7 +1564,7 @@ def test_unstructured_explanation_records_quality_warning():
         judgement_rules=["规则一"],
         start_seq=1,
         ai_rows=[{
-            "name": "添加垂直行业-逻辑处理开发",
+            "name": "添加垂直行业-逻辑接口开发",
             "type": "EI",
             "classification_basis_index": 1,
             "explanation": "保存垂直行业基础信息。",
@@ -1586,7 +1592,7 @@ def test_multiple_ui_rows_without_split_reason_are_merged():
             ai_rows=[
                 {"name": "垂直行业列表界面开发", "type": "EI", "explanation": "列表。"},
                 {"name": "垂直行业查询界面开发", "type": "EI", "explanation": "查询。"},
-                {"name": "添加垂直行业-逻辑处理开发", "type": "ILF", "explanation": "保存。"},
+                {"name": "添加垂直行业-逻辑接口开发", "type": "ILF", "explanation": "保存。"},
             ],
         )
     finally:
@@ -1652,7 +1658,7 @@ def test_strict_profile_normalizes_ai_development_work_item_names():
             profile=STRICT_FPA_PROFILE,
             ai_rows=[
                 {
-                    "name": "添加垂直行业-逻辑处理开发",
+                    "name": "添加垂直行业-逻辑接口开发",
                     "type": "ILF",
                     "explanation": "输入垂直行业名称并保存。",
                 },
@@ -2602,7 +2608,7 @@ def test_ai_first_unified_ui_supplements_profile_required_process_rows_even_when
         reset_current_fpa_rule_set_config(token)
 
     assert any(
-        row["新增/修改功能点"] == "【地市后台】客户管理-客户查询-客户查询-查询客户-查询处理开发"
+        row["新增/修改功能点"] == "【地市后台】客户管理-客户查询-客户查询-查询客户-逻辑接口开发"
         and row["生成方式"] == "rules_fallback"
         for row in combined
     )
@@ -3161,8 +3167,8 @@ def test_coverage_rules_can_disable_missing_process_supplement():
             profile=CUSTOM_RULES_PROFILE,
             strategy="ai_first",
             ai_rows=[{
-                "name": "查询客户-查询处理开发",
-                "type": "EQ",
+                "name": "查询客户-逻辑接口开发",
+                "type": "ILF",
                 "explanation": "按客户名称查询客户列表。",
                 "source_processes": ["查询客户"],
             }],
@@ -3338,11 +3344,11 @@ def test_keyword_type_fallbacks():
     token = set_current_fpa_rule_set_config(_custom_default_rule_set())
     try:
         assert CUSTOM_RULES_PROFILE.infer_type("客户界面开发")[0] == "EI"
-        assert CUSTOM_RULES_PROFILE.infer_type("添加客户-逻辑处理开发")[0] == "ILF"
-        assert CUSTOM_RULES_PROFILE.infer_type("查询客户-查询处理开发")[0] == "EQ"
+        assert CUSTOM_RULES_PROFILE.infer_type("添加客户-逻辑接口开发")[0] == "ILF"
+        assert CUSTOM_RULES_PROFILE.infer_type("查询客户-逻辑接口开发")[0] == "ILF"
         assert CUSTOM_RULES_PROFILE.infer_type("导出客户-导出处理开发")[0] == "EO"
-        assert CUSTOM_RULES_PROFILE.infer_type("导入客户-导入处理开发")[0] == "EI"
-        assert CUSTOM_RULES_PROFILE.infer_type("同步外部接口数据-逻辑处理开发")[0] == "ILF"
+        assert CUSTOM_RULES_PROFILE.infer_type("导入客户-导入处理开发")[0] == "EQ"
+        assert CUSTOM_RULES_PROFILE.infer_type("同步外部接口数据-逻辑接口开发")[0] == "ILF"
         assert CUSTOM_RULES_PROFILE.infer_type("引用统一用户中心账号-外部接口处理开发")[0] == "EIF"
     finally:
         reset_current_fpa_rule_set_config(token)
@@ -3877,8 +3883,23 @@ def test_ai_cache_hit_skips_llm(monkeypatch, tmp_path, caplog):
                 "name": "垂直行业管理界面开发",
                 "type": "EI",
                 "classification_basis_index": 1,
-                "explanation": "垂直行业管理界面开发，具体为以下：1、新增列表和查询条件。",
-            }
+                "explanation": "来源场景：垂直行业管理界面开发。\n业务数据：垂直行业。\n业务规则：新增列表和查询条件。\n计算说明：按 EI 计量。",
+                "source_processes": ["添加垂直行业"],
+            },
+            {
+                "name": "添加垂直行业-逻辑接口开发",
+                "type": "ILF",
+                "classification_basis_index": 1,
+                "explanation": "来源场景：添加垂直行业。\n业务数据：垂直行业。\n业务规则：输入垂直行业名称并保存。\n计算说明：按 ILF 计量。",
+                "source_processes": ["添加垂直行业"],
+            },
+            {
+                "name": "查询垂直行业-逻辑接口开发",
+                "type": "ILF",
+                "classification_basis_index": 1,
+                "explanation": "来源场景：查询垂直行业。\n业务数据：垂直行业。\n业务规则：按行业名称查询垂直行业列表。\n计算说明：按 ILF 计量。",
+                "source_processes": ["查询垂直行业"],
+            },
         ]
     }
     calls = {"count": 0}
@@ -3951,12 +3972,29 @@ def test_ai_cache_is_invalidated_when_project_domain_context_changes(monkeypatch
     )
     cache_path = tmp_path / "fpa_ai_cache.json"
     response = {
-        "rows": [{
-            "name": "供应商关系维护",
-            "type": "ILF",
-            "classification_basis_index": 1,
-            "explanation": "供应商关系维护，具体为以下：1、保存供应商关系。",
-        }]
+        "rows": [
+            {
+                "name": "垂直行业管理界面开发",
+                "type": "EI",
+                "classification_basis_index": 1,
+                "explanation": "来源场景：垂直行业管理界面开发。\n业务数据：垂直行业。\n业务规则：新增列表和查询条件。\n计算说明：按 EI 计量。",
+                "source_processes": ["添加垂直行业"],
+            },
+            {
+                "name": "添加垂直行业-逻辑接口开发",
+                "type": "ILF",
+                "classification_basis_index": 1,
+                "explanation": "来源场景：添加垂直行业。\n业务数据：垂直行业。\n业务规则：保存供应商关系。\n计算说明：按 ILF 计量。",
+                "source_processes": ["添加垂直行业"],
+            },
+            {
+                "name": "查询垂直行业-逻辑接口开发",
+                "type": "ILF",
+                "classification_basis_index": 1,
+                "explanation": "来源场景：查询垂直行业。\n业务数据：垂直行业。\n业务规则：按行业名称查询垂直行业列表。\n计算说明：按 ILF 计量。",
+                "source_processes": ["查询垂直行业"],
+            },
+        ]
     }
     calls = {"count": 0}
 
@@ -4038,7 +4076,7 @@ fpa_check_columns:
 
 | 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |
 |------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|
-| 1 | 测试系统 | TEST | 查询客户-查询处理开发 | EQ |  | 查询客户。 | 新增 | 2 | 1 | ai | AI 根据功能点名称和业务说明判定。 | 查询客户 | 查询客户 classification_basis_index 越界: 99 |
+| 1 | 测试系统 | TEST | 查询客户-逻辑接口开发 | ILF |  | 查询客户。 | 新增 | 2 | 1 | ai | AI 根据功能点名称和业务说明判定。 | 查询客户 | 查询客户 classification_basis_index 越界: 99 |
 """,
         encoding="utf-8",
     )
@@ -4056,12 +4094,12 @@ fpa_check_columns:
             "modules": [{
                 "rule_hits": [{
                     "fpa_seq": 1,
-                    "name": "查询客户-查询处理开发",
+                    "name": "查询客户-逻辑接口开发",
                     "generation": "ai",
-                    "hit_object": "查询客户-查询处理开发",
+                    "hit_object": "查询客户-逻辑接口开发",
                     "rule_id": "postprocess.classification_basis_index",
                     "rule_desc": "classification_basis_index 必须落在模板判定原则范围内。",
-                    "suggested_type": "EQ",
+                    "suggested_type": "ILF",
                     "adopted": "是",
                     "warnings": ["查询客户 classification_basis_index 越界: 99"],
                 }],
@@ -4092,7 +4130,7 @@ def test_fpa_check_xlsx_includes_rule_set_config_warning(tmp_path):
 
 | 序号 | 子系统(模块) | 资产标识 | 新增/修改功能点 | 类型 | 计算依据归类 | 计算依据说明 | 变更状态 | 调整值 | 要素数量 | 生成方式 | 类型理由 | 源功能过程 | 后处理警告 |
 |------|-------------|---------|----------------|------|-------------|-------------|---------|-------|---------|---------|---------|-----------|-----------|
-| 1 | 测试系统 | TEST | 发送短信-逻辑处理开发 | EI |  | 调用短信平台发送通知。 | 新增 | 2 | 1 | fallback | 普通外部服务调用按事务处理。 | 发送短信 |  |
+| 1 | 测试系统 | TEST | 发送短信-逻辑接口开发 | ILF |  | 调用短信平台发送通知。 | 新增 | 2 | 1 | fallback | 普通外部服务调用按事务处理。 | 发送短信 |  |
 """,
         encoding="utf-8",
     )

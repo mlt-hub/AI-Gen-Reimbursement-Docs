@@ -76,10 +76,10 @@ class TestBuildFpaRuleRows:
         assert result[0]["类型"] == "EI"
         assert result[0]["新增/修改功能点"].endswith("-界面开发")
         assert result[1]["类型"] == "ILF"
-        assert result[1]["新增/修改功能点"].endswith("-逻辑处理开发")
+        assert result[1]["新增/修改功能点"].endswith("-逻辑接口开发")
         assert result[1]["新增/修改功能点"].startswith("【后台】系统管理-用户管理-用户注册-")
-        assert result[2]["类型"] == "EQ"
-        assert result[2]["新增/修改功能点"].endswith("-查询处理开发")
+        assert result[2]["类型"] == "ILF"
+        assert result[2]["新增/修改功能点"].endswith("-逻辑接口开发")
 
     def test_prefix_generation(self):
         """验证功能点前缀替换正确。"""

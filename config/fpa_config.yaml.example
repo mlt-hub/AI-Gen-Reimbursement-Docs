@@ -93,6 +93,7 @@ profiles:
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
+    calculation_explanation_rules: strict_fpa_ce
 
   unified_ui:
     kind: unified_ui
@@ -101,6 +102,7 @@ profiles:
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
+    calculation_explanation_rules: unified_ui_ce
 
   multi_uis:
     kind: unified_ui
@@ -109,6 +111,7 @@ profiles:
     core_rules: multi_uis_cr
     system_prompt: multi_uis_sp
     user_prompt: multi_uis_up
+    calculation_explanation_rules: multi_uis_ce
 
   ui_api_mapping:
     kind: ui_api_mapping
@@ -117,6 +120,7 @@ profiles:
     core_rules: ui_api_mapping_cr
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up
+    calculation_explanation_rules: ui_api_mapping_ce
 
 core_rules:
   strict_fpa_cr: |-
@@ -138,10 +142,13 @@ core_rules:
     统一界面 FPA 核心口径：
     1. 拆分先按业务能力粒度，不按按钮、弹窗、数据库表、字段或技术实现拆分。
     2. 同一三级模块中的列表、查询条件、按钮、新增/编辑弹窗、状态切换等界面能力默认合并为 1 条界面开发行。
-    3. 非界面类后端逻辑按功能动作拆分，一行表示一个业务动作或数据处理能力。
-    4. 新增表、保存表、字段维护等不要单独生成 FPA 行，应归属到对应功能动作中。
-    5. 类型可使用 EI、ILF、EQ、EO、EIF：界面交互通常为 EI；内部数据维护通常为 ILF；查询读取通常为 EQ；导出/报表输出通常为 EO；EIF 仅用于引用其他应用维护的数据组。
-    6. 计算依据归类只能从给定判定原则列表中选择，不要自造分类。
+    3. 非界面类后端逻辑按业务动作或数据处理能力拆分，一行表示一个能力。
+    4. 添加、编辑、查询、删除、状态更新、数据表新增修改等内部逻辑接口/表能力按 ILF 输出，并使用“逻辑接口开发”类名称。
+    5. 新增表、修改表字段等数据表变更不要单独生成 FPA 行，应归属到对应添加、编辑、导入或其他业务动作中。
+    6. 导入类能力单独输出一行，类型为 EQ；导出、下载、报表输出、生成文件等单独输出一行，类型为 EO。
+    7. 外部接口联调、外部系统调用、外部数据引用等有明确外部边界证据时单独输出一行，类型为 EIF。
+    8. 类型可使用 EI、ILF、EQ、EO、EIF：界面类为 EI；逻辑接口/表为 ILF；导入为 EQ；导出/报表输出为 EO；EIF 仅用于明确外部边界能力。
+    9. 计算依据归类只能从给定判定原则列表中选择，不要自造分类。
 
   multi_uis_cr: |-
     多界面 FPA 核心口径：
@@ -183,14 +190,14 @@ system_prompt_sets:
     4. 用户提供了带序号的「计算依据归类判定原则列表」，请返回最匹配的 classification_basis_index。
     5. 计算依据说明必须基于输入业务内容，按用户提示词中的结构化证据说明规则生成；不要编造不存在的页面、表、服务、接口或流程。
     6. 必须读取 payload_json.agent_review.workload_judgement.judgements；其中 recommended_categories 是当前 profile 的行覆盖建议，不是可忽略的参考说明。
-    7. 当 recommended_categories 包含「界面开发」时，必须至少输出 1 条三级模块级「界面开发」行；当包含「查询处理开发」「导出处理开发」「导入处理开发」「逻辑处理开发」时，必须为对应功能过程输出处理开发行。
+    7. 当 recommended_categories 包含「界面开发」时，必须至少输出 1 条三级模块级「界面开发」行；当包含「逻辑接口开发」「导入处理开发」「导出处理开发」或其他非界面能力时，必须为对应功能过程输出能力行。
     8. 不允许输出除 JSON 外的任何内容。
     9. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
     10. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略，且不得影响 rows 完整输出。
 
   multi_uis_sp: |-
     你是一个严谨的 FPA 功能点评估助手。你的任务是根据 multi_uis 口径规划多界面功能点评估行，并把拆分理由放入 split_reason 供 check/review 元数据记录。
-    必须读取 payload_json.agent_review.workload_judgement.judgements；其中 recommended_categories 是当前 profile 的行覆盖建议。除非有独立页面、独立业务对象、独立业务流程或独立用户端的明确拆分证据，否则至少输出 1 条三级模块级「界面开发」行；当 recommended_categories 包含「查询处理开发」「导出处理开发」「导入处理开发」「逻辑处理开发」时，必须为对应功能过程输出处理开发行。
+    必须读取 payload_json.agent_review.workload_judgement.judgements；其中 recommended_categories 是当前 profile 的行覆盖建议。除非有独立页面、独立业务对象、独立业务流程或独立用户端的明确拆分证据，否则至少输出 1 条三级模块级「界面开发」行；当 recommended_categories 包含「逻辑接口开发」「导出处理开发」「导入处理开发」「外部接口联调调用」时，必须为对应功能过程输出能力行。
     不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；只输出 JSON。所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略。
 
   ui_api_mapping_sp: |-
@@ -198,17 +205,27 @@ system_prompt_sets:
     必须读取 payload_json.agent_review.mapping_judgement.judgements；expected_default_rows 中的「界面开发/EI」和「接口开发/ILF」是每个功能过程的强制默认行，不是可选建议。explicit_backend_rows 只表示输入材料明确出现的接口、服务、调用、请求、对接、同步、外部系统、第三方或 API；不得把普通保存、提交、删除、审批、新增、修改动作当作额外明确后端行。
     不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；只输出 JSON。所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略。
 
-prompt_fragments:
-  calculation_explanation_rules:
-    default: |-
-      计算依据说明生成规则：
-      1. explanation 必须写成结构化证据说明，固定包含「来源场景」「业务数据」「业务规则」「计算说明」；只有输入中明确出现表、服务、接口、文件、外部系统等系统元素时，才输出「系统元素」。
-      2. 来源场景必须使用完整路径；EI/EQ/EO 事务功能使用「【客户端类型】一级模块-二级模块-三级模块-功能点名称」，ILF/EIF 数据功能使用「【客户端类型】一级模块-二级模块-三级模块-数据组名称」，并保留用户动作、系统动作或数据组识别来源。
-      3. 业务数据描述业务对象、逻辑数据组、字段或状态；可以合理归纳业务对象，但不得把数据库表直接等同为 ILF。
-      4. 系统元素只列出输入中明确出现的表、服务、接口、文件或外部系统；未明确出现时，正式 explanation 中省略「系统元素」，不要写“未识别到”。
-      5. 计算说明必须说明为什么纳入 FPA 功能点计量，并明确当前类型 EI / EO / EQ / ILF / EIF。
-      6. 计算依据归类中的短依据可以是模板判定原则原文，但 explanation 不要把“按后台数据库变更的表个数计量”“按数据库表个数计量”等归类依据改写成详细计量解释。
-      7. 每项 1 句，总体建议 80-180 字；不要为凑字数补充输入中没有的权限、审批、状态流、表名、服务名或接口名。
+calculation_explanation_rules:
+  strict_fpa_ce: |-
+    计算依据说明生成规则：
+    1. explanation 必须写成结构化证据说明，固定包含「来源场景」「业务数据」「业务规则」「计算说明」；只有输入中明确出现表、服务、接口、文件、外部系统等系统元素时，才输出「系统元素」。
+    2. 来源场景必须使用完整路径；EI/EQ/EO 事务功能使用「【客户端类型】一级模块-二级模块-三级模块-功能点名称」，ILF/EIF 数据功能使用「【客户端类型】一级模块-二级模块-三级模块-数据组名称」，并保留用户动作、系统动作或数据组识别来源。
+    3. 业务数据描述业务对象、逻辑数据组、字段或状态；可以合理归纳业务对象，但不得把数据库表直接等同为 ILF。
+    4. 系统元素只列出输入中明确出现的表、服务、接口、文件或外部系统；未明确出现时，正式 explanation 中省略「系统元素」，不要写“未识别到”。
+    5. 计算说明必须说明为什么纳入 FPA 功能点计量，并明确当前类型 EI / EO / EQ / ILF / EIF。
+    6. 计算依据归类中的短依据可以是模板判定原则原文，但 explanation 不要把“按后台数据库变更的表个数计量”“按数据库表个数计量”等归类依据改写成详细计量解释。
+    7. 每项 1 句，总体建议 80-180 字；不要为凑字数补充输入中没有的权限、审批、状态流、表名、服务名或接口名。
+  unified_ui_ce: &unified_ui_ce |-
+    统一界面口径计算依据说明生成规则：
+    1. explanation 应描述本次功能建设做了什么，固定包含「来源场景」「业务数据」「业务规则」「计算说明」；只有输入中明确出现表、服务、接口、文件、外部系统等系统元素时，才输出「系统元素」。
+    2. 来源场景必须使用完整路径；界面行使用三级模块整体路径，非界面能力行使用「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
+    3. 界面开发行的说明应概括同一三级模块内新增的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面，不要按用户点击路径或页面跳转流程描述。
+    4. 逻辑接口/表能力行应说明添加、编辑、查询、删除、状态更新或数据表变更归属的业务动作；新增表、修改字段等数据结构调整可归纳为一个小点，不单独造行。
+    5. 导入、导出和外部接口联调调用行应描述系统建设内容，不编造输入中没有的表名、接口名、外部系统、权限规则或审批流程。
+    6. 计算说明必须说明为什么纳入 FPA 功能点计量，并明确当前类型 EI / EO / EQ / ILF / EIF。
+    7. 每项 1 句，总体建议 80-180 字；不要为凑字数补充输入中没有的权限、审批、状态流、表名、服务名或接口名。
+  multi_uis_ce: *unified_ui_ce
+  ui_api_mapping_ce: *unified_ui_ce
 
 user_prompt_sets:
   # user 模板只支持并且必须包含三个核心占位符：
@@ -222,15 +239,18 @@ user_prompt_sets:
     ${judgement_rules}
 
     请以三级模块为单位规划 FPA 行：
-    1. 默认生成 1 条三级模块级界面开发行，覆盖同一页面内的列表、查询条件、按钮、弹窗和状态组件。
-    2. 非界面逻辑按功能动作拆分，一行一个动作。
-    3. 不要为数据库表、字段、保存表动作单独生成行。
-    4. 如果确实需要多条界面开发行，每条都必须给出 split_reason。
-    5. 必须读取 payload_json.agent_review.workload_judgement.judgements，并逐个 source_process_ids 覆盖 recommended_categories。
-    6. recommended_categories 包含「界面开发」时，至少输出 1 条「【客户端类型】一级模块-二级模块-三级模块-界面开发」行，source_process_ids 覆盖对应功能过程；不要因为已有查询处理开发行就省略界面开发行。
-    7. recommended_categories 包含「查询处理开发」「导出处理开发」「导入处理开发」「逻辑处理开发」时，必须输出对应「功能过程-处理开发」行；不要只输出界面开发行替代这些处理开发行。
-    8. name 必须使用模块输入 JSON 中的 client_type / l1 / l2 / l3 作为前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
-    9. name 不得只返回功能过程名，不得用子系统（模块）替代客户端类型，不得省略客户端类型外侧的「【】」。
+    1. 默认生成 1 条三级模块级界面开发行，覆盖同一页面内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；简单管理页面不要按按钮、弹窗、状态组件拆得过细。
+    2. 非界面能力按业务动作或数据处理能力拆分，一行一个能力。
+    3. 添加、编辑、查询、删除、状态更新、数据表新增修改等按「逻辑接口开发」类行输出，类型为 ILF。
+    4. 导入类能力单独输出一行，类型为 EQ；导出、下载、报表输出、生成文件等单独输出一行，类型为 EO。
+    5. 外部接口联调、外部系统调用、外部数据引用等有明确外部边界证据时单独输出一行，类型为 EIF。
+    6. 不要为数据库表、字段、保存表动作单独生成行。
+    7. 如果确实需要多条界面开发行，每条都必须给出 split_reason。
+    8. 必须读取 payload_json.agent_review.workload_judgement.judgements，并逐个 source_process_ids 覆盖 recommended_categories。
+    9. recommended_categories 包含「界面开发」时，至少输出 1 条「【客户端类型】一级模块-二级模块-三级模块-界面开发」行，source_process_ids 覆盖对应功能过程；不要因为已有逻辑接口开发行就省略界面开发行。
+    10. recommended_categories 包含非界面能力时，必须输出对应「功能过程-逻辑接口开发 / 导入处理开发 / 导出处理开发」行；不要只输出界面开发行替代这些能力行。
+    11. name 必须使用模块输入 JSON 中的 client_type / l1 / l2 / l3 作为前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
+    12. name 不得只返回功能过程名，不得用子系统（模块）替代客户端类型，不得省略客户端类型外侧的「【】」。
 
     ${calculation_explanation_rules}
 
@@ -282,10 +302,10 @@ user_prompt_sets:
     请以多界面口径规划 FPA 行：
     1. 可按独立页面、独立业务对象、独立业务流程或独立用户端拆分多条界面开发行。
     2. 每条界面开发行必须在 split_reason 中写明拆分理由，供 check/review 元数据记录。
-    3. 界面开发行固定 EI；非界面业务动作沿用统一界面类型规则。
+    3. 界面开发行固定 EI；非界面业务动作沿用统一界面类型规则：逻辑接口/表为 ILF，导入为 EQ，导出为 EO，明确外部边界调用为 EIF。
     4. 必须读取 payload_json.agent_review.workload_judgement.judgements，并逐个 source_process_ids 覆盖 recommended_categories。
     5. 如果输入没有独立页面、独立业务对象、独立业务流程或独立用户端的明确拆分证据，至少输出 1 条三级模块级「界面开发」行，source_process_ids 覆盖对应功能过程。
-    6. recommended_categories 包含「查询处理开发」「导出处理开发」「导入处理开发」「逻辑处理开发」时，必须输出对应「功能过程-处理开发」行；不要只输出界面开发行替代这些处理开发行。
+    6. recommended_categories 包含非界面能力时，必须输出对应「功能过程-逻辑接口开发 / 导入处理开发 / 导出处理开发」行；不要只输出界面开发行替代这些能力行。
     7. name 必须使用完整模块路径前缀，格式为「【客户端类型】一级模块-二级模块-三级模块-功能点名称」。
     8. 每条界面开发行的 explanation.计算说明 必须明确写出“按 EI 识别”或“按 EI 计量”；不要只写“界面开发行”“用户通过界面输入”等间接表述。
 
@@ -323,10 +343,10 @@ user_prompt_sets:
 
 rule_sets:
   # type_mapping_rules：直接把关键词映射到 EI/EQ/EO/ILF/EIF，适合项目级特例、业务对象或数据组边界。
-  # keyword_rules：事务动作关键词规则，主要用于 EI/EQ/EO，例如新增/查询/导出。
+  # keyword_rules：动作关键词规则，主要用于导入/EQ、导出/EO，以及明确外部边界/EIF。
   # strict_fpa 类型推断中，type_mapping_rules 先于普通事务关键词判断，可用于覆盖明确特例。
   # unified_ui 的默认规则集。
-  # 适合继续使用报账材料中的模板友好表达，例如界面开发、逻辑处理开发、查询处理开发。
+  # 适合继续使用报账材料中的模板友好表达，例如界面开发、逻辑接口开发、导入处理开发、导出处理开发。
   unified_ui_rs:
     row_planning_rules:
       ui_row:
@@ -341,11 +361,12 @@ rule_sets:
       process_rows:
         enabled: true
         one_row_per_process: true
-        default_name_suffix: "逻辑处理开发"
+        default_name_suffix: "逻辑接口开发"
         type_suffixes:
-          EQ: "查询处理开发"
+          ILF: "逻辑接口开发"
           EO: "导出处理开发"
-          EI: "导入处理开发"
+          EQ: "导入处理开发"
+          EIF: "外部接口联调调用"
         explanation_template: "{name}，具体为以下：\n1、{description}"
     type_mapping_rules:
       merge: append
@@ -354,11 +375,11 @@ rule_sets:
           keywords: ["界面开发", "页面"]
           reason: "关键词命中界面/页面能力，按 EI 兜底。"
         - type: EIF
-          keywords: ["外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据"]
-          reason: "描述明确引用外部应用维护的数据组，按 EIF 兜底。"
+          keywords: ["外部接口联调", "外部系统调用", "调用外部系统", "外部数据引用", "外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据", "主数据平台", "CRM", "OA 系统", "OA系统"]
+          reason: "描述明确存在外部边界联调、调用或外部数据引用，按 EIF 兜底。"
         - type: ILF
-          keywords: ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新"]
-          reason: "关键词命中内部数据维护能力，按 ILF 兜底。"
+          keywords: ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新", "查询", "查看", "详情", "列表检索", "检索", "状态更新", "数据表新增", "新增表", "修改字段"]
+          reason: "关键词命中逻辑接口/表能力，按 ILF 兜底。"
         - type: ILF
           keywords: ["外部接口", "外部数据"]
           reason: "仅出现外部接口或外部数据不足以判定 EIF，按 ILF 兜底。"
@@ -368,12 +389,12 @@ rule_sets:
         - type: EO
           keywords: ["导出", "报表输出", "生成文件", "下载", "下载模板", "下载文件"]
           reason: "关键词命中导出/输出能力，按 EO 兜底。"
-        - type: EQ
+        - type: ILF
           keywords: ["查询", "查看", "详情", "列表检索", "检索"]
-          reason: "关键词命中查询/查看能力，按 EQ 兜底。"
-        - type: EI
+          reason: "关键词命中查询/查看逻辑接口能力，按 ILF 兜底。"
+        - type: EQ
           keywords: ["导入"]
-          reason: "关键词命中导入能力，通常表示外部数据进入系统，按 EI 兜底。"
+          reason: "关键词命中导入能力，按 EQ 兜底。"
     coverage_rules:
       require_process_coverage: true
       require_data_function: true
@@ -392,11 +413,12 @@ rule_sets:
       process_rows:
         enabled: true
         one_row_per_process: true
-        default_name_suffix: "逻辑处理开发"
+        default_name_suffix: "逻辑接口开发"
         type_suffixes:
-          EQ: "查询处理开发"
+          ILF: "逻辑接口开发"
           EO: "导出处理开发"
-          EI: "导入处理开发"
+          EQ: "导入处理开发"
+          EIF: "外部接口联调调用"
         explanation_template: "{name}，具体为以下：\n1、{description}"
     type_mapping_rules:
       merge: append
@@ -405,23 +427,23 @@ rule_sets:
           keywords: ["界面开发", "页面"]
           reason: "多界面开发行按 EI。"
         - type: EIF
-          keywords: ["外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据"]
-          reason: "描述明确引用外部应用维护的数据组，按 EIF 兜底。"
+          keywords: ["外部接口联调", "外部系统调用", "调用外部系统", "外部数据引用", "外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据", "主数据平台", "CRM", "OA 系统", "OA系统"]
+          reason: "描述明确存在外部边界联调、调用或外部数据引用，按 EIF 兜底。"
         - type: ILF
-          keywords: ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新"]
-          reason: "关键词命中内部数据维护能力，按 ILF 兜底。"
+          keywords: ["添加", "新增", "编辑", "修改", "删除", "维护", "保存", "启用", "停用", "更新", "查询", "查看", "详情", "列表检索", "检索", "状态更新", "数据表新增", "新增表", "修改字段"]
+          reason: "关键词命中逻辑接口/表能力，按 ILF 兜底。"
     keyword_rules:
       merge: append
       items:
         - type: EO
           keywords: ["导出", "报表输出", "生成文件", "下载", "下载模板", "下载文件"]
           reason: "关键词命中导出/输出能力，按 EO 兜底。"
-        - type: EQ
+        - type: ILF
           keywords: ["查询", "查看", "详情", "列表检索", "检索"]
-          reason: "关键词命中查询/查看能力，按 EQ 兜底。"
-        - type: EI
+          reason: "关键词命中查询/查看逻辑接口能力，按 ILF 兜底。"
+        - type: EQ
           keywords: ["导入"]
-          reason: "关键词命中导入能力，通常表示外部数据进入系统，按 EI 兜底。"
+          reason: "关键词命中导入能力，按 EQ 兜底。"
     coverage_rules:
       require_process_coverage: true
       require_data_function: true

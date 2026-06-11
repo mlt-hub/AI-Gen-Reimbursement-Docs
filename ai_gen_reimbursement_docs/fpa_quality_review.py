@@ -193,6 +193,8 @@ def _type_judgement_issues(
             continue
         for index, row in matching:
             row_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
+            if _is_unified_ui_workload_row(row):
+                continue
             if row_type and row_type != suggested_type:
                 issues.append(FpaQualityIssue(
                     code="quality.type_judgement_mismatch",
@@ -207,6 +209,14 @@ def _type_judgement_issues(
                     retryable=True,
                 ))
     return issues
+
+
+def _is_unified_ui_workload_row(row: dict[str, object]) -> bool:
+    name = str(row.get("新增/修改功能点", "") or row.get("name", "") or "")
+    return any(
+        suffix in name
+        for suffix in ("界面开发", "逻辑接口开发", "导入处理开发", "导出处理开发", "外部接口联调调用")
+    )
 
 
 def _row_source_ids(row: dict[str, object]) -> set[str]:

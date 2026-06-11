@@ -41,7 +41,7 @@ STRICT_FPA_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
 UNIFIED_UI_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
     name="unified_ui_contract",
     profile_kind="unified_ui",
-    categories=("界面开发", "查询处理开发", "导出处理开发", "导入处理开发", "逻辑处理开发"),
+    categories=("界面开发", "逻辑接口开发", "导入处理开发", "导出处理开发", "外部接口联调调用"),
     judgement_output_key="workload_judgement",
     merge_review_output_key="unified_merge_review",
     quality_review_output_key="unified_quality_review",
@@ -51,7 +51,7 @@ UNIFIED_UI_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
 MULTI_UIS_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
     name="multi_uis_contract",
     profile_kind="unified_ui",
-    categories=("多界面开发", "查询处理开发", "导出处理开发", "导入处理开发", "逻辑处理开发"),
+    categories=("多界面开发", "逻辑接口开发", "导入处理开发", "导出处理开发", "外部接口联调调用"),
     judgement_output_key="workload_judgement",
     merge_review_output_key="unified_merge_review",
     quality_review_output_key="unified_quality_review",
@@ -366,16 +366,14 @@ def _build_unified_workload_judgement(process_facts: list[dict[str, object]]) ->
     for fact in process_facts:
         categories = ["界面开发"]
         operation = str(fact.get("operation", "") or "")
-        if operation == "query":
-            categories.append("查询处理开发")
-        elif operation == "output":
+        if operation == "output":
             categories.append("导出处理开发")
         elif operation == "import":
             categories.append("导入处理开发")
-        elif bool(fact.get("changes_internal_data")):
-            categories.append("逻辑处理开发")
+        elif operation == "query" or bool(fact.get("changes_internal_data")):
+            categories.append("逻辑接口开发")
         if bool(fact.get("ordinary_external_service")) or str(fact.get("external_data_group_evidence", "") or ""):
-            categories.append("外部系统对接")
+            categories.append("外部接口联调调用")
         judgements.append({
             "process_id": str(fact.get("process_id", "") or ""),
             "process_name": str(fact.get("process_name", "") or ""),
@@ -394,7 +392,7 @@ def _build_unified_workload_judgement(process_facts: list[dict[str, object]]) ->
             "process_recommendation_count": sum(
                 1
                 for item in judgements
-                if any(category.endswith("处理开发") for category in item["recommended_categories"])
+                if any(_is_unified_process_category(category) for category in item["recommended_categories"])
             ),
         },
     }
@@ -402,14 +400,18 @@ def _build_unified_workload_judgement(process_facts: list[dict[str, object]]) ->
 
 def _unified_workload_reason(operation: str, categories: list[str]) -> str:
     if operation == "query":
-        return "查询类功能过程建议保留统一界面行，并补充查询处理开发审计建议。"
+        return "查询类功能过程建议保留统一界面行，并补充逻辑接口开发审计建议。"
     if operation == "output":
         return "输出类功能过程建议保留统一界面行，并补充导出处理开发审计建议。"
     if operation == "import":
         return "导入类功能过程建议保留统一界面行，并补充导入处理开发审计建议。"
-    if "外部系统对接" in categories:
-        return "存在外部服务或外部数据证据，建议在统一界面口径下审查外部系统对接表达。"
-    return "维护或处理类功能过程建议保留统一界面行，并补充逻辑处理开发审计建议。"
+    if "外部接口联调调用" in categories:
+        return "存在外部服务或外部数据证据，建议在统一界面口径下审查外部接口联调调用表达。"
+    return "维护或处理类功能过程建议保留统一界面行，并补充逻辑接口开发审计建议。"
+
+
+def _is_unified_process_category(category: object) -> bool:
+    return str(category) in {"逻辑接口开发", "导入处理开发", "导出处理开发", "外部接口联调调用"}
 
 
 def _build_unified_merge_review(
@@ -433,7 +435,7 @@ def _build_unified_merge_review(
             "recommendation": "merge",
             "reason": "统一界面口径下同一三级模块默认合并为一条界面开发行。",
         })
-    for category in ("查询处理开发", "导出处理开发", "逻辑处理开发"):
+    for category in ("逻辑接口开发", "导出处理开发", "导入处理开发", "外部接口联调调用"):
         category_processes = [
             str(item.get("process_id", "") or item.get("process_name", "") or "")
             for item in judgements
@@ -482,14 +484,14 @@ def _build_unified_quality_review(
         process_name = str(judgement.get("process_name", "") or "")
         categories = [str(category) for category in _list_value(judgement.get("recommended_categories"))]
         for category in categories:
-            if not category.endswith("处理开发"):
+            if not _is_unified_process_category(category):
                 continue
             if not any(category in name and (not process_name or process_name in name) for name in row_names):
                 issues.append(_unified_issue(
                     code="unified_ui.missing_process_row",
                     severity="warning",
                     message=f"功能过程“{process_name}”建议存在{category}，但结果行未体现。",
-                    suggestion="审查 AI 或 fallback 是否漏掉对应处理开发行。",
+                    suggestion="审查 AI 或 fallback 是否漏掉对应能力行。",
                     process_name=process_name,
                     category=category,
                 ))

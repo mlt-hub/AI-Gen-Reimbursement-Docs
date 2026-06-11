@@ -143,6 +143,7 @@ profiles:
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
+    calculation_explanation_rules: unified_ui_ce
   strict_fpa:
     kind: strict_fpa
     strategy: ai_first
@@ -150,6 +151,7 @@ profiles:
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
+    calculation_explanation_rules: strict_fpa_ce
 core_rules:
   unified_ui_cr: CUSTOM CORE RULES
   strict_fpa_cr: STRICT CORE RULES
@@ -159,6 +161,9 @@ system_prompt_sets:
 user_prompt_sets:
   unified_ui_up: CUSTOM ${core_rules} ${judgement_rules} ${payload_json}
   strict_fpa_up: STRICT ${core_rules} ${judgement_rules} ${payload_json}
+calculation_explanation_rules:
+  unified_ui_ce: UNIFIED EXPLANATION RULES
+  strict_fpa_ce: STRICT EXPLANATION RULES
 rule_sets:
   unified_ui_rs:
     row_planning_rules:
@@ -174,11 +179,12 @@ rule_sets:
       process_rows:
         enabled: true
         one_row_per_process: true
-        default_name_suffix: "逻辑处理开发"
+        default_name_suffix: "逻辑接口开发"
         type_suffixes:
-          EQ: "查询处理开发"
+          ILF: "逻辑接口开发"
           EO: "导出处理开发"
-          EI: "导入处理开发"
+          EQ: "导入处理开发"
+          EIF: "外部接口联调调用"
         explanation_template: "{name}，具体为以下：\n1、{description}"
     coverage_rules:
       require_process_coverage: true
@@ -236,12 +242,12 @@ def _append_calculation_rules_fragment(tmp_path, *, strict_value: str | None = N
     content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
     lines = [
         "",
-        "prompt_fragments:",
-        "  calculation_explanation_rules:",
-        "    default: DEFAULT EXPLANATION RULES",
+        "calculation_explanation_rules:",
+        "  unified_ui_ce: DEFAULT EXPLANATION RULES",
+        "  strict_fpa_ce: DEFAULT EXPLANATION RULES",
     ]
     if strict_value is not None:
-        lines.append(f"    strict_fpa: {strict_value!r}")
+        lines[-1] = f"  strict_fpa_ce: {strict_value!r}"
     (tmp_path / "fpa_config.yaml").write_text(content + "\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -258,7 +264,7 @@ def test_default_fpa_prompt_diagnostics_resolve_calculation_rules(tmp_path):
             assert diagnostics.resolved is True, profile
             assert diagnostics.errors == (), profile
             assert diagnostics.unresolved_placeholders == (), profile
-            assert "prompt_fragments.calculation_explanation_rules.default" in diagnostics.fragment_source
+            assert "calculation_explanation_rules." in diagnostics.fragment_source
             assert "${" not in diagnostics.final_prompt_preview
 
 
@@ -281,6 +287,9 @@ def test_prompt_diagnostics_error_when_referenced_fragment_is_missing(tmp_path):
         path.read_text(encoding="utf-8").replace(
             "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
             "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${calculation_explanation_rules}",
+        ).replace(
+            "    calculation_explanation_rules: strict_fpa_ce\n",
+            "",
         ),
         encoding="utf-8",
     )
@@ -291,7 +300,7 @@ def test_prompt_diagnostics_error_when_referenced_fragment_is_missing(tmp_path):
     assert diagnostics.ok is False
     assert diagnostics.referenced is True
     assert diagnostics.resolved is False
-    assert any("缺少 prompt_fragments.calculation_explanation_rules.default" in item for item in diagnostics.errors)
+    assert any("profiles.strict_fpa.calculation_explanation_rules" in item for item in diagnostics.errors)
     assert "${calculation_explanation_rules}" in diagnostics.unresolved_placeholders
 
 
@@ -312,12 +321,12 @@ def test_prompt_diagnostics_uses_profile_override_source(tmp_path):
 
     assert diagnostics.ok is True
     assert diagnostics.resolved is True
-    assert "prompt_fragments.calculation_explanation_rules.strict_fpa" in diagnostics.fragment_source
+    assert "calculation_explanation_rules.strict_fpa_ce" in diagnostics.fragment_source
     assert "STRICT EXPLANATION RULES" in diagnostics.final_prompt_preview
     assert "DEFAULT EXPLANATION RULES" not in diagnostics.final_prompt_preview
 
 
-def test_prompt_diagnostics_blank_profile_override_falls_back_to_default(tmp_path):
+def test_prompt_diagnostics_blank_bound_rule_reports_error(tmp_path):
     _write_fpa_config(tmp_path)
     path = tmp_path / "fpa_config.yaml"
     path.write_text(
@@ -332,10 +341,9 @@ def test_prompt_diagnostics_blank_profile_override_falls_back_to_default(tmp_pat
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         diagnostics = diagnose_fpa_prompt_config("strict_fpa")
 
-    assert diagnostics.ok is True
-    assert "prompt_fragments.calculation_explanation_rules.default" in diagnostics.fragment_source
-    assert "DEFAULT EXPLANATION RULES" in diagnostics.final_prompt_preview
-    assert any("strict_fpa 为空，已回退 default" in item for item in diagnostics.warnings)
+    assert diagnostics.ok is False
+    assert diagnostics.fragment_source == ""
+    assert any("calculation_explanation_rules.strict_fpa_ce 不是非空字符串" in item for item in diagnostics.errors)
 
 
 def test_prompt_diagnostics_reports_unknown_placeholder(tmp_path):
@@ -1086,12 +1094,12 @@ judgement_rules:
         _write_fpa_config(tmp_path)
         (tmp_path / "fpa_config.yaml").write_text(
             (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8").replace(
-                "type: EO", "type: ILF"
+                "type: EO", "type: UNKNOWN"
             ),
             encoding="utf-8",
         )
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match=r"keyword_rules\.items\[0\]\.type 必须是 EI / EQ / EO"):
+            with pytest.raises(FpaConfigError, match=r"keyword_rules\.items\[0\]\.type 必须是 EI / EQ / EO / ILF / EIF"):
                 load_fpa_rule_sets_config()
 
     def test_type_mapping_rules_shape_is_rejected(self, tmp_path):
@@ -1197,7 +1205,7 @@ judgement_rules:
     def test_row_planning_rules_type_suffixes_are_rejected(self, tmp_path):
         _write_fpa_config(tmp_path)
         content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
-        content = content.replace('          EQ: "查询处理开发"', '          UNKNOWN: "查询处理开发"')
+        content = content.replace('          ILF: "逻辑接口开发"', '          UNKNOWN: "逻辑接口开发"')
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
 
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -1279,11 +1287,7 @@ class TestLoadFpaUserPromptTemplate:
             "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
             "STRICT ${core_rules} ${judgement_rules} ${calculation_explanation_rules} ${payload_json}",
         )
-        content += """
-prompt_fragments:
-  calculation_explanation_rules:
-    default: DEFAULT RULES
-"""
+        content = content.replace("  strict_fpa_ce: STRICT EXPLANATION RULES", "  strict_fpa_ce: DEFAULT RULES")
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
 
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -1294,7 +1298,7 @@ prompt_fragments:
         assert diagnostics["fragments"][0]["referenced"] is True
         assert diagnostics["fragments"][0]["resolved"] is True
         assert diagnostics["fragments"][0]["source"] == (
-            "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.default）"
+            "用户配置（配置目录/fpa_config.yaml: calculation_explanation_rules.strict_fpa_ce）"
         )
         assert "DEFAULT RULES" in diagnostics["rendered_prompt"]
 
@@ -1305,12 +1309,7 @@ prompt_fragments:
             "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
             "STRICT ${core_rules} ${judgement_rules} ${calculation_explanation_rules} ${payload_json}",
         )
-        content += """
-prompt_fragments:
-  calculation_explanation_rules:
-    default: DEFAULT RULES
-    strict_fpa: STRICT OVERRIDE RULES
-"""
+        content = content.replace("  strict_fpa_ce: STRICT EXPLANATION RULES", "  strict_fpa_ce: STRICT OVERRIDE RULES")
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
 
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -1318,7 +1317,7 @@ prompt_fragments:
 
         assert diagnostics["warnings"] == []
         assert diagnostics["fragments"][0]["source"] == (
-            "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.strict_fpa）"
+            "用户配置（配置目录/fpa_config.yaml: calculation_explanation_rules.strict_fpa_ce）"
         )
         assert "STRICT OVERRIDE RULES" in diagnostics["rendered_prompt"]
 
@@ -1365,7 +1364,7 @@ prompt_fragments:
         assert "ILF/EIF 数据功能使用" in explanation_rules.text
         assert "数据组名称" in explanation_rules.text
         assert explanation_rules.source_label == (
-            "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.default）"
+            "用户配置（配置目录/fpa_config.yaml: calculation_explanation_rules.strict_fpa_ce）"
         )
         assert "变更状态只能作为源需求状态参考" in strict
         assert "不作为 FPA 类型判定依据" in strict
@@ -1387,10 +1386,10 @@ prompt_fragments:
         for prompt in (unified_system, multi_uis_system, unified, multi_uis):
             assert "payload_json.agent_review.workload_judgement.judgements" in prompt
             assert "recommended_categories" in prompt
-        assert "不要因为已有查询处理开发行就省略界面开发行" in unified
-        assert "不要只输出界面开发行替代这些处理开发行" in unified
+        assert "不要因为已有逻辑接口开发行就省略界面开发行" in unified
+        assert "不要只输出界面开发行替代这些能力行" in unified
         assert "独立页面、独立业务对象、独立业务流程或独立用户端" in multi_uis
-        assert "不要只输出界面开发行替代这些处理开发行" in multi_uis
+        assert "不要只输出界面开发行替代这些能力行" in multi_uis
         assert "按 EI 识别" in multi_uis
         assert "按 EI 计量" in multi_uis
         assert "不要只写“界面开发行”" in multi_uis
@@ -1404,12 +1403,8 @@ prompt_fragments:
     def test_calculation_explanation_rules_profile_override(self, tmp_path):
         _write_fpa_config(tmp_path)
         content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
-        content += """
-prompt_fragments:
-  calculation_explanation_rules:
-    default: DEFAULT RULES
-    strict_fpa: STRICT OVERRIDE RULES
-"""
+        content = content.replace("  strict_fpa_ce: STRICT EXPLANATION RULES", "  strict_fpa_ce: STRICT OVERRIDE RULES")
+        content = content.replace("  unified_ui_ce: UNIFIED EXPLANATION RULES", "  unified_ui_ce: DEFAULT RULES")
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
 
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -1418,7 +1413,7 @@ prompt_fragments:
 
         assert strict.text == "STRICT OVERRIDE RULES"
         assert strict.source_label == (
-            "用户配置（配置目录/fpa_config.yaml: prompt_fragments.calculation_explanation_rules.strict_fpa）"
+            "用户配置（配置目录/fpa_config.yaml: calculation_explanation_rules.strict_fpa_ce）"
         )
         assert unified.text == "DEFAULT RULES"
 
@@ -1429,10 +1424,11 @@ prompt_fragments:
             "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
             "STRICT ${core_rules} ${judgement_rules} ${calculation_explanation_rules} ${payload_json}",
         )
+        content = content.replace("    calculation_explanation_rules: strict_fpa_ce\n", "")
         (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
 
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match=r"prompt_fragments"):
+            with pytest.raises(FpaConfigError, match=r"profiles\.strict_fpa\.calculation_explanation_rules"):
                 load_fpa_user_prompt_template("strict_fpa")
 
     def test_fpa_system_prompt_exposes_safe_source_label(self, tmp_path):

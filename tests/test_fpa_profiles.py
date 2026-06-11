@@ -73,6 +73,7 @@ profiles:
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
+    calculation_explanation_rules: unified_ui_ce
   strict_fpa:
     kind: strict_fpa
     strategy: ai_first
@@ -80,6 +81,7 @@ profiles:
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
+    calculation_explanation_rules: strict_fpa_ce
 core_rules:
   unified_ui_cr: CUSTOM CORE RULES
   strict_fpa_cr: STRICT CORE RULES
@@ -101,6 +103,9 @@ user_prompt_sets:
     ${judgement_rules}
     PAYLOAD:
     ${payload_json}
+calculation_explanation_rules:
+  unified_ui_ce: UNIFIED EXPLANATION RULES
+  strict_fpa_ce: STRICT EXPLANATION RULES
 rule_sets:
   unified_ui_rs:
     row_planning_rules:
@@ -116,11 +121,12 @@ rule_sets:
       process_rows:
         enabled: true
         one_row_per_process: true
-        default_name_suffix: "逻辑处理开发"
+        default_name_suffix: "逻辑接口开发"
         type_suffixes:
-          EQ: "查询处理开发"
+          ILF: "逻辑接口开发"
           EO: "导出处理开发"
-          EI: "导入处理开发"
+          EQ: "导入处理开发"
+          EIF: "外部接口联调调用"
         explanation_template: "{name}，具体为以下：\n1、{description}"
     coverage_rules:
       require_process_coverage: true
@@ -138,9 +144,9 @@ rule_sets:
         - type: EO
           keywords: ["导出", "报表输出", "生成文件", "下载", "下载模板", "下载文件"]
         - type: EQ
-          keywords: ["查询", "查看", "详情", "列表检索", "检索"]
-        - type: EI
           keywords: ["导入"]
+        - type: ILF
+          keywords: ["查询", "查看", "详情", "列表检索", "检索"]
   strict_fpa_rs:
     keyword_rules:
       merge: append
@@ -402,7 +408,7 @@ def test_unified_ui_fallback_merges_duplicate_non_ui_process_rows(tmp_path):
             reset_current_fpa_rule_set_config(token)
     _assert_structured_explanations(group, rows)
 
-    process_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "查询客户-查询处理开发")]
+    process_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "查询客户-逻辑接口开发")]
     assert len(process_rows) == 1
     assert process_rows[0]["源功能过程"] == "查询客户"
 
@@ -433,14 +439,14 @@ def test_custom_rule_set_row_planning_rules_are_loaded(tmp_path):
     assert row_planning.ui_row.name_suffix == "界面开发"
     assert row_planning.ui_row.fpa_type == "EI"
     assert row_planning.process_rows is not None
-    assert row_planning.process_rows.type_suffixes["EQ"] == "查询处理开发"
+    assert row_planning.process_rows.type_suffixes["ILF"] == "逻辑接口开发"
 
 
 def test_custom_rule_set_row_planning_rules_affect_fallback_rows(tmp_path):
     _write_fpa_config(tmp_path)
     content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
     content = content.replace('name_suffix: "界面开发"', 'name_suffix: "页面交互开发"')
-    content = content.replace('EQ: "查询处理开发"', 'EQ: "读取处理开发"')
+    content = content.replace('ILF: "逻辑接口开发"', 'ILF: "读取处理开发"')
     (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
     group = {
         "client_type": "后台",
@@ -488,7 +494,7 @@ def test_custom_rule_set_can_disable_ui_fallback_row(tmp_path):
         finally:
             reset_current_fpa_rule_set_config(token)
 
-    assert [str(row["新增/修改功能点"]) for row in rows] == [_fp_name(group, "查询客户-查询处理开发")]
+    assert [str(row["新增/修改功能点"]) for row in rows] == [_fp_name(group, "查询客户-逻辑接口开发")]
 
 
 def test_rule_set_external_data_rules_affect_strict_profile(tmp_path):
@@ -719,12 +725,7 @@ def test_profile_prompt_uses_calculation_explanation_override(tmp_path):
         "    RULES:\n    ${judgement_rules}",
         "    RULES:\n    ${judgement_rules}\n    ${calculation_explanation_rules}",
     )
-    content += """
-prompt_fragments:
-  calculation_explanation_rules:
-    default: DEFAULT EXPLANATION RULES
-    strict_fpa: STRICT EXPLANATION RULES
-"""
+    content = content.replace("  strict_fpa_ce: STRICT EXPLANATION RULES", "  strict_fpa_ce: STRICT OVERRIDE EXPLANATION RULES")
     (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
 
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
@@ -740,7 +741,7 @@ prompt_fragments:
             ["规则一"],
         )
 
-    assert "STRICT EXPLANATION RULES" in prompt
+    assert "STRICT OVERRIDE EXPLANATION RULES" in prompt
     assert "DEFAULT EXPLANATION RULES" not in prompt
     assert "${calculation_explanation_rules}" not in prompt
 

@@ -73,7 +73,7 @@ def test_unified_ui_agent_review_contract_is_debug_only():
     assert review["contract_outputs"]["judgement"] == "workload_judgement"
     assert review["contract_outputs"]["merge_review"] == "unified_merge_review"
     assert review["contract_outputs"]["quality_review"] == "unified_quality_review"
-    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "查询处理开发"]
+    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "逻辑接口开发"]
     assert review["unified_merge_review"]["groups"][0]["kind"] == "same_module_ui"
     roles = {role["name"]: role for role in review["roles"]}
     assert roles["workload_judge"]["output_key"] == "workload_judgement"
@@ -120,14 +120,14 @@ def test_multi_uis_agent_review_contract_is_unified_ui_kind_variant():
     assert review["contract"] == "multi_uis_contract"
     assert review["categories"][0] == "多界面开发"
     assert review["contract_outputs"]["judgement"] == "workload_judgement"
-    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "查询处理开发"]
+    assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "逻辑接口开发"]
 
 
 def test_unified_ui_quality_review_warns_without_changing_rows():
     rows = [
         {
-            "新增/修改功能点": "【地市后台】客户管理-客户中心-客户档案-查询客户-查询处理开发",
-            "类型": "EQ",
+            "新增/修改功能点": "【地市后台】客户管理-客户中心-客户档案-查询客户-逻辑接口开发",
+            "类型": "ILF",
             "源功能过程": "查询客户",
         }
     ]
@@ -142,7 +142,7 @@ def test_unified_ui_quality_review_warns_without_changing_rows():
     issue_codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
     assert "unified_ui.missing_ui_row" in issue_codes
     assert review["summary"]["profile_quality_issue_count"] >= 1
-    assert rows[0]["新增/修改功能点"].endswith("查询客户-查询处理开发")
+    assert rows[0]["新增/修改功能点"].endswith("查询客户-逻辑接口开发")
 
 
 def test_unified_ui_quality_review_accepts_expected_ui_and_process_rows():
@@ -153,8 +153,8 @@ def test_unified_ui_quality_review_accepts_expected_ui_and_process_rows():
             "源功能过程": "查询客户",
         },
         {
-            "新增/修改功能点": "【地市后台】客户管理-客户中心-客户档案-查询客户-查询处理开发",
-            "类型": "EQ",
+            "新增/修改功能点": "【地市后台】客户管理-客户中心-客户档案-查询客户-逻辑接口开发",
+            "类型": "ILF",
             "源功能过程": "查询客户",
         },
     ]

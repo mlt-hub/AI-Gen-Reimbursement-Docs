@@ -58,20 +58,20 @@ rule_sets:
       process_rows:
         enabled: true
         one_row_per_process: true
-        default_name_suffix: "逻辑处理开发"
+        default_name_suffix: "逻辑接口开发"
         type_suffixes:
-          EQ: "查询处理开发"
+          ILF: "逻辑接口开发"
           EO: "导出处理开发"
-          EI: "导入处理开发"
+          EQ: "导入处理开发"
         explanation_template: "{name}，具体为以下：\\n1、{description}"
     keyword_rules:
       items:
-        - type: EQ
+        - type: ILF
           keywords: ["查询", "列表"]
-          reason: "查询类处理按 EQ。"
-        - type: EI
+          reason: "查询类逻辑接口按 ILF。"
+        - type: ILF
           keywords: ["保存", "提交", "新增", "修改"]
-          reason: "维护类处理按 EI。"
+          reason: "维护类逻辑接口按 ILF。"
   ui_api_mapping_rs: {}
 """,
         encoding="utf-8",
@@ -136,7 +136,7 @@ def test_custom_unified_ui_profile_harness_inherits_generation_and_review_contra
     assert config.profile.name == "client_ui"
     assert config.profile.agent_review_profile_kind() == "unified_ui"
     assert _point(group, "界面开发") in names
-    assert _point(group, "查询客户-查询处理开发") in names
+    assert _point(group, "查询客户-逻辑接口开发") in names
 
     review = build_fpa_agent_review(
         group=group,

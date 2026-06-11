@@ -155,7 +155,7 @@ def test_fpa_acceptance_formula_projection_matches_summary_across_type_strategie
         totals[profile_name] = _summary_total(summary_md)
         projections[profile_name] = calculate_fpa_excel_formula_projection(str(fpa_xlsx))
 
-    assert totals == {"unified_ui": 44.0, "strict_fpa": 23.0}
+    assert totals == {"unified_ui": 52.0, "strict_fpa": 23.0}
     assert projections == totals
 
 
@@ -348,8 +348,8 @@ def test_fpa_acceptance_mock_ai_warning_source_reaches_check_workbook(monkeypatc
         "ai_gen_reimbursement_docs.gen_fpa._call_llm",
         lambda *args, **kwargs: json.dumps({
             "rows": [{
-                "name": "查询客户-查询处理开发",
-                "type": "EQ",
+                "name": "查询客户-逻辑接口开发",
+                "type": "ILF",
                 "classification_basis_index": 99,
                 "explanation": "按客户名称查询客户列表。",
                 "source_processes": ["查询客户"],
@@ -622,8 +622,8 @@ def test_fpa_acceptance_check_workbook_reports_missing_process_supplement(monkey
         "ai_gen_reimbursement_docs.gen_fpa._call_llm",
         lambda *args, **kwargs: json.dumps({
             "rows": [{
-                "name": "查询客户-查询处理开发",
-                "type": "EQ",
+                "name": "查询客户-逻辑接口开发",
+                "type": "ILF",
                 "explanation": "按客户名称查询客户列表。",
                 "source_processes": ["查询客户"],
             }]
@@ -812,14 +812,23 @@ def test_fpa_acceptance_ai_cache_hit_is_visible_in_audit_and_check(monkeypatch, 
     def fake_llm(*args, **kwargs):
         calls["count"] += 1
         return json.dumps({
-            "rows": [{
-                "name": "查询客户-查询处理开发",
-                "type": "EQ",
-                "classification_basis_index": 1,
-                "explanation": "按客户名称查询客户列表。",
-                "source_processes": ["查询客户"],
-            }]
-        }, ensure_ascii=False)
+                "rows": [
+                    {
+                        "name": "客户查询界面开发",
+                        "type": "EI",
+                        "classification_basis_index": 1,
+                        "explanation": "来源场景：客户查询界面开发。\n业务数据：客户。\n业务规则：新增客户查询界面。\n计算说明：按 EI 计量。",
+                        "source_processes": ["查询客户"],
+                    },
+                    {
+                        "name": "查询客户-逻辑接口开发",
+                        "type": "ILF",
+                        "classification_basis_index": 1,
+                        "explanation": "来源场景：查询客户。\n业务数据：客户。\n业务规则：按客户名称查询客户列表。\n计算说明：按 ILF 计量。",
+                        "source_processes": ["查询客户"],
+                    },
+                ]
+            }, ensure_ascii=False)
 
     monkeypatch.setattr("ai_gen_reimbursement_docs.gen_fpa._call_llm", fake_llm)
     plan_fpa_md_from_tree(
