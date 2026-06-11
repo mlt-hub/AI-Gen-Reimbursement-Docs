@@ -162,6 +162,8 @@ rule_sets:
 
 ## 代码实施建议
 
+本节是实施约束，不是方向性建议。实现时按下面切片执行，除非已有代码结构发生变化。
+
 ### 数据结构
 
 在 `ai_gen_reimbursement_docs/fpa_profiles.py` 中增加 `ui_api_mapping` 专属或通用但仅由该 profile 调用的数据结构：
@@ -189,6 +191,36 @@ template
 priority
 ```
 
+最小字段定义：
+
+```python
+@dataclass(frozen=True)
+class FpaExplanationPattern:
+    """计算依据说明场景模板。"""
+
+    pattern_id: str
+    fpa_type: str
+    keywords: tuple[str, ...]
+    required_points: tuple[str, ...]
+
+    def matches(self, text: str, fpa_type: str) -> bool:
+        return self.fpa_type == fpa_type.upper() and any(keyword in text for keyword in self.keywords)
+```
+
+把 `FpaRuleSetConfig` 增加字段：
+
+```python
+explanation_patterns: tuple[FpaExplanationPattern, ...] = field(default_factory=tuple)
+explanation_patterns_merge: str = "append"
+```
+
+字段命名说明：
+
+- 配置中使用 `id`，解析后进入 `pattern_id`，避免覆盖 Python 内置名。
+- 配置中使用 `type`，解析后进入 `fpa_type`，保持与现有 `KeywordTypeRule` / `TypeMappingRule` 风格一致。
+- `keywords` 和 `required_points` 必须去空、去首尾空白；空项忽略。
+- `fpa_type` 必须是 `EI / ILF / EO / EQ / EIF` 之一；非法类型忽略并写入 config warning，或直接沿用现有 rule_set 校验风格抛错。建议第一版抛错，避免静默配置失效。
+
 ### 解析逻辑
 
 `resolve_fpa_rule_set_config()` 解析 `rule_sets.*.explanation_patterns`，但只有 `UiApiMappingProfile` 使用这些规则。
@@ -198,6 +230,49 @@ priority
 - 配置格式统一。
 - 行为影响收敛在 `ui_api_mapping`。
 - 其他 profile 即使配置中存在该字段，也不会被改变。
+
+需要修改的具体位置：
+
+| 文件 | 位置 | 修改内容 |
+|---|---|---|
+| `ai_gen_reimbursement_docs/fpa_profiles.py` | dataclass 区域，`InternalDataGroupRule` 或 `FpaCoverageRules` 附近 | 新增 `FpaExplanationPattern` |
+| `ai_gen_reimbursement_docs/fpa_profiles.py` | `FpaRuleSetConfig` | 新增 `explanation_patterns` / `explanation_patterns_merge` |
+| `ai_gen_reimbursement_docs/fpa_profiles.py` | `_rule_set_from_dict()` | 解析 `explanation_patterns` |
+| `ai_gen_reimbursement_docs/fpa_profiles.py` | `_merge_rule_sets()` | 合并 `explanation_patterns` |
+| `ai_gen_reimbursement_docs/fpa_profiles.py` | `UiApiMappingProfile` | 新增匹配和格式化方法，并在 fallback 生成时调用 |
+| `config/fpa_config.yaml.example` | `profiles.ui_api_mapping` | 改为引用 `ui_api_mapping_workload_eval_ce` |
+| `config/fpa_config.yaml.example` | `calculation_explanation_rules` | 新增 `ui_api_mapping_workload_eval_ce` |
+| `config/fpa_config.yaml.example` | `rule_sets.ui_api_mapping_rs` | 新增 `explanation_patterns` |
+
+解析函数建议：
+
+```python
+def _explanation_pattern_from_dict(item: dict[str, object]) -> FpaExplanationPattern | None:
+    ...
+
+def _explanation_patterns_from_dict(data: dict[str, object]) -> tuple[str, tuple[FpaExplanationPattern, ...]]:
+    merge, raw_items = _rule_section_from_dict(data, "explanation_patterns")
+    ...
+    return merge, tuple(patterns)
+```
+
+这里复用现有 `_rule_section_from_dict()`，让配置结构与 `keyword_rules`、`type_mapping_rules` 一致：
+
+```yaml
+explanation_patterns:
+  merge: append
+  items:
+    - id: query_service
+      type: ILF
+      keywords: ["查询服务", "数据查询"]
+      required_points: ["查询条件", "返回字段"]
+```
+
+合并规则：
+
+- `merge: append`：父 rule_set 的 patterns 在前，子 rule_set 的 patterns 在后。
+- `merge: replace`：只使用子 rule_set 的 patterns。
+- 第一版不做同 `id` 去重，保持与现有 `_merge_rule_section()` 行为一致。
 
 ### 生成逻辑
 
@@ -217,6 +292,135 @@ priority
 
 4. 未命中 pattern 时，退回 `row_planning_rules.process_rows.explanation_template`。
 
+需要修改的具体位置：
+
+```text
+UiApiMappingProfile.fallback_rows_for_l3()
+```
+
+当前代码在默认行和显式后端行中都直接调用：
+
+```python
+explanation_template.format(name=point_name, description=desc or raw_name)
+```
+
+实施后改为：
+
+```python
+"计算依据说明": self._mapping_explanation(
+    name=point_name,
+    fpa_type=fpa_type,
+    process_name=raw_name,
+    description=desc,
+    fallback_template=explanation_template,
+)
+```
+
+显式后端行使用 `fpa_type="ILF"`。
+
+新增私有方法：
+
+```python
+def _mapping_explanation(
+    self,
+    *,
+    name: str,
+    fpa_type: str,
+    process_name: str,
+    description: str,
+    fallback_template: str,
+) -> str:
+    ...
+```
+
+配套私有方法：
+
+```python
+def _matching_explanation_pattern(self, text: str, fpa_type: str) -> FpaExplanationPattern | None:
+    ...
+
+def _format_pattern_explanation(
+    self,
+    *,
+    name: str,
+    process_name: str,
+    description: str,
+    pattern: FpaExplanationPattern,
+) -> str:
+    ...
+```
+
+命中优先级：
+
+1. 只匹配 `pattern.fpa_type == 当前行类型` 的 pattern。
+2. 匹配文本为：
+
+   ```text
+   {新增/修改功能点} {源功能过程名称} {源功能过程描述}
+   ```
+
+3. 按配置顺序返回第一个命中 pattern。
+4. 未命中时使用 `fallback_template`。
+
+编号生成规则：
+
+1. 第 1 条优先使用源描述：
+
+   ```text
+   1、{description or process_name}
+   ```
+
+2. 后续追加 `required_points`。
+3. 若 `required_points` 中的文本已经被第 1 条包含，则跳过，避免重复。
+4. 说明整体格式固定为：
+
+   ```text
+   {name}，具体如下：
+   1、{description or process_name}
+   2、{required_point_1}
+   3、{required_point_2}
+   ```
+
+5. 不做复杂 NLP 字段抽取；第一版只负责稳定模板化。AI prompt 负责更细致的字段展开。
+
+示例：
+
+输入：
+
+```python
+{
+    "name": "驿站列表数据查询服务",
+    "desc": "查询条件为驿站名称，根据查询条件返回列表数据包含序号、驿站名称、添加时间、状态。"
+}
+```
+
+输出：
+
+```text
+【业务端】...-驿站列表数据查询服务-接口开发，具体如下：
+1、查询条件为驿站名称，根据查询条件返回列表数据包含序号、驿站名称、添加时间、状态。
+2、查询条件
+3、根据查询条件返回列表数据
+4、返回字段
+```
+
+### EO 边界
+
+第一版不改变 `ui_api_mapping` 的行规划能力，不新增 `EO` fallback 行。
+
+`export_service` pattern 的用途：
+
+- 给 AI prompt 使用。
+- 预留给后续如果 `ui_api_mapping` 增加 `type_suffixes.EO` 或导出类显式行时复用。
+
+因此本轮实施验收不要求 `ui_api_mapping` fallback 自动生成 `EO` 导出行。若要支持导出 fallback，需要单独切片定义：
+
+```text
+导出关键词如何从默认 ILF 接口行提升为 EO
+是否仍保留默认接口开发 ILF 行
+计算依据归类如何选择 EO 判定原则
+```
+
 ### AI prompt
 
 `ui_api_mapping_up` 继续引用：
@@ -226,6 +430,187 @@ ${calculation_explanation_rules}
 ```
 
 由于 `profiles.ui_api_mapping.calculation_explanation_rules` 指向专属规则，AI 只会在 `ui_api_mapping` 下收到样例 Excel 风格要求。
+
+## 实施切片
+
+### 切片 1：配置落地
+
+修改文件：
+
+```text
+config/fpa_config.yaml.example
+```
+
+修改内容：
+
+1. 将 `profiles.ui_api_mapping.calculation_explanation_rules` 从 `ui_api_mapping_ce` 改为 `ui_api_mapping_workload_eval_ce`。
+2. 保留 `ui_api_mapping_ce` 或让其继续作为通用规则存在，不删除，避免影响历史配置示例。
+3. 新增 `calculation_explanation_rules.ui_api_mapping_workload_eval_ce`。
+4. 在 `rule_sets.ui_api_mapping_rs` 下新增 `explanation_patterns`。
+
+验收：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py::TestFpaConfigUtils::test_default_fpa_prompt_example_contains_calculation_explanation_rules
+```
+
+同时增加或更新断言：
+
+```text
+load_fpa_calculation_explanation_rules("ui_api_mapping").text 包含
+"ui_api_mapping 计算依据说明生成规则"
+```
+
+### 切片 2：rule_set 解析
+
+修改文件：
+
+```text
+ai_gen_reimbursement_docs/fpa_profiles.py
+```
+
+修改内容：
+
+1. 新增 `FpaExplanationPattern`。
+2. 扩展 `FpaRuleSetConfig`。
+3. 新增 `_explanation_pattern_from_dict()`。
+4. 新增 `_explanation_patterns_from_dict()`。
+5. 修改 `_rule_set_from_dict()` 读取配置。
+6. 修改 `_merge_rule_sets()` 支持继承合并。
+
+验收测试建议放在：
+
+```text
+tests/test_fpa_profiles.py
+```
+
+新增用例：
+
+```text
+test_rule_set_parses_explanation_patterns
+test_rule_set_extends_merges_explanation_patterns
+test_rule_set_extends_replaces_explanation_patterns
+```
+
+核心断言：
+
+```text
+resolve_fpa_rule_set_config("ui_api_mapping_rs").explanation_patterns 非空
+第一个 pattern.pattern_id == "ui_list_page"
+type 被规范化为 "EI"
+keywords / required_points 为 tuple 且去空
+```
+
+### 切片 3：ui_api_mapping fallback 应用 pattern
+
+修改文件：
+
+```text
+ai_gen_reimbursement_docs/fpa_profiles.py
+tests/test_fpa_profiles.py
+tests/fpa_profiles/test_ui_api_mapping_harness.py
+```
+
+修改内容：
+
+1. 在 `UiApiMappingProfile` 中新增 `_mapping_explanation()`。
+2. 在默认 UI/API 行生成处替换直接 `explanation_template.format(...)`。
+3. 在显式后端行生成处同样替换。
+4. 保持 `_configured_mapping_explanation_template()` 的必填校验不变，未命中 pattern 时仍可回退。
+
+新增测试：
+
+```text
+test_ui_api_mapping_fallback_uses_numbered_explanation_pattern_for_list_page
+test_ui_api_mapping_fallback_uses_numbered_explanation_pattern_for_query_service
+test_ui_api_mapping_fallback_uses_numbered_explanation_pattern_for_delete_service
+test_ui_api_mapping_fallback_falls_back_to_configured_template_when_no_pattern_matches
+```
+
+示例 fixture：
+
+```python
+group = {
+    "client_type": "业务端",
+    "l1": "营销管理",
+    "l2": "驿站管理",
+    "l3": "驿站列表",
+    "processes": [
+        {
+            "name": "驿站列表数据查询服务",
+            "change_status": "新增",
+            "desc": "查询条件为驿站名称，根据查询条件返回列表数据包含序号、驿站名称、添加时间、状态。",
+        },
+        {
+            "name": "驿站列表数据删除服务",
+            "change_status": "新增",
+            "desc": "点击删除按钮传输数据 ID，新增数据删除接口，从数据表中匹配对应数据并删除。",
+        },
+    ],
+}
+```
+
+核心断言：
+
+```text
+计算依据说明 startswith "{name}，具体如下："
+查询服务行包含 "1、查询条件为驿站名称"
+查询服务行包含 "返回字段"
+删除服务行包含 "传输数据 ID"
+删除服务行包含 "后端匹配并删除对应数据"
+```
+
+### 切片 4：非目标 profile 不受影响
+
+修改文件：
+
+```text
+tests/test_fpa_profiles.py
+```
+
+新增或补充测试：
+
+```text
+test_strict_fpa_fallback_explanation_not_affected_by_ui_api_mapping_patterns
+test_unified_ui_fallback_explanation_not_affected_by_ui_api_mapping_patterns
+```
+
+核心断言：
+
+```text
+strict_fpa fallback 仍包含 "来源场景：" / "业务数据：" / "业务规则：" / "计算说明："
+unified_ui fallback 不包含 "ui_api_mapping 计算依据说明生成规则"
+unified_ui fallback 不因 explanation_patterns 自动追加编号清单
+```
+
+### 切片 5：文档和回归
+
+修改文件：
+
+```text
+docs/fpa/ui-api-mapping-explanation-rules.md
+```
+
+实施完成后在本文档增加“实施记录”小节，记录：
+
+```text
+提交哈希
+实际修改文件
+实际测试命令
+是否支持 EO fallback
+```
+
+推荐回归命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_fpa_profiles.py tests/fpa_profiles/test_ui_api_mapping_harness.py tests/test_config_utils.py
+```
+
+若只做最小回归：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_fpa_profiles.py::test_ui_api_mapping_fallback_generates_default_and_explicit_backend_rows tests/test_fpa_profiles.py::test_ui_api_mapping_fallback_uses_configured_explanation_template
+```
 
 ## 验收标准
 
@@ -240,7 +625,7 @@ ${calculation_explanation_rules}
 3. `ui_api_mapping` 列表界面行能说明搜索项、按钮、列表字段、翻页和调用接口。
 4. `ui_api_mapping` 查询服务行能说明查询条件和返回字段。
 5. `ui_api_mapping` 删除服务行能说明传 ID、删除接口和匹配删除。
-6. `ui_api_mapping` 导出服务行能说明查询条件和导出字段。
+6. `ui_api_mapping` 未命中 pattern 时仍回退到 `row_planning_rules.process_rows.explanation_template`。
 7. `strict_fpa` fallback 行仍保持四段式：
 
    ```text
@@ -251,6 +636,7 @@ ${calculation_explanation_rules}
    ```
 
 8. `unified_ui` 和 `multi_uis` 仍使用各自现有 `explanation_template`，不自动套用 `ui_api_mapping` 的编号清单模板。
+9. `export_service` pattern 只作为 prompt 和后续扩展预留；本轮不要求 fallback 自动生成 `EO` 导出行。
 
 ## 推荐测试
 
