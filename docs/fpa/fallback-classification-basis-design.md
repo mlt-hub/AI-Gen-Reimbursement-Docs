@@ -219,6 +219,36 @@ profile.fallback_rows_for_l3(
 .\.venv\Scripts\python.exe -m pytest tests\test_fpa_profiles.py
 ```
 
+## 实施清单
+
+实施时按以下顺序推进：
+
+1. 在 `ai_gen_reimbursement_docs/gen_fpa.py` 中保留或泛化 `_basis_for_fpa_type(...)`，确保它不再只服务 strict_fpa。
+2. 将 `_fill_strict_fpa_fallback_classification_basis(...)` 改为通用补漏函数，例如 `_fill_fallback_classification_basis(...)`。
+3. 更新 `ai_gen_reimbursement_docs/fpa_profiles.py` 中所有 `fallback_rows_for_l3(...)` 实现，增加可选参数 `judgement_rules: list[str] | None = None`。
+4. 在 `CustomRulesProfile.fallback_rows_for_l3(...)` 构造界面合并行时，基于 `ui_rule.fpa_type` 立即选择并写入 `计算依据归类`。
+5. 在 `CustomRulesProfile.fallback_rows_for_l3(...)` 构造功能过程行时，基于 `self.infer_type(point_name, desc)` 返回的 `fpa_type` 立即选择并写入 `计算依据归类`。
+6. 如其他 profile 子类也直接构造 fallback 行，同步接入相同参数和依据选择逻辑。
+7. 命中依据归类时统一使用现有 `_add_rule_hit(...)` 记录 `_规则命中详情`，不要在 profile 中手写命中结构。
+8. 更新所有 `profile.fallback_rows_for_l3(...)` 调用点，传入 `judgement_rules=judgement_rules`。
+9. 更新测试替身、monkeypatch 或 fake fallback 方法签名，优先使用 `**kwargs` 保持兼容。
+10. 增加 unified_ui/rules_first 回归测试，并确认 strict_fpa 既有测试仍通过。
+
+## 验收标准
+
+代码实施完成后，必须满足以下标准：
+
+- `unified_ui` + `rules_first` 在规则结果完整且不调用 AI 时，fallback 行的 `计算依据归类` 不为空。
+- `unified_ui` + `rules_only` 的 fallback 行同样应尽量写入 `计算依据归类`。
+- `计算依据归类` 必须来自 `judgement_rules` 原文，不得硬编码或编造新的归类文案。
+- 界面合并行应按 `ui_rule.fpa_type` 匹配判定原则。
+- 功能过程行应按 `self.infer_type(...)` 得出的 `fpa_type` 匹配判定原则。
+- 如果无法从 `judgement_rules` 匹配到依据归类，不得覆盖为空字段为伪造文本，应在 check 文件中保留可追溯信息。
+- `规则命中详情` 应能看到 `{profile.name}.fallback_classification_basis` 或等价的依据归类命中记录。
+- strict_fpa fallback 行补齐行为保持兼容，既有 strict_fpa 测试继续通过。
+- Excel `FPA功能点估算` sheet 中 `计算依据归类` 列的用户可见文案仍使用该术语，不引入 `功能点类型`、`类型判定依据` 等替代表述。
+- 实际测试目录重新生成后，目标文件 F 列数据行非空，`-check.xlsx` 无新增无关 warning。
+
 ## 风险与兼容
 
 ### 签名变更风险
