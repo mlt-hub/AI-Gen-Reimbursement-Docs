@@ -598,6 +598,8 @@ ${calculation_explanation_rules}
 - `multi_uis` 绑定 `multi_uis_ce`，`ui_api_mapping` 绑定 `ui_api_mapping_ce`；两者当前规则内容与 `unified_ui_ce` 保持一致，但保留独立 key 便于后续差异化。
 - 不再保留 `default` 回退；引用 `${calculation_explanation_rules}` 的 profile 必须显式绑定存在的顶层规则 key。
 
+`unified_ui_ce` 与 `strict_fpa_ce` 的差异必须在文案中可见，不能只把标准规则换名复用。`strict_fpa_ce` 负责标准 FPA 证据链说明；`unified_ui_ce` 负责统一界面建设口径，要求 `计算依据说明` 描述“系统建设了什么”，而不是复述用户操作流程。它应明确覆盖：三级模块内界面能力合并描述、逻辑接口/表能力按业务动作归属描述、导入/导出/外部接口联调调用只基于输入证据描述，以及不得编造表名、接口名、外部系统、权限或审批流程。
+
 ### profile 专属 prompt 与输出差异
 
 如果只抽取一个公共 `${calculation_explanation_rules}` 给所有 profile 复用，主要收益是统一 `计算依据说明` 的格式和质量要求。它会让所有 profile 更稳定地产生四段式说明，但不会单独保证“不同 profile 输出不同风格或不同重点的说明”。profile 差异仍主要来自行规划口径、类型规则、输入上下文和 fallback 行生成逻辑。

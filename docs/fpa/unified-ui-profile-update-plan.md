@@ -138,6 +138,8 @@ calculation_explanation_rules:
 
 `multi_uis` profile 绑定 `multi_uis_ce`，`ui_api_mapping` profile 绑定 `ui_api_mapping_ce`。两者的规则内容与 `unified_ui_ce` 保持一致，先通过独立 key 保留 profile 级配置边界，后续如需针对多界面拆分或界面接口映射补充差异化说明规则，可以只调整对应 CE key 的文本。
 
+`unified_ui_ce` 不应只是 `strict_fpa_ce` 的改名复用。`strict_fpa_ce` 保留标准 FPA 结构化证据说明，重点解释来源路径、业务数据、系统元素和当前 FPA 类型；`unified_ui_ce` 必须体现统一界面交付口径，`计算依据说明` 要按系统建设内容描述，不按用户点击路径或页面跳转顺序叙述。界面开发行应概括同一三级模块内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；逻辑接口/表能力行应说明添加、编辑、查询、删除、状态更新或数据结构调整归属的业务动作；导入、导出和外部接口联调调用行只描述输入中有证据的建设内容，不补写表名、接口名、外部系统、权限或审批流程。
+
 由于本系统尚未上线，不建议保留旧 `prompt_fragments.calculation_explanation_rules` 兼容回退，也不建议继续保留 `default_calculation_explanation_rules` 这类泛化命名。配置校验应直接要求引用 `${calculation_explanation_rules}` 的 profile 显式配置 `profiles.<profile>.calculation_explanation_rules`，且绑定 key 必须存在于顶层 `calculation_explanation_rules`。
 
 ## 拟修改范围

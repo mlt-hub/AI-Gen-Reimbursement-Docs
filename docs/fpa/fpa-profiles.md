@@ -140,6 +140,8 @@ calculation_explanation_rules:
     统一界面口径计算依据说明生成规则...
 ```
 
+`unified_ui` 绑定的 `unified_ui_ce` 不是 `strict_fpa_ce` 的同文复用。它用于约束 `计算依据说明` 按统一界面建设内容叙述：界面行合并同一三级模块内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；逻辑接口/表能力行描述添加、编辑、查询、删除、状态更新或数据结构调整归属；导入、导出和外部接口联调调用行只写输入中有证据的系统建设内容。`multi_uis_ce` 和 `ui_api_mapping_ce` 当前可与 `unified_ui_ce` 内容保持一致，但保留独立 key，避免后续差异化时影响 `unified_ui`。
+
 命名约定：
 
 ```text
