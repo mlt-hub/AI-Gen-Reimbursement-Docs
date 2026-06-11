@@ -374,8 +374,8 @@ rule_sets:
       merge: append
       items:
         - type: EI
-          keywords: ["界面开发", "页面"]
-          reason: "关键词命中界面/页面能力，按 EI 兜底。"
+          keywords: ["界面开发"]
+          reason: "关键词命中界面，按 EI 兜底。"
         - type: EIF
           keywords: ["外部接口联调", "外部系统调用", "调用外部系统", "外部数据引用", "外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据", "主数据平台", "CRM", "OA 系统", "OA系统"]
           reason: "描述明确存在外部边界联调、调用或外部数据引用，按 EIF 兜底。"
@@ -426,7 +426,7 @@ rule_sets:
       merge: append
       items:
         - type: EI
-          keywords: ["界面开发", "页面"]
+          keywords: ["界面开发"]
           reason: "多界面开发行按 EI。"
         - type: EIF
           keywords: ["外部接口联调", "外部系统调用", "调用外部系统", "外部数据引用", "外部应用维护", "外部系统维护", "引用外部数据组", "统一用户中心", "外部主数据", "主数据平台", "CRM", "OA 系统", "OA系统"]
