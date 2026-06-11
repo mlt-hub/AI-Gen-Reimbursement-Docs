@@ -90,17 +90,31 @@ profiles:
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
-    calculation_explanation_rules: default_calculation_explanation_rules
+    calculation_explanation_rules: strict_fpa_ce
+
+  unified_ui:
+    kind: unified_ui
+    strategy: rules_first
+    rule_set: unified_ui_rs
+    core_rules: unified_ui_cr
+    system_prompt: unified_ui_sp
+    user_prompt: unified_ui_up
+    calculation_explanation_rules: unified_ui_ce
 
 calculation_explanation_rules:
-  default_calculation_explanation_rules: |-
+  strict_fpa_ce: |-
     计算依据说明生成规则：
     1. explanation 必须写成结构化证据说明...
+  unified_ui_ce: |-
+    统一界面口径计算依据说明生成规则：
+    1. explanation 应描述本次功能建设做了什么...
 ```
 
 调整后，user prompt 仍继续通过 `${calculation_explanation_rules}` 引用规则文本；运行时渲染时先读取当前 profile 的 `calculation_explanation_rules` 绑定 key，再从顶层 `calculation_explanation_rules.<key>` 读取实际文本。
 
-由于本系统尚未上线，不建议保留旧 `prompt_fragments.calculation_explanation_rules` 兼容回退。配置校验应直接要求引用 `${calculation_explanation_rules}` 的 profile 显式配置 `profiles.<profile>.calculation_explanation_rules`，且绑定 key 必须存在于顶层 `calculation_explanation_rules`。
+原 `default` calculation_explanation_rules 改名为 `strict_fpa_ce`，并绑定到 `strict_fpa` profile。`unified_ui` profile 新增并绑定 `unified_ui_ce`，用于承载统一界面口径下“按建设内容描述、界面合并、逻辑接口/表按能力拆分”的计算依据说明规则。
+
+由于本系统尚未上线，不建议保留旧 `prompt_fragments.calculation_explanation_rules` 兼容回退，也不建议继续保留 `default_calculation_explanation_rules` 这类泛化命名。配置校验应直接要求引用 `${calculation_explanation_rules}` 的 profile 显式配置 `profiles.<profile>.calculation_explanation_rules`，且绑定 key 必须存在于顶层 `calculation_explanation_rules`。
 
 ## 拟修改范围
 
