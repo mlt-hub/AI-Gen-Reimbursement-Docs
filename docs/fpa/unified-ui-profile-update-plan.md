@@ -73,17 +73,48 @@
 4. 不编造输入中没有的表名、接口名、外部系统、权限规则或审批流程。
 5. FPA 用户可见字段统一使用“新增/修改功能点”“类型”“计算依据归类”“计算依据说明”“生成方式”。
 
+## 配置结构调整
+
+`calculation_explanation_rules` 应从旧的 `prompt_fragments.calculation_explanation_rules.default` 结构中提升出来，成为与 `core_rules`、`system_prompt_sets`、`user_prompt_sets`、`rule_sets` 同级的顶层配置段。
+
+每个 profile 在 `profiles.<profile_name>` 下显式绑定使用哪一份 `calculation_explanation_rules`，与 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt` 同级。
+
+目标结构示例：
+
+```yaml
+profiles:
+  strict_fpa:
+    kind: strict_fpa
+    strategy: ai_first
+    rule_set: strict_fpa_rs
+    core_rules: strict_fpa_cr
+    system_prompt: strict_fpa_sp
+    user_prompt: strict_fpa_up
+    calculation_explanation_rules: default_calculation_explanation_rules
+
+calculation_explanation_rules:
+  default_calculation_explanation_rules: |-
+    计算依据说明生成规则：
+    1. explanation 必须写成结构化证据说明...
+```
+
+调整后，user prompt 仍继续通过 `${calculation_explanation_rules}` 引用规则文本；运行时渲染时先读取当前 profile 的 `calculation_explanation_rules` 绑定 key，再从顶层 `calculation_explanation_rules.<key>` 读取实际文本。
+
+由于本系统尚未上线，不建议保留旧 `prompt_fragments.calculation_explanation_rules` 兼容回退。配置校验应直接要求引用 `${calculation_explanation_rules}` 的 profile 显式配置 `profiles.<profile>.calculation_explanation_rules`，且绑定 key 必须存在于顶层 `calculation_explanation_rules`。
+
 ## 拟修改范围
 
 后续实施时建议修改以下范围：
 
 | 文件 | 修改内容 |
 |---|---|
-| `config/fpa_config.yaml.example` | 更新 `unified_ui_cr`、`unified_ui_sp`、`unified_ui_up` 和 `unified_ui_rs`，同步新类型规则、行命名和计算依据说明约束。 |
-| `ai_gen_reimbursement_docs/fpa_profiles.py` | 调整 `unified_ui` fallback/规则兜底的后缀选择逻辑，避免只按类型决定“查询处理开发/导入处理开发”等旧后缀。 |
+| `config/fpa_config.yaml.example` | 更新 `unified_ui_cr`、`unified_ui_sp`、`unified_ui_up` 和 `unified_ui_rs`，同步新类型规则、行命名和计算依据说明约束；将 `calculation_explanation_rules` 提升为顶层配置段，并在各 profile 下显式绑定。 |
+| `ai_gen_reimbursement_docs/config_utils.py` | 允许并校验 `profiles.<profile>.calculation_explanation_rules`；改为通过 profile 绑定 key 读取顶层 `calculation_explanation_rules`；更新 prompt diagnostics 的 source path。 |
+| `ai_gen_reimbursement_docs/fpa_profiles.py` | 调整 `unified_ui` fallback/规则兜底的后缀选择逻辑，避免只按类型决定“查询处理开发/导入处理开发”等旧后缀；保持 `${calculation_explanation_rules}` 渲染入口不变。 |
+| `tests/test_config_utils.py`、`tests/test_fpa_profiles.py` | 更新旧 `prompt_fragments.calculation_explanation_rules.*` 断言；新增 profile 绑定 key、缺失绑定、绑定 key 不存在、未引用占位符 warning 等测试。 |
 | `tests/fpa_profiles/test_unified_ui_harness.py` | 更新规则兜底测试，覆盖查询为 `ILF`、导入为 `EQ`、导出为 `EO`、外部接口联调调用为 `EIF`。 |
 | `tests/fixtures/fpa_golden_cases/vertical_industry_management.json` | 更新垂直行业管理 golden case，补齐查询逻辑接口行，并将非界面行命名调整为“逻辑接口开发”。 |
-| `docs/fpa/fpa-profiles.md` | 同步 profile 文档，说明 `unified_ui` 新口径和适用场景。 |
+| `docs/fpa/fpa-profiles.md`、`docs/fpa/calculation-basis-explanation-rules.md` | 同步 profile 文档和计算依据说明文档，移除旧 `prompt_fragments.calculation_explanation_rules` 路径说明，改为 profile 级绑定说明。 |
 
 ## 验证方式
 
@@ -96,8 +127,18 @@
 
 如修改 golden case，应补充运行相关 golden case 测试，确认 `unified_ui` 输出名称、类型、计算依据说明和 profile quality review 均符合预期。
 
+配置结构调整还需要重点验证：
+
+1. 默认配置四个官方 profile 都能解析并渲染 `${calculation_explanation_rules}`。
+2. profile 绑定的 `calculation_explanation_rules` key 能正确读取顶层文本。
+3. user prompt 引用了 `${calculation_explanation_rules}` 但 profile 未配置绑定时，应明确报错。
+4. profile 绑定了不存在的 key 时，应明确报错。
+5. user prompt 未引用 `${calculation_explanation_rules}` 时，仍只给 warning，不强制要求绑定。
+
 ## 风险
 
 主要风险是 `unified_ui` 现有规则使用类型反推行后缀，例如 `EQ -> 查询处理开发`、`EI -> 导入处理开发`。新口径中“查询 = ILF”“导入 = EQ”，同一类型无法再唯一决定行名称后缀，因此需要改为关键词或业务动作优先的后缀选择策略。
 
 另一个风险是 `multi_uis` 当前复用 `unified_ui` kind。实施时应确认是否只改 `unified_ui_rs`，还是同步影响 `multi_uis_rs`。如只调整 `unified_ui`，需要避免共享逻辑导致 `multi_uis` 行名或类型被意外改变。
+
+配置结构调整的风险是 Web 配置诊断页、测试和文档中仍可能显示旧 source path。实施时需要同步更新 diagnostics 输出，避免运行时已使用新结构，但页面或测试仍提示 `prompt_fragments.calculation_explanation_rules.default`。
