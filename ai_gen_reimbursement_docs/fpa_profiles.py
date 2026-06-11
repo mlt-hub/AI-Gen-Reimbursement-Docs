@@ -14,10 +14,48 @@ VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}
 VALID_TRANSACTION_FPA_TYPES = {"EI", "EQ", "EO"}
 VALID_RULE_MERGE_MODES = {"append", "replace"}
+RULE_HITS_KEY = "_规则命中详情"
 
 UNIFIED_UI_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.unified_ui_cr 配置 unified_ui 核心口径。"
 STRICT_FPA_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.strict_fpa_cr 配置 strict_fpa 核心口径。"
 UI_API_MAPPING_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.ui_api_mapping_cr 配置 ui_api_mapping 核心口径。"
+
+FALLBACK_BASIS_KEYWORDS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "ILF": (
+        ("内部", "逻辑数据组"),
+        ("内部", "逻辑文件"),
+        ("后台数据库", "变更"),
+        ("维护", "数据组"),
+        ("数据库", "表"),
+    ),
+    "EIF": (
+        ("外部", "维护", "数据组"),
+        ("外部", "接口文件"),
+        ("外部", "逻辑数据组"),
+        ("外部", "逻辑文件"),
+    ),
+    "EI": (
+        ("外部输入",),
+        ("进入", "系统边界"),
+        ("改变", "系统边界"),
+        ("修改", "增加", "界面"),
+        ("插入", "修改", "删除"),
+    ),
+    "EQ": (
+        ("外部查询",),
+        ("查询", "输入", "返回"),
+        ("查询界面", "展示"),
+        ("查询", "展示"),
+    ),
+    "EO": (
+        ("外部输出",),
+        ("票据",),
+        ("报表",),
+        ("统计",),
+        ("文件", "输出"),
+        ("导出",),
+    ),
+}
 
 
 EXTERNAL_DATA_GROUP_NOUNS = [
@@ -971,6 +1009,48 @@ def _append_row_with_l3_name_policy(rows: list[dict[str, object]], row: dict[str
     return True
 
 
+def basis_for_fpa_type(fpa_type: str, judgement_rules: list[str] | None) -> str:
+    """按 FPA 类型从模板判定原则中选择计算依据归类原文。"""
+    keywords_by_priority = FALLBACK_BASIS_KEYWORDS.get(str(fpa_type or "").upper(), ())
+    rules = [str(rule).strip() for rule in judgement_rules or [] if str(rule).strip()]
+    for keywords in keywords_by_priority:
+        for rule in rules:
+            if all(keyword in rule for keyword in keywords):
+                return rule
+    return ""
+
+
+def _add_fallback_basis_rule_hit(
+    row: dict[str, object],
+    *,
+    profile_name: str,
+    fpa_type: str,
+) -> None:
+    hits = row.setdefault(RULE_HITS_KEY, [])
+    if not isinstance(hits, list):
+        hits = []
+        row[RULE_HITS_KEY] = hits
+    rule_id = f"{profile_name}.fallback_classification_basis"
+    if any(isinstance(hit, dict) and hit.get("rule_id") == rule_id for hit in hits):
+        return
+    hits.append({
+        "hit_object": str(row.get("新增/修改功能点", "") or ""),
+        "rule_id": rule_id,
+        "rule_desc": "规则兜底行按 FPA 类型匹配判定原则，写入计算依据归类。",
+        "suggested_type": fpa_type,
+        "adopted": "是",
+        "warnings": [],
+    })
+
+
+def _classification_basis_for_fallback_row(
+    *,
+    fpa_type: str,
+    judgement_rules: list[str] | None,
+) -> str:
+    return basis_for_fpa_type(fpa_type, judgement_rules)
+
+
 @dataclass(frozen=True)
 class CustomRulesProfile:
     """用户自定义规则口径。"""
@@ -1033,6 +1113,7 @@ class CustomRulesProfile:
         group: dict[str, object],
         meta: dict[str, str],
         start_seq: int = 1,
+        judgement_rules: list[str] | None = None,
     ) -> list[dict[str, object]]:
         """AI 不可用或失败时的三级模块兜底 FPA 行。"""
         subsystem = meta.get("子系统（模块）", "")
@@ -1057,13 +1138,17 @@ class CustomRulesProfile:
                 f"{i}、{item}" for i, item in enumerate(ui_items or [ui_rule.empty_process_text], 1) if item
             )
             ui_name = f"{tag}-{ui_rule.name_suffix}" if ui_rule.name_suffix else tag
-            rows.append({
+            basis = _classification_basis_for_fallback_row(
+                fpa_type=ui_rule.fpa_type,
+                judgement_rules=judgement_rules,
+            )
+            row = {
                 "序号": seq,
                 "子系统(模块)": subsystem,
                 "资产标识": asset,
                 "新增/修改功能点": ui_name,
                 "类型": ui_rule.fpa_type,
-                "计算依据归类": "",
+                "计算依据归类": basis,
                 "计算依据说明": ui_rule.explanation_template.format(name=ui_name, items=ui_detail),
                 "变更状态": module_change_status(process_list),
                 "调整值": adjust_value_for_type(ui_rule.fpa_type, self.name),
@@ -1072,7 +1157,10 @@ class CustomRulesProfile:
                 "类型理由": ui_rule.reason,
                 "源功能过程": "、".join(str(p.get("name", "")) for p in process_list if isinstance(p, dict)),
                 "后处理警告": "",
-            })
+            }
+            if basis:
+                _add_fallback_basis_rule_hit(row, profile_name=self.name, fpa_type=ui_rule.fpa_type)
+            rows.append(row)
             seq += 1
 
         process_rule = self._configured_process_row_planning_rule()
@@ -1087,13 +1175,17 @@ class CustomRulesProfile:
                 continue
             point_name = function_point_tag(group, self.logic_point_name(name, desc))
             fpa_type, reason = self.infer_type(point_name, desc)
+            basis = _classification_basis_for_fallback_row(
+                fpa_type=fpa_type,
+                judgement_rules=judgement_rules,
+            )
             row = {
                 "序号": seq,
                 "子系统(模块)": subsystem,
                 "资产标识": asset,
                 "新增/修改功能点": point_name,
                 "类型": fpa_type,
-                "计算依据归类": "",
+                "计算依据归类": basis,
                 "计算依据说明": process_rule.explanation_template.format(
                     name=point_name,
                     description=desc or name,
@@ -1106,6 +1198,8 @@ class CustomRulesProfile:
                 "源功能过程": name,
                 "后处理警告": "",
             }
+            if basis:
+                _add_fallback_basis_rule_hit(row, profile_name=self.name, fpa_type=fpa_type)
             if _append_row_with_l3_name_policy(rows, row):
                 seq += 1
         return rows
@@ -1330,6 +1424,7 @@ class StrictFpaProfile(CustomRulesProfile):
         group: dict[str, object],
         meta: dict[str, str],
         start_seq: int = 1,
+        judgement_rules: list[str] | None = None,
     ) -> list[dict[str, object]]:
         subsystem = meta.get("子系统（模块）", "")
         asset = meta.get("资产标识", "")
@@ -1340,13 +1435,17 @@ class StrictFpaProfile(CustomRulesProfile):
 
         for data_name, data_type, data_reason in self._data_functions_for_group(group, process_list):
             point_name = function_point_tag(group, data_name)
-            rows.append({
+            basis = _classification_basis_for_fallback_row(
+                fpa_type=data_type,
+                judgement_rules=judgement_rules,
+            )
+            row = {
                 "序号": seq,
                 "子系统(模块)": subsystem,
                 "资产标识": asset,
                 "新增/修改功能点": point_name,
                 "类型": data_type,
-                "计算依据归类": "",
+                "计算依据归类": basis,
                 "计算依据说明": f"{point_name}，作为该三级模块涉及的逻辑数据组。",
                 "变更状态": module_change_status(process_list),
                 "调整值": adjust_value_for_type(data_type, self.name),
@@ -1355,27 +1454,37 @@ class StrictFpaProfile(CustomRulesProfile):
                 "类型理由": data_reason,
                 "源功能过程": "、".join(str(p.get("name", "")) for p in process_list if isinstance(p, dict)),
                 "后处理警告": "",
-            })
+            }
+            if basis:
+                _add_fallback_basis_rule_hit(row, profile_name=self.name, fpa_type=data_type)
+            rows.append(row)
             seq += 1
 
         for transaction in self._logical_transactions_for_group(process_list):
             point_name = function_point_tag(group, str(transaction["name"]))
+            fpa_type = str(transaction["type"])
+            basis = _classification_basis_for_fallback_row(
+                fpa_type=fpa_type,
+                judgement_rules=judgement_rules,
+            )
             row = {
                 "序号": seq,
                 "子系统(模块)": subsystem,
                 "资产标识": asset,
                 "新增/修改功能点": point_name,
-                "类型": transaction["type"],
-                "计算依据归类": "",
+                "类型": fpa_type,
+                "计算依据归类": basis,
                 "计算依据说明": str(transaction["explanation"]).replace(str(transaction["name"]), point_name, 1),
                 "变更状态": str(transaction["change_status"] or module_change_status(process_list)),
-                "调整值": adjust_value_for_type(str(transaction["type"]), self.name),
+                "调整值": adjust_value_for_type(fpa_type, self.name),
                 "要素数量": 1,
                 "生成方式": "fallback",
                 "类型理由": transaction["reason"],
                 "源功能过程": transaction["sources"],
                 "后处理警告": "",
             }
+            if basis:
+                _add_fallback_basis_rule_hit(row, profile_name=self.name, fpa_type=fpa_type)
             if _append_row_with_l3_name_policy(rows, row):
                 seq += 1
         return _structure_fallback_explanations(group, rows)
@@ -1862,6 +1971,7 @@ class UiApiMappingProfile(CustomRulesProfile):
         group: dict[str, object],
         meta: dict[str, str],
         start_seq: int = 1,
+        judgement_rules: list[str] | None = None,
     ) -> list[dict[str, object]]:
         subsystem = meta.get("子系统（模块）", "")
         asset = meta.get("资产标识", "")
@@ -1890,13 +2000,17 @@ class UiApiMappingProfile(CustomRulesProfile):
                 if point_name in default_point_names:
                     warning = f"{point_name} ui_api_mapping 功能过程默认行同名，已保留并提示人工审阅。"
                 default_point_names.add(point_name)
-                rows.append({
+                basis = _classification_basis_for_fallback_row(
+                    fpa_type=fpa_type,
+                    judgement_rules=judgement_rules,
+                )
+                row = {
                     "序号": seq,
                     "子系统(模块)": subsystem,
                     "资产标识": asset,
                     "新增/修改功能点": point_name,
                     "类型": fpa_type,
-                    "计算依据归类": "",
+                    "计算依据归类": basis,
                     "计算依据说明": f"{point_name}，来源功能过程：{desc or raw_name}",
                     "变更状态": status,
                     "调整值": adjust_value_for_type(fpa_type, self.name),
@@ -1905,7 +2019,10 @@ class UiApiMappingProfile(CustomRulesProfile):
                     "类型理由": reason,
                     "源功能过程": raw_name,
                     "后处理警告": warning,
-                })
+                }
+                if basis:
+                    _add_fallback_basis_rule_hit(row, profile_name=self.name, fpa_type=fpa_type)
+                rows.append(row)
                 seq += 1
 
             for explicit_name in self._explicit_backend_interactions(raw_name, desc):
@@ -1922,7 +2039,10 @@ class UiApiMappingProfile(CustomRulesProfile):
                     "资产标识": asset,
                     "新增/修改功能点": point_name,
                     "类型": "ILF",
-                    "计算依据归类": "",
+                    "计算依据归类": _classification_basis_for_fallback_row(
+                        fpa_type="ILF",
+                        judgement_rules=judgement_rules,
+                    ),
                     "计算依据说明": f"{point_name}，来源功能过程：{desc or raw_name}",
                     "变更状态": status,
                     "调整值": adjust_value_for_type("ILF", self.name),
@@ -1932,6 +2052,8 @@ class UiApiMappingProfile(CustomRulesProfile):
                     "源功能过程": raw_name,
                     "后处理警告": "",
                 }
+                if row["计算依据归类"]:
+                    _add_fallback_basis_rule_hit(row, profile_name=self.name, fpa_type="ILF")
                 explicit_rows[point_name] = row
                 rows.append(row)
                 seq += 1

@@ -3076,6 +3076,38 @@ def test_strict_fpa_fallback_rows_fill_classification_basis_from_judgement_rules
     )
 
 
+def test_unified_ui_fallback_rows_fill_classification_basis_during_type_planning(tmp_path):
+    judgement_rules = [
+        "后台数据库变更/内部逻辑数据组相关原则",
+        "修改或增加界面的个数，或进入/改变系统边界数据的事务原则",
+    ]
+
+    result = _plan_fpa_rows_with_ai(
+        _rows(),
+        _meta(),
+        judgement_rules,
+        api_key="",
+        model="mock-model",
+        base_url="",
+        profile=CUSTOM_RULES_PROFILE,
+        strategy="rules_only",
+        rule_set="unified_ui_rs",
+        rule_set_config=_custom_default_rule_set(),
+        audit_trace_path=str(tmp_path / "trace.json"),
+    )
+
+    fallback_rows = [row for row in result if row["生成方式"] == "fallback"]
+    assert fallback_rows
+    assert all(row["计算依据归类"] in judgement_rules for row in fallback_rows)
+    assert any(row["类型"] == "EI" and row["计算依据归类"] == judgement_rules[1] for row in fallback_rows)
+    assert any(row["类型"] == "ILF" and row["计算依据归类"] == judgement_rules[0] for row in fallback_rows)
+    assert any(
+        hit["rule_id"] == "unified_ui.fallback_classification_basis"
+        for row in fallback_rows
+        for hit in row.get("_规则命中详情", [])
+    )
+
+
 def test_fpa_prompt_context_appends_json_only_reasoning_constraint(monkeypatch, tmp_path):
     _write_fpa_prompt_config(tmp_path, monkeypatch)
     group = _group_rows_by_l3(_rows())[0]
@@ -3357,7 +3389,7 @@ def test_keyword_type_fallbacks():
 
 
 class LowConfidenceRulesProfile(CustomRulesProfile):
-    def fallback_rows_for_l3(self, group, meta, start_seq=1):
+    def fallback_rows_for_l3(self, group, meta, start_seq=1, **kwargs):
         return [{
             "序号": start_seq,
             "子系统(模块)": meta.get("子系统（模块）", ""),
@@ -3823,7 +3855,7 @@ def test_rules_first_preview_calls_ai_when_rule_rows_are_low_confidence(monkeypa
         lambda path: {"tree_rows": _rows(), "meta": _meta()},
     )
 
-    def fake_fallback(self, group, meta, start_seq=1):
+    def fake_fallback(self, group, meta, start_seq=1, **kwargs):
         return [{
             "序号": start_seq,
             "子系统(模块)": meta.get("子系统（模块）", ""),

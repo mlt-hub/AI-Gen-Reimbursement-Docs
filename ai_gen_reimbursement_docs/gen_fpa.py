@@ -42,6 +42,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     CustomRulesProfile,
     FpaRuleSetConfig,
     adjust_value_for_type as _adjust_value_for_type,
+    basis_for_fpa_type as _basis_for_fpa_type,
     calculate_fpa_adjustment_for_row,
     current_fpa_rule_set_config,
     get_fpa_profile,
@@ -855,7 +856,11 @@ def _attach_profile_rule_hits(
         if generation:
             row["生成方式"] = generation
         row_generation = str(row.get("生成方式", "") or generation or "fallback")
-        if _row_rule_hits(row):
+        existing_rule_ids = {
+            str(hit.get("rule_id", "") or "")
+            for hit in _row_rule_hits(row)
+        }
+        if any(rule_id and not rule_id.endswith(".fallback_classification_basis") for rule_id in existing_rule_ids):
             continue
         name = str(row.get("新增/修改功能点", "") or "")
         fpa_type = str(row.get("类型", "") or "")
@@ -996,7 +1001,12 @@ def _normalize_ai_fpa_rows_for_l3(
         logger.warning(msg)
         warnings.append(msg)
         ai_rows = [
-            profile.fallback_rows_for_l3(group, meta, start_seq=1)[0],
+            profile.fallback_rows_for_l3(
+                group,
+                meta,
+                start_seq=1,
+                judgement_rules=judgement_rules,
+            )[0],
             *[
                 r for r in ai_rows
                 if not (isinstance(r, dict) and "界面开发" in str(r.get("name", "")))
@@ -1421,30 +1431,12 @@ def _normalize_ai_fpa_rows_for_l3(
     return normalized, warnings
 
 
-STRICT_FPA_FALLBACK_BASIS_KEYWORDS: dict[str, tuple[tuple[str, ...], ...]] = {
-    "ILF": (("内部", "逻辑数据组"), ("后台数据库", "变更"), ("维护", "数据组")),
-    "EIF": (("外部", "维护", "数据组"), ("外部", "接口文件"), ("外部", "逻辑数据组")),
-    "EI": (("进入", "系统边界"), ("改变", "系统边界"), ("修改", "增加", "界面")),
-    "EQ": (("查询", "输入", "返回"), ("查询界面", "展示"), ("查询", "展示")),
-    "EO": (("票据",), ("报表",), ("统计",), ("文件", "输出"), ("导出",)),
-}
-
-
-def _basis_for_fpa_type(fpa_type: str, judgement_rules: list[str]) -> str:
-    keywords_by_priority = STRICT_FPA_FALLBACK_BASIS_KEYWORDS.get(fpa_type.upper(), ())
-    for keywords in keywords_by_priority:
-        for rule in judgement_rules:
-            if all(keyword in rule for keyword in keywords):
-                return rule
-    return ""
-
-
-def _fill_strict_fpa_fallback_classification_basis(
+def _fill_fallback_classification_basis(
     rows: list[dict[str, object]],
     judgement_rules: list[str],
     profile: CustomRulesProfile,
 ) -> None:
-    if profile.name != "strict_fpa" or not judgement_rules:
+    if not judgement_rules:
         return
     for row in rows:
         generation = str(row.get("生成方式", "") or "")
@@ -1458,11 +1450,19 @@ def _fill_strict_fpa_fallback_classification_basis(
             _add_rule_hit(
                 row,
                 hit_object=str(row.get("新增/修改功能点", "") or ""),
-                rule_id="strict_fpa.fallback_classification_basis",
-                rule_desc="strict_fpa 规则兜底行按 FPA 类型匹配模板判定原则，补齐计算依据归类。",
+                rule_id=f"{profile.name}.fallback_classification_basis",
+                rule_desc="规则兜底行按 FPA 类型匹配判定原则，补齐计算依据归类。",
                 suggested_type=str(row.get("类型", "") or ""),
                 adopted=True,
             )
+
+
+def _fill_strict_fpa_fallback_classification_basis(
+    rows: list[dict[str, object]],
+    judgement_rules: list[str],
+    profile: CustomRulesProfile,
+) -> None:
+    _fill_fallback_classification_basis(rows, judgement_rules, profile)
 
 
 def _process_names_for_group(group: dict[str, object]) -> list[str]:
@@ -1693,6 +1693,7 @@ def _supplement_ai_rows_with_rules(
     profile: CustomRulesProfile,
     strategy: str,
     rule_set_config: FpaRuleSetConfig | None = None,
+    judgement_rules: list[str] | None = None,
 ) -> tuple[list[dict[str, object]], list[str]]:
     """AI 优先策略下，用规则补齐 AI 没覆盖的功能过程，不覆盖 AI 已判定的类型。"""
     if strategy != "ai_first" or not ai_rows:
@@ -1704,7 +1705,12 @@ def _supplement_ai_rows_with_rules(
     if not require_process_coverage and not require_data_function and not require_profile_exact_rows:
         return ai_rows, []
 
-    rule_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+    rule_rows = profile.fallback_rows_for_l3(
+        group,
+        meta,
+        start_seq=1,
+        judgement_rules=judgement_rules,
+    )
     id_to_name = _process_id_to_name_for_group(group)
     expected_process_ids = set(id_to_name)
     expected_process_names = set(_process_names_for_group(group))
@@ -2560,9 +2566,14 @@ def _plan_fpa_rows_with_execution(
         audit_modules: list[dict[str, object]] = []
         seq = 1
         for group in groups:
-            group_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            group_rows = profile.fallback_rows_for_l3(
+                group,
+                meta,
+                start_seq=seq,
+                judgement_rules=judgement_rules,
+            )
             _attach_profile_rule_hits(group_rows, profile=profile, generation="fallback")
-            _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
+            _fill_fallback_classification_basis(group_rows, judgement_rules, profile)
             quality_review = _build_quality_review_for_l3(
                 group=group,
                 rows=group_rows,
@@ -2618,9 +2629,14 @@ def _plan_fpa_rows_with_execution(
         rules_first_rows: list[dict[str, object]] = []
         rules_first_reasons: list[str] = []
         if strategy == "rules_first":
-            rules_first_rows = profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            rules_first_rows = profile.fallback_rows_for_l3(
+                group,
+                meta,
+                start_seq=seq,
+                judgement_rules=judgement_rules,
+            )
             _attach_profile_rule_hits(rules_first_rows, profile=profile, generation="fallback")
-            _fill_strict_fpa_fallback_classification_basis(rules_first_rows, judgement_rules, profile)
+            _fill_fallback_classification_basis(rules_first_rows, judgement_rules, profile)
             rules_first_reasons = _rules_first_ai_reasons(group, rules_first_rows)
             if not rules_first_reasons:
                 quality_review = _build_quality_review_for_l3(
@@ -2681,10 +2697,15 @@ def _plan_fpa_rows_with_execution(
             if strategy == "ai_only":
                 raise ValueError(f"FPA strategy=ai_only 但三级模块 {_group_tag(group)} 被 AI 限制跳过")
             skipped += 1
-            group_rows = rules_first_rows or profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            group_rows = rules_first_rows or profile.fallback_rows_for_l3(
+                group,
+                meta,
+                start_seq=seq,
+                judgement_rules=judgement_rules,
+            )
             generation = "fallback" if strategy == "rules_first" else "rules_fallback"
             _attach_profile_rule_hits(group_rows, profile=profile, generation=generation)
-            _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
+            _fill_fallback_classification_basis(group_rows, judgement_rules, profile)
             fallback += len(group_rows)
             all_rows.extend(group_rows)
             seq += len(group_rows)
@@ -2749,10 +2770,11 @@ def _plan_fpa_rows_with_execution(
                     profile=profile,
                     strategy=strategy,
                     rule_set_config=rule_set_config,
+                    judgement_rules=judgement_rules,
                 )
                 _renumber_rows(group_rows, seq)
                 warnings.extend(supplement_warnings)
-                _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
+                _fill_fallback_classification_basis(group_rows, judgement_rules, profile)
                 validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                     group=group,
                     rows=group_rows,
@@ -2830,10 +2852,11 @@ def _plan_fpa_rows_with_execution(
                 profile=profile,
                 strategy=strategy,
                 rule_set_config=rule_set_config,
+                judgement_rules=judgement_rules,
             )
             _renumber_rows(group_rows, seq)
             warnings.extend(supplement_warnings)
-            _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
+            _fill_fallback_classification_basis(group_rows, judgement_rules, profile)
             validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                 group=group,
                 rows=group_rows,
@@ -2888,10 +2911,11 @@ def _plan_fpa_rows_with_execution(
                         profile=profile,
                         strategy=strategy,
                         rule_set_config=rule_set_config,
+                        judgement_rules=judgement_rules,
                     )
                     _renumber_rows(retry_group_rows, seq)
                     retry_warnings.extend(retry_supplement_warnings)
-                    _fill_strict_fpa_fallback_classification_basis(retry_group_rows, judgement_rules, profile)
+                    _fill_fallback_classification_basis(retry_group_rows, judgement_rules, profile)
                     retry_issues, retry_validation_warnings = _validate_fpa_rows_for_l3(
                         group=group,
                         rows=retry_group_rows,
@@ -2992,10 +3016,11 @@ def _plan_fpa_rows_with_execution(
                         profile=profile,
                         strategy=strategy,
                         rule_set_config=rule_set_config,
+                        judgement_rules=judgement_rules,
                     )
                     _renumber_rows(group_rows, seq)
                     confirmation_warnings.extend(confirmation_supplement_warnings)
-                    _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
+                    _fill_fallback_classification_basis(group_rows, judgement_rules, profile)
                     validation_issues, confirmation_validation_warnings = _validate_fpa_rows_for_l3(
                         group=group,
                         rows=group_rows,
@@ -3055,9 +3080,14 @@ def _plan_fpa_rows_with_execution(
             else:
                 parse_failed += 1
             logger.warning("FPA AI 响应解析失败 [%s]: %s", _group_tag(group), exc)
-            group_rows = rules_first_rows or profile.fallback_rows_for_l3(group, meta, start_seq=seq)
+            group_rows = rules_first_rows or profile.fallback_rows_for_l3(
+                group,
+                meta,
+                start_seq=seq,
+                judgement_rules=judgement_rules,
+            )
             _attach_profile_rule_hits(group_rows, profile=profile, generation="fallback")
-            _fill_strict_fpa_fallback_classification_basis(group_rows, judgement_rules, profile)
+            _fill_fallback_classification_basis(group_rows, judgement_rules, profile)
             fallback += len(group_rows)
             fallback_warning = f"AI 调用或解析失败: {exc}"
             if rules_first_reasons:
@@ -4015,9 +4045,14 @@ def preview_fpa_module(
             if execution.strategy in {"rules_first", "rules_only"}:
                 used_ai = False
                 debug["reason"] = execution.strategy
-                fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+                fpa_rows = profile.fallback_rows_for_l3(
+                    group,
+                    meta,
+                    start_seq=1,
+                    judgement_rules=judgement_rules,
+                )
                 _attach_profile_rule_hits(fpa_rows, profile=profile, generation="fallback")
-                _fill_strict_fpa_fallback_classification_basis(fpa_rows, judgement_rules, profile)
+                _fill_fallback_classification_basis(fpa_rows, judgement_rules, profile)
                 if execution.strategy == "rules_first":
                     rules_first_reasons = _rules_first_ai_reasons(group, fpa_rows)
                     if rules_first_reasons and api_key:
@@ -4044,9 +4079,10 @@ def preview_fpa_module(
                             profile=profile,
                             strategy=execution.strategy,
                             rule_set_config=execution.rule_set_config,
+                            judgement_rules=judgement_rules,
                         )
                         warnings.extend(supplement_warnings)
-                        _fill_strict_fpa_fallback_classification_basis(fpa_rows, judgement_rules, profile)
+                        _fill_fallback_classification_basis(fpa_rows, judgement_rules, profile)
                         validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                             group=group,
                             rows=fpa_rows,
@@ -4088,9 +4124,10 @@ def preview_fpa_module(
                     profile=profile,
                     strategy=execution.strategy,
                     rule_set_config=execution.rule_set_config,
+                    judgement_rules=judgement_rules,
                 )
                 warnings.extend(supplement_warnings)
-                _fill_strict_fpa_fallback_classification_basis(fpa_rows, judgement_rules, profile)
+                _fill_fallback_classification_basis(fpa_rows, judgement_rules, profile)
                 validation_issues, validation_warnings = _validate_fpa_rows_for_l3(
                     group=group,
                     rows=fpa_rows,
@@ -4113,9 +4150,14 @@ def preview_fpa_module(
             debug["reason"] = "ai_failed_fallback"
             warnings.append(f"AI 调用或解析失败，已使用兜底生成: {exc}")
             logger.warning("FPA 预览 AI 失败 [%s]: %s", _group_tag(group), exc)
-            fpa_rows = profile.fallback_rows_for_l3(group, meta, start_seq=1)
+            fpa_rows = profile.fallback_rows_for_l3(
+                group,
+                meta,
+                start_seq=1,
+                judgement_rules=judgement_rules,
+            )
             _attach_profile_rule_hits(fpa_rows, profile=profile, generation="fallback")
-            _fill_strict_fpa_fallback_classification_basis(fpa_rows, judgement_rules, profile)
+            _fill_fallback_classification_basis(fpa_rows, judgement_rules, profile)
         finally:
             reset_current_fpa_rule_set_config(rule_set_token)
         warnings = _with_config_warnings(warnings, execution.rule_set_config)

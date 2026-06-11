@@ -724,7 +724,7 @@ def test_fpa_acceptance_rules_first_low_confidence_check_workbook_explains_ai_re
     audit_trace = tmp_path / "trace.json"
     check_xlsx = tmp_path / "check.xlsx"
 
-    def fake_fallback(self, group, meta, start_seq=1):
+    def fake_fallback(self, group, meta, start_seq=1, **kwargs):
         return [{
             "序号": start_seq,
             "子系统(模块)": meta.get("子系统（模块）", ""),

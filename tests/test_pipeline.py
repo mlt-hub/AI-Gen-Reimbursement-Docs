@@ -180,7 +180,7 @@ class TestGenFpa:
     ):
         calls = {"count": 0}
 
-        def fake_fallback(self, group, meta, start_seq=1):
+        def fake_fallback(self, group, meta, start_seq=1, **kwargs):
             return [{
                 "序号": start_seq,
                 "子系统(模块)": meta.get("子系统（模块）", ""),
