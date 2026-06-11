@@ -9,8 +9,6 @@ judgement_rules_source: config
 # FPA 调整值计算配置。
 # legacy_workload: 简化历史口径，调整值来自 type_weights。
 # standard_fpa: 标准 FPA 口径，AI 输出 DET/RET/FTR 证据，代码按矩阵复算复杂度和 FP。
-adjustment_value_method_default: standard_fpa
-
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -90,6 +88,7 @@ profiles:
     kind: strict_fpa
     strategy: ai_first
     rule_set: strict_fpa_rs
+    adjustment_value_method: standard_fpa
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
@@ -99,6 +98,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: standard_fpa
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -108,6 +108,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: multi_uis_rs
+    adjustment_value_method: standard_fpa
     core_rules: multi_uis_cr
     system_prompt: multi_uis_sp
     user_prompt: multi_uis_up
@@ -117,6 +118,7 @@ profiles:
     kind: ui_api_mapping
     strategy: rules_first
     rule_set: ui_api_mapping_rs
+    adjustment_value_method: standard_fpa
     core_rules: ui_api_mapping_cr
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up

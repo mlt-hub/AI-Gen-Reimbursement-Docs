@@ -110,7 +110,6 @@ def _write_fpa_config(tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: unified_ui
-adjustment_value_method_default: standard_fpa
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -140,6 +139,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: standard_fpa
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -148,6 +148,7 @@ profiles:
     kind: strict_fpa
     strategy: ai_first
     rule_set: strict_fpa_rs
+    adjustment_value_method: standard_fpa
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
@@ -758,15 +759,13 @@ class TestLoadFpaExecutionOptions:
         assert result["methods"]["legacy_workload"]["type_weights"] == {"EI": 2, "default": 1}
         assert result["methods"]["standard_fpa"]["weights"]["EI"]["medium"] == 4
 
-    def test_adjustment_value_config_rejects_missing_adjustment_value(self, tmp_path):
+    def test_adjustment_value_config_rejects_missing_profile_method(self, tmp_path):
         _write_fpa_config(tmp_path)
         path = tmp_path / "fpa_config.yaml"
         content = path.read_text(encoding="utf-8")
-        start = content.index("adjustment_value_method_default:")
-        end = content.index("profiles:")
-        path.write_text(content[:start] + content[end:], encoding="utf-8")
+        path.write_text(content.replace("    adjustment_value_method: standard_fpa\n", ""), encoding="utf-8")
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-            with pytest.raises(FpaConfigError, match="adjustment_value_method_default"):
+            with pytest.raises(FpaConfigError, match=r"profiles\.unified_ui\.adjustment_value_method"):
                 load_fpa_adjustment_value_config()
 
     def test_adjustment_value_config_accepts_custom_legacy_weights(self, tmp_path):
@@ -787,13 +786,36 @@ class TestLoadFpaExecutionOptions:
 
         assert result["methods"]["legacy_workload"]["type_weights"] == {"EI": 5, "EO": 3, "default": 2}
 
+    def test_adjustment_value_config_uses_profile_method(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        path = tmp_path / "fpa_config.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                """  strict_fpa:
+    kind: strict_fpa
+    strategy: ai_first
+    rule_set: strict_fpa_rs
+    adjustment_value_method: standard_fpa""",
+                """  strict_fpa:
+    kind: strict_fpa
+    strategy: ai_first
+    rule_set: strict_fpa_rs
+    adjustment_value_method: legacy_workload""",
+            ),
+            encoding="utf-8",
+        )
+
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            assert load_fpa_adjustment_value_config("unified_ui")["method"] == "standard_fpa"
+            assert load_fpa_adjustment_value_config("strict_fpa")["method"] == "legacy_workload"
+
     def test_adjust_value_for_type_uses_configured_legacy_weights(self, tmp_path):
         _write_fpa_config(tmp_path)
         path = tmp_path / "fpa_config.yaml"
         path.write_text(
             path.read_text(encoding="utf-8").replace(
-                "adjustment_value_method_default: standard_fpa",
-                "adjustment_value_method_default: legacy_workload",
+                "    adjustment_value_method: standard_fpa",
+                "    adjustment_value_method: legacy_workload",
             ).replace(
                 """      EI: 2
       default: 1""",

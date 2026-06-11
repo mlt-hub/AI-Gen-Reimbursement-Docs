@@ -604,7 +604,6 @@ def test_fpa_options_returns_config_metadata(monkeypatch, tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: strict_fpa
-adjustment_value_method_default: legacy_workload
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -615,6 +614,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: legacy_workload
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -622,6 +622,7 @@ profiles:
     kind: strict_fpa
     strategy: ai_first
     rule_set: strict_fpa_rs
+    adjustment_value_method: legacy_workload
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
@@ -699,7 +700,6 @@ def test_fpa_options_preserves_custom_profile_order_and_label_fallback(monkeypat
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: client_api
-adjustment_value_method_default: legacy_workload
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -710,6 +710,7 @@ profiles:
     kind: ui_api_mapping
     strategy: rules_first
     rule_set: shared_rs
+    adjustment_value_method: legacy_workload
     core_rules: shared_cr
     system_prompt: shared_sp
     user_prompt: shared_up
@@ -717,6 +718,7 @@ profiles:
     kind: strict_fpa
     strategy: ai_first
     rule_set: shared_rs
+    adjustment_value_method: legacy_workload
     core_rules: shared_cr
     system_prompt: shared_sp
     user_prompt: shared_up
@@ -757,7 +759,6 @@ def test_fpa_options_returns_400_for_invalid_prompt_placeholder(monkeypatch, tmp
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: strict_fpa
-adjustment_value_method_default: legacy_workload
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -768,6 +769,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: legacy_workload
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -775,6 +777,7 @@ profiles:
     kind: strict_fpa
     strategy: ai_first
     rule_set: strict_fpa_rs
+    adjustment_value_method: legacy_workload
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up

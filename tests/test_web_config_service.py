@@ -863,7 +863,6 @@ def _write_minimal_fpa_config(path: Path) -> None:
         """
 default-profile: strict_fpa
 judgement_rules_source: config
-adjustment_value_method_default: legacy_workload
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -874,6 +873,7 @@ profiles:
     kind: strict_fpa
     strategy: ai_first
     rule_set: strict_fpa_rs
+    adjustment_value_method: legacy_workload
     core_rules: strict_cr
     system_prompt: strict_sp
     user_prompt: strict_up
@@ -881,6 +881,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_rs
+    adjustment_value_method: legacy_workload
     core_rules: unified_cr
     system_prompt: unified_sp
     user_prompt: unified_up

@@ -247,11 +247,11 @@ def _match_complexity_matrix(
     return ""
 
 
-def calculate_fpa_adjustment_for_row(row: dict[str, object]) -> dict[str, object]:
+def calculate_fpa_adjustment_for_row(row: dict[str, object], profile_name: str = "") -> dict[str, object]:
     """Calculate adjustment value and audit fields from configured FPA method."""
     from ai_gen_reimbursement_docs.config_utils import FpaConfigError, load_fpa_adjustment_value_config
 
-    config = load_fpa_adjustment_value_config()
+    config = load_fpa_adjustment_value_config(profile_name)
     method = str(config.get("method") or "").strip()
     methods = config.get("methods", {})
     if not isinstance(methods, dict) or method not in methods:
@@ -358,8 +358,8 @@ def function_point_tag(group: dict[str, object], name: str) -> str:
     return f"{base}-{clean_name}"
 
 
-def adjust_value_for_type(fpa_type: str) -> int | float:
-    return calculate_fpa_adjustment_for_row({"类型": fpa_type})["adjustment_value"]
+def adjust_value_for_type(fpa_type: str, profile_name: str = "") -> int | float:
+    return calculate_fpa_adjustment_for_row({"类型": fpa_type}, profile_name)["adjustment_value"]
 
 
 def module_change_status(processes: list[object]) -> str:
@@ -443,7 +443,7 @@ def _prompt_payload(
     from ai_gen_reimbursement_docs.fpa_merge_review import build_fpa_merge_review
     from ai_gen_reimbursement_docs.fpa_type_judgement import build_fpa_type_judgement
 
-    adjustment_config = load_fpa_adjustment_value_config()
+    adjustment_config = load_fpa_adjustment_value_config(profile_name)
     methods = adjustment_config.get("methods", {})
     standard_fpa = methods.get("standard_fpa", {}) if isinstance(methods, dict) else {}
     process_facts = extract_fpa_process_facts(group)
@@ -495,7 +495,7 @@ def _prompt_payload(
                 "RET": "ILF/EIF 中用户可识别的记录子组数量。",
                 "FTR": "EI/EO/EQ 读取或维护的 ILF/EIF 数量。",
             },
-            "adjustment_value_method_default": adjustment_config.get("method", ""),
+            "adjustment_value_method": adjustment_config.get("method", ""),
             "standard_fpa": standard_fpa if isinstance(standard_fpa, dict) else {},
             "output_fields": {
                 "ILF_EIF": ["complexity", "det_count", "ret_count", "complexity_reason"],
@@ -1066,7 +1066,7 @@ class CustomRulesProfile:
                 "计算依据归类": "",
                 "计算依据说明": ui_rule.explanation_template.format(name=ui_name, items=ui_detail),
                 "变更状态": module_change_status(process_list),
-                "调整值": adjust_value_for_type(ui_rule.fpa_type),
+                "调整值": adjust_value_for_type(ui_rule.fpa_type, self.name),
                 "要素数量": 1,
                 "生成方式": "fallback",
                 "类型理由": ui_rule.reason,
@@ -1099,7 +1099,7 @@ class CustomRulesProfile:
                     description=desc or name,
                 ),
                 "变更状态": str(p.get("change_status", "") or module_change_status(process_list)),
-                "调整值": adjust_value_for_type(fpa_type),
+                "调整值": adjust_value_for_type(fpa_type, self.name),
                 "要素数量": 1,
                 "生成方式": "fallback",
                 "类型理由": reason,
@@ -1349,7 +1349,7 @@ class StrictFpaProfile(CustomRulesProfile):
                 "计算依据归类": "",
                 "计算依据说明": f"{point_name}，作为该三级模块涉及的逻辑数据组。",
                 "变更状态": module_change_status(process_list),
-                "调整值": adjust_value_for_type(data_type),
+                "调整值": adjust_value_for_type(data_type, self.name),
                 "要素数量": 1,
                 "生成方式": "fallback",
                 "类型理由": data_reason,
@@ -1369,7 +1369,7 @@ class StrictFpaProfile(CustomRulesProfile):
                 "计算依据归类": "",
                 "计算依据说明": str(transaction["explanation"]).replace(str(transaction["name"]), point_name, 1),
                 "变更状态": str(transaction["change_status"] or module_change_status(process_list)),
-                "调整值": adjust_value_for_type(str(transaction["type"])),
+                "调整值": adjust_value_for_type(str(transaction["type"]), self.name),
                 "要素数量": 1,
                 "生成方式": "fallback",
                 "类型理由": transaction["reason"],
@@ -1899,7 +1899,7 @@ class UiApiMappingProfile(CustomRulesProfile):
                     "计算依据归类": "",
                     "计算依据说明": f"{point_name}，来源功能过程：{desc or raw_name}",
                     "变更状态": status,
-                    "调整值": adjust_value_for_type(fpa_type),
+                    "调整值": adjust_value_for_type(fpa_type, self.name),
                     "要素数量": 1,
                     "生成方式": "fallback",
                     "类型理由": reason,
@@ -1925,7 +1925,7 @@ class UiApiMappingProfile(CustomRulesProfile):
                     "计算依据归类": "",
                     "计算依据说明": f"{point_name}，来源功能过程：{desc or raw_name}",
                     "变更状态": status,
-                    "调整值": adjust_value_for_type("ILF"),
+                    "调整值": adjust_value_for_type("ILF", self.name),
                     "要素数量": 1,
                     "生成方式": "fallback",
                     "类型理由": "输入材料明确出现接口、服务、调用或同步等后端交互，按明确接口/后端调用行固定 ILF。",

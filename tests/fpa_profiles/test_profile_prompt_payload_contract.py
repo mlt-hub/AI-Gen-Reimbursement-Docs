@@ -12,7 +12,6 @@ def _write_config(tmp_path):
     (tmp_path / "fpa_config.yaml").write_text(
         """
 default-profile: unified_ui
-adjustment_value_method_default: legacy_workload
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -24,6 +23,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: legacy_workload
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -31,6 +31,7 @@ profiles:
     kind: ui_api_mapping
     strategy: rules_first
     rule_set: ui_api_mapping_rs
+    adjustment_value_method: legacy_workload
     core_rules: ui_api_mapping_cr
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up
@@ -38,6 +39,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: legacy_workload
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -45,6 +47,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: legacy_workload
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -52,6 +55,7 @@ profiles:
     kind: ui_api_mapping
     strategy: rules_first
     rule_set: ui_api_mapping_rs
+    adjustment_value_method: legacy_workload
     core_rules: ui_api_mapping_cr
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up

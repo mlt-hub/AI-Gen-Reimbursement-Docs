@@ -993,16 +993,7 @@ def _validate_standard_fpa_config(raw: object, key_path: str) -> None:
 
 
 def _validate_fpa_adjustment_value_config(cfg: dict[str, object]) -> None:
-    method = _require_non_empty_string(cfg.get("adjustment_value_method_default"), "adjustment_value_method_default")
-    if method not in VALID_FPA_ADJUSTMENT_METHODS:
-        raise FpaConfigError(
-            f"未知 FPA adjustment_value_method_default: {method}，支持的 method: {', '.join(sorted(VALID_FPA_ADJUSTMENT_METHODS))}"
-        )
     methods = _require_mapping(cfg.get("adjustment_value_methods"), "adjustment_value_methods")
-    if method not in methods:
-        raise FpaConfigError(
-            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 adjustment_value_methods 缺少默认 method: {method}"
-        )
     if "legacy_workload" in methods:
         _validate_legacy_workload_config(methods.get("legacy_workload"), "adjustment_value_methods.legacy_workload")
     if "standard_fpa" in methods:
@@ -1105,6 +1096,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
                 "system_prompt",
                 "user_prompt",
                 "calculation_explanation_rules",
+                "adjustment_value_method",
             }
         )
         if unknown_fields:
@@ -1124,6 +1116,21 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         if rule_set not in rule_sets:
             raise FpaConfigError(
                 f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {profile_path}.rule_set 指向不存在的 rule_set: {rule_set}"
+            )
+        adjustment_value_method = _require_non_empty_string(
+            entry.get("adjustment_value_method"),
+            f"{profile_path}.adjustment_value_method",
+        )
+        if adjustment_value_method not in VALID_FPA_ADJUSTMENT_METHODS:
+            raise FpaConfigError(
+                f"未知 FPA {profile_path}.adjustment_value_method: {adjustment_value_method}，支持的 method: "
+                f"{', '.join(sorted(VALID_FPA_ADJUSTMENT_METHODS))}"
+            )
+        if adjustment_value_method not in cfg.get("adjustment_value_methods", {}):
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 "
+                f"{profile_path}.adjustment_value_method 指向不存在的 adjustment_value_methods: "
+                f"{adjustment_value_method}"
             )
         core_rule = _require_non_empty_string(entry.get("core_rules"), f"{profile_path}.core_rules")
         if core_rule not in core_rules:
@@ -1168,14 +1175,19 @@ def load_fpa_config() -> dict[str, object]:
     return cfg
 
 
-def load_fpa_adjustment_value_config() -> dict[str, object]:
+def load_fpa_adjustment_value_config(profile_name: str = "") -> dict[str, object]:
     """读取 FPA 调整值计算配置。"""
     cfg = load_fpa_config()
     methods = cfg.get("adjustment_value_methods")
     if not isinstance(methods, dict):
         raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 adjustment_value_methods")
+    profile_key = str(profile_name or cfg.get("default-profile") or "").strip()
+    profiles = cfg.get("profiles")
+    entry = profiles.get(profile_key) if isinstance(profiles, dict) else None
+    if not isinstance(entry, dict):
+        raise FpaConfigError(f"未找到 FPA profile 配置：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_key}")
     result: dict[str, object] = {
-        "method": str(cfg["adjustment_value_method_default"]).strip(),
+        "method": str(entry.get("adjustment_value_method") or "").strip(),
         "methods": {},
     }
 

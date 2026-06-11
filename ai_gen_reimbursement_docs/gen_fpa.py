@@ -1382,7 +1382,7 @@ def _normalize_ai_fpa_rows_for_l3(
             "计算依据归类": basis,
             "计算依据说明": explanation,
             "变更状态": str(raw.get("change_status", "") or module_status),
-            "调整值": _adjust_value_for_type(fpa_type),
+            "调整值": _adjust_value_for_type(fpa_type, profile.name),
             "要素数量": int(raw.get("element_count", 1) or 1),
             "生成方式": "ai",
             "类型理由": type_reason,
@@ -1395,7 +1395,7 @@ def _normalize_ai_fpa_rows_for_l3(
             "FTR": raw.get("ftr_count", ""),
             "复杂度说明": raw.get("complexity_reason", ""),
         }
-        adjustment_audit = calculate_fpa_adjustment_for_row(row)
+        adjustment_audit = calculate_fpa_adjustment_for_row(row, profile.name)
         row["调整值"] = adjustment_audit["adjustment_value"]
         row["复杂度"] = adjustment_audit["complexity"]
         row["DET"] = adjustment_audit["det_count"]
@@ -1748,7 +1748,7 @@ def _supplement_ai_rows_with_rules(
                 warning = f"{row_name} AI 默认映射行类型 {old_type or '空'} 已按 {profile.name} contract 修正为 {row_type}。"
                 old_warning = str(existing.get("后处理警告", "") or "")
                 existing["后处理警告"] = f"{old_warning}；{warning}" if old_warning else warning
-                adjustment_audit = calculate_fpa_adjustment_for_row(existing)
+                adjustment_audit = calculate_fpa_adjustment_for_row(existing, profile.name)
                 existing["调整值"] = adjustment_audit["adjustment_value"]
                 existing["复杂度"] = adjustment_audit["complexity"]
                 existing["DET"] = adjustment_audit["det_count"]
@@ -2298,10 +2298,10 @@ def calculate_fpa_total(rows: list[dict[str, object]]) -> float:
     return sum(calculate_fpa_row_workload(row) for row in rows)
 
 
-def _enrich_fpa_rows_with_adjustment(rows: list[dict[str, object]]) -> None:
+def _enrich_fpa_rows_with_adjustment(rows: list[dict[str, object]], profile_name: str = "") -> None:
     """Apply configured adjustment calculation and audit fields to rows in place."""
     for row in rows:
-        adjustment_audit = calculate_fpa_adjustment_for_row(row)
+        adjustment_audit = calculate_fpa_adjustment_for_row(row, profile_name)
         row["调整值"] = adjustment_audit["adjustment_value"]
         row["复杂度"] = adjustment_audit["complexity"]
         row["DET"] = adjustment_audit["det_count"]
@@ -3116,7 +3116,7 @@ def _write_fpa_rows_md(
     ai_filled: bool = False,
     execution_meta: dict[str, str] | None = None,
 ) -> float:
-    _enrich_fpa_rows_with_adjustment(fpa_rows)
+    _enrich_fpa_rows_with_adjustment(fpa_rows, (execution_meta or {}).get("profile", ""))
     with open(output_md_path, 'w', encoding='utf-8') as f:
         f.write("# FPA 工作量评估\n\n")
         f.write(f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")

@@ -120,6 +120,7 @@ profiles:
     kind: strict_fpa
     strategy: ai_first
     rule_set: strict_fpa_rs
+    adjustment_value_method: standard_fpa
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
@@ -128,6 +129,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: standard_fpa
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -146,6 +148,7 @@ calculation_explanation_rules:
 
 ```text
 rule_set: <profile>_rs
+adjustment_value_method: standard_fpa | legacy_workload
 core_rules: <profile>_cr
 system_prompt: <profile>_sp
 user_prompt: <profile>_up

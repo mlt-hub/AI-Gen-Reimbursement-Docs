@@ -83,7 +83,6 @@ def test_strict_fpa_external_data_rules_can_be_extended_from_config(tmp_path):
     yaml_file.write_text(
         """
 default-profile: strict_fpa
-adjustment_value_method_default: legacy_workload
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -94,6 +93,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: legacy_workload
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -101,6 +101,7 @@ profiles:
     kind: strict_fpa
     strategy: ai_first
     rule_set: strict_fpa_auth
+    adjustment_value_method: legacy_workload
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
@@ -150,7 +151,6 @@ def test_rule_set_warns_when_external_data_rule_looks_like_ordinary_service(tmp_
     yaml_file.write_text(
         """
 default-profile: strict_fpa
-adjustment_value_method_default: legacy_workload
 adjustment_value_methods:
   legacy_workload:
     type_weights:
@@ -161,6 +161,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
+    adjustment_value_method: legacy_workload
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -168,6 +169,7 @@ profiles:
     kind: strict_fpa
     strategy: rules_only
     rule_set: strict_fpa_sms
+    adjustment_value_method: legacy_workload
     core_rules: strict_fpa_cr
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
