@@ -3168,26 +3168,38 @@ def _write_fpa_rows_md(
                 str(row.get("序号", "")),
                 str(row.get("子系统(模块)", "")),
                 str(row.get("资产标识", "")),
-                str(row.get("新增/修改功能点", "")).replace('|', '\\|'),
+                _escape_fpa_md_cell(row.get("新增/修改功能点", "")),
                 str(row.get("类型", "")),
                 str(row.get("计算依据归类", "")),
-                str(row.get("计算依据说明", "")).replace("|", chr(92) + "|").replace(chr(10), " "),
+                _escape_fpa_md_cell(row.get("计算依据说明", "")),
                 str(row.get("变更状态", "")),
                 str(row.get("调整值", "")),
                 str(row.get("要素数量", "")),
                 str(row.get("生成方式", "")),
-                str(row.get("类型理由", "")).replace('|', '\\|'),
-                str(row.get("源功能过程", "")).replace('|', '\\|'),
-                str(row.get("后处理警告", "")).replace('|', '\\|'),
+                _escape_fpa_md_cell(row.get("类型理由", "")),
+                _escape_fpa_md_cell(row.get("源功能过程", "")),
+                _escape_fpa_md_cell(row.get("后处理警告", "")),
                 str(row.get("复杂度", "")),
                 str(row.get("DET", "")),
                 str(row.get("RET", "")),
                 str(row.get("FTR", "")),
-                str(row.get("复杂度说明", "")).replace("|", chr(92) + "|").replace(chr(10), " "),
+                _escape_fpa_md_cell(row.get("复杂度说明", "")),
                 str(row.get("调整值计算方式", "")),
             ]
             f.write("| " + " | ".join(vals) + " |\n")
     return calculate_fpa_total(fpa_rows)
+
+
+def _escape_fpa_md_cell(value: object) -> str:
+    text = str(value or "")
+    text = text.replace("|", chr(92) + "|")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return text.replace("\n", "<br>")
+
+
+def _unescape_fpa_md_cell(value: object) -> str:
+    text = str(value or "")
+    return re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
 
 
 def _read_fpa_rows_md_for_audit(fpa_md_path: str) -> tuple[dict[str, str], list[dict[str, object]]]:
@@ -3217,19 +3229,19 @@ def _read_fpa_rows_md_for_audit(fpa_md_path: str) -> tuple[dict[str, str], list[
                         "新增/修改功能点": cells[3],
                         "类型": cells[4],
                         "计算依据归类": cells[5],
-                        "计算依据说明": cells[6],
+                        "计算依据说明": _unescape_fpa_md_cell(cells[6]),
                         "变更状态": cells[7],
                         "调整值": cells[8],
                         "要素数量": cells[9],
                         "生成方式": cells[10],
-                        "类型理由": cells[11],
-                        "源功能过程": cells[12],
-                        "后处理警告": cells[13],
+                        "类型理由": _unescape_fpa_md_cell(cells[11]),
+                        "源功能过程": _unescape_fpa_md_cell(cells[12]),
+                        "后处理警告": _unescape_fpa_md_cell(cells[13]),
                         "复杂度": cells[14] if len(cells) > 14 else "",
                         "DET": cells[15] if len(cells) > 15 else "",
                         "RET": cells[16] if len(cells) > 16 else "",
                         "FTR": cells[17] if len(cells) > 17 else "",
-                        "复杂度说明": cells[18] if len(cells) > 18 else "",
+                        "复杂度说明": _unescape_fpa_md_cell(cells[18]) if len(cells) > 18 else "",
                         "调整值计算方式": cells[19] if len(cells) > 19 else "",
                     })
     return execution_meta, fpa_rows
@@ -4249,6 +4261,7 @@ def _format_fpa_explanation(text: str) -> str:
     """格式化 FPA 计算依据说明：加换行排版，不改变原文内容。"""
     NL = chr(10)
     text = text.lstrip("：: ")
+    text = re.sub(re.compile(r"(具体为以下[：:])\s*"), r"\1" + NL, text)
     text = text.replace("具体如下", "具体如下" + NL + NL)
     text = text.replace("事件流：", NL + "事件流：")
     text = text.replace("触发事件：", NL + "触发事件：")
@@ -4259,6 +4272,7 @@ def _format_fpa_explanation(text: str) -> str:
     text = text.replace("涉及服务", NL + "涉及服务")
     text = text.replace("；涉及接口", "；" + NL + "涉及接口")
     text = re.sub(re.compile(r"(?<=\S)\s+(?=\d+\.)"), NL, text)
+    text = re.sub(re.compile(r"(?<=\S)\s+(?=\d+、)"), NL, text)
     text = re.sub(re.compile(r"^[	 ]+", re.MULTILINE), "", text)
     text = re.sub(re.compile(r'\n[：:;；]\s*\n'), '\n', text)
     text = re.sub(re.compile(NL + "{3,}"), NL + NL, text)
@@ -4438,7 +4452,7 @@ def generate_fpa_xlsx_from_md(
                         "新增/修改功能点": cells[3],
                         "类型": cells[4],
                         "计算依据归类": cells[5],
-                        "计算依据说明": cells[6],
+                        "计算依据说明": _unescape_fpa_md_cell(cells[6]),
                         "变更状态": cells[7],
                         "调整值": cells[8],
                         "要素数量": cells[9],

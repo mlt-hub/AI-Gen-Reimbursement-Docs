@@ -8,6 +8,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
     _build_fpa_rule_rows,
     _receiver_from_client_type,
     _format_fpa_explanation,
+    _write_fpa_rows_md,
     calculate_fpa_row_workload,
     calculate_fpa_total,
     calculate_fpa_excel_formula_projection,
@@ -188,6 +189,57 @@ class TestFpaTotalCalculation:
         assert ws.cell(4, 12).value == "=J4*K4"
         assert ws.cell(1, 12).value == "=SUM(L3:L4)"
         wb.close()
+
+    def test_generate_xlsx_preserves_explanation_template_newlines(self, tmp_path):
+        template = FIXTURES / "output_templates" / "FPA工作量评估-输出模板.xlsx"
+        if not template.exists():
+            pytest.skip(f"模板文件缺失: {template}")
+
+        fpa_md = tmp_path / "fpa.md"
+        meta_md = tmp_path / "meta.md"
+        output = tmp_path / "FPA工作量评估.xlsx"
+        _write_fpa_rows_md(
+            [
+                {
+                    "序号": 1,
+                    "子系统(模块)": "测试系统",
+                    "资产标识": "TEST",
+                    "新增/修改功能点": "界面开发",
+                    "类型": "EI",
+                    "计算依据归类": "EI:1)修改或增加界面的个数",
+                    "计算依据说明": "界面开发，具体为以下：\n1、添加页面\n2、查询列表",
+                    "变更状态": "新增",
+                    "调整值": 4,
+                    "要素数量": 1,
+                    "生成方式": "fallback",
+                    "类型理由": "",
+                    "源功能过程": "",
+                    "后处理警告": "",
+                    "复杂度说明": "低复杂度\n按默认值",
+                }
+            ],
+            str(fpa_md),
+        )
+        meta_md.write_text("# 元数据\n", encoding="utf-8")
+
+        md_text = fpa_md.read_text(encoding="utf-8")
+        assert "具体为以下：<br>1、添加页面<br>2、查询列表" in md_text
+
+        generate_fpa_xlsx_from_md(str(fpa_md), str(meta_md), str(template), str(output))
+
+        wb = openpyxl.load_workbook(output, data_only=False)
+        ws = wb["FPA功能点估算"]
+        explanation = ws.cell(3, 7).value
+        assert "具体为以下：\n1、添加页面\n2、查询列表" in explanation
+        assert ws.cell(3, 7).alignment.wrap_text is True
+        wb.close()
+
+    def test_format_fpa_explanation_recovers_flattened_chinese_items(self):
+        result = _format_fpa_explanation(
+            "界面开发，具体为以下： 1、添加页面 2、查询列表"
+        )
+
+        assert "具体为以下：\n1、添加页面\n2、查询列表" in result
 
     def test_generate_xlsx_uses_fpa_manifest_sheet_rows_and_headers(self, tmp_path):
         template = tmp_path / "custom-fpa.xlsx"
