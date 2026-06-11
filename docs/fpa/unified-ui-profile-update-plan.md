@@ -154,6 +154,19 @@ calculation_explanation_rules:
 | `tests/fixtures/fpa_golden_cases/vertical_industry_management.json` | 更新垂直行业管理 golden case，补齐查询逻辑接口行，并将非界面行命名调整为“逻辑接口开发”。 |
 | `docs/fpa/fpa-profiles.md`、`docs/fpa/calculation-basis-explanation-rules.md` | 同步 profile 文档和计算依据说明文档，移除旧 `prompt_fragments.calculation_explanation_rules` 路径说明，改为 profile 级绑定说明。 |
 
+## 实施顺序
+
+建议按以下顺序实施，降低配置结构调整和 profile 行为调整互相干扰的风险：
+
+1. 调整 `config/fpa_config.yaml.example` 的配置结构：新增顶层 `calculation_explanation_rules`，将原 default 规则文本改名为 `strict_fpa_ce`，新增 `unified_ui_ce`、`multi_uis_ce`、`ui_api_mapping_ce`，并在四个 profile 下显式绑定。
+2. 调整 `ai_gen_reimbursement_docs/config_utils.py`：允许 `profiles.<profile>.calculation_explanation_rules` 字段，校验绑定 key 存在，移除旧 `prompt_fragments.calculation_explanation_rules` 读取路径，并更新 diagnostics 的 source path。
+3. 先更新配置结构相关测试：覆盖默认配置可加载、profile 绑定 key 可解析、缺失绑定报错、绑定不存在 key 报错、未引用占位符只 warning。
+4. 调整 `unified_ui` profile 口径：更新 `unified_ui_cr`、`unified_ui_sp`、`unified_ui_up`、`unified_ui_rs`，落实界面合并、逻辑接口/表、导入、导出、外部接口联调调用的类型规则。
+5. 调整 `ai_gen_reimbursement_docs/fpa_profiles.py` 的 fallback/规则兜底命名逻辑：从“按类型推后缀”改为“按业务动作或关键词优先推后缀”，确保查询为 `ILF` 时仍输出“逻辑接口开发”，导入为 `EQ` 时仍输出导入类行。
+6. 更新 `unified_ui` 相关测试和 golden case：重点覆盖垂直行业管理、查询逻辑接口、导入、导出、外部接口联调调用，以及 `multi_uis`、`ui_api_mapping` 是否保持预期行为。
+7. 同步文档：更新 `docs/fpa/fpa-profiles.md` 和 `docs/fpa/calculation-basis-explanation-rules.md` 中的配置路径、profile 绑定和新口径说明。
+8. 运行完整验证命令，确认配置加载、prompt 渲染、fallback、AI 后处理和验收样例均通过。
+
 ## 验证方式
 
 后续实施完成后，至少运行：
@@ -172,6 +185,30 @@ calculation_explanation_rules:
 3. user prompt 引用了 `${calculation_explanation_rules}` 但 profile 未配置绑定时，应明确报错。
 4. profile 绑定了不存在的 key 时，应明确报错。
 5. user prompt 未引用 `${calculation_explanation_rules}` 时，仍只给 warning，不强制要求绑定。
+
+## 验收清单
+
+实施完成后，应满足以下验收项：
+
+- 默认 `config/fpa_config.yaml.example` 不再包含 `prompt_fragments.calculation_explanation_rules`。
+- 顶层存在 `calculation_explanation_rules.strict_fpa_ce`、`calculation_explanation_rules.unified_ui_ce`、`calculation_explanation_rules.multi_uis_ce`、`calculation_explanation_rules.ui_api_mapping_ce`。
+- 原 `default` calculation_explanation_rules 文本迁移为 `strict_fpa_ce`。
+- `profiles.strict_fpa.calculation_explanation_rules` 绑定 `strict_fpa_ce`。
+- `profiles.unified_ui.calculation_explanation_rules` 绑定 `unified_ui_ce`。
+- `profiles.multi_uis.calculation_explanation_rules` 绑定 `multi_uis_ce`。
+- `profiles.ui_api_mapping.calculation_explanation_rules` 绑定 `ui_api_mapping_ce`。
+- `multi_uis_ce` 和 `ui_api_mapping_ce` 的规则内容与 `unified_ui_ce` 保持一致。
+- 默认四个官方 profile 的 user prompt 均能成功渲染 `${calculation_explanation_rules}`，最终 prompt 中不残留 `${...}`。
+- 缺失 `profiles.<profile>.calculation_explanation_rules` 或绑定不存在 key 时，配置校验给出明确错误。
+- `unified_ui` 界面类输出合并为三级模块级 `EI` 行，不按按钮、弹窗、列表、状态组件拆成多行。
+- `unified_ui` 添加、编辑、查询、删除、状态更新、数据表新增修改等非界面能力输出为“逻辑接口开发”类行，类型为 `ILF`。
+- `unified_ui` 导入类能力类型为 `EQ`。
+- `unified_ui` 导出类能力类型为 `EO`。
+- `unified_ui` 外部接口联调调用类型为 `EIF`。
+- 垂直行业管理 golden case 至少包含“垂直行业管理界面开发 / EI”“添加垂直行业-逻辑接口开发 / ILF”“编辑垂直行业-逻辑接口开发 / ILF”“查询垂直行业-逻辑接口开发 / ILF”“删除垂直行业-逻辑接口开发 / ILF”。
+- `计算依据说明` 按系统建设内容描述，不按用户操作流程描述；新增表、修改字段等可归纳为一个小点。
+- Web 配置诊断和 prompt diagnostics 不再显示旧路径 `prompt_fragments.calculation_explanation_rules.default`。
+- `git status` 只包含本轮相关变更；提交前测试命令有明确通过记录或说明未运行原因。
 
 ## 风险
 
