@@ -1705,12 +1705,24 @@ def _supplement_ai_rows_with_rules(
     if not require_process_coverage and not require_data_function and not require_profile_exact_rows:
         return ai_rows, []
 
-    rule_rows = profile.fallback_rows_for_l3(
-        group,
-        meta,
-        start_seq=1,
-        judgement_rules=judgement_rules,
-    )
+    if isinstance(rule_set_config, FpaRuleSetConfig):
+        rule_set_token = set_current_fpa_rule_set_config(rule_set_config)
+        try:
+            rule_rows = profile.fallback_rows_for_l3(
+                group,
+                meta,
+                start_seq=1,
+                judgement_rules=judgement_rules,
+            )
+        finally:
+            reset_current_fpa_rule_set_config(rule_set_token)
+    else:
+        rule_rows = profile.fallback_rows_for_l3(
+            group,
+            meta,
+            start_seq=1,
+            judgement_rules=judgement_rules,
+        )
     id_to_name = _process_id_to_name_for_group(group)
     expected_process_ids = set(id_to_name)
     expected_process_names = set(_process_names_for_group(group))

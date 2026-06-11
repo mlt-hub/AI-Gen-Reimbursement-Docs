@@ -1,5 +1,13 @@
-from ai_gen_reimbursement_docs.fpa_profiles import UiApiMappingProfile
-from ai_gen_reimbursement_docs.fpa_validator import validate_fpa_rows
+import pytest
+
+from ai_gen_reimbursement_docs.fpa_profiles import (
+    FpaProcessRowsPlanningRule,
+    FpaRowPlanningRules,
+    FpaRuleSetConfig,
+    UiApiMappingProfile,
+    reset_current_fpa_rule_set_config,
+    set_current_fpa_rule_set_config,
+)
 
 
 def _group():
@@ -21,6 +29,25 @@ def _point(group: dict[str, object], name: str) -> str:
     return f"【{group['client_type']}】{group['l1']}-{group['l2']}-{group['l3']}-{name}"
 
 
+@pytest.fixture(autouse=True)
+def ui_api_mapping_rule_context():
+    config = FpaRuleSetConfig(
+        name="ui_api_mapping_rs",
+        row_planning_rules=FpaRowPlanningRules(
+            process_rows=FpaProcessRowsPlanningRule(
+                enabled=True,
+                one_row_per_process=True,
+                explanation_template="{name}，具体为以下：\n1、{description}",
+            ),
+        ),
+    )
+    token = set_current_fpa_rule_set_config(config)
+    try:
+        yield
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+
 def test_ui_api_mapping_harness_generates_default_ui_and_api_rows_per_process():
     group = _group()
     rows = UiApiMappingProfile().fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
@@ -31,7 +58,9 @@ def test_ui_api_mapping_harness_generates_default_ui_and_api_rows_per_process():
         assert types[_point(group, f"{process_name}-界面开发")] == "EI"
         assert types[_point(group, f"{process_name}-接口开发")] == "ILF"
 
-    assert not any(issue.code == "validator.explanation_structure" for issue in validate_fpa_rows(group=group, rows=rows))
+    explanations = [str(row["计算依据说明"]) for row in rows]
+    assert any("具体为以下：\n1、查询合同列表。" in item for item in explanations)
+    assert not any("来源功能过程" in item for item in explanations)
 
 
 def test_ui_api_mapping_harness_keeps_explicit_backend_rows_and_merges_sources():

@@ -8,6 +8,8 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
     ExternalDataGroupRule,
+    FpaProcessRowsPlanningRule,
+    FpaRowPlanningRules,
     FpaRuleSetConfig,
     KeywordTypeRule,
     UiApiMappingProfile,
@@ -33,6 +35,19 @@ def _assert_structured_explanations(group, rows):
 def _assert_not_strict_fallback_wrapped(rows):
     assert rows
     assert not any("来源场景：来自" in str(row["计算依据说明"]) for row in rows)
+
+
+def _ui_api_mapping_rule_set(template: str = "{name}，具体为以下：\n1、{description}") -> FpaRuleSetConfig:
+    return FpaRuleSetConfig(
+        name="ui_api_mapping_rs",
+        row_planning_rules=FpaRowPlanningRules(
+            process_rows=FpaProcessRowsPlanningRule(
+                enabled=True,
+                one_row_per_process=True,
+                explanation_template=template,
+            ),
+        ),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -315,7 +330,11 @@ def test_ui_api_mapping_fallback_generates_default_and_explicit_backend_rows():
         ],
     }
 
-    rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    token = set_current_fpa_rule_set_config(_ui_api_mapping_rule_set())
+    try:
+        rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    finally:
+        reset_current_fpa_rule_set_config(token)
     names = [str(row["新增/修改功能点"]) for row in rows]
     types = {str(row["新增/修改功能点"]): str(row["类型"]) for row in rows}
 
@@ -334,6 +353,42 @@ def test_ui_api_mapping_fallback_generates_default_and_explicit_backend_rows():
     assert types["【业务端】销售管理-合同中心-合同管理-查询合同列表-界面开发"] == "EI"
     assert types["【业务端】销售管理-合同中心-合同管理-查询合同列表-接口开发"] == "ILF"
     assert types["【业务端】销售管理-合同中心-合同管理-OA 审批接口"] == "ILF"
+    query_ui_row = next(
+        row
+        for row in rows
+        if row["新增/修改功能点"] == "【业务端】销售管理-合同中心-合同管理-查询合同列表-界面开发"
+    )
+    assert str(query_ui_row["计算依据说明"]).startswith(
+        "【业务端】销售管理-合同中心-合同管理-查询合同列表-界面开发，具体为以下："
+    )
+    assert "1、查询合同列表。" in str(query_ui_row["计算依据说明"])
+    assert "来源功能过程" not in str(query_ui_row["计算依据说明"])
+
+
+def test_ui_api_mapping_fallback_uses_configured_explanation_template():
+    profile = UiApiMappingProfile()
+    group = {
+        "client_type": "业务端",
+        "l1": "销售管理",
+        "l2": "合同中心",
+        "l3": "合同管理",
+        "processes": [
+            {"name": "提交合同审批", "change_status": "新增", "desc": "提交合同审批。"},
+        ],
+    }
+    config = _ui_api_mapping_rule_set("配置模板::{name}::{description}")
+    token = set_current_fpa_rule_set_config(config)
+    try:
+        rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert rows
+    assert all(
+        str(row["计算依据说明"]).startswith("配置模板::")
+        for row in rows
+    )
+    assert all("提交合同审批。" in str(row["计算依据说明"]) for row in rows)
 
 
 def test_ui_api_mapping_keeps_multiple_explicit_backend_rows_and_duplicate_default_rows():
@@ -349,7 +404,11 @@ def test_ui_api_mapping_keeps_multiple_explicit_backend_rows_and_duplicate_defau
         ],
     }
 
-    rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    token = set_current_fpa_rule_set_config(_ui_api_mapping_rule_set())
+    try:
+        rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    finally:
+        reset_current_fpa_rule_set_config(token)
     names = [str(row["新增/修改功能点"]) for row in rows]
 
     assert names.count("【业务端】销售管理-合同中心-合同管理-提交合同审批-界面开发") == 2

@@ -1983,6 +1983,7 @@ class UiApiMappingProfile(CustomRulesProfile):
 
         explicit_rows: dict[str, dict[str, object]] = {}
         default_point_names: set[str] = set()
+        explanation_template = self._configured_mapping_explanation_template()
         for p in process_list:
             if not isinstance(p, dict):
                 continue
@@ -2011,7 +2012,10 @@ class UiApiMappingProfile(CustomRulesProfile):
                     "新增/修改功能点": point_name,
                     "类型": fpa_type,
                     "计算依据归类": basis,
-                    "计算依据说明": f"{point_name}，来源功能过程：{desc or raw_name}",
+                    "计算依据说明": explanation_template.format(
+                        name=point_name,
+                        description=desc or raw_name,
+                    ),
                     "变更状态": status,
                     "调整值": adjust_value_for_type(fpa_type, self.name),
                     "要素数量": 1,
@@ -2043,7 +2047,10 @@ class UiApiMappingProfile(CustomRulesProfile):
                         fpa_type="ILF",
                         judgement_rules=judgement_rules,
                     ),
-                    "计算依据说明": f"{point_name}，来源功能过程：{desc or raw_name}",
+                    "计算依据说明": explanation_template.format(
+                        name=point_name,
+                        description=desc or raw_name,
+                    ),
                     "变更状态": status,
                     "调整值": adjust_value_for_type("ILF", self.name),
                     "要素数量": 1,
@@ -2058,6 +2065,19 @@ class UiApiMappingProfile(CustomRulesProfile):
                 rows.append(row)
                 seq += 1
         return rows
+
+    def _configured_mapping_explanation_template(self) -> str:
+        process_rule = self._configured_process_row_planning_rule()
+        if (
+            process_rule is None
+            or process_rule.enabled is False
+            or not process_rule.explanation_template
+        ):
+            raise ValueError(
+                "ui_api_mapping rule_set 必须配置 "
+                "row_planning_rules.process_rows.explanation_template"
+            )
+        return process_rule.explanation_template
 
     def _explicit_backend_interactions(self, name: str, desc: str) -> list[str]:
         text = f"{name}，{desc}"

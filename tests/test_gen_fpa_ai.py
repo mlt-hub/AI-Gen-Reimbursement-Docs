@@ -46,6 +46,29 @@ def _meta():
     return {"子系统（模块）": "测试系统", "资产标识": "TEST-001"}
 
 
+def _ui_api_mapping_rule_set(
+    *,
+    require_process_coverage: bool | None = True,
+    require_data_function: bool | None = False,
+) -> FpaRuleSetConfig:
+    return FpaRuleSetConfig(
+        name="ui_api_mapping_rs",
+        coverage_rules=FpaCoverageRules(
+            require_process_coverage=require_process_coverage,
+            require_data_function=require_data_function,
+        ),
+        row_planning_rules=FpaRowPlanningRules(
+            process_rows=FpaProcessRowsPlanningRule(
+                enabled=True,
+                one_row_per_process=True,
+                default_name_suffix="接口开发",
+                type_suffixes={"EI": "界面开发", "ILF": "接口开发"},
+                explanation_template="{name}，具体为以下：\n1、{description}",
+            ),
+        ),
+    )
+
+
 def _rows():
     return [
         {
@@ -2655,6 +2678,7 @@ def test_ai_first_ui_api_mapping_supplements_required_default_rows_and_normalize
         ai_rows=ai_rows,
         profile=UI_API_MAPPING_PROFILE,
         strategy="ai_first",
+        rule_set_config=_ui_api_mapping_rule_set(),
     )
 
     api_row = next(row for row in combined if row["新增/修改功能点"] == api_name)
@@ -2712,9 +2736,9 @@ def test_ai_first_ui_api_mapping_normalizes_type_without_reporting_added_rows():
         ai_rows=ai_rows,
         profile=UI_API_MAPPING_PROFILE,
         strategy="ai_first",
-        rule_set_config=FpaRuleSetConfig(
-            name="contract_only",
-            coverage_rules=FpaCoverageRules(require_data_function=False, require_process_coverage=False),
+        rule_set_config=_ui_api_mapping_rule_set(
+            require_data_function=False,
+            require_process_coverage=False,
         ),
     )
 

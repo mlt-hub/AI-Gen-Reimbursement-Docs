@@ -73,7 +73,16 @@ rule_sets:
         - type: ILF
           keywords: ["保存", "提交", "新增", "修改"]
           reason: "维护类逻辑接口按 ILF。"
-  ui_api_mapping_rs: {}
+  ui_api_mapping_rs:
+    row_planning_rules:
+      process_rows:
+        enabled: true
+        one_row_per_process: true
+        default_name_suffix: "接口开发"
+        type_suffixes:
+          EI: "界面开发"
+          ILF: "接口开发"
+        explanation_template: "{name}，具体为以下：\\n1、{description}"
 """,
         encoding="utf-8",
     )
@@ -157,7 +166,11 @@ def test_custom_ui_api_mapping_profile_harness_inherits_generation_and_review_co
 
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         config = resolve_fpa_execution_config("contract_api")
-        rows = config.profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            rows = config.profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+        finally:
+            reset_current_fpa_rule_set_config(token)
 
     types = {str(row["新增/修改功能点"]): str(row["类型"]) for row in rows}
     assert config.profile.name == "contract_api"

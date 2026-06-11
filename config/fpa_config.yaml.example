@@ -451,6 +451,15 @@ rule_sets:
       require_data_function: true
 
   ui_api_mapping_rs:
+    row_planning_rules:
+      process_rows:
+        enabled: true
+        one_row_per_process: true
+        default_name_suffix: "接口开发"
+        type_suffixes:
+          EI: "界面开发"
+          ILF: "接口开发"
+        explanation_template: "{name}，具体为以下：\n1、{description}"
     coverage_rules:
       require_process_coverage: true
       require_data_function: false
