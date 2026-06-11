@@ -1570,6 +1570,7 @@ def test_unstructured_explanation_records_quality_warning():
             "classification_basis_index": 1,
             "explanation": "保存垂直行业基础信息。",
         }],
+        profile=STRICT_FPA_PROFILE,
     )
 
     assert any("计算依据说明格式不完整" in warning for warning in warnings)

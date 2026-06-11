@@ -218,6 +218,7 @@ def _explanation_quality_warnings(
     name: str,
     fpa_type: str,
     explanation: str,
+    profile_name: str,
 ) -> list[str]:
     """Check formal FPA calculation explanation quality without changing output."""
     text = str(explanation or "").strip()
@@ -225,11 +226,12 @@ def _explanation_quality_warnings(
         return []
 
     warnings: list[str] = []
-    missing_labels = [label.rstrip("：") for label in EXPLANATION_REQUIRED_LABELS if label not in text]
-    if missing_labels:
-        warnings.append(
-            f"{name} 计算依据说明格式不完整，缺少结构化项: {'、'.join(missing_labels)}"
-        )
+    if profile_name == "strict_fpa":
+        missing_labels = [label.rstrip("：") for label in EXPLANATION_REQUIRED_LABELS if label not in text]
+        if missing_labels:
+            warnings.append(
+                f"{name} 计算依据说明格式不完整，缺少结构化项: {'、'.join(missing_labels)}"
+            )
 
     source_prefix = (
         f"【{group.get('client_type', '')}】"
@@ -1254,6 +1256,7 @@ def _normalize_ai_fpa_rows_for_l3(
             name=output_name,
             fpa_type=fpa_type,
             explanation=explanation,
+            profile_name=profile.name,
         )
         if explanation_warnings:
             warnings.extend(explanation_warnings)

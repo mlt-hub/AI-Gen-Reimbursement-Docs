@@ -30,6 +30,11 @@ def _assert_structured_explanations(group, rows):
     assert not any(issue.code == "validator.explanation_structure" for issue in validate_fpa_rows(group=group, rows=rows))
 
 
+def _assert_not_strict_fallback_wrapped(rows):
+    assert rows
+    assert not any("来源场景：来自" in str(row["计算依据说明"]) for row in rows)
+
+
 @pytest.fixture(autouse=True)
 def strict_default_rule_context():
     config = FpaRuleSetConfig(
@@ -314,7 +319,7 @@ def test_ui_api_mapping_fallback_generates_default_and_explicit_backend_rows():
     names = [str(row["新增/修改功能点"]) for row in rows]
     types = {str(row["新增/修改功能点"]): str(row["类型"]) for row in rows}
 
-    _assert_structured_explanations(group, rows)
+    _assert_not_strict_fallback_wrapped(rows)
     assert "【业务端】销售管理-合同中心-合同管理-查询合同列表-界面开发" in names
     assert "【业务端】销售管理-合同中心-合同管理-查询合同列表-接口开发" in names
     assert "【业务端】销售管理-合同中心-合同管理-OA 审批接口" in names
@@ -407,11 +412,41 @@ def test_unified_ui_fallback_merges_duplicate_non_ui_process_rows(tmp_path):
             rows = config.profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
         finally:
             reset_current_fpa_rule_set_config(token)
-    _assert_structured_explanations(group, rows)
+    _assert_not_strict_fallback_wrapped(rows)
 
     process_rows = [row for row in rows if row["新增/修改功能点"] == _fp_name(group, "查询客户-逻辑接口开发")]
     assert len(process_rows) == 1
     assert process_rows[0]["源功能过程"] == "查询客户"
+
+
+def test_unified_ui_fallback_keeps_configured_ui_and_ilf_explanation_templates(tmp_path):
+    _write_fpa_config(tmp_path)
+    group = {
+        "client_type": "业务端",
+        "l1": "客户管理",
+        "l2": "客户中心",
+        "l3": "客户档案",
+        "processes": [
+            {"name": "新增客户", "change_status": "新增", "desc": "录入客户基础信息。"},
+        ],
+    }
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("unified_ui")
+        token = set_current_fpa_rule_set_config(config.rule_set_config)
+        try:
+            rows = config.profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+        finally:
+            reset_current_fpa_rule_set_config(token)
+
+    ui_row = next(row for row in rows if row["新增/修改功能点"] == _fp_name(group, "界面开发"))
+    ilf_row = next(row for row in rows if row["新增/修改功能点"] == _fp_name(group, "新增客户-逻辑接口开发"))
+
+    assert str(ui_row["计算依据说明"]).startswith(f"{_fp_name(group, '界面开发')}，具体为以下：")
+    assert "1、录入客户基础信息。" in str(ui_row["计算依据说明"])
+    assert str(ilf_row["计算依据说明"]).startswith(f"{_fp_name(group, '新增客户-逻辑接口开发')}，具体为以下：")
+    assert "1、录入客户基础信息。" in str(ilf_row["计算依据说明"])
+    _assert_not_strict_fallback_wrapped([ui_row, ilf_row])
 
 
 def test_rule_set_extends_are_loaded(tmp_path):

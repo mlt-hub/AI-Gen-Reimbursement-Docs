@@ -1077,7 +1077,7 @@ class CustomRulesProfile:
 
         process_rule = self._configured_process_row_planning_rule()
         if process_rule is None or process_rule.enabled is False:
-            return _structure_fallback_explanations(group, rows)
+            return rows
         for p in process_list:
             if not isinstance(p, dict):
                 continue
@@ -1108,7 +1108,7 @@ class CustomRulesProfile:
             }
             if _append_row_with_l3_name_policy(rows, row):
                 seq += 1
-        return _structure_fallback_explanations(group, rows)
+        return rows
 
     def build_prompt(
         self,
@@ -1935,7 +1935,7 @@ class UiApiMappingProfile(CustomRulesProfile):
                 explicit_rows[point_name] = row
                 rows.append(row)
                 seq += 1
-        return _structure_fallback_explanations(group, rows)
+        return rows
 
     def _explicit_backend_interactions(self, name: str, desc: str) -> list[str]:
         text = f"{name}，{desc}"
