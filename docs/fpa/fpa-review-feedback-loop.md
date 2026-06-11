@@ -204,85 +204,57 @@ AI原始返回：包含传入 AI 的人工审阅反馈摘要
 
 ## 实施切片
 
-### 前置切片：规则兜底计算依据说明配置化
+### 前置切片：strict_fpa 专属四段式 fallback harness
 
 目标：
 
 ```text
-将 rules_first / rules_only 规则兜底行的“计算依据说明”模板从代码迁移到 FPA 配置。
-不同 profile 可以绑定不同 fallback 说明模板。
-unified_ui 的兜底说明应与 unified_ui_ce 的统一界面建设口径保持一致。
+只有 strict_fpa profile 的 fallback 行需要走四段式“计算依据说明”harness。
+unified_ui / multi_uis / ui_api_mapping 等非 strict_fpa profile 的 fallback 行不走四段式包装。
+非 strict_fpa profile 的 fallback 说明直接使用 rule_set 中 row_planning_rules 的 explanation_template。
 ```
 
 当前问题：
 
 ```text
-fallback 行会由代码补成固定四段式结构：
+当前 _structure_fallback_explanations 会对所有生成方式为 fallback 的行补成固定四段式结构：
 来源场景 / 业务数据 / 业务规则 / 计算说明。
-这能保证说明完整，但属于业务口径文案，放在 fpa_profiles.py 中会形成代码内置规则。
-当 unified_ui_ce 调整后，fallback 实际输出可能仍沿用旧代码模板。
-```
-
-建议配置形态：
-
-```yaml
-profiles:
-  unified_ui:
-    fallback_explanation_template: unified_ui_fallback
-
-fallback_explanation_templates:
-  unified_ui_fallback: |-
-    来源场景：来自“${point_name}”。
-    业务数据：${business_data}
-    业务规则：${business_rules}
-    计算说明：该功能点由统一界面规则生成，按当前 profile 的建设内容口径识别为 ${fpa_type}。
-```
-
-建议占位符白名单：
-
-```text
-point_name
-fpa_type
-source_processes
-type_reason
-business_data
-business_rules
-original_explanation
+这适合 strict_fpa 的标准 FPA 证据链说明，但不适合统一界面等模板友好 profile。
+unified_ui 的界面开发行、逻辑接口开发 ILF 行、导入 EQ 行、导出 EO 行和外部接口联调调用 EIF 行，都应保留配置中的 explanation_template 输出，不应被 strict_fpa 四段式 harness 改写。
 ```
 
 拟修改范围：
 
 ```text
-config/fpa_config.yaml.example
-  增加 fallback_explanation_templates，并在默认 profile 下显式绑定。
-
-ai_gen_reimbursement_docs/config_utils.py
-  增加 fallback_explanation_template 加载与校验。
-  校验模板 key 存在、文本非空、占位符属于白名单。
-
 ai_gen_reimbursement_docs/fpa_profiles.py
-  将 _structured_fallback_explanation 中的固定 join 文案改为读取 profile 绑定模板。
-  business_data、business_rules 等上下文变量仍由代码生成。
+  将 _structure_fallback_explanations 调整为只对 strict_fpa 生效，或只在 StrictFpaProfile.fallback_rows_for_l3 中调用。
+  CustomRulesProfile / MultiUisProfile / UiApiMappingProfile 的 fallback rows 直接返回配置模板生成的说明。
 
-tests/test_config_utils.py / tests/test_fpa_profiles.py
-  覆盖模板解析、占位符替换、缺失配置报错和 unified_ui fallback 输出。
+ai_gen_reimbursement_docs/gen_fpa.py
+  若存在正式说明质量 warning 强制要求四段式，应同步收敛为仅 strict_fpa 强制。
+
+tests/test_fpa_profiles.py / tests/test_gen_fpa_ai.py
+  覆盖 strict_fpa fallback 仍补齐四段式。
+  覆盖 unified_ui fallback 界面开发行保留 ui_row.explanation_template。
+  覆盖 unified_ui fallback ILF 逻辑接口开发行保留 process_rows.explanation_template。
 ```
 
 验收：
 
 ```text
-unified_ui + rules_first 不调用 AI 时，fallback 行的计算依据说明来自 unified_ui 绑定模板。
-strict_fpa / unified_ui / multi_uis / ui_api_mapping 均有明确 fallback 模板绑定。
-模板占位符拼错时配置校验失败，并给出可定位的错误信息。
-fallback 行仍满足审阅页对“来源场景、业务数据、业务规则、计算说明”的结构要求。
+strict_fpa fallback 行仍包含“来源场景、业务数据、业务规则、计算说明”四段式标签。
+unified_ui + rules_first 不调用 AI 时，界面开发行的计算依据说明保留 ui_row.explanation_template 输出。
+unified_ui + rules_first 不调用 AI 时，ILF 逻辑接口开发行的计算依据说明保留 process_rows.explanation_template 输出。
+multi_uis / ui_api_mapping fallback 行不被 strict_fpa 四段式 harness 改写。
+非 strict_fpa fallback 行不出现由 _structured_fallback_explanation 生成的固定“来源场景：来自...”包装。
 ```
 
 风险：
 
 ```text
-配置项增加后，用户自定义 profile 需要同步绑定模板。
-模板过度自由可能破坏审阅页结构化说明要求。
-为降低风险，应固定占位符白名单，并在默认模板中保留四段式标签。
+如果 gen_fpa.py 的质量检查仍默认要求所有 profile 四段式，非 strict_fpa 会出现格式 warning。
+应将四段式完整性检查作为 strict_fpa 专属 harness，而不是所有 profile 的通用要求。
+非 strict_fpa 的说明质量主要由各自 rule_set explanation_template 和 profile prompt 规则保障。
 ```
 
 ### 第一切片：读取审阅反馈
