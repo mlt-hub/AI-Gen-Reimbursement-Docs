@@ -14,6 +14,7 @@ from docx.oxml import OxmlElement
 
 from ai_gen_reimbursement_docs.spec_template_importer import (
     SpecTemplateImportResult,
+    collect_complex_word_structures,
     import_spec_word_template,
 )
 from ai_gen_reimbursement_docs.template_manifest import load_template_manifest, validate_output_template
@@ -466,6 +467,7 @@ def build_imported_spec_template_preview(target_root: Path, import_id: str) -> d
     scopes = _collect_word_preview_scopes(doc)
     placeholders = _collect_word_placeholder_occurrences(scopes)
     anchors = _collect_word_anchor_occurrences(scopes, manifest)
+    complex_structures = _complex_word_structure_dicts(doc)
     section_candidates = [
         item
         for item in _collect_section_candidates(scopes)
@@ -489,10 +491,12 @@ def build_imported_spec_template_preview(target_root: Path, import_id: str) -> d
             "section_count": len(doc.sections),
             "placeholder_count": len(placeholders),
             "anchor_count": len(anchors),
+            "complex_structure_count": len(complex_structures),
             "section_candidate_count": len(section_candidates),
         },
         "placeholders": placeholders,
         "anchors": anchors,
+        "complex_structures": complex_structures,
         "section_candidates": section_candidates[:20],
         "scopes": scopes,
     }
@@ -544,6 +548,7 @@ def build_imported_spec_template_layout_preview(target_root: Path, import_id: st
         max_blocks=24,
     )
     body_blocks = _layout_body_blocks(doc, max_blocks=120)
+    complex_structures = _complex_word_structure_dicts(doc)
     placeholder_count = sum(len(block.get("placeholders", [])) for block in body_blocks)
     placeholder_count += sum(len(block.get("placeholders", [])) for block in header_blocks)
     placeholder_count += sum(len(block.get("placeholders", [])) for block in footer_blocks)
@@ -563,17 +568,33 @@ def build_imported_spec_template_layout_preview(target_root: Path, import_id: st
             "header_block_count": len(header_blocks),
             "footer_block_count": len(footer_blocks),
             "placeholder_count": placeholder_count,
+            "complex_structure_count": len(complex_structures),
             "truncated": len(doc.paragraphs) + len(doc.tables) > len(body_blocks),
         },
         "page": page,
         "headers": header_blocks,
         "body": body_blocks,
         "footers": footer_blocks,
+        "complex_structures": complex_structures,
         "limitations": [
             "当前版式预览为浏览器可渲染的 Word 结构近似，不等同于 Word/Office 像素级分页结果。",
-            "暂不渲染文本框、内容控件、图片文字和复杂浮动对象。",
+            "文本框和内容控件仅做位置检测，不参与版式渲染或自动字段替换。",
+            "暂不渲染图片文字和复杂浮动对象。",
         ],
     }
+
+
+def _complex_word_structure_dicts(doc: Document) -> list[dict[str, str]]:
+    return [
+        {
+            "kind": item.kind,
+            "label": item.label,
+            "scope": item.scope,
+            "location": item.location,
+            "text_preview": item.text_preview,
+        }
+        for item in collect_complex_word_structures(doc)
+    ]
 
 
 def _collect_word_preview_scopes(doc: Document) -> list[dict[str, Any]]:

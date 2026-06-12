@@ -2,6 +2,8 @@ from pathlib import Path
 
 import yaml
 from docx import Document
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 from ai_gen_reimbursement_docs.spec_template_importer import import_spec_word_template
 from ai_gen_reimbursement_docs.template_manifest import validate_output_template
@@ -22,6 +24,42 @@ def _write_customer_docx(path: Path) -> None:
     doc.add_paragraph("4 功能需求")
     doc.add_paragraph("这里是客户原始功能说明")
     doc.save(path)
+
+
+def _append_complex_word_structures(doc: Document) -> None:
+    content_control = parse_xml(
+        f"""
+        <w:sdt {nsdecls('w')}>
+          <w:sdtContent>
+            <w:p>
+              <w:r><w:t>内容控件里的项目名称：客户报账系统</w:t></w:r>
+            </w:p>
+          </w:sdtContent>
+        </w:sdt>
+        """
+    )
+    text_box = parse_xml(
+        f"""
+        <w:p {nsdecls('w')} xmlns:v="urn:schemas-microsoft-com:vml">
+          <w:r>
+            <w:pict>
+              <v:shape>
+                <v:textbox>
+                  <w:txbxContent>
+                    <w:p>
+                      <w:r><w:t>文本框里的需求部门：财务部</w:t></w:r>
+                    </w:p>
+                  </w:txbxContent>
+                </v:textbox>
+              </v:shape>
+            </w:pict>
+          </w:r>
+        </w:p>
+        """
+    )
+    body = doc.element.body
+    body.insert(len(body) - 1, content_control)
+    body.insert(len(body) - 1, text_box)
 
 
 def test_import_spec_word_template_creates_draft_and_manifest(tmp_path):
@@ -81,3 +119,21 @@ def test_import_spec_word_template_appends_anchors_when_section_not_found(tmp_pa
     assert body_text.endswith("{{模块清单表}}\n{{功能过程详情}}")
     assert any("未识别到功能需求章节标题" in item for item in result.pending_confirmations)
     assert validate_output_template("spec", str(result.template_path)).ok
+
+
+def test_import_spec_word_template_detects_complex_structures_for_confirmation(tmp_path):
+    source = tmp_path / "customer.docx"
+    output_dir = tmp_path / "custom_templates"
+    doc = Document()
+    doc.add_paragraph("项目名称：客户报账系统")
+    doc.add_paragraph("总体描述：用于测试导入")
+    doc.add_paragraph("功能需求")
+    _append_complex_word_structures(doc)
+    doc.save(source)
+
+    result = import_spec_word_template(source, output_dir)
+
+    kinds = {item.kind for item in result.complex_structures}
+    assert {"content_control", "text_box"} <= kinds
+    assert any("复杂 Word 结构" in item for item in result.pending_confirmations)
+    assert any("不会自动替换" in item for item in result.warnings)

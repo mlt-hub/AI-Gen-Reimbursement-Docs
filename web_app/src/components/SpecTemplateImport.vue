@@ -51,6 +51,15 @@
           </ul>
         </div>
 
+        <div v-if="result.complex_structures.length">
+          <p class="text-xs font-semibold text-[var(--color-warning)]">复杂结构</p>
+          <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-warning)]">
+            <li v-for="item in result.complex_structures" :key="item.scope + item.location">
+              {{ item.label }} / {{ scopeLabel(item.scope) }} / {{ item.location }} / {{ item.text_preview || '无可读文本' }}
+            </li>
+          </ul>
+        </div>
+
         <div v-if="result.pending_confirmations.length">
           <p class="text-xs font-semibold text-[var(--color-warning)]">待确认</p>
           <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-warning)]">
@@ -172,6 +181,12 @@
                 <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
                   锚点：{{ activePreview.summary.anchor_count }}
                 </div>
+                <div
+                  v-if="activePreview.summary.complex_structure_count"
+                  class="rounded border border-[var(--color-warning)] bg-[var(--color-surface)] px-2 py-1 text-[var(--color-warning)]"
+                >
+                  复杂结构：{{ activePreview.summary.complex_structure_count }}
+                </div>
               </div>
 
               <div v-if="activePreview.anchors.length">
@@ -188,6 +203,15 @@
                 <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-ink-muted)]">
                   <li v-for="candidate in activePreview.section_candidates" :key="candidate.location + candidate.text">
                     {{ candidate.location }} / {{ candidate.style }} / {{ candidate.text }}
+                  </li>
+                </ul>
+              </div>
+
+              <div v-if="activePreview.complex_structures.length">
+                <p class="text-xs font-semibold text-[var(--color-warning)]">复杂结构</p>
+                <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-warning)]">
+                  <li v-for="structure in activePreview.complex_structures" :key="structure.scope + structure.location">
+                    {{ structure.label }} / {{ scopeLabel(structure.scope) }} / {{ structure.location }} / {{ structure.text_preview || '无可读文本' }}
                   </li>
                 </ul>
               </div>
@@ -282,6 +306,12 @@
                 <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
                   占位符：{{ activeLayout.summary.placeholder_count }}
                 </div>
+                <div
+                  v-if="activeLayout.summary.complex_structure_count"
+                  class="rounded border border-[var(--color-warning)] bg-[var(--color-surface)] px-2 py-1 text-[var(--color-warning)]"
+                >
+                  复杂结构：{{ activeLayout.summary.complex_structure_count }}
+                </div>
               </div>
 
               <div class="overflow-auto rounded border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
@@ -323,6 +353,15 @@
                 </div>
               </div>
 
+              <div v-if="activeLayout.complex_structures.length" class="rounded border border-[var(--color-warning)] bg-[var(--color-surface)] p-3">
+                <p class="text-xs font-semibold text-[var(--color-warning)]">检测到但未渲染的复杂结构</p>
+                <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-warning)]">
+                  <li v-for="structure in activeLayout.complex_structures" :key="structure.scope + structure.location">
+                    {{ structure.label }} / {{ scopeLabel(structure.scope) }} / {{ structure.location }} / {{ structure.text_preview || '无可读文本' }}
+                  </li>
+                </ul>
+              </div>
+
               <ul class="list-disc space-y-1 pl-5 text-xs text-[var(--color-ink-muted)]">
                 <li v-for="item in activeLayout.limitations" :key="item">{{ item }}</li>
               </ul>
@@ -352,6 +391,14 @@ interface ImportAnchor {
   location: string
 }
 
+interface ComplexStructure {
+  kind: string
+  label: string
+  scope: string
+  location: string
+  text_preview: string
+}
+
 interface ImportResult {
   template_path: string
   manifest_path: string
@@ -359,6 +406,7 @@ interface ImportResult {
   manifest_filename: string
   detected_placeholders: ImportPlaceholder[]
   inserted_anchors: ImportAnchor[]
+  complex_structures: ComplexStructure[]
   pending_confirmations: string[]
   warnings: string[]
   out_templates_patch: Record<string, string>
@@ -448,10 +496,12 @@ interface ImportedDraftPreview {
     section_count: number
     placeholder_count: number
     anchor_count: number
+    complex_structure_count: number
     section_candidate_count: number
   }
   placeholders: PreviewOccurrence[]
   anchors: PreviewAnchor[]
+  complex_structures: ComplexStructure[]
   section_candidates: PreviewCandidate[]
   scopes: PreviewScope[]
 }
@@ -488,11 +538,13 @@ interface ImportedLayoutPreview {
     header_block_count: number
     footer_block_count: number
     placeholder_count: number
+    complex_structure_count: number
     truncated: boolean
   }
   headers: LayoutBlock[]
   body: LayoutBlock[]
   footers: LayoutBlock[]
+  complex_structures: ComplexStructure[]
   limitations: string[]
 }
 

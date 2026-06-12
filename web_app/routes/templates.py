@@ -97,6 +97,16 @@ async def import_spec_template(
             }
             for item in result.inserted_anchors
         ],
+        "complex_structures": [
+            {
+                "kind": item.kind,
+                "label": item.label,
+                "scope": item.scope,
+                "location": item.location,
+                "text_preview": item.text_preview,
+            }
+            for item in result.complex_structures
+        ],
         "pending_confirmations": result.pending_confirmations,
         "warnings": result.warnings,
         "out_templates_patch": {

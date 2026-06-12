@@ -492,6 +492,7 @@ manifest 文件命名规则：
 - Web 配置页已支持将已确认且预检通过的 Word 模板草稿发布为正式用户模板版本，发布后可将正式模板路径应用到 `spec_out_template`。
 - Web 配置页已支持已导入 Word 模板草稿的基础在线调整：根据结构预览移动功能需求拆分锚点，并把指定段落文本替换为占位符；调整后会重置确认/发布状态。
 - Web 配置页已支持已导入 Word 模板草稿的基础版式渲染预览：后端返回页面尺寸、边距、页眉/正文/页脚块、段落/表格样式和占位符位置，前端以页面式预览展示草稿版式骨架。
+- Web 配置页已支持已导入 Word 模板草稿的复杂结构检测提示：导入、结构预览和版式预览会展示文本框、内容控件的数量、位置和可读文本摘要，但暂不自动替换其中字段。
 - Web 配置页已支持输出模板 profile 基础选择能力：展示 `output_template_profiles` 列表，选择或清空 `active_output_template_profile`，并显示所选 profile 的 `template_pack` 和 `templates` key。
 - Web/API 保存 `active_output_template_profile` 时已支持联动 profile 中的 FPA 口径、规则集、生成策略和确认模式；同一次保存中显式传入的 `run_defaults` 会覆盖 profile 默认值。
 
@@ -502,7 +503,7 @@ manifest 文件命名规则：
 - Office 级 Word 像素还原预览。
 - COSMIC/FPA 等 Excel 写入器按 manifest 做完整列映射、锚点定位和复杂样式复制。
 - FPA 写入器的更多复杂锚点、图片/文本框和跨 sheet 公式重写。
-- 文本框、内容控件、图片文字等复杂 Word 结构识别。
+- 文本框、内容控件中的字段自动替换，以及图片文字等复杂 Word 结构识别。
 
 ### 输出模板 profile 当前行为
 

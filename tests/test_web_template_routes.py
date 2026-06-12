@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 from docx import Document
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 FastAPI = pytest.importorskip("fastapi").FastAPI
@@ -32,6 +34,42 @@ def _write_docx(path: Path) -> None:
     doc.save(path)
 
 
+def _append_complex_word_structures(doc: Document) -> None:
+    content_control = parse_xml(
+        f"""
+        <w:sdt {nsdecls('w')}>
+          <w:sdtContent>
+            <w:p>
+              <w:r><w:t>内容控件里的项目名称：客户报账系统</w:t></w:r>
+            </w:p>
+          </w:sdtContent>
+        </w:sdt>
+        """
+    )
+    text_box = parse_xml(
+        f"""
+        <w:p {nsdecls('w')} xmlns:v="urn:schemas-microsoft-com:vml">
+          <w:r>
+            <w:pict>
+              <v:shape>
+                <v:textbox>
+                  <w:txbxContent>
+                    <w:p>
+                      <w:r><w:t>文本框里的需求部门：财务部</w:t></w:r>
+                    </w:p>
+                  </w:txbxContent>
+                </v:textbox>
+              </v:shape>
+            </w:pict>
+          </w:r>
+        </w:p>
+        """
+    )
+    body = doc.element.body
+    body.insert(len(body) - 1, content_control)
+    body.insert(len(body) - 1, text_box)
+
+
 def test_import_spec_template_route_creates_template_draft(monkeypatch, tmp_path):
     client = _client(monkeypatch, tmp_path)
     source = tmp_path / "customer.docx"
@@ -55,6 +93,34 @@ def test_import_spec_template_route_creates_template_draft(monkeypatch, tmp_path
         "document_title",
     }
     assert [item["key"] for item in data["inserted_anchors"]] == ["module_table", "module_details"]
+
+
+def test_imported_spec_template_preview_reports_complex_structures(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+    doc = Document(source)
+    _append_complex_word_structures(doc)
+    doc.save(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    assert import_resp.status_code == 200
+    imported = import_resp.json()
+    assert {item["kind"] for item in imported["complex_structures"]} >= {"content_control", "text_box"}
+    assert any("复杂 Word 结构" in item for item in imported["pending_confirmations"])
+    import_id = Path(imported["template_path"]).parent.name
+
+    preview = client.get(f"/api/templates/spec/imported/{import_id}/preview").json()
+    assert preview["summary"]["complex_structure_count"] >= 2
+    assert {item["kind"] for item in preview["complex_structures"]} >= {"content_control", "text_box"}
+
+    layout = client.get(f"/api/templates/spec/imported/{import_id}/layout-preview").json()
+    assert layout["summary"]["complex_structure_count"] >= 2
+    assert any("仅做位置检测" in item for item in layout["limitations"])
 
 
 def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp_path):
