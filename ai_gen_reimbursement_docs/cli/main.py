@@ -37,19 +37,35 @@ def _summary_files_from_result(result) -> list[tuple[str, str]]:
     ]
 
 
+def _spec_toc_note_from_result(result) -> str:
+    return str(getattr(result, "spec_toc_note", "") or "")
+
+
+def _summary_note_from_result(result, label: str) -> str:
+    if label == "项目需求说明书":
+        return _spec_toc_note_from_result(result)
+    return ""
+
+
 def _done_files_from_result(result) -> list[dict]:
     files = []
     for label, path in _summary_files_from_result(result):
         if path and os.path.exists(path):
-            files.append(
-                {
-                    "label": label,
-                    "name": os.path.basename(path),
-                    "path": path,
-                    "size_kb": round(os.path.getsize(path) / 1024),
-                    "is_temp": "_TEMP" in os.path.basename(path),
-                }
-            )
+            item = {
+                "label": label,
+                "name": os.path.basename(path),
+                "path": path,
+                "size_kb": round(os.path.getsize(path) / 1024),
+                "is_temp": "_TEMP" in os.path.basename(path),
+            }
+            if label == "项目需求说明书":
+                toc_note = _spec_toc_note_from_result(result)
+                toc_status = str(getattr(result, "spec_toc_status", "") or "")
+                if toc_note:
+                    item["toc_note"] = toc_note
+                if toc_status:
+                    item["toc_status"] = toc_status
+            files.append(item)
     return files
 
 
@@ -328,7 +344,9 @@ def _run_pipeline_with_args(
         if _path and os.path.exists(_path):
             _size = os.path.getsize(_path)
             _uri = _Path(_path).as_uri()
-            print(f"  ✅ {_label}: {_uri} ({_size/1024:.0f} KB)")
+            _note = _summary_note_from_result(result, _label)
+            _suffix = f"；{_note}" if _note else ""
+            print(f"  ✅ {_label}: {_uri} ({_size/1024:.0f} KB){_suffix}")
         else:
             print(f"  ⏭️  {_label}: 跳过（已存在或未生成）")
     print()
@@ -1208,7 +1226,9 @@ def main():
         for _label, _path in _summary_files:
             if _path and os.path.exists(_path):
                 _size = os.path.getsize(_path)
-                print(f"  ✅ {_label}: {_path} ({_size/1024:.0f} KB)")
+                _note = _summary_note_from_result(result, _label)
+                _suffix = f"；{_note}" if _note else ""
+                print(f"  ✅ {_label}: {_path} ({_size/1024:.0f} KB){_suffix}")
             else:
                 print(f"  ⏭️  {_label}: 跳过（已存在或未生成）")
         print()

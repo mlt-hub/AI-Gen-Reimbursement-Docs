@@ -493,7 +493,7 @@ manifest 文件命名规则：
 - Web 配置页已支持已导入 Word 模板草稿的基础在线调整：根据结构预览移动功能需求拆分锚点、把指定段落或正文表格单元格文本替换为占位符，并选择正文表格作为模块清单样例表；调整后会重置确认/发布状态。
 - Web 配置页已支持已导入 Word 模板草稿的基础版式渲染预览：后端返回页面尺寸、边距、页眉/正文/页脚块、段落/表格样式和占位符位置，前端以页面式预览展示草稿版式骨架。
 - Web 配置页已支持已导入 Word 模板草稿的复杂结构检测提示：导入、结构预览和版式预览会展示文本框、内容控件的数量、位置和可读文本摘要，但暂不自动替换其中字段。
-- Web 配置页已支持已导入 Word 模板草稿的目录状态检测：导入器会识别 TOC 字段和目录样式段落，写入 manifest 的 `toc` 状态，并在结构预览和版式预览中提示是否需要更新目录。
+- Web 配置页已支持已导入 Word 模板草稿的目录状态检测：导入器会识别 TOC 字段和目录样式段落，写入 manifest 的 `toc` 状态，并在结构预览和版式预览中提示是否需要更新目录；pipeline 生成需求说明书后会记录目录更新状态，并在 Web 进度、Web 交付物清单和 CLI 完成摘要中展示。
 - Web 配置页已支持输出模板 profile 基础选择能力：展示 `output_template_profiles` 列表，选择或清空 `active_output_template_profile`，并显示所选 profile 的 `template_pack` 和 `templates` key。
 - Web/API 保存 `active_output_template_profile` 时已支持联动 profile 中的 FPA 口径、规则集、生成策略和确认模式；同一次保存中显式传入的 `run_defaults` 会覆盖 profile 默认值。
 
@@ -505,6 +505,7 @@ manifest 文件命名规则：
 - COSMIC/FPA 等 Excel 写入器按 manifest 做完整列映射、锚点定位和复杂样式复制。
 - FPA 写入器的更多复杂锚点、图片/文本框和跨 sheet 公式重写。
 - 文本框、内容控件中的字段自动替换，以及图片文字等复杂 Word 结构识别。
+- LibreOffice 或其他无 Word COM 环境下的目录字段自动更新方案。
 
 ### 输出模板 profile 当前行为
 

@@ -79,12 +79,20 @@ def build_file_summary(result) -> list[dict]:
         if path and os.path.exists(path):
             size = os.path.getsize(path)
             is_temp = "_TEMP" in os.path.basename(path)
-            files.append({
+            item = {
                 "label": label,
                 "path": path,
                 "size_kb": round(size / 1024),
                 "is_temp": is_temp,
-            })
+            }
+            if label == "项目需求说明书":
+                toc_note = str(getattr(result, "spec_toc_note", "") or "")
+                toc_status = str(getattr(result, "spec_toc_status", "") or "")
+                if toc_note:
+                    item["toc_note"] = toc_note
+                if toc_status:
+                    item["toc_status"] = toc_status
+            files.append(item)
     return files
 
 

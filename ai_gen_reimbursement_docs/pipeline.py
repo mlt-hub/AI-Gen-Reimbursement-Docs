@@ -137,19 +137,29 @@ def _activity(step: PipelineStep, message: str) -> None:
     _emit_event("activity", step, message)
 
 
-def _artifact(step: PipelineStep, path: str, label: str, *, is_temp: bool = False) -> None:
+def _artifact(
+    step: PipelineStep,
+    path: str,
+    label: str,
+    *,
+    is_temp: bool = False,
+    metadata: dict[str, Any] | None = None,
+) -> None:
     if not path:
         return
+    payload = {
+        "label": label,
+        "name": os.path.basename(path),
+        "path": path,
+        "is_temp": is_temp,
+    }
+    if metadata:
+        payload.update(metadata)
     _emit_event(
         "artifact",
         step,
         f"已生成{label}",
-        {
-            "label": label,
-            "name": os.path.basename(path),
-            "path": path,
-            "is_temp": is_temp,
-        },
+        payload,
     )
 
 
@@ -186,9 +196,52 @@ class PipelineResult:
     cosmic_draft_excel_written: bool = False
     require_xlsx: str = ""
     spec_docx: str = ""
+    spec_toc_status: str = ""
+    spec_toc_note: str = ""
+    spec_toc_present: bool = False
+    spec_toc_updated: bool = False
     cfp_total: float = 0.0
     fpa_reduced: float = 0.0
     errors: list[str] = field(default_factory=list)
+
+
+def _build_spec_toc_status(
+    spec_docx: str,
+    *,
+    auto_update_enabled: bool,
+    toc_updated: bool,
+    reminder_applied: bool,
+) -> dict[str, Any]:
+    present = False
+    try:
+        from docx import Document
+
+        from ai_gen_reimbursement_docs.spec_template_importer import collect_word_toc_info
+
+        present = collect_word_toc_info(Document(spec_docx)).present
+    except Exception as exc:
+        logger.warning("需求说明书目录状态检测失败: %s", exc)
+        present = False
+
+    if not present:
+        status = "not_present"
+        note = "未检测到目录"
+    elif toc_updated:
+        status = "updated"
+        note = "目录已更新"
+    else:
+        status = "manual_required"
+        note = "需要手动更新目录"
+        if auto_update_enabled:
+            note = "目录自动更新未成功，需要手动更新目录"
+    return {
+        "status": status,
+        "note": note,
+        "present": present,
+        "updated": bool(toc_updated),
+        "auto_update_enabled": bool(auto_update_enabled),
+        "reminder_applied": bool(reminder_applied),
+    }
 
 
 def run_pipeline(
@@ -961,22 +1014,44 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
 
     # 自动更新目录（Word COM）
     _toc_updated = False
-    if load_spec_auto_update_toc():
+    _toc_auto_update_enabled = load_spec_auto_update_toc()
+    if _toc_auto_update_enabled:
         from ai_gen_reimbursement_docs.gen_spec import auto_update_docx_toc
         _toc_updated = auto_update_docx_toc(spec_docx)
 
     # 未自动更新时，按配置添加提醒前缀
+    _toc_reminder_applied = False
     if not _toc_updated and load_spec_remind_update_toc():
         _doc_dir, _doc_name = os.path.split(spec_docx)
         if not _doc_name.startswith("【提醒】请手动更新整个目录"):
             _new_path = os.path.join(_doc_dir, f"【提醒】请手动更新整个目录 {_doc_name}")
             os.rename(spec_docx, _new_path)
             spec_docx = _new_path
+            _toc_reminder_applied = True
+
+    _toc_status = _build_spec_toc_status(
+        spec_docx,
+        auto_update_enabled=_toc_auto_update_enabled,
+        toc_updated=_toc_updated,
+        reminder_applied=_toc_reminder_applied,
+    )
 
     result.spec_docx = spec_docx
-    _artifact("spec", spec_docx, "项目需求说明书")
-    _step_done("spec", "项目需求说明书已生成")
-    logger.info(f"项目需求说明书已生成: {spec_docx}")
+    result.spec_toc_status = str(_toc_status["status"])
+    result.spec_toc_note = str(_toc_status["note"])
+    result.spec_toc_present = bool(_toc_status["present"])
+    result.spec_toc_updated = bool(_toc_status["updated"])
+    _artifact(
+        "spec",
+        spec_docx,
+        "项目需求说明书",
+        metadata={
+            "toc_status": result.spec_toc_status,
+            "toc_note": result.spec_toc_note,
+        },
+    )
+    _step_done("spec", f"项目需求说明书已生成，{result.spec_toc_note}")
+    logger.info(f"项目需求说明书已生成: {spec_docx}（{result.spec_toc_note}）")
     return result
 
 

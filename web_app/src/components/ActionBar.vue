@@ -5,13 +5,16 @@
       <div class="mb-2 text-xs font-semibold text-[var(--color-ink-muted)]">交付物清单</div>
       <div class="flex flex-wrap gap-2">
         <span v-for="f in session.doneFiles" :key="f.path"
-          :class="['inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold',
+          :class="['inline-flex items-start gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold',
             f.is_temp ? 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]' : 'border-[var(--color-success)] bg-[var(--color-success-soft)] text-[var(--color-success)]']"
           :title="f.is_temp ? '文件被占用，已保存到临时文件 — 关闭占用程序后重命名替换原文件即可' : f.path">
           <span v-if="f.is_temp">&#9888;</span>
           <span v-else>&#10003;</span>
-          {{ f.label }}
-          <span class="opacity-60">{{ f.size_kb }} KB</span>
+          <span>
+            <span>{{ f.label }}</span>
+            <span class="opacity-60"> {{ f.size_kb }} KB</span>
+            <span v-if="f.toc_note" class="block font-normal opacity-80">{{ f.toc_note }}</span>
+          </span>
         </span>
       </div>
       <div v-if="session.doneFiles.some(f => f.is_temp)" class="mt-2 text-xs text-[var(--color-warning)]">

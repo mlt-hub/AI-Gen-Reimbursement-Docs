@@ -1,4 +1,7 @@
 import pytest
+from docx import Document
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 from ai_gen_reimbursement_docs import pipeline
 from ai_gen_reimbursement_docs.cli.logging import render_pipeline_event
@@ -7,6 +10,22 @@ from ai_gen_reimbursement_docs.llm_client import call_llm
 from ai_gen_reimbursement_docs.pipeline_callbacks import PipelineCallbacks
 from ai_gen_reimbursement_docs.runtime_context import callbacks_var, current_callbacks
 from ai_gen_reimbursement_docs.template_manifest import TemplateValidationResult
+
+
+def _append_toc_field(doc: Document) -> None:
+    toc = parse_xml(
+        f"""
+        <w:p {nsdecls('w')}>
+          <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+          <w:r><w:instrText>TOC \\o "1-3" \\h \\z \\u</w:instrText></w:r>
+          <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+          <w:r><w:t>目录</w:t></w:r>
+          <w:r><w:fldChar w:fldCharType="end"/></w:r>
+        </w:p>
+        """
+    )
+    body = doc._element.body
+    body.insert(len(body) - 1, toc)
 
 
 def test_pipeline_callbacks_default_cli_behavior():
@@ -62,6 +81,63 @@ def test_pipeline_activity_uses_shared_event_model():
         "step": "spec",
         "message": "正在写入需求说明书 Word 模板",
     }]
+
+
+def test_pipeline_artifact_can_include_metadata():
+    events = []
+    callbacks = PipelineCallbacks(emit_event=events.append)
+    token = callbacks_var.set(callbacks)
+    try:
+        pipeline._artifact(
+            "spec",
+            "需求说明书.docx",
+            "项目需求说明书",
+            metadata={"toc_status": "manual_required", "toc_note": "需要手动更新目录"},
+        )
+    finally:
+        callbacks_var.reset(token)
+
+    assert events == [{
+        "type": "artifact",
+        "step": "spec",
+        "message": "已生成项目需求说明书",
+        "payload": {
+            "label": "项目需求说明书",
+            "name": "需求说明书.docx",
+            "path": "需求说明书.docx",
+            "is_temp": False,
+            "toc_status": "manual_required",
+            "toc_note": "需要手动更新目录",
+        },
+    }]
+
+
+def test_spec_toc_status_reports_manual_required_and_updated(tmp_path):
+    docx_path = tmp_path / "spec.docx"
+    doc = Document()
+    _append_toc_field(doc)
+    doc.save(docx_path)
+
+    manual = pipeline._build_spec_toc_status(
+        str(docx_path),
+        auto_update_enabled=False,
+        toc_updated=False,
+        reminder_applied=True,
+    )
+    updated = pipeline._build_spec_toc_status(
+        str(docx_path),
+        auto_update_enabled=True,
+        toc_updated=True,
+        reminder_applied=False,
+    )
+
+    assert manual["status"] == "manual_required"
+    assert manual["note"] == "需要手动更新目录"
+    assert manual["present"] is True
+    assert manual["reminder_applied"] is True
+    assert updated["status"] == "updated"
+    assert updated["note"] == "目录已更新"
+    assert updated["updated"] is True
 
 
 def test_cli_renders_template_preflight_details(capsys):
