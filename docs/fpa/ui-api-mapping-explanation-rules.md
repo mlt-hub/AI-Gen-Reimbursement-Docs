@@ -663,7 +663,7 @@ test_unified_ui_fallback_explanation_not_affected_by_ui_api_mapping_rules
 ## 实施记录
 
 - 实施状态：已实施。
-- 本轮提交：见最终回复中的提交哈希。
+- 本轮提交：`a5b3fab Implement ui api mapping explanation patterns`。
 - 实际修改文件：`ai_gen_reimbursement_docs/fpa_profiles.py`、`ai_gen_reimbursement_docs/config_utils.py`、`config/fpa_config.yaml.example`、`tests/test_fpa_profiles.py`、`tests/test_config_utils.py`、`docs/fpa/ui-api-mapping-explanation-rules.md`。
 - 实际测试命令：`.\.venv\Scripts\python.exe -m pytest tests/test_fpa_profiles.py tests/fpa_profiles/test_ui_api_mapping_harness.py tests/test_config_utils.py`。
 - EO fallback：本轮不支持自动生成 `EO` fallback 行；`export_service` pattern 仅作为 prompt 和后续扩展预留。
