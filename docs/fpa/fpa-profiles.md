@@ -67,9 +67,9 @@ profile × kind × strategy × rule_set × prompt × model
 | 组合 | 当前等级 | 说明 |
 |---|---|---|
 | `strict_fpa + ai_first + strict_fpa_rs` | `certified` | 已有 golden、validator、确认流、稳定性报告和真实模型 recommended 连续复测。 |
-| `unified_ui + rules_first + unified_ui_rs` | `supported` | 有配置、规则兜底、分层 harness、只读 profile review 和真实模型归零记录。 |
-| `multi_uis + rules_first + multi_uis_rs` | `supported` | 独立 kind、独立 contract、多界面同名行和拆分理由已有分层 harness，并有真实模型归零记录。 |
-| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 规则兜底、固定 EI/ILF harness、只读 mapping review 和真实模型归零记录较清楚。 |
+| `unified_ui + rules_first + unified_ui_rs` | `supported` | 有配置、规则兜底、分层 harness、profile golden fixture、只读 profile review 和真实模型归零记录。 |
+| `multi_uis + rules_first + multi_uis_rs` | `supported` | 独立 kind、独立 contract、多界面同名行和拆分理由已有分层 harness、profile golden fixture，并有真实模型归零记录。 |
+| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 规则兜底、固定 EI/ILF harness、profile golden fixture、只读 mapping review 和真实模型归零记录较清楚。 |
 | 任意 profile + 自定义 rule_set | 视继承关系而定 | 继承推荐 rule_set 时复用 base harness，再补扩展断言。 |
 | 任意 profile + 明显不匹配 rule_set | `experimental / invalid` | 只保证配置错误可见或输出可审计，不承诺业务正确。 |
 

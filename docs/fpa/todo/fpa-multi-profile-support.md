@@ -21,6 +21,7 @@
 - `ui_api_mapping` 已实现默认界面开发 EI、默认接口开发 ILF、明确接口/后端调用 ILF；明确接口同名按三级模块合并来源，默认行同名保留并提示。
 - `multi_uis` 已记录拆分理由到 check/review 元数据；同名多界面开发行保留并提示。
 - `multi_uis` 已提升为独立 `kind: multi_uis`，仍复用统一界面的非界面业务动作规则和审阅能力。
+- `unified_ui`、`multi_uis`、`ui_api_mapping` 已补充 profile 级 golden fixture contract suite，并要求 profile quality issue 归零。
 - `strict_fpa`、`unified_ui` / `multi_uis` 的规则兜底行已补齐同名同类型来源合并、同名不同类型保留并提示。
 - `rule_set extends` 循环错误已提示循环路径。
 - 常规配置说明、Golden Case 说明、验收记录和计算依据说明文档已更新到新 profile/config 键；旧键只保留在迁移说明和错误提示测试中。
@@ -29,7 +30,7 @@
 
 - 如真实项目中 `multi_uis` 需要更强的多界面规则兜底拆分算法，可在现有 `kind: multi_uis` 下扩展专属规则，不复制整套 FPA 流程。
 - 可继续扩充 `ui_api_mapping` 的明确接口/后端交互抽取词库，但必须保持“只来自输入材料显式信息”的边界。
-- 可用真实模型抽样复核 4 个 profile 的 prompt 稳定性，尤其是 `multi_uis.split_reason` 和 `ui_api_mapping` 固定 EI/ILF 类型规则。
+- 可用更多真实项目样本复核 4 个 profile 的 prompt 稳定性，尤其是 `multi_uis.split_reason` 和 `ui_api_mapping` 固定 EI/ILF 类型规则，并将新边界沉淀为 profile golden fixtures。
 
 ## 目标
 
