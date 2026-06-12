@@ -529,7 +529,7 @@ replacement_scopes:
 - Web 配置页已支持输出模板 profile 基础选择能力：读取 `output_template_profiles`、选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。
 - Web/API 保存 `active_output_template_profile` 时已支持联动 profile 中的 FPA 口径、规则集、生成策略和确认模式。
 - FPA 结果写入器已开始使用 `fpa` manifest 做 result sheet、表头行、数据起始行、样式源行、关键列定位，以及 result sheet 的数据起始和 FPA 工作量汇总命名单元格定位；FPA 模板附录判定原则读取已支持 `sheets.judgement_rules` 的 sheet、表头定位、列、起始/结束行和基础锚点配置，预检会校验声明的规则表头。
-- COSMIC 结果写入器已开始使用 `cosmic` manifest 做 result sheet、数据起始行和样式源行。
+- COSMIC 结果写入器已开始使用 `cosmic` manifest 做 result sheet、数据起始行、样式源行和数据起始命名单元格定位。
 
 尚未实施：
 
