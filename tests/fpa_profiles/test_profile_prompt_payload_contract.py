@@ -102,7 +102,7 @@ def test_unified_ui_prompt_payload_exposes_profile_agent_review_contract(tmp_pat
                 "process_id": "m1_p1",
                 "process_name": "查询客户",
                 "description": "按客户名称查询客户列表。",
-                "type": "新增",
+                "change_status": "新增",
             }
         ],
     }
@@ -130,7 +130,7 @@ def test_ui_api_mapping_prompt_payload_exposes_mapping_agent_review_contract(tmp
                 "process_id": "m1_p1",
                 "process_name": "提交合同审批",
                 "description": "提交合同审批，调用 OA 审批接口。",
-                "type": "新增",
+                "change_status": "新增",
             }
         ],
     }
@@ -163,7 +163,7 @@ def test_custom_unified_ui_profile_prompt_payload_inherits_kind_contract(tmp_pat
                 "process_id": "m1_p1",
                 "process_name": "查询客户",
                 "description": "按客户名称查询客户列表。",
-                "type": "新增",
+                "change_status": "新增",
             }
         ],
     }
@@ -192,7 +192,7 @@ def test_multi_uis_prompt_payload_uses_multi_uis_contract_variant(tmp_path):
                 "process_id": "m1_p1",
                 "process_name": "查询客户",
                 "description": "按客户名称查询客户列表。",
-                "type": "新增",
+                "change_status": "新增",
             }
         ],
     }
@@ -221,7 +221,7 @@ def test_custom_ui_api_mapping_profile_prompt_payload_inherits_kind_contract(tmp
                 "process_id": "m1_p1",
                 "process_name": "提交合同审批",
                 "description": "提交合同审批，调用 OA 审批接口。",
-                "type": "新增",
+                "change_status": "新增",
             }
         ],
     }

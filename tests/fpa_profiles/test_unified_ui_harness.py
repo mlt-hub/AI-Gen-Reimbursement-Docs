@@ -18,10 +18,10 @@ def _group():
         "l2": "客户中心",
         "l3": "客户档案",
         "processes": [
-            {"name": "查询客户", "type": "新增", "desc": "按客户名称查询客户列表。"},
-            {"name": "查询客户", "type": "新增", "desc": "按手机号查询客户列表。"},
-            {"name": "导出客户清单", "type": "新增", "desc": "按查询条件导出客户清单文件。"},
-            {"name": "导入客户名单", "type": "新增", "desc": "上传客户名单并导入。"},
+            {"name": "查询客户", "change_status": "新增", "desc": "按客户名称查询客户列表。"},
+            {"name": "查询客户", "change_status": "新增", "desc": "按手机号查询客户列表。"},
+            {"name": "导出客户清单", "change_status": "新增", "desc": "按查询条件导出客户清单文件。"},
+            {"name": "导入客户名单", "change_status": "新增", "desc": "上传客户名单并导入。"},
         ],
     }
 
@@ -131,7 +131,7 @@ def test_unified_ui_harness_marks_external_boundary_as_eif():
     group = _group()
     group["processes"].append({
         "name": "外部接口联调行业平台",
-        "type": "新增",
+        "change_status": "新增",
         "desc": "联调行业平台外部系统调用并引用外部数据。",
     })
     token = set_current_fpa_rule_set_config(_rule_set())
