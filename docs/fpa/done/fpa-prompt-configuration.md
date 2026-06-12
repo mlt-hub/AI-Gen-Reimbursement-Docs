@@ -207,6 +207,14 @@ profiles:
 
 如果配置中新增自定义 profile，应先判断它是否真的采用标准 FPA 计量；只有标准 FPA profile 才使用“FPA 专家 / FPA 功能点评估助手”身份。其他自定义 profile 应使用“项目工作量评估助手”或更贴近业务口径的身份表述。
 
+### 默认配置实施记录
+
+- 实施状态：已实施。
+- 本轮提交：`078aeb3 Align custom FPA profile prompt identities`。
+- 实际修改文件：`config/fpa_config.yaml.example`、`tests/test_config_utils.py`。
+- 行为变化：`strict_fpa_sp` 继续使用“FPA 功能点评估助手”；`unified_ui_sp`、`multi_uis_sp`、`ui_api_mapping_sp` 已改为“项目工作量评估助手”，并明确这些 profile 是项目自定义工作量拆分规则，不按标准 FPA 自动合并或改写行规划。
+- 实际测试命令：`.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_fpa_profiles.py`。
+
 ## 模板变量
 
 代码只负责构造结构化变量，不在生产路径维护完整中文 Prompt 兜底。
