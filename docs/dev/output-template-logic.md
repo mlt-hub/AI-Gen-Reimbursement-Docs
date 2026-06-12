@@ -191,6 +191,7 @@ COSMIC 结果写入器当前会读取 `cosmic` manifest 的 `sheets.result`：
 - `style_source_row`：生成行复制样式的来源行。
 - `header_row`：表头扫描行。
 - `columns`：按 manifest header 或模板表头定位项目、模块层级、用户、触发事件、功能过程、子过程描述、数据移动类型、数据组、数据属性、复用度和 CFP 等输出列。
+- `named_cells.data_start`：可用 Excel 命名单元格定位数据起始行，优先级高于 `data_start_row`。
 
 生成数据写入、模块/过程合并列、warning 标记列、复用度数据校验列和 CFP 公式列会跟随 `columns` 映射。复杂锚点和跨 sheet 公式重写后续再推进。
 

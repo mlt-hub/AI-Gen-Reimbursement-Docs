@@ -6,6 +6,7 @@ from typing import Any
 
 import openpyxl
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.cell import range_boundaries
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 from ai_gen_reimbursement_docs.constants import (
@@ -49,6 +50,7 @@ def _cosmic_result_sheet_spec(manifest: dict[str, Any]) -> dict[str, Any]:
         "data_start_row": _as_manifest_int(spec.get("data_start_row"), FP_DATA_START_ROW),
         "style_source_row": _as_manifest_int(spec.get("style_source_row"), FP_DATA_START_ROW),
         "columns": spec.get("columns", {}) if isinstance(spec.get("columns", {}), dict) else {},
+        "named_cells": spec.get("named_cells", {}) if isinstance(spec.get("named_cells", {}), dict) else {},
     }
 
 
@@ -77,6 +79,64 @@ def _manifest_header(sheet_spec: dict[str, Any], key: str) -> str:
     if isinstance(spec, dict):
         return str(spec.get("header", "") or "").strip()
     return ""
+
+
+def _manifest_named_cell(sheet_spec: dict[str, Any], key: str) -> str:
+    named_cells = sheet_spec.get("named_cells", {}) or {}
+    if not isinstance(named_cells, dict):
+        return ""
+    spec = named_cells.get(key, "")
+    if isinstance(spec, str):
+        return spec.strip()
+    if isinstance(spec, dict):
+        return str(spec.get("name", "") or "").strip()
+    return ""
+
+
+def _named_cell_target(wb, name: str, *, expected_sheet: str) -> tuple[str, int, int] | None:
+    if not name:
+        return None
+    defined_name = wb.defined_names.get(name)
+    if defined_name is None:
+        logger.warning("cosmic manifest named_cells 指向的命名单元格不存在: %s", name)
+        return None
+    try:
+        destinations = list(defined_name.destinations)
+    except Exception as exc:
+        logger.warning("cosmic manifest named_cells 无法解析命名单元格 %s: %s", name, exc)
+        return None
+    if len(destinations) != 1:
+        logger.warning("cosmic manifest named_cells 仅支持单一目标命名单元格: %s", name)
+        return None
+    sheet_name, coord = destinations[0]
+    if sheet_name != expected_sheet:
+        logger.warning(
+            "cosmic manifest named_cells 命名单元格 %s 指向 sheet %s，期望 %s",
+            name,
+            sheet_name,
+            expected_sheet,
+        )
+        return None
+    try:
+        min_col, min_row, max_col, max_row = range_boundaries(str(coord))
+    except ValueError:
+        logger.warning("cosmic manifest named_cells 命名单元格 %s 坐标无效: %s", name, coord)
+        return None
+    if min_col != max_col or min_row != max_row:
+        logger.warning("cosmic manifest named_cells 仅支持单个单元格目标: %s -> %s", name, coord)
+        return None
+    return sheet_name, min_row, min_col
+
+
+def _named_cell_row(wb, ws, sheet_spec: dict[str, Any], key: str, default_row: int) -> int:
+    name = _manifest_named_cell(sheet_spec, key)
+    if not name:
+        return default_row
+    target = _named_cell_target(wb, name, expected_sheet=ws.title)
+    if target is None:
+        return default_row
+    _sheet_name, row, _col = target
+    return row
 
 
 def _column_by_header(
@@ -215,7 +275,7 @@ def write_cosmic_xlsx(
     sheet_spec = _cosmic_result_sheet_spec(manifest)
     wb = safe_load_workbook(template_path, '项目功能点拆分表')
     ws = wb[sheet_spec["name"]]
-    _data_start_row = sheet_spec["data_start_row"]
+    _data_start_row = _named_cell_row(wb, ws, sheet_spec, "data_start", sheet_spec["data_start_row"])
     _style_source_row = sheet_spec["style_source_row"]
     columns = _cosmic_columns(ws, sheet_spec)
     field_by_col = {col: key for key, col in columns.items()}
