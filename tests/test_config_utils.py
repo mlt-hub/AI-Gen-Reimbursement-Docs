@@ -1197,6 +1197,27 @@ judgement_rules:
             with pytest.raises(FpaConfigError, match=r"internal_data_rules\.items\[0\]\.keywords 必须是非空字符串列表"):
                 load_fpa_rule_sets_config()
 
+    def test_explanation_patterns_shape_is_rejected(self, tmp_path):
+        _write_fpa_config(tmp_path)
+        content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+        content = content.replace(
+            """    internal_data_rules:
+      merge: append""",
+            """    explanation_patterns:
+      merge: append
+      items:
+        - id: invalid
+          type: BAD
+          keywords: ["查询服务"]
+          required_points: ["返回字段"]
+    internal_data_rules:
+      merge: append""",
+        )
+        (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+        with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+            with pytest.raises(FpaConfigError, match=r"explanation_patterns\.items\[0\]\.type 必须是 EI / EQ / EO / ILF / EIF"):
+                load_fpa_rule_sets_config()
+
     def test_coverage_rules_bool_fields_are_rejected(self, tmp_path):
         _write_fpa_config(tmp_path)
         content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
@@ -1366,6 +1387,7 @@ class TestLoadFpaUserPromptTemplate:
             mapping = load_fpa_user_prompt_template("ui_api_mapping")
             strict = load_fpa_user_prompt_template("strict_fpa")
             explanation_rules = load_fpa_calculation_explanation_rules("strict_fpa")
+            mapping_explanation_rules = load_fpa_calculation_explanation_rules("ui_api_mapping")
             unified_system = load_fpa_system_prompt_config("unified_ui").text
             multi_uis_system = load_fpa_system_prompt_config("multi_uis").text
             mapping_system = load_fpa_system_prompt_config("ui_api_mapping").text
@@ -1385,6 +1407,8 @@ class TestLoadFpaUserPromptTemplate:
         assert "不要把" in explanation_rules.text
         assert "ILF/EIF 数据功能使用" in explanation_rules.text
         assert "数据组名称" in explanation_rules.text
+        assert "ui_api_mapping 计算依据说明生成规则" in mapping_explanation_rules.text
+        assert "具体如下" in mapping_explanation_rules.text
         assert explanation_rules.source_label == (
             "用户配置（配置目录/fpa_config.yaml: calculation_explanation_rules.strict_fpa_ce）"
         )

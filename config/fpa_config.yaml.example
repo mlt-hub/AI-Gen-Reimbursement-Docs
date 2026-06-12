@@ -122,7 +122,7 @@ profiles:
     core_rules: ui_api_mapping_cr
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up
-    calculation_explanation_rules: ui_api_mapping_ce
+    calculation_explanation_rules: ui_api_mapping_workload_eval_ce
 
 core_rules:
   strict_fpa_cr: |-
@@ -228,6 +228,17 @@ calculation_explanation_rules:
     7. 每项 1 句，总体建议 80-180 字；不要为凑字数补充输入中没有的权限、审批、状态流、表名、服务名或接口名。
   multi_uis_ce: *unified_ui_ce
   ui_api_mapping_ce: *unified_ui_ce
+  ui_api_mapping_workload_eval_ce: |-
+    ui_api_mapping 计算依据说明生成规则：
+    1. 计算依据说明使用「{新增/修改功能点}，具体如下：」开头。
+    2. 后续使用编号清单描述事件流、页面要素、业务规则、业务数据、表、服务、接口。
+    3. EI 界面开发行必须说明页面或弹窗入口、搜索项、按钮、列表字段、翻页、校验和调用接口。
+    4. ILF 接口/服务行必须说明接口或服务名称、入参或触发动作、数据表新增/更新/删除/查询、返回数据。
+    5. EO 导出行必须说明导出触发方式、查询条件、导出字段和输出文件或报表。
+    6. 删除服务必须说明点击删除、传输数据 ID、调用删除接口、匹配并删除数据。
+    7. 查询服务必须说明查询条件，以及返回列表字段。
+    8. 导入服务必须说明导入模板字段、数据校验和入库处理。
+    9. 不得编造输入中没有的表、接口、字段、权限规则或外部系统。
 
 user_prompt_sets:
   # user 模板只支持并且必须包含三个核心占位符：
@@ -459,7 +470,54 @@ rule_sets:
         type_suffixes:
           EI: "界面开发"
           ILF: "接口开发"
-        explanation_template: "{name}，具体为以下：\n1、{description}"
+        explanation_template: "{name}，具体如下：\n1、{description}"
+    explanation_patterns:
+      merge: append
+      items:
+        - id: ui_list_page
+          type: EI
+          keywords: ["列表", "界面", "页面", "搜索", "查询按钮", "重置按钮"]
+          required_points:
+            - "新增或修改页面/列表界面"
+            - "搜索条件、按钮和列表字段"
+            - "列表翻页功能"
+            - "调用列表数据展示接口"
+        - id: create_or_edit_page
+          type: EI
+          keywords: ["新增界面", "编辑界面", "弹出", "跳转", "确认按钮", "取消按钮"]
+          required_points:
+            - "点击新增/编辑按钮进入界面"
+            - "表单要素"
+            - "必填项或权限校验"
+            - "调用新增/编辑接口"
+        - id: query_service
+          type: ILF
+          keywords: ["查询服务", "数据查询", "列表查询"]
+          required_points:
+            - "查询条件"
+            - "根据查询条件返回列表数据"
+            - "返回字段"
+        - id: delete_service
+          type: ILF
+          keywords: ["删除服务", "删除接口", "删除"]
+          required_points:
+            - "点击删除按钮并传输数据 ID"
+            - "调用或新增删除接口"
+            - "后端匹配并删除对应数据"
+        - id: import_service
+          type: ILF
+          keywords: ["导入", "导入模板"]
+          required_points:
+            - "新增或使用导入模板"
+            - "校验导入数据"
+            - "将正确数据存储至数据表"
+        - id: export_service
+          type: EO
+          keywords: ["导出", "报表", "文件", "下载"]
+          required_points:
+            - "根据搜索或查询条件导出数据"
+            - "说明导出字段"
+            - "输出文件、报表或下载结果"
     coverage_rules:
       require_process_coverage: true
       require_data_function: false

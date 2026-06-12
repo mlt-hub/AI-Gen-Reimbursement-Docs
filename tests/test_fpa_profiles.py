@@ -8,6 +8,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
     STRICT_FPA_PROFILE,
     ExternalDataGroupRule,
+    FpaExplanationPattern,
     FpaProcessRowsPlanningRule,
     FpaRowPlanningRules,
     FpaRuleSetConfig,
@@ -40,6 +41,41 @@ def _assert_not_strict_fallback_wrapped(rows):
 def _ui_api_mapping_rule_set(template: str = "{name}，具体为以下：\n1、{description}") -> FpaRuleSetConfig:
     return FpaRuleSetConfig(
         name="ui_api_mapping_rs",
+        row_planning_rules=FpaRowPlanningRules(
+            process_rows=FpaProcessRowsPlanningRule(
+                enabled=True,
+                one_row_per_process=True,
+                explanation_template=template,
+            ),
+        ),
+    )
+
+
+def _ui_api_mapping_pattern_rule_set(
+    template: str = "{name}，具体如下：\n1、{description}",
+) -> FpaRuleSetConfig:
+    return FpaRuleSetConfig(
+        name="ui_api_mapping_rs",
+        explanation_patterns=(
+            FpaExplanationPattern(
+                "ui_list_page",
+                "EI",
+                ("列表", "界面", "页面", "搜索", "查询按钮", "重置按钮"),
+                ("新增或修改页面/列表界面", "搜索条件、按钮和列表字段", "列表翻页功能", "调用列表数据展示接口"),
+            ),
+            FpaExplanationPattern(
+                "query_service",
+                "ILF",
+                ("查询服务", "数据查询", "列表查询"),
+                ("查询条件", "根据查询条件返回列表数据", "返回字段"),
+            ),
+            FpaExplanationPattern(
+                "delete_service",
+                "ILF",
+                ("删除服务", "删除接口", "删除"),
+                ("点击删除按钮并传输数据 ID", "调用或新增删除接口", "后端匹配并删除对应数据"),
+            ),
+        ),
         row_planning_rules=FpaRowPlanningRules(
             process_rows=FpaProcessRowsPlanningRule(
                 enabled=True,
@@ -223,6 +259,13 @@ rule_sets:
         - source_aliases: ["行业平台"]
           data_name: "行业平台客户档案"
           data_nouns: ["客户", "档案"]
+    explanation_patterns:
+      merge: append
+      items:
+        - id: parent_query
+          type: ILF
+          keywords: ["父级查询"]
+          required_points: ["父级返回字段"]
     coverage_rules:
       require_process_coverage: false
       require_data_function: true
@@ -256,6 +299,13 @@ rule_sets:
         - source_aliases: ["标签平台"]
           data_name: "标签平台客户标签"
           data_nouns: ["客户", "标签"]
+    explanation_patterns:
+      merge: replace
+      items:
+        - id: child_delete
+          type: ILF
+          keywords: ["子级删除"]
+          required_points: ["子级删除字段"]
     coverage_rules:
       require_data_function: false
 """,
@@ -391,6 +441,127 @@ def test_ui_api_mapping_fallback_uses_configured_explanation_template():
     assert all("提交合同审批。" in str(row["计算依据说明"]) for row in rows)
 
 
+def test_ui_api_mapping_fallback_uses_numbered_explanation_pattern_for_list_page():
+    profile = UiApiMappingProfile()
+    group = {
+        "client_type": "业务端",
+        "l1": "营销管理",
+        "l2": "驿站管理",
+        "l3": "驿站列表",
+        "processes": [
+            {
+                "name": "驿站列表界面",
+                "change_status": "新增",
+                "desc": "提供驿站名称搜索、查询按钮、重置按钮和列表展示。",
+            },
+        ],
+    }
+    token = set_current_fpa_rule_set_config(_ui_api_mapping_pattern_rule_set())
+    try:
+        rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    ui_row = next(row for row in rows if str(row["新增/修改功能点"]).endswith("-界面开发"))
+    explanation = str(ui_row["计算依据说明"])
+    assert explanation.startswith(f"{ui_row['新增/修改功能点']}，具体如下：")
+    assert "1、提供驿站名称搜索、查询按钮、重置按钮和列表展示。" in explanation
+    assert "搜索条件、按钮和列表字段" in explanation
+    assert "列表翻页功能" in explanation
+    assert "调用列表数据展示接口" in explanation
+
+
+def test_ui_api_mapping_fallback_uses_numbered_explanation_pattern_for_query_service():
+    profile = UiApiMappingProfile()
+    group = {
+        "client_type": "业务端",
+        "l1": "营销管理",
+        "l2": "驿站管理",
+        "l3": "驿站列表",
+        "processes": [
+            {
+                "name": "驿站列表数据查询服务",
+                "change_status": "新增",
+                "desc": "查询条件为驿站名称，根据查询条件返回列表数据包含序号、驿站名称、添加时间、状态。",
+            },
+        ],
+    }
+    token = set_current_fpa_rule_set_config(_ui_api_mapping_pattern_rule_set())
+    try:
+        rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    service_row = next(row for row in rows if str(row["新增/修改功能点"]).endswith("-接口开发"))
+    explanation = str(service_row["计算依据说明"])
+    assert explanation.startswith(f"{service_row['新增/修改功能点']}，具体如下：")
+    assert "1、查询条件为驿站名称" in explanation
+    assert "返回字段" in explanation
+    assert explanation.count("查询条件") == 2
+
+
+def test_ui_api_mapping_fallback_uses_numbered_explanation_pattern_for_delete_service():
+    profile = UiApiMappingProfile()
+    group = {
+        "client_type": "业务端",
+        "l1": "营销管理",
+        "l2": "驿站管理",
+        "l3": "驿站列表",
+        "processes": [
+            {
+                "name": "驿站列表数据删除服务",
+                "change_status": "新增",
+                "desc": "点击删除按钮传输数据 ID，新增数据删除接口，从数据表中匹配对应数据并删除。",
+            },
+        ],
+    }
+    token = set_current_fpa_rule_set_config(_ui_api_mapping_pattern_rule_set())
+    try:
+        rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    service_row = next(row for row in rows if str(row["新增/修改功能点"]).endswith("-接口开发"))
+    explanation = str(service_row["计算依据说明"])
+    assert "传输数据 ID" in explanation
+    assert "调用或新增删除接口" in explanation
+    assert "后端匹配并删除对应数据" in explanation
+
+
+def test_ui_api_mapping_fallback_falls_back_to_configured_template_when_no_pattern_matches():
+    profile = UiApiMappingProfile()
+    group = {
+        "client_type": "业务端",
+        "l1": "营销管理",
+        "l2": "活动管理",
+        "l3": "活动审批",
+        "processes": [
+            {"name": "活动审批", "change_status": "新增", "desc": "提交活动审批。"},
+        ],
+    }
+    config = FpaRuleSetConfig(
+        name="ui_api_mapping_rs",
+        explanation_patterns=(
+            FpaExplanationPattern("export_service", "EO", ("导出",), ("输出文件",)),
+        ),
+        row_planning_rules=FpaRowPlanningRules(
+            process_rows=FpaProcessRowsPlanningRule(
+                enabled=True,
+                one_row_per_process=True,
+                explanation_template="回退::{name}::{description}",
+            ),
+        ),
+    )
+    token = set_current_fpa_rule_set_config(config)
+    try:
+        rows = profile.fallback_rows_for_l3(group, {"子系统（模块）": "测试", "资产标识": "T"})
+    finally:
+        reset_current_fpa_rule_set_config(token)
+
+    assert rows
+    assert all(str(row["计算依据说明"]).startswith("回退::") for row in rows)
+
+
 def test_ui_api_mapping_keeps_multiple_explicit_backend_rows_and_duplicate_default_rows():
     profile = UiApiMappingProfile()
     group = {
@@ -520,8 +691,39 @@ def test_rule_set_extends_are_loaded(tmp_path):
     assert config.rule_set_config.ai_type_conflict_rules[0].expected_type == "ILF"
     assert config.rule_set_config.internal_data_rules[0].data_name == "认证授权关系"
     assert config.rule_set_config.external_data_rules[0].data_name == "行业平台客户档案"
+    assert config.rule_set_config.explanation_patterns[0].pattern_id == "parent_query"
+    assert config.rule_set_config.explanation_patterns[0].fpa_type == "ILF"
+    assert config.rule_set_config.explanation_patterns[0].keywords == ("父级查询",)
+    assert config.rule_set_config.explanation_patterns[0].required_points == ("父级返回字段",)
     assert config.rule_set_config.coverage_rules.require_process_coverage is False
     assert config.rule_set_config.coverage_rules.require_data_function is True
+
+
+def test_rule_set_extends_merges_explanation_patterns(tmp_path):
+    _write_fpa_config(tmp_path)
+    content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+    content = content.replace(
+        """    coverage_rules:
+      require_data_function: false""",
+        """    explanation_patterns:
+      merge: append
+      items:
+        - id: child_import
+          type: ILF
+          keywords: ["子级导入"]
+          required_points: ["子级入库"]
+    coverage_rules:
+      require_data_function: false""",
+    )
+    (tmp_path / "fpa_config.yaml").write_text(content, encoding="utf-8")
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("strict_fpa", "ai_first", "telecom_replace_rules")
+
+    assert [pattern.pattern_id for pattern in config.rule_set_config.explanation_patterns] == [
+        "parent_query",
+        "child_import",
+    ]
 
 
 def test_custom_rule_set_row_planning_rules_are_loaded(tmp_path):
@@ -535,6 +737,21 @@ def test_custom_rule_set_row_planning_rules_are_loaded(tmp_path):
     assert row_planning.ui_row.fpa_type == "EI"
     assert row_planning.process_rows is not None
     assert row_planning.process_rows.type_suffixes["ILF"] == "逻辑接口开发"
+
+
+def test_default_ui_api_mapping_rule_set_parses_explanation_patterns(tmp_path):
+    source = Path(__file__).resolve().parents[1] / "config"
+    copy_default_config_files(tmp_path, source)
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        config = resolve_fpa_execution_config("ui_api_mapping")
+
+    patterns = config.rule_set_config.explanation_patterns
+    assert patterns
+    assert patterns[0].pattern_id == "ui_list_page"
+    assert patterns[0].fpa_type == "EI"
+    assert isinstance(patterns[0].keywords, tuple)
+    assert isinstance(patterns[0].required_points, tuple)
 
 
 def test_custom_rule_set_row_planning_rules_affect_fallback_rows(tmp_path):
@@ -619,6 +836,7 @@ def test_rule_set_replace_discards_parent_rule_sections(tmp_path):
     assert [rule.keywords for rule in config.rule_set_config.ai_type_conflict_rules] == [("标签平台客户标签",)]
     assert [rule.data_name for rule in config.rule_set_config.internal_data_rules] == ["客户标签关系"]
     assert [rule.data_name for rule in config.rule_set_config.external_data_rules] == ["标签平台客户标签"]
+    assert [pattern.pattern_id for pattern in config.rule_set_config.explanation_patterns] == ["child_delete"]
     assert config.rule_set_config.coverage_rules.require_process_coverage is False
     assert config.rule_set_config.coverage_rules.require_data_function is False
 
@@ -805,10 +1023,15 @@ def test_default_profiles_render_calculation_explanation_fragment(tmp_path):
 
     for name, prompt in prompts.items():
         assert "计算依据说明生成规则" in prompt, name
-        assert "来源场景" in prompt, name
-        assert "业务数据" in prompt, name
-        assert "业务规则" in prompt, name
-        assert "计算说明" in prompt, name
+        if name == "ui_api_mapping":
+            assert "ui_api_mapping 计算依据说明生成规则" in prompt
+            assert "具体如下" in prompt
+            assert "删除服务必须说明点击删除" in prompt
+        else:
+            assert "来源场景" in prompt, name
+            assert "业务数据" in prompt, name
+            assert "业务规则" in prompt, name
+            assert "计算说明" in prompt, name
         assert "${calculation_explanation_rules}" not in prompt, name
         assert "${" not in prompt, name
 

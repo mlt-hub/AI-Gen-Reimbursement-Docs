@@ -659,3 +659,11 @@ test_unified_ui_fallback_explanation_not_affected_by_ui_api_mapping_rules
 - `ui_api_mapping` 当前主要支持 `EI/ILF` 默认行；若需要在该 profile 中输出 `EO` 导出行，需要确认是否继续通过显式接口/后端调用规则扩展，或引入 `type_suffixes.EO`。
 - 样例 Excel 中存在个别类型与计算依据归类不一致的行，例如 `类型=ILF` 但归类写 `EI:1)`；实施时应以配置规则为准，并把冲突作为人工审阅 warning，而不是复制样例错误。
 - 本方案不改变标准 FPA 口径，也不把开发工作项拆分规则扩散到 `strict_fpa`。
+
+## 实施记录
+
+- 实施状态：已实施。
+- 本轮提交：见最终回复中的提交哈希。
+- 实际修改文件：`ai_gen_reimbursement_docs/fpa_profiles.py`、`ai_gen_reimbursement_docs/config_utils.py`、`config/fpa_config.yaml.example`、`tests/test_fpa_profiles.py`、`tests/test_config_utils.py`、`docs/fpa/ui-api-mapping-explanation-rules.md`。
+- 实际测试命令：`.\.venv\Scripts\python.exe -m pytest tests/test_fpa_profiles.py tests/fpa_profiles/test_ui_api_mapping_harness.py tests/test_config_utils.py`。
+- EO fallback：本轮不支持自动生成 `EO` fallback 行；`export_service` pattern 仅作为 prompt 和后续扩展预留。

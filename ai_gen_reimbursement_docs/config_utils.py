@@ -715,6 +715,24 @@ def _validate_internal_data_rules(value: object, key_path: str) -> None:
             _require_non_empty_string(item.get("reason"), f"{item_path}.reason")
 
 
+def _validate_explanation_patterns(value: object, key_path: str) -> None:
+    items = _validate_rule_section(value, key_path)
+    if items is None:
+        return
+    for index, item in enumerate(items):
+        item_path = f"{key_path}.items[{index}]"
+        if not isinstance(item, dict):
+            raise FpaConfigError(f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path} 必须是对象")
+        _require_non_empty_string(item.get("id"), f"{item_path}.id")
+        fpa_type = _require_non_empty_string(item.get("type"), f"{item_path}.type").upper()
+        if fpa_type not in VALID_FPA_TYPES:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {item_path}.type 必须是 EI / EQ / EO / ILF / EIF"
+            )
+        _validate_non_empty_string_list(item.get("keywords"), f"{item_path}.keywords")
+        _validate_non_empty_string_list(item.get("required_points"), f"{item_path}.required_points")
+
+
 def _validate_coverage_rules(value: object, key_path: str) -> None:
     if value is None:
         return
@@ -1057,6 +1075,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         _validate_type_mapping_rules(rule_entry.get("type_mapping_rules"), f"{rule_set_path}.type_mapping_rules")
         _validate_ai_type_conflict_rules(rule_entry.get("ai_type_conflict_rules"), f"{rule_set_path}.ai_type_conflict_rules")
         _validate_internal_data_rules(rule_entry.get("internal_data_rules"), f"{rule_set_path}.internal_data_rules")
+        _validate_explanation_patterns(rule_entry.get("explanation_patterns"), f"{rule_set_path}.explanation_patterns")
         _validate_coverage_rules(rule_entry.get("coverage_rules"), f"{rule_set_path}.coverage_rules")
         _validate_row_planning_rules(rule_entry.get("row_planning_rules"), f"{rule_set_path}.row_planning_rules")
 

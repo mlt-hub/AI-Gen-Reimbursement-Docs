@@ -149,6 +149,19 @@ class InternalDataGroupRule:
 
 
 @dataclass(frozen=True)
+class FpaExplanationPattern:
+    """计算依据说明场景模板。"""
+
+    pattern_id: str
+    fpa_type: str
+    keywords: tuple[str, ...]
+    required_points: tuple[str, ...]
+
+    def matches(self, text: str, fpa_type: str) -> bool:
+        return self.fpa_type == fpa_type.upper() and any(keyword in text for keyword in self.keywords)
+
+
+@dataclass(frozen=True)
 class FpaExecutionConfig:
     """一次 FPA 执行使用的 profile、策略和规则集。"""
 
@@ -215,6 +228,8 @@ class FpaRuleSetConfig:
     ai_type_conflict_rules_merge: str = "append"
     internal_data_rules: tuple[InternalDataGroupRule, ...] = field(default_factory=tuple)
     internal_data_rules_merge: str = "append"
+    explanation_patterns: tuple[FpaExplanationPattern, ...] = field(default_factory=tuple)
+    explanation_patterns_merge: str = "append"
     coverage_rules: FpaCoverageRules = field(default_factory=FpaCoverageRules)
     row_planning_rules: FpaRowPlanningRules = field(default_factory=FpaRowPlanningRules)
     config_warnings: tuple[str, ...] = field(default_factory=tuple)
@@ -657,6 +672,25 @@ def _internal_data_rule_from_dict(item: dict[str, object]) -> InternalDataGroupR
     return InternalDataGroupRule(keyword_values, data_name, reason)
 
 
+def _explanation_pattern_from_dict(item: dict[str, object]) -> FpaExplanationPattern | None:
+    pattern_id = str(item.get("id") or "").strip()
+    fpa_type = str(item.get("type") or "").strip().upper()
+    keywords = item.get("keywords", [])
+    required_points = item.get("required_points", [])
+    if (
+        not pattern_id
+        or fpa_type not in VALID_FPA_TYPES
+        or not isinstance(keywords, list)
+        or not isinstance(required_points, list)
+    ):
+        return None
+    keyword_values = tuple(str(keyword).strip() for keyword in keywords if str(keyword).strip())
+    point_values = tuple(str(point).strip() for point in required_points if str(point).strip())
+    if not keyword_values or not point_values:
+        return None
+    return FpaExplanationPattern(pattern_id, fpa_type, keyword_values, point_values)
+
+
 def _rule_section_from_dict(data: dict[str, object], key: str) -> tuple[str, list[object]]:
     section = data.get(key)
     if not isinstance(section, dict):
@@ -784,6 +818,13 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
             rule = _internal_data_rule_from_dict(item)
             if rule is not None:
                 internal_rules.append(rule)
+    explanation_patterns: list[FpaExplanationPattern] = []
+    explanation_patterns_merge, raw_explanation_patterns = _rule_section_from_dict(data, "explanation_patterns")
+    for item in raw_explanation_patterns:
+        if isinstance(item, dict):
+            pattern = _explanation_pattern_from_dict(item)
+            if pattern is not None:
+                explanation_patterns.append(pattern)
     return FpaRuleSetConfig(
         name=name,
         extends=str(data.get("extends") or "").strip(),
@@ -797,6 +838,8 @@ def _rule_set_from_dict(name: str, data: dict[str, object]) -> FpaRuleSetConfig:
         ai_type_conflict_rules_merge=ai_type_conflict_merge,
         internal_data_rules=tuple(internal_rules),
         internal_data_rules_merge=internal_merge,
+        explanation_patterns=tuple(explanation_patterns),
+        explanation_patterns_merge=explanation_patterns_merge,
         coverage_rules=_coverage_rules_from_dict(data),
         row_planning_rules=_row_planning_rules_from_dict(data),
         config_warnings=_external_data_rule_config_warnings(name, tuple(external_rules)),
@@ -904,6 +947,12 @@ def _merge_rule_sets(parent: FpaRuleSetConfig, child: FpaRuleSetConfig) -> FpaRu
             child.internal_data_rules_merge,
         ),
         internal_data_rules_merge=child.internal_data_rules_merge,
+        explanation_patterns=_merge_rule_section(
+            parent.explanation_patterns,
+            child.explanation_patterns,
+            child.explanation_patterns_merge,
+        ),
+        explanation_patterns_merge=child.explanation_patterns_merge,
         coverage_rules=_merge_coverage_rules(parent.coverage_rules, child.coverage_rules),
         row_planning_rules=_merge_row_planning_rules(parent.row_planning_rules, child.row_planning_rules),
         config_warnings=_external_data_rule_config_warnings(child.name, external_data_rules),
@@ -2012,9 +2061,12 @@ class UiApiMappingProfile(CustomRulesProfile):
                     "新增/修改功能点": point_name,
                     "类型": fpa_type,
                     "计算依据归类": basis,
-                    "计算依据说明": explanation_template.format(
+                    "计算依据说明": self._mapping_explanation(
                         name=point_name,
-                        description=desc or raw_name,
+                        fpa_type=fpa_type,
+                        process_name=raw_name,
+                        description=desc,
+                        fallback_template=explanation_template,
                     ),
                     "变更状态": status,
                     "调整值": adjust_value_for_type(fpa_type, self.name),
@@ -2047,9 +2099,12 @@ class UiApiMappingProfile(CustomRulesProfile):
                         fpa_type="ILF",
                         judgement_rules=judgement_rules,
                     ),
-                    "计算依据说明": explanation_template.format(
+                    "计算依据说明": self._mapping_explanation(
                         name=point_name,
-                        description=desc or raw_name,
+                        fpa_type="ILF",
+                        process_name=raw_name,
+                        description=desc,
+                        fallback_template=explanation_template,
                     ),
                     "变更状态": status,
                     "调整值": adjust_value_for_type("ILF", self.name),
@@ -2065,6 +2120,55 @@ class UiApiMappingProfile(CustomRulesProfile):
                 rows.append(row)
                 seq += 1
         return rows
+
+    def _mapping_explanation(
+        self,
+        *,
+        name: str,
+        fpa_type: str,
+        process_name: str,
+        description: str,
+        fallback_template: str,
+    ) -> str:
+        pattern = self._matching_explanation_pattern(
+            f"{name} {process_name} {description}",
+            fpa_type,
+        )
+        if pattern is None:
+            return fallback_template.format(name=name, description=description or process_name)
+        return self._format_pattern_explanation(
+            name=name,
+            process_name=process_name,
+            description=description,
+            pattern=pattern,
+        )
+
+    def _matching_explanation_pattern(self, text: str, fpa_type: str) -> FpaExplanationPattern | None:
+        config = current_fpa_rule_set_config()
+        if config is None:
+            return None
+        for pattern in config.explanation_patterns:
+            if pattern.matches(text, fpa_type):
+                return pattern
+        return None
+
+    def _format_pattern_explanation(
+        self,
+        *,
+        name: str,
+        process_name: str,
+        description: str,
+        pattern: FpaExplanationPattern,
+    ) -> str:
+        first_point = description or process_name
+        points = [first_point] if first_point else []
+        for required_point in pattern.required_points:
+            if first_point and required_point in first_point:
+                continue
+            if required_point not in points:
+                points.append(required_point)
+        detail = "\n".join(f"{index}、{point}" for index, point in enumerate(points, 1))
+        return f"{name}，具体如下：\n{detail}"
 
     def _configured_mapping_explanation_template(self) -> str:
         process_rule = self._configured_process_row_planning_rule()
