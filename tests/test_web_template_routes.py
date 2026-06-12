@@ -70,6 +70,20 @@ def _append_complex_word_structures(doc: Document) -> None:
     body.insert(len(body) - 1, text_box)
 
 
+def _append_toc_field(doc: Document) -> None:
+    toc = parse_xml(
+        f"""
+        <w:p {nsdecls('w')}>
+          <w:fldSimple w:instr="TOC \\o &quot;1-3&quot; \\h \\z \\u">
+            <w:r><w:t>目录</w:t></w:r>
+          </w:fldSimple>
+        </w:p>
+        """
+    )
+    body = doc.element.body
+    body.insert(len(body) - 1, toc)
+
+
 def test_import_spec_template_route_creates_template_draft(monkeypatch, tmp_path):
     client = _client(monkeypatch, tmp_path)
     source = tmp_path / "customer.docx"
@@ -121,6 +135,35 @@ def test_imported_spec_template_preview_reports_complex_structures(monkeypatch, 
     layout = client.get(f"/api/templates/spec/imported/{import_id}/layout-preview").json()
     assert layout["summary"]["complex_structure_count"] >= 2
     assert any("仅做位置检测" in item for item in layout["limitations"])
+
+
+def test_imported_spec_template_preview_reports_toc_status(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+    doc = Document(source)
+    _append_toc_field(doc)
+    doc.save(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    assert import_resp.status_code == 200
+    imported = import_resp.json()
+    assert imported["toc"]["present"] is True
+    assert imported["toc"]["field_count"] == 1
+    assert imported["toc"]["update_required"] is True
+    import_id = Path(imported["template_path"]).parent.name
+
+    preview = client.get(f"/api/templates/spec/imported/{import_id}/preview").json()
+    assert preview["summary"]["toc_present"] is True
+    assert preview["toc"]["field_count"] == 1
+
+    layout = client.get(f"/api/templates/spec/imported/{import_id}/layout-preview").json()
+    assert layout["summary"]["toc_present"] is True
+    assert layout["toc"]["update_required"] is True
 
 
 def test_imported_spec_template_routes_list_download_and_delete(monkeypatch, tmp_path):

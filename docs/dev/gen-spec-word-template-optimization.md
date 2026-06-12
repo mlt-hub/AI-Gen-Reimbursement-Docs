@@ -298,6 +298,8 @@ sections:
 - Web/CLI 明确展示“目录已更新”或“需要手动更新目录”。
 - 后续评估 LibreOffice 或其他 docx 字段更新方案。
 
+当前已先落地导入草稿侧的目录状态检测：Word 模板导入器会识别 TOC 字段和目录样式段落，写入 manifest 的 `toc.present`、`toc.auto_update` 和 `toc.update_required`，并在导入结果、结构预览和版式预览中展示目录状态。生成后的目录自动更新结果展示仍按后续项推进。
+
 manifest 示例：
 
 ```yaml
@@ -521,6 +523,7 @@ replacement_scopes:
 - Web 已支持已导入模板草稿的基础在线调整：可根据结构预览移动 `{{模块清单表}}` / `{{功能过程详情}}` 锚点，也可将指定段落文本替换为 `{{字段名}}` 占位符；调整后会重置确认/发布状态。
 - Web 已支持已导入模板草稿的基础版式渲染预览：后端提供页面尺寸、边距、页眉/正文/页脚、段落/表格、样式名和占位符的浏览器可渲染 layout model，配置页草稿列表可打开页面式预览。
 - Web 已支持已导入模板草稿的复杂结构检测提示：导入、结构预览和版式预览会展示文本框、内容控件的数量、位置和可读文本摘要，并要求人工确认；当前不会自动替换这些结构中的字段。
+- Web 已支持已导入模板草稿的目录状态检测：导入器会识别 TOC 字段和目录样式段落，写入 manifest 的 `toc` 状态，并在结构预览和版式预览中提示是否需要更新目录。
 - pipeline 已支持输出模板 profile/模板包基础解析：`system_config.yaml` 可通过 `active_output_template_profile` 选择 `output_template_profiles`，profile 可直接声明模板路径或通过 `template_pack` 指向带 `manifest.yaml` 的模板包目录。
 - Web 配置页已支持输出模板 profile 基础选择能力：读取 `output_template_profiles`、选择或清空 `active_output_template_profile`，并展示所选 profile 的 `template_pack` 与 `templates` key。
 - Web/API 保存 `active_output_template_profile` 时已支持联动 profile 中的 FPA 口径、规则集、生成策略和确认模式。
@@ -688,6 +691,7 @@ custom_templates/
 
 1. 评估是否需要 Office/LibreOffice 支撑的像素级 Word 渲染预览。
 2. 在已检测文本框、内容控件存在性的基础上，评估是否支持其中字段的自动替换。
-3. 继续增强导入草稿的在线调整能力，例如表格字段和样例表选择。
+3. 补齐生成后目录更新状态记录和 Web/CLI 展示。
+4. 继续增强导入草稿的在线调整能力，例如表格字段和样例表选择。
 
 这样可以把已生成的模板草稿纳入完整管理流程，同时继续避免承诺任意 Word 自动完美转换。

@@ -39,12 +39,22 @@ class ComplexWordStructure:
 
 
 @dataclass(frozen=True)
+class ImportedTocInfo:
+    present: bool
+    field_count: int = 0
+    styled_paragraph_count: int = 0
+    update_required: bool = False
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class SpecTemplateImportResult:
     template_path: Path
     manifest_path: Path
     detected_placeholders: list[ImportedPlaceholder] = field(default_factory=list)
     inserted_anchors: list[ImportedAnchor] = field(default_factory=list)
     complex_structures: list[ComplexWordStructure] = field(default_factory=list)
+    toc: ImportedTocInfo = field(default_factory=lambda: ImportedTocInfo(False))
     pending_confirmations: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -100,11 +110,13 @@ def import_spec_word_template(
     detected = _replace_known_fields(doc)
     inserted_anchors, anchor_note = _ensure_split_requirement_anchors(doc)
     complex_structures = collect_complex_word_structures(doc)
+    toc_info = collect_word_toc_info(doc)
     pending_confirmations = _pending_confirmations(
         detected,
         inserted_anchors,
         anchor_note,
         complex_structures,
+        toc_info,
     )
 
     doc.save(str(template_path))
@@ -112,6 +124,7 @@ def import_spec_word_template(
         template_id=template_id or _default_template_id(),
         template_file=template_path.name,
         detected_placeholders=detected,
+        toc_info=toc_info,
     )
     manifest_path.write_text(
         yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
@@ -124,6 +137,7 @@ def import_spec_word_template(
         detected_placeholders=detected,
         inserted_anchors=inserted_anchors,
         complex_structures=complex_structures,
+        toc=toc_info,
         pending_confirmations=pending_confirmations,
         warnings=_import_warnings(complex_structures),
     )
@@ -310,6 +324,58 @@ def collect_complex_word_structures(doc: Document) -> list[ComplexWordStructure]
     return items
 
 
+def collect_word_toc_info(doc: Document) -> ImportedTocInfo:
+    """Detect whether a Word document contains a table-of-contents field."""
+    field_count = 0
+    for root in _iter_toc_roots(doc):
+        for element in root.iter():
+            local_name = _xml_local_name(getattr(element, "tag", ""))
+            if local_name == "instrText" and _looks_like_toc_instruction(element.text):
+                field_count += 1
+            elif local_name == "fldSimple":
+                instr = ""
+                for value in getattr(element, "attrib", {}).values():
+                    text = str(value or "")
+                    if "TOC" in text.upper():
+                        instr = text
+                        break
+                if _looks_like_toc_instruction(instr):
+                    field_count += 1
+
+    styled_count = 0
+    for paragraph in doc.paragraphs:
+        style_name = str(paragraph.style.name if paragraph.style else "")
+        if style_name.lower().startswith("toc") or style_name.startswith("目录"):
+            styled_count += 1
+
+    present = field_count > 0 or styled_count > 0
+    if field_count:
+        note = "检测到 Word 目录字段，生成后需要更新目录域。"
+    elif styled_count:
+        note = "检测到目录样式段落，但未检测到目录字段，请确认是否需要手动更新目录。"
+    else:
+        note = "未检测到 Word 目录字段。"
+    return ImportedTocInfo(
+        present=present,
+        field_count=field_count,
+        styled_paragraph_count=styled_count,
+        update_required=present,
+        note=note,
+    )
+
+
+def _iter_toc_roots(doc: Document):
+    yield doc.element.body
+    for section in doc.sections:
+        yield section.header._element
+        yield section.footer._element
+
+
+def _looks_like_toc_instruction(text: object) -> bool:
+    raw = str(text or "").strip().upper()
+    return bool(re.search(r"(^|\s)TOC(\s|$)", raw))
+
+
 def _iter_complex_structure_roots(doc: Document):
     yield "body", doc.element.body
     for section in doc.sections:
@@ -368,6 +434,7 @@ def _pending_confirmations(
     anchors: list[ImportedAnchor],
     anchor_note: str,
     complex_structures: list[ComplexWordStructure],
+    toc_info: ImportedTocInfo,
 ) -> list[str]:
     confirmations: list[str] = []
     detected_keys = {item.key for item in detected}
@@ -387,6 +454,8 @@ def _pending_confirmations(
         confirmations.append(
             f"检测到复杂 Word 结构：{'、'.join(labels)}；当前不会自动替换其中字段，请在预览中人工确认。"
         )
+    if toc_info.present:
+        confirmations.append(toc_info.note)
     return confirmations
 
 
@@ -404,6 +473,7 @@ def _build_manifest(
     template_id: str,
     template_file: str,
     detected_placeholders: list[ImportedPlaceholder],
+    toc_info: ImportedTocInfo,
 ) -> dict:
     placeholders = {
         item.key: {"token": item.token, "required": True}
@@ -448,7 +518,11 @@ def _build_manifest(
             "body_indent": "Body Text Indent",
             "module_table": "Table Grid",
         },
-        "toc": {"present": True, "auto_update": "optional"},
+        "toc": {
+            "present": toc_info.present,
+            "auto_update": "optional" if toc_info.present else "none",
+            "update_required": toc_info.update_required,
+        },
         "replacement_scopes": ["body", "tables", "headers", "footers"],
     }
 
