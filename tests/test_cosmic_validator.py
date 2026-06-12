@@ -217,6 +217,26 @@ def test_external_interface_boundary_requires_context_review():
     ]
 
 
+def test_boundary_context_extends_governance_rule_terms():
+    movement = _movement(2, "X", data_group="统一支付回执", data_attrs="支付状态")
+    movement.sub_process = "调用统一支付平台返回支付回执"
+    result = validate_cosmic_item(
+        _item(movements=[
+            _movement(1, "E", data_group="支付请求", data_attrs="订单号"),
+            movement,
+        ]),
+        governance_config={
+            "boundary_context": {
+                "external_systems": ["统一支付平台"],
+            },
+        },
+    )
+
+    issue = next(issue for issue in result.issues if issue.code == "EXTERNAL_INTERFACE_BOUNDARY_REVIEW")
+    assert "统一支付平台" in issue.details["matched_terms"]
+    assert issue.details["context_source"] == "gen_cosmic.governance.boundary_context.external_systems"
+
+
 def test_configured_rule_matrix_adds_custom_movement_rule():
     movement = _movement(2, "X", data_group="专线响应", data_attrs="状态")
     movement.sub_process = "通过外部专线返回处理结果"

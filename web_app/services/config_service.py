@@ -835,6 +835,22 @@ def _require_mapping_config(value: object, filename: str) -> dict:
     return value
 
 
+def _read_yaml_file(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        import yaml
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        problem = getattr(exc, "problem", "") or str(exc)
+        mark = getattr(exc, "problem_mark", None)
+        if mark is not None:
+            raise AdvancedConfigError(f"{path.name} 语法错误: 第 {mark.line + 1} 行第 {mark.column + 1} 列，{problem}") from exc
+        raise AdvancedConfigError(f"{path.name} 语法错误: {problem}") from exc
+    return _require_mapping_config(data, path.name)
+
+
 def _validate_fpa_judgement_rules_payload(value: object) -> None:
     cfg = _require_mapping_config(value, "fpa_judgement_rules.yaml")
     rules = cfg.get("judgement_rules")
@@ -1518,6 +1534,237 @@ def save_business_rules(
     result = build_business_rules_view(target_dir=target_dir)
     result["backed_up"] = [backed_up] if backed_up else []
     return result
+
+
+def build_cosmic_governance_view(*, target_dir: Path) -> dict:
+    """Read structured COSMIC governance settings from system_config.yaml."""
+    filename = "system_config.yaml"
+    path = target_dir / filename
+    cfg = _read_yaml_file(path) if path.exists() else {}
+    system_cfg = _require_mapping_config(cfg, filename)
+    gen_cosmic = system_cfg.get("gen_cosmic")
+    if not isinstance(gen_cosmic, dict):
+        gen_cosmic = {}
+    governance = gen_cosmic.get("governance")
+    if not isinstance(governance, dict):
+        governance = {}
+    return {
+        "exists": path.exists(),
+        "allow_draft_excel_output": bool(gen_cosmic.get("allow_draft_excel_output", False)),
+        "cfp_policy": _normalize_non_negative_number_mapping(gen_cosmic.get("cfp_policy")),
+        "governance": {
+            "auto_apply_review_actions": bool(governance.get("auto_apply_review_actions", False)),
+            "auto_apply_issue_codes": _normalize_string_list(governance.get("auto_apply_issue_codes")),
+            "function_user_role_map": _normalize_string_mapping(governance.get("function_user_role_map")),
+            "require_unique_function_user": bool(governance.get("require_unique_function_user", False)),
+            "cfp_formula_consistency_check": bool(governance.get("cfp_formula_consistency_check", False)),
+            "audit_hash_chain": governance.get("audit_hash_chain") is not False,
+            "audit_signature_secret_env": str(
+                governance.get("audit_signature_secret_env")
+                or "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+            ).strip(),
+            "boundary_context": _normalize_boundary_context(governance.get("boundary_context")),
+            "rule_matrix": _normalize_cosmic_rule_matrix(governance.get("rule_matrix")),
+        },
+    }
+
+
+def save_cosmic_governance_settings(
+    *,
+    payload: dict,
+    target_dir: Path,
+    actor: str,
+    audit_root: Path | None = None,
+    backup_root: Path | None = None,
+    backup_scope: str = "global",
+) -> dict:
+    """Save structured COSMIC governance settings while preserving unknown system_config keys."""
+    audit_root = audit_root or target_dir
+    backup_root = backup_root or target_dir
+    filename = "system_config.yaml"
+    target_path = target_dir / filename
+    try:
+        normalized = _validate_cosmic_governance_payload(payload)
+    except AdvancedConfigError:
+        append_config_audit_record(
+            audit_root=audit_root,
+            actor=actor,
+            target_dir=target_dir,
+            files=[filename],
+            changed_fields=["gen_cosmic"],
+            result="validation_failed",
+        )
+        raise
+
+    if target_path.exists():
+        cfg = _require_mapping_config(_read_yaml_file(target_path), filename)
+        system_cfg = dict(cfg)
+    else:
+        system_cfg = {}
+    gen_cosmic = dict(system_cfg.get("gen_cosmic") if isinstance(system_cfg.get("gen_cosmic"), dict) else {})
+    gen_cosmic["allow_draft_excel_output"] = normalized["allow_draft_excel_output"]
+    gen_cosmic["cfp_policy"] = normalized["cfp_policy"]
+    gen_cosmic["governance"] = normalized["governance"]
+    system_cfg["gen_cosmic"] = gen_cosmic
+
+    backed_up = backup_single_config_file(
+        source=target_path,
+        backup_root=backup_root,
+        scope=backup_scope,
+    )
+    import yaml
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+    text = yaml.dump(system_cfg, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    _atomic_write_text(target_path, text)
+    try:
+        from ai_gen_reimbursement_docs.config_utils import clear_config_caches
+
+        clear_config_caches()
+    except Exception:
+        pass
+    append_config_audit_record(
+        audit_root=audit_root,
+        actor=actor,
+        target_dir=target_dir,
+        files=[filename],
+        changed_fields=[
+            "gen_cosmic.allow_draft_excel_output",
+            "gen_cosmic.cfp_policy",
+            "gen_cosmic.governance",
+        ],
+        result="success",
+    )
+    result = build_cosmic_governance_view(target_dir=target_dir)
+    result["backed_up"] = [backed_up] if backed_up else []
+    return result
+
+
+def _validate_cosmic_governance_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise AdvancedConfigError("COSMIC 治理配置必须是对象")
+    governance = payload.get("governance")
+    if not isinstance(governance, dict):
+        governance = {}
+    audit_env = str(
+        governance.get("audit_signature_secret_env")
+        or "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+    ).strip()
+    if not audit_env:
+        audit_env = "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", audit_env):
+        raise AdvancedConfigError("audit_signature_secret_env 必须是合法环境变量名")
+    return {
+        "allow_draft_excel_output": bool(payload.get("allow_draft_excel_output", False)),
+        "cfp_policy": _normalize_non_negative_number_mapping(payload.get("cfp_policy")),
+        "governance": {
+            "auto_apply_review_actions": bool(governance.get("auto_apply_review_actions", False)),
+            "auto_apply_issue_codes": _normalize_string_list(governance.get("auto_apply_issue_codes")),
+            "function_user_role_map": _normalize_string_mapping(governance.get("function_user_role_map")),
+            "require_unique_function_user": bool(governance.get("require_unique_function_user", False)),
+            "cfp_formula_consistency_check": bool(governance.get("cfp_formula_consistency_check", False)),
+            "audit_hash_chain": governance.get("audit_hash_chain") is not False,
+            "audit_signature_secret_env": audit_env,
+            "boundary_context": _normalize_boundary_context(governance.get("boundary_context")),
+            "rule_matrix": _normalize_cosmic_rule_matrix(governance.get("rule_matrix")),
+        },
+    }
+
+
+def _normalize_string_list(value: object) -> list[str]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return list(dict.fromkeys(
+        str(item).strip()
+        for item in value
+        if str(item or "").strip()
+    ))
+
+
+def _normalize_string_mapping(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key).strip(): str(raw_value).strip()
+        for key, raw_value in value.items()
+        if str(key or "").strip() and str(raw_value or "").strip()
+    }
+
+
+def _normalize_non_negative_number_mapping(value: object) -> dict[str, float]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, float] = {}
+    for key, raw_value in value.items():
+        try:
+            number = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if number >= 0:
+            result[str(key)] = number
+    return result
+
+
+def _normalize_boundary_context(value: object) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, list[str]] = {}
+    for key in (
+        "external_systems",
+        "internal_components",
+        "non_functional_terms",
+        "valid_boundary_terms",
+    ):
+        values = _normalize_string_list(value.get(key))
+        if values:
+            result[key] = values
+    return result
+
+
+def _normalize_cosmic_rule_matrix(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    rules: list[dict[str, object]] = []
+    for raw_rule in value:
+        if not isinstance(raw_rule, dict):
+            continue
+        code = str(raw_rule.get("code") or "").strip()
+        target = str(raw_rule.get("target") or "").strip()
+        if not code or target not in {"process", "movement"}:
+            continue
+        terms = _normalize_string_list(raw_rule.get("terms"))
+        if not terms:
+            continue
+        severity = str(raw_rule.get("severity") or "warning").strip()
+        if severity not in {"error", "warning", "info"}:
+            severity = "warning"
+        actions = []
+        raw_actions = raw_rule.get("suggested_actions")
+        if isinstance(raw_actions, list):
+            actions = [
+                {
+                    str(key): raw_value
+                    for key, raw_value in action.items()
+                    if str(key or "").strip()
+                }
+                for action in raw_actions
+                if isinstance(action, dict) and str(action.get("action") or "").strip()
+            ]
+        rule = {
+            "code": code,
+            "target": target,
+            "severity": severity,
+            "terms": terms,
+            "suggested_actions": actions,
+        }
+        for key in ("message", "scope_policy", "governance_category", "description"):
+            text = str(raw_rule.get(key) or "").strip()
+            if text:
+                rule[key] = text
+        rules.append(rule)
+    return rules
 
 
 def build_ai_prompt_settings_view(*, target_dir: Path) -> dict:

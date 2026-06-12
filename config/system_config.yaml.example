@@ -102,6 +102,14 @@ gen_cosmic:
     cfp_formula_consistency_check: false
     # 是否给 review_audit 写入前后相连的 SHA-256 hash；保存前若发现已有 hash 链异常，会产生 AUDIT_HASH_CHAIN_INVALID 待审项
     audit_hash_chain: true
+    # 如需给 review_audit 追加 HMAC 签名，在服务端环境变量中设置该 key；不配置密钥时只写 hash 链
+    audit_signature_secret_env: COSMIC_REVIEW_AUDIT_SIGNING_KEY
+    # 组织级边界上下文，会并入内置规则矩阵，辅助识别外部系统、内部组件和复杂非功能事项
+    boundary_context:
+      external_systems: []
+      internal_components: []
+      non_functional_terms: []
+      valid_boundary_terms: []
     # COSMIC 治理规则矩阵；不配置时使用内置默认规则，覆盖内部/外部边界、控制命令、数据运算、消息输出和非功能范围。
     # 配置同 code 会覆盖内置规则，也可新增组织规则。
     rule_matrix: []

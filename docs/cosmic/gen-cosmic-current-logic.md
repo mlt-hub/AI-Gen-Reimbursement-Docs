@@ -359,6 +359,16 @@ AI 调用限制：
 6. AI 单模块生成失败会把失败模块路径和异常文本写入 `PARTIAL_AI_FAILURE` 或 `AI_GENERATION_FAILED` 的 details，便于定位重试。
 7. 默认策略仍保持保守：新增规则只产生待审项，不会在未配置白名单时自动排除、合并或强制修改功能用户。
 
+### 2026-06-12 继续推进治理配置和审计签名
+
+本次继续推进规则矩阵可维护性、组织级上下文和不可抵赖审计方向，当前状态如下：
+
+1. Web 配置后端新增结构化 `GET/PUT /api/web-config/cosmic-governance`，可读写 `gen_cosmic.allow_draft_excel_output`、`gen_cosmic.cfp_policy`、`gen_cosmic.governance.function_user_role_map`、`rule_matrix`、`boundary_context` 和治理开关；保存时保留 `system_config.yaml` 其他未知键，并写配置审计和备份。
+2. `gen_cosmic.governance.boundary_context` 支持 `external_systems`、`internal_components`、`non_functional_terms` 和 `valid_boundary_terms`；其中前三类会并入内置治理规则，辅助识别组织级外部系统、内部组件和复杂非功能事项。
+3. `review_audit` 在 hash 链基础上支持可选 HMAC 签名；当服务端环境变量 `COSMIC_REVIEW_AUDIT_SIGNING_KEY` 或 `audit_signature_secret_env` 指定的变量存在时，会写入 `audit_signature`，保存前校验失败会产生 `AUDIT_SIGNATURE_INVALID` 待审项。
+4. CFP 公式一致性解析继续增强，新增对 `CHOOSE(MATCH(...), ...)` 这类模板公式写法的复用度分支识别。
+5. 默认策略仍保持保守：结构化配置 API 不会自动启用治理动作；未配置签名密钥时仍只使用 JSON 级 hash 链。
+
 ### 目标行为
 
 生成 COSMIC 结果后，系统必须为每个功能过程给出校验状态：
@@ -1112,9 +1122,9 @@ md/3.4.gen-cosmic-校验报告.md
 
 以下内容不属于第一阶段验收范围：
 
-1. 更复杂的边界规则治理，例如跨系统/内部技术交互的组织级判定和非功能事项的高精度自动分类；当前已有可配置规则矩阵和自动治理入口，但默认关闭自动动作，且仍主要基于关键词和建议动作。
-2. 功能用户和三级模块的一对一强绑定治理中的审批流、模块归属冲突处理和强制修复规则；当前已有角色映射、人工/自动动作和 `FUNCTION_USER_ROLE_CONFLICT` 诊断，但不做无审批强制修复。
-3. CFP policy、Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前已有可解析简单数字和分数的 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但尚未做完整 Excel 公式语义解析。
-4. 审计追踪的权限、签名和不可抵赖记录；当前 `review_audit` 会注入服务端登录用户、写入 JSON 级 hash 链并记录保存前校验状态，但仍不是加密签名或外部不可篡改审计。
+1. 更复杂的边界规则治理，例如跨系统/内部技术交互的组织级判定和非功能事项的高精度自动分类；当前已有可配置规则矩阵、结构化配置 API、组织级 `boundary_context` 和自动治理入口，但默认关闭自动动作，且仍主要基于关键词、上下文词表和建议动作。
+2. 功能用户和三级模块的一对一强绑定治理中的正式审批流、权限和状态机；当前已有角色映射、人工/自动动作、`FUNCTION_USER_ROLE_CONFLICT` 诊断和建议动作，但不做无审批强制修复。
+3. CFP policy、Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前已有可解析简单数字、分数、常见 `IF`/`IFS`/`SWITCH` 和 `CHOOSE/MATCH` 分支的 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但尚未做完整 Excel 公式语义解析。
+4. 审计追踪的外部不可篡改记录；当前 `review_audit` 会注入服务端登录用户、写入 JSON 级 hash 链、可选 HMAC 签名并记录保存前校验状态，但仍未接入外部不可篡改审计存储。
 
 这些内容应在结构化草稿和校验器稳定后，再按 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md) 分阶段实施。

@@ -2361,6 +2361,10 @@ def test_cosmic_cfp_formula_parser_handles_switch_and_ifs():
         'IFS(L{row}="新增",1,L{row}="修改",1,L{row}="复用",1/3,L{row}="利旧",0)',
         names,
     )
+    choose_policy = _parse_cfp_policy_from_formula(
+        'CHOOSE(MATCH(L{row},{"新增","修改","复用","利旧"},0),1,1,1/3,0)',
+        names,
+    )
 
     assert switch_policy == {
         "新增": 1.0,
@@ -2373,6 +2377,12 @@ def test_cosmic_cfp_formula_parser_handles_switch_and_ifs():
     assert ifs_policy["修改"] == 1.0
     assert ifs_policy["复用"] == 1.0 / 3.0
     assert ifs_policy["利旧"] == 0.0
+    assert choose_policy == {
+        "新增": 1.0,
+        "修改": 1.0,
+        "复用": 1.0 / 3.0,
+        "利旧": 0.0,
+    }
 
 
 def test_cosmic_audit_hash_tamper_is_reported(monkeypatch, tmp_path):
@@ -2413,6 +2423,51 @@ def test_cosmic_audit_hash_tamper_is_reported(monkeypatch, tmp_path):
     assert audit_status["valid"] is True
     assert audit_status["valid_before_save"] is False
     assert audit_status["reason_before_save"] == "audit_hash 不匹配"
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_audit_signature_tamper_is_reported(monkeypatch, tmp_path):
+    from web_app.routes.artifacts import _audit_hash
+
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_audit_signature_tamper"
+    record = {
+        "action": "exclude_movement",
+        "item_index": 0,
+        "movement_order": 2,
+        "review_id": "item::0::CONTROL_COMMAND_MOVEMENT::movements[1].sub_process::2",
+        "applied_at": "2026-06-09T00:00:00+00:00",
+        "previous_audit_hash": "",
+    }
+    record["audit_hash"] = _audit_hash(record, "")
+    record["audit_signature"] = "0" * 64
+    payload = _cosmic_export_payload()
+    payload["review_items"] = []
+    payload["review_actions"] = []
+    payload["review_audit"] = [record]
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setenv("CUSTOM_COSMIC_AUDIT_KEY", "secret-for-test")
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_governance_config",
+        lambda: {
+            "auto_apply_review_actions": False,
+            "auto_apply_issue_codes": [],
+            "function_user_role_map": {},
+            "require_unique_function_user": False,
+            "cfp_formula_consistency_check": False,
+            "audit_hash_chain": True,
+            "audit_signature_secret_env": "CUSTOM_COSMIC_AUDIT_KEY",
+        },
+    )
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    assert saved_payload["issue_codes"]["AUDIT_SIGNATURE_INVALID"] == 1
+    assert saved_payload["review_audit_hash_chain"]["signature_enabled"] is True
+    assert saved_payload["review_audit_hash_chain"]["reason_before_save"] == "audit_signature 不匹配"
+    assert saved_payload["review_audit"][0]["audit_signature"] != "0" * 64
     server.session_manager.cleanup_download(session_id)
 
 

@@ -576,6 +576,8 @@ class TestBooleanLoaders:
         assert result["require_unique_function_user"] is False
         assert result["cfp_formula_consistency_check"] is False
         assert result["audit_hash_chain"] is True
+        assert result["audit_signature_secret_env"] == "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+        assert result["boundary_context"] == {}
         assert result["rule_matrix"] == []
 
     def test_load_gen_cosmic_governance_config_nested(self, tmp_path):
@@ -593,6 +595,12 @@ class TestBooleanLoaders:
                 "    require_unique_function_user: true",
                 "    cfp_formula_consistency_check: true",
                 "    audit_hash_chain: false",
+                "    audit_signature_secret_env: CUSTOM_COSMIC_AUDIT_KEY",
+                "    boundary_context:",
+                "      external_systems: [统一支付平台, '']",
+                "      internal_components:",
+                "        - 内部缓存",
+                "      non_functional_terms: 国产化适配",
                 "    rule_matrix:",
                 "      - code: CUSTOM_BOUNDARY",
                 "        target: movement",
@@ -620,6 +628,12 @@ class TestBooleanLoaders:
         assert result["require_unique_function_user"] is True
         assert result["cfp_formula_consistency_check"] is True
         assert result["audit_hash_chain"] is False
+        assert result["audit_signature_secret_env"] == "CUSTOM_COSMIC_AUDIT_KEY"
+        assert result["boundary_context"] == {
+            "external_systems": ["统一支付平台"],
+            "internal_components": ["内部缓存"],
+            "non_functional_terms": ["国产化适配"],
+        }
         assert result["rule_matrix"] == [{
             "code": "CUSTOM_BOUNDARY",
             "target": "movement",

@@ -189,6 +189,73 @@ def test_build_web_config_view_redacts_api_key_and_marks_global_sources():
     }
 
 
+def test_save_cosmic_governance_settings_preserves_system_config_unknown_keys(tmp_path):
+    (tmp_path / "system_config.yaml").write_text(
+        "web_port: 3000\n"
+        "gen_cosmic:\n"
+        "  legacy_key: keep-me\n",
+        encoding="utf-8",
+    )
+
+    result = config_service.save_cosmic_governance_settings(
+        payload={
+            "allow_draft_excel_output": True,
+            "cfp_policy": {"新增": 1, "复用": 0.5, "非法": "bad"},
+            "governance": {
+                "auto_apply_review_actions": True,
+                "auto_apply_issue_codes": ["CONTROL_COMMAND_MOVEMENT", ""],
+                "function_user_role_map": {"客户资料": "发起者：客户资料经办|接收者：客户资料经办"},
+                "require_unique_function_user": True,
+                "cfp_formula_consistency_check": True,
+                "audit_hash_chain": True,
+                "audit_signature_secret_env": "CUSTOM_COSMIC_AUDIT_KEY",
+                "boundary_context": {
+                    "external_systems": ["统一支付平台", ""],
+                    "internal_components": ["内部缓存"],
+                },
+                "rule_matrix": [{
+                    "code": "CUSTOM_BOUNDARY",
+                    "target": "movement",
+                    "severity": "warning",
+                    "terms": ["专线接口"],
+                    "suggested_actions": [{"action": "exclude_movement", "label": "排除计数"}],
+                }],
+            },
+        },
+        target_dir=tmp_path,
+        actor="alice",
+        audit_root=tmp_path,
+        backup_root=tmp_path,
+    )
+
+    saved = config_service._read_yaml_file(tmp_path / "system_config.yaml")
+    assert saved["web_port"] == 3000
+    assert saved["gen_cosmic"]["legacy_key"] == "keep-me"
+    assert result["allow_draft_excel_output"] is True
+    assert result["cfp_policy"] == {"新增": 1.0, "复用": 0.5}
+    assert result["governance"]["auto_apply_issue_codes"] == ["CONTROL_COMMAND_MOVEMENT"]
+    assert result["governance"]["boundary_context"] == {
+        "external_systems": ["统一支付平台"],
+        "internal_components": ["内部缓存"],
+    }
+    assert result["governance"]["rule_matrix"][0]["code"] == "CUSTOM_BOUNDARY"
+
+
+def test_save_cosmic_governance_rejects_invalid_signature_env(tmp_path):
+    try:
+        config_service.save_cosmic_governance_settings(
+            payload={"governance": {"audit_signature_secret_env": "bad-name"}},
+            target_dir=tmp_path,
+            actor="alice",
+            audit_root=tmp_path,
+            backup_root=tmp_path,
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "环境变量名" in str(exc)
+    else:
+        raise AssertionError("invalid audit env should be rejected")
+
+
 def test_build_web_config_view_uses_personal_overrides_for_remote_user():
     view = config_service.build_web_config_view(
         global_config={

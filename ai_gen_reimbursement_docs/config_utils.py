@@ -1581,6 +1581,8 @@ def load_gen_cosmic_governance_config() -> dict[str, object]:
         "require_unique_function_user": False,
         "cfp_formula_consistency_check": False,
         "audit_hash_chain": True,
+        "audit_signature_secret_env": "COSMIC_REVIEW_AUDIT_SIGNING_KEY",
+        "boundary_context": {},
         "rule_matrix": [],
     }
     yaml_path = config_dir() / "system_config.yaml"
@@ -1601,6 +1603,8 @@ def load_gen_cosmic_governance_config() -> dict[str, object]:
         values["require_unique_function_user"] = bool(raw.get("require_unique_function_user", False))
         values["cfp_formula_consistency_check"] = bool(raw.get("cfp_formula_consistency_check", False))
         values["audit_hash_chain"] = bool(raw.get("audit_hash_chain", True))
+        secret_env = str(raw.get("audit_signature_secret_env") or "COSMIC_REVIEW_AUDIT_SIGNING_KEY").strip()
+        values["audit_signature_secret_env"] = secret_env or "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
         raw_codes = raw.get("auto_apply_issue_codes")
         if isinstance(raw_codes, list):
             values["auto_apply_issue_codes"] = [
@@ -1615,12 +1619,38 @@ def load_gen_cosmic_governance_config() -> dict[str, object]:
                 for key, value in raw_role_map.items()
                 if str(key or "").strip() and str(value or "").strip()
             }
+        raw_boundary_context = raw.get("boundary_context")
+        if isinstance(raw_boundary_context, dict):
+            values["boundary_context"] = _normalize_gen_cosmic_boundary_context(raw_boundary_context)
         raw_rule_matrix = raw.get("rule_matrix")
         if isinstance(raw_rule_matrix, list):
             values["rule_matrix"] = _normalize_gen_cosmic_rule_matrix(raw_rule_matrix)
         return values
     except Exception:
         return defaults
+
+
+def _normalize_gen_cosmic_boundary_context(raw_context: dict[str, object]) -> dict[str, list[str]]:
+    context: dict[str, list[str]] = {}
+    for key in (
+        "external_systems",
+        "internal_components",
+        "non_functional_terms",
+        "valid_boundary_terms",
+    ):
+        raw_values = raw_context.get(key)
+        if isinstance(raw_values, str):
+            raw_values = [raw_values]
+        if not isinstance(raw_values, list):
+            continue
+        values = [
+            str(value).strip()
+            for value in raw_values
+            if str(value or "").strip()
+        ]
+        if values:
+            context[key] = values
+    return context
 
 
 def _normalize_gen_cosmic_rule_matrix(raw_rules: list[object]) -> list[dict[str, object]]:

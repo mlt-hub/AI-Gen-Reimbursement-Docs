@@ -317,6 +317,10 @@ def _governance_rule_matrix(
     rules = [dict(rule) for rule in _DEFAULT_GOVERNANCE_RULE_MATRIX]
     if not isinstance(governance_config, dict):
         return rules
+    rules = _apply_boundary_context_to_rules(
+        rules,
+        governance_config.get("boundary_context"),
+    )
     raw_rules = governance_config.get("rule_matrix")
     if not isinstance(raw_rules, list):
         return rules
@@ -335,6 +339,47 @@ def _governance_rule_matrix(
             by_code[code] = len(rules)
             rules.append(normalized)
     return rules
+
+
+def _apply_boundary_context_to_rules(
+    rules: list[dict[str, object]],
+    raw_context: object,
+) -> list[dict[str, object]]:
+    if not isinstance(raw_context, dict):
+        return rules
+    context_mapping = {
+        "EXTERNAL_INTERFACE_BOUNDARY_REVIEW": "external_systems",
+        "INTERNAL_TECHNICAL_BOUNDARY": "internal_components",
+        "COMPLEX_NON_FUNCTIONAL_SCOPE": "non_functional_terms",
+    }
+    for rule in rules:
+        code = str(rule.get("code") or "")
+        context_key = context_mapping.get(code)
+        if not context_key:
+            continue
+        context_terms = _context_terms(raw_context.get(context_key))
+        if not context_terms:
+            continue
+        existing_terms = [
+            str(term)
+            for term in rule.get("terms", [])
+            if str(term or "")
+        ] if isinstance(rule.get("terms"), list) else []
+        rule["terms"] = list(dict.fromkeys([*existing_terms, *context_terms]))
+        rule["context_source"] = f"gen_cosmic.governance.boundary_context.{context_key}"
+    return rules
+
+
+def _context_terms(raw_terms: object) -> list[str]:
+    if isinstance(raw_terms, str):
+        raw_terms = [raw_terms]
+    if not isinstance(raw_terms, list):
+        return []
+    return [
+        str(term).strip()
+        for term in raw_terms
+        if str(term or "").strip()
+    ]
 
 
 def _normalize_governance_rule(raw_rule: dict[str, object]) -> dict[str, object] | None:
@@ -426,6 +471,7 @@ def _finding_from_rule(rule: dict[str, object], matched_terms: list[str]) -> dic
         "governance_category": str(rule.get("governance_category") or ""),
         "matched_terms": matched_terms,
         "description": str(rule.get("description") or rule.get("message") or ""),
+        "context_source": str(rule.get("context_source") or ""),
         "suggested_actions": [
             dict(action)
             for action in rule.get("suggested_actions", [])
@@ -457,6 +503,9 @@ def _finding_details(finding: dict[str, object]) -> dict[str, object]:
         "governance_category": category,
         "review_required_reason": _governance_review_reason(category),
     }
+    context_source = str(finding.get("context_source", "") or "")
+    if context_source:
+        details["context_source"] = context_source
     movement_order = finding.get("movement_order")
     suggested_actions = finding.get("suggested_actions")
     if isinstance(suggested_actions, list) and suggested_actions:

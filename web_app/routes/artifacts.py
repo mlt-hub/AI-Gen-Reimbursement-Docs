@@ -1,4 +1,5 @@
 import os
+import hmac
 import hashlib
 import json
 import re
@@ -411,17 +412,37 @@ def _audit_hash(record: dict, previous_hash: str = "") -> str:
     material = {
         key: value
         for key, value in record.items()
-        if key not in {"audit_hash", "previous_audit_hash"}
+        if key not in {"audit_hash", "previous_audit_hash", "audit_signature"}
     }
     material["previous_audit_hash"] = previous_hash
     text = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _verify_audit_hash_chain(records: list[dict]) -> dict[str, object]:
+def _audit_signature(record: dict, secret: str) -> str:
+    material = {
+        "audit_hash": str(record.get("audit_hash") or ""),
+        "previous_audit_hash": str(record.get("previous_audit_hash") or ""),
+    }
+    text = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hmac.new(secret.encode("utf-8"), text.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _audit_signature_secret(governance: dict[str, object]) -> tuple[str, str]:
+    env_name = str(
+        governance.get("audit_signature_secret_env")
+        or "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+    ).strip()
+    if not env_name:
+        env_name = "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+    return env_name, os.environ.get(env_name, "")
+
+
+def _verify_audit_hash_chain(records: list[dict], *, signing_secret: str = "") -> dict[str, object]:
     previous_hash = ""
     checked = 0
     unsigned = 0
+    signed = 0
     for index, record in enumerate(records):
         if not isinstance(record, dict):
             continue
@@ -437,6 +458,7 @@ def _verify_audit_hash_chain(records: list[dict]) -> dict[str, object]:
                 "valid": False,
                 "checked_record_count": checked,
                 "unsigned_record_count": unsigned,
+                "signed_record_count": signed,
                 "failed_index": index,
                 "reason": "previous_audit_hash 不匹配",
             }
@@ -447,15 +469,32 @@ def _verify_audit_hash_chain(records: list[dict]) -> dict[str, object]:
                 "valid": False,
                 "checked_record_count": checked,
                 "unsigned_record_count": unsigned,
+                "signed_record_count": signed,
                 "failed_index": index,
                 "reason": "audit_hash 不匹配",
             }
+        signature = str(record.get("audit_signature") or "")
+        if signing_secret and signature:
+            signed += 1
+            if not hmac.compare_digest(signature, _audit_signature(record, signing_secret)):
+                return {
+                    "algorithm": "sha256-json-v1",
+                    "signature_algorithm": "hmac-sha256-v1",
+                    "valid": False,
+                    "checked_record_count": checked,
+                    "unsigned_record_count": unsigned,
+                    "signed_record_count": signed,
+                    "failed_index": index,
+                    "reason": "audit_signature 不匹配",
+                }
         previous_hash = audit_hash
     return {
         "algorithm": "sha256-json-v1",
+        "signature_algorithm": "hmac-sha256-v1" if signing_secret else "",
         "valid": True,
         "checked_record_count": checked,
         "unsigned_record_count": unsigned,
+        "signed_record_count": signed,
         "failed_index": None,
         "reason": "",
     }
@@ -485,27 +524,42 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> list[CosmicIssu
         keyed[_review_action_key(record)] = record
     records = list(keyed.values())
     governance = load_gen_cosmic_governance_config()
+    signature_env, signing_secret = _audit_signature_secret(governance)
     issues: list[CosmicIssue] = []
     if governance.get("audit_hash_chain") is not False:
-        before = _verify_audit_hash_chain(records)
+        before = _verify_audit_hash_chain(records, signing_secret=signing_secret)
         if before.get("checked_record_count", 0) and before.get("valid") is False:
+            code = (
+                "AUDIT_SIGNATURE_INVALID"
+                if str(before.get("reason") or "").startswith("audit_signature")
+                else "AUDIT_HASH_CHAIN_INVALID"
+            )
+            message = (
+                "COSMIC 审计签名在本次保存前校验失败，需确认历史审阅记录是否被篡改"
+                if code == "AUDIT_SIGNATURE_INVALID"
+                else "COSMIC 审计 hash 链在本次保存前校验失败，需确认历史审阅记录是否被篡改"
+            )
             issue = global_cosmic_issue(
                 "warning",
-                "AUDIT_HASH_CHAIN_INVALID",
-                "COSMIC 审计 hash 链在本次保存前校验失败，需确认历史审阅记录是否被篡改",
+                code,
+                message,
                 "review_audit",
             )
             issue.details = {
                 "verification_before_save": before,
-                "basis_description": "保存前校验已有 audit_hash 的审计记录，发现 hash 链不连续或记录内容不匹配",
+                "basis_description": "保存前校验已有审计记录，发现 hash 链或 HMAC 签名不匹配",
             }
             issues.append(issue)
         payload["review_audit_hash_chain"] = {
             "algorithm": "sha256-json-v1",
+            "signature_algorithm": "hmac-sha256-v1" if signing_secret else "",
+            "signature_enabled": bool(signing_secret),
+            "signature_secret_env": signature_env,
             "valid": True,
             "valid_before_save": before.get("valid"),
             "checked_record_count_before_save": before.get("checked_record_count", 0),
             "unsigned_record_count_before_save": before.get("unsigned_record_count", 0),
+            "signed_record_count_before_save": before.get("signed_record_count", 0),
             "failed_index_before_save": before.get("failed_index"),
             "reason_before_save": before.get("reason", ""),
         }
@@ -513,6 +567,10 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> list[CosmicIssu
         for record in records:
             record["previous_audit_hash"] = previous_hash
             record["audit_hash"] = _audit_hash(record, previous_hash)
+            if signing_secret:
+                record["audit_signature"] = _audit_signature(record, signing_secret)
+            elif "audit_signature" in record:
+                record.pop("audit_signature", None)
             previous_hash = str(record["audit_hash"])
         payload["review_audit_hash_chain"].update({
             "record_count": len(records),
@@ -691,8 +749,11 @@ def _cfp_policy_formula_issues(cfp_formula: str, policy: dict[str, float]) -> li
 def _parse_cfp_policy_from_formula(formula: str, reuse_names) -> dict[str, float]:
     parsed: dict[str, float] = {}
     normalized_formula = str(formula or "").replace("，", ",")
+    parsed.update(_parse_choose_match_policy(normalized_formula))
     names = [str(reuse or "").strip() for reuse in reuse_names if str(reuse or "").strip()]
     for name in names:
+        if name in parsed:
+            continue
         branch_value = _parse_branch_value_after_reuse_name(normalized_formula, name)
         if branch_value is not None:
             parsed[name] = branch_value
@@ -701,6 +762,44 @@ def _parse_cfp_policy_from_formula(formula: str, reuse_names) -> dict[str, float
         if fallback_value is not None:
             parsed[name] = fallback_value
     return parsed
+
+
+def _parse_choose_match_policy(formula: str) -> dict[str, float]:
+    match = re.search(
+        r"MATCH\s*\([^,]+,\s*\{(?P<names>[^}]+)\}\s*,\s*0\s*\)",
+        formula,
+        flags=re.IGNORECASE,
+    )
+    choose = re.search(
+        r"CHOOSE\s*\(\s*MATCH\s*\([^)]*\)\s*,(?P<values>[\s\S]+)\)",
+        formula,
+        flags=re.IGNORECASE,
+    )
+    if not match or not choose:
+        return {}
+    names = [
+        item.strip().strip('"').strip("'")
+        for item in match.group("names").split(",")
+        if item.strip().strip('"').strip("'")
+    ]
+    values = _split_formula_arguments(choose.group("values"))
+    parsed: dict[str, float] = {}
+    for name, raw_value in zip(names, values):
+        value = _parse_formula_number(raw_value)
+        if value is not None:
+            parsed[name] = value
+    return parsed
+
+
+def _split_formula_arguments(text: str) -> list[str]:
+    values: list[str] = []
+    cursor = 0
+    while cursor < len(text):
+        value, next_cursor = _read_formula_argument(text, cursor)
+        if value:
+            values.append(value)
+        cursor = next_cursor + 1
+    return values
 
 
 def _parse_branch_value_after_reuse_name(formula: str, reuse_name: str) -> float | None:
@@ -788,6 +887,11 @@ def _cosmic_governance_effective(governance: dict[str, object]) -> dict[str, obj
         "require_unique_function_user": bool(governance.get("require_unique_function_user")),
         "cfp_formula_consistency_check": bool(governance.get("cfp_formula_consistency_check")),
         "audit_hash_chain": governance.get("audit_hash_chain") is not False,
+        "audit_signature_enabled": bool(_audit_signature_secret(governance)[1]),
+        "audit_signature_secret_env": str(
+            governance.get("audit_signature_secret_env")
+            or "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+        ),
         "rule_matrix_codes": [
             str(rule.get("code"))
             for rule in rule_matrix

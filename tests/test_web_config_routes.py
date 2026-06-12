@@ -109,6 +109,60 @@ def test_web_config_put_saves_and_returns_redacted_view(monkeypatch, tmp_path):
     assert resp.json()["ai"]["api_key_configured"] is True
 
 
+def test_cosmic_governance_config_route_roundtrip(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: True)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+
+    payload = {
+        "allow_draft_excel_output": True,
+        "cfp_policy": {"复用": 0.5},
+        "governance": {
+            "auto_apply_review_actions": False,
+            "auto_apply_issue_codes": ["CONTROL_COMMAND_MOVEMENT"],
+            "function_user_role_map": {"客户资料": "发起者：客户资料经办|接收者：客户资料经办"},
+            "require_unique_function_user": True,
+            "cfp_formula_consistency_check": True,
+            "audit_hash_chain": True,
+            "audit_signature_secret_env": "CUSTOM_COSMIC_AUDIT_KEY",
+            "boundary_context": {"external_systems": ["统一支付平台"]},
+            "rule_matrix": [{
+                "code": "CUSTOM_BOUNDARY",
+                "target": "movement",
+                "terms": ["专线接口"],
+            }],
+        },
+    }
+
+    save_resp = client.put("/api/web-config/cosmic-governance", json=payload)
+    get_resp = client.get("/api/web-config/cosmic-governance")
+
+    assert save_resp.status_code == 200
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    assert data["allow_draft_excel_output"] is True
+    assert data["cfp_policy"] == {"复用": 0.5}
+    assert data["governance"]["audit_signature_secret_env"] == "CUSTOM_COSMIC_AUDIT_KEY"
+    assert data["governance"]["boundary_context"] == {"external_systems": ["统一支付平台"]}
+    assert data["governance"]["rule_matrix"][0]["code"] == "CUSTOM_BOUNDARY"
+
+
+def test_cosmic_governance_config_route_requires_local_mode(monkeypatch, tmp_path):
+    app = FastAPI()
+    app.include_router(config_routes.router)
+    app.dependency_overrides[config_routes.require_auth] = lambda: "alice"
+    client = TestClient(app)
+    monkeypatch.setattr(config_routes, "is_local_mode", lambda request: False)
+    monkeypatch.setattr(config_routes, "config_dir", lambda: tmp_path)
+
+    resp = client.get("/api/web-config/cosmic-governance")
+
+    assert resp.status_code == 403
+
+
 def test_web_config_backups_endpoint_uses_current_scope(monkeypatch, tmp_path):
     app = FastAPI()
     app.include_router(config_routes.router)

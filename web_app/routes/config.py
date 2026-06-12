@@ -10,6 +10,7 @@ from web_app.services.config_service import (
     build_ai_prompt_settings_view,
     build_business_rules_view,
     build_config_backup_diff,
+    build_cosmic_governance_view,
     build_domain_context_view,
     build_fpa_judgement_rules_view,
     build_fpa_strategy_settings_view,
@@ -28,6 +29,7 @@ from web_app.services.config_service import (
     run_fpa_prompt_sample_preview,
     save_ai_prompt_settings,
     save_business_rules,
+    save_cosmic_governance_settings,
     save_domain_context_settings,
     save_fpa_judgement_rules,
     save_fpa_strategy_settings,
@@ -349,6 +351,33 @@ async def save_web_config_business_rules(data: dict, request: Request, user: str
     try:
         return save_business_rules(
             cfp_formula=data.get("cfp_formula"),
+            target_dir=target_dir,
+            actor=user or "local-admin",
+            audit_root=config_dir(),
+            backup_root=config_dir(),
+            backup_scope="global",
+        )
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/api/web-config/cosmic-governance")
+async def get_web_config_cosmic_governance(request: Request, _user: str = Depends(require_auth)):
+    """读取结构化 COSMIC 治理配置。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return build_cosmic_governance_view(target_dir=target_dir)
+    except AdvancedConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.put("/api/web-config/cosmic-governance")
+async def save_web_config_cosmic_governance(data: dict, request: Request, user: str = Depends(require_auth)):
+    """保存结构化 COSMIC 治理配置。"""
+    target_dir = _require_local_advanced_config(request)
+    try:
+        return save_cosmic_governance_settings(
+            payload=data,
             target_dir=target_dir,
             actor=user or "local-admin",
             audit_root=config_dir(),
