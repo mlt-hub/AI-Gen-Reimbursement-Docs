@@ -440,6 +440,62 @@ def test_imported_spec_template_adjustments_update_table_cell_placeholder(monkey
     assert adjusted["preview"]["metadata"]["published"] is False
 
 
+def test_imported_spec_template_adjustments_update_content_control_placeholder(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+    doc = Document(source)
+    _append_complex_word_structures(doc)
+    doc.save(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    import_id = Path(import_resp.json()["template_path"]).parent.name
+    metadata_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/metadata",
+        json={"confirmed": True},
+    )
+    assert metadata_resp.status_code == 200
+
+    preview = client.get(f"/api/templates/spec/imported/{import_id}/preview").json()
+    content_control = next(item for item in preview["complex_structures"] if item["kind"] == "content_control")
+    adjust_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/adjustments",
+        json={
+            "placeholders": [
+                {
+                    "scope": content_control["scope"],
+                    "location": content_control["location"],
+                    "text": "客户报账系统",
+                    "token": "{{项目名称}}",
+                },
+            ],
+        },
+    )
+
+    assert adjust_resp.status_code == 200
+    adjusted = adjust_resp.json()
+    assert adjusted["changed_fields"] == ["placeholders"]
+    assert any(
+        item["scope"] == content_control["scope"]
+        and item["location"] == content_control["location"]
+        and item["token"] == "{{项目名称}}"
+        for item in adjusted["preview"]["placeholders"]
+    )
+    adjusted_content_control = next(
+        item for item in adjusted["preview"]["complex_structures"]
+        if item["kind"] == "content_control"
+    )
+    assert "{{项目名称}}" in adjusted_content_control["text_preview"]
+    updated_doc = Document(import_resp.json()["template_path"])
+    assert "{{项目名称}}" in updated_doc.element.body.xml
+    assert adjusted["preview"]["metadata"]["confirmed"] is False
+    assert adjusted["preview"]["metadata"]["published"] is False
+
+
 def test_import_spec_template_route_rejects_non_docx(monkeypatch, tmp_path):
     client = _client(monkeypatch, tmp_path)
 

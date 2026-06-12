@@ -295,7 +295,7 @@ def _all_plain_text(doc: Document) -> list[str]:
 
 
 def collect_complex_word_structures(doc: Document) -> list[ComplexWordStructure]:
-    """Detect Word structures that the importer can surface but not rewrite."""
+    """Detect Word structures that the importer can surface for confirmation."""
     items: list[ComplexWordStructure] = []
     for scope, root in _iter_complex_structure_roots(doc):
         seen: set[str] = set()
@@ -452,7 +452,7 @@ def _pending_confirmations(
     if complex_structures:
         labels = sorted({item.label for item in complex_structures})
         confirmations.append(
-            f"检测到复杂 Word 结构：{'、'.join(labels)}；当前不会自动替换其中字段，请在预览中人工确认。"
+            f"检测到复杂 Word 结构：{'、'.join(labels)}；内容控件可在预览中替换字段，文本框仍需人工确认。"
         )
     if toc_info.present:
         confirmations.append(toc_info.note)
@@ -462,7 +462,7 @@ def _pending_confirmations(
 def _import_warnings(complex_structures: list[ComplexWordStructure]) -> list[str]:
     warnings = ["暂不识别图片文字中的字段；如客户模板使用图片承载文字，需要人工确认。"]
     if complex_structures:
-        warnings.append("已检测文本框/内容控件的位置，但当前不会自动替换其中字段。")
+        warnings.append("已检测文本框/内容控件的位置；内容控件可在线替换字段，文本框仍需人工确认。")
     else:
         warnings.append("未检测到文本框或内容控件；若客户模板使用图片文字，仍需人工确认。")
     return warnings
