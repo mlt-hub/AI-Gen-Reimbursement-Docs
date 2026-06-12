@@ -21,6 +21,12 @@
 - 真实模型抽样应继续按日期归档，尤其要覆盖 `multi-profile-real-model` 之外的真实项目样本，避免只保留单次通过记录。
 - 当前最小落地路线没有剩余必做切片；后续推进只由新增真实项目样本、profile 口径调整或质量门升级触发。
 
+当前推进结论：
+
+- 本文档范围内没有需要继续推进的必做项。
+- `unified_ui`、`multi_uis`、`ui_api_mapping` 当前按 supported 组合使用；它们的基础 contract、harness、profile golden fixture 和真实模型归零记录已具备。
+- 后续工作不再按本文档常驻待办推进，只在出现新真实项目样本、新 profile/rule_set、profile 口径变化或 warning 质量门升级决策时开启专项切片。
+
 ## 背景
 
 当前 `gen-fpa` 已经为 `strict_fpa` 建立了第一版多 Agent 分工骨架。这里的 Agent 不是多个独立 LLM 调用，而是“角色化的确定性中间节点”：

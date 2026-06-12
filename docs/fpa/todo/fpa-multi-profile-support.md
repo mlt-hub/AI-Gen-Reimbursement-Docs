@@ -26,7 +26,13 @@
 - `rule_set extends` 循环错误已提示循环路径。
 - 常规配置说明、Golden Case 说明、验收记录和计算依据说明文档已更新到新 profile/config 键；旧键只保留在迁移说明和错误提示测试中。
 
-后续可选增强：
+当前推进结论：
+
+- 本文档范围内没有需要继续推进的必做项。
+- `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping` 四个首批 profile 的配置、规则、审计元数据、profile 级 golden fixture 和文档入口已收口。
+- `multi_uis` 已是独立 `kind: multi_uis`；后续不再按“从 unified_ui 拆出 kind”的任务推进。
+
+后续触发型增强：
 
 - 如真实项目中 `multi_uis` 需要更强的多界面规则兜底拆分算法，可在现有 `kind: multi_uis` 下扩展专属规则，不复制整套 FPA 流程。
 - 可继续扩充 `ui_api_mapping` 的明确接口/后端交互抽取词库，但必须保持“只来自输入材料显式信息”的边界。

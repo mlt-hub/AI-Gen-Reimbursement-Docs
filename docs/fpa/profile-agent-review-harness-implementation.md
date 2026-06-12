@@ -319,3 +319,13 @@ hardening 后结果：
 3. 观察 profile 专属 warning 误报率，再决定是否从只读质量门升级为阻断或自动重试。
 
 这些事项是长期质量治理，不是当前 profile-aware Agent Review 最小落地路线的阻塞项。后续只有在新增真实项目样本、调整 profile 口径或升级 warning 质量门时才需要重新开启专项切片；每个切片都应保持现有生成行为可回归，并按仓库规则单独提交。
+
+## 当前推进结论
+
+截至 2026-06-12，本文档中的 profile-aware Agent Review harness 主线已经收口，没有需要继续推进的必做切片。
+
+后续只在以下条件出现时重新开启专项推进：
+
+1. 新增真实项目样本，并需要把新边界沉淀为 profile 级 golden fixtures。
+2. 新增 profile、rule_set 或调整既有 profile 口径。
+3. 决定将 profile 专属 warning 从只读质量门升级为阻断、自动重试或其他生成控制。
