@@ -340,6 +340,8 @@ def _apply_placeholder_adjustment(doc: Document, item: dict[str, Any]) -> bool:
     token = str(item.get("token") or "").strip()
     if not token or not token.startswith("{{") or not token.endswith("}}"):
         raise ValueError("占位符 token 必须使用 {{字段名}} 格式")
+    if location.startswith("content_control:"):
+        return _replace_content_control_text(doc, scope, location, find_text, token)
     if location.startswith("paragraph:"):
         target = _resolve_paragraph(doc, scope, location)
         target_label = "段落"
@@ -347,7 +349,7 @@ def _apply_placeholder_adjustment(doc: Document, item: dict[str, Any]) -> bool:
         target = _resolve_table_cell(doc, scope, location)
         target_label = "单元格"
     else:
-        raise ValueError("当前仅支持调整段落或正文表格单元格中的识别字段")
+        raise ValueError("当前仅支持调整段落、正文表格单元格或内容控件中的识别字段")
     old = target.text
     if find_text:
         if find_text not in old:
@@ -356,6 +358,69 @@ def _apply_placeholder_adjustment(doc: Document, item: dict[str, Any]) -> bool:
     else:
         target.text = token
     return target.text != old
+
+
+def _replace_content_control_text(
+    doc: Document,
+    scope: str,
+    location: str,
+    find_text: str,
+    token: str,
+) -> bool:
+    element = _resolve_content_control(doc, scope, location)
+    text_nodes = [
+        node for node in element.iter()
+        if _xml_local_name(getattr(node, "tag", "")) == "t"
+    ]
+    if not text_nodes:
+        raise ValueError(f"内容控件中未找到可替换文本：{scope}/{location}")
+    old = "".join(str(node.text or "") for node in text_nodes)
+    if find_text:
+        for node in text_nodes:
+            current = str(node.text or "")
+            if find_text in current:
+                node.text = current.replace(find_text, token, 1)
+                return "".join(str(item.text or "") for item in text_nodes) != old
+        raise ValueError(f"内容控件中未找到待替换文本：{find_text}")
+    text_nodes[0].text = token
+    for node in text_nodes[1:]:
+        node.text = ""
+    return "".join(str(item.text or "") for item in text_nodes) != old
+
+
+def _resolve_content_control(doc: Document, scope: str, location: str):
+    if not location.startswith("content_control:"):
+        raise ValueError(f"内容控件位置无效：{location}")
+    try:
+        expected = int(location.split(":", 1)[1])
+    except (IndexError, ValueError) as exc:
+        raise ValueError(f"内容控件位置无效：{location}") from exc
+    if expected <= 0:
+        raise ValueError(f"内容控件位置无效：{location}")
+    count = 0
+    for root in _complex_structure_roots_for_scope(doc, scope):
+        for element in root.iter():
+            if _xml_local_name(getattr(element, "tag", "")) != "sdt":
+                continue
+            count += 1
+            if count == expected:
+                return element
+    raise ValueError(f"内容控件位置不存在：{scope}/{location}")
+
+
+def _complex_structure_roots_for_scope(doc: Document, scope: str):
+    if scope == "body":
+        return [doc.element.body]
+    if scope == "headers":
+        return [section.header._element for section in doc.sections]
+    if scope == "footers":
+        return [section.footer._element for section in doc.sections]
+    raise ValueError(f"当前不支持的复杂结构范围：{scope}")
+
+
+def _xml_local_name(tag: Any) -> str:
+    text = str(tag or "")
+    return text.rsplit("}", 1)[-1] if "}" in text else text
 
 
 def _resolve_paragraph(doc: Document, scope: str, location: str) -> Paragraph:
@@ -563,9 +628,9 @@ def build_imported_spec_template_preview(target_root: Path, import_id: str) -> d
     doc = Document(str(template_path))
 
     scopes = _collect_word_preview_scopes(doc)
-    placeholders = _collect_word_placeholder_occurrences(scopes)
-    anchors = _collect_word_anchor_occurrences(scopes, manifest)
     complex_structures = _complex_word_structure_dicts(doc)
+    placeholders = _collect_word_placeholder_occurrences(scopes, complex_structures)
+    anchors = _collect_word_anchor_occurrences(scopes, manifest)
     toc = _word_toc_info_dict(doc)
     section_candidates = [
         item
@@ -682,7 +747,7 @@ def build_imported_spec_template_layout_preview(target_root: Path, import_id: st
         "toc": toc,
         "limitations": [
             "当前版式预览为浏览器可渲染的 Word 结构近似，不等同于 Word/Office 像素级分页结果。",
-            "文本框和内容控件仅做位置检测，不参与版式渲染或自动字段替换。",
+            "内容控件可通过在线调整替换字段；文本框仅做位置检测，不参与版式渲染或自动字段替换。",
             "暂不渲染图片文字和复杂浮动对象。",
         ],
     }
@@ -792,7 +857,10 @@ def _table_previews(tables) -> list[dict[str, Any]]:
     return previews[:40]
 
 
-def _collect_word_placeholder_occurrences(scopes: list[dict[str, Any]]) -> list[dict[str, str]]:
+def _collect_word_placeholder_occurrences(
+    scopes: list[dict[str, Any]],
+    complex_structures: list[dict[str, str]] | None = None,
+) -> list[dict[str, str]]:
     occurrences: list[dict[str, str]] = []
     for scope in scopes:
         scope_name = scope["scope"]
@@ -813,6 +881,17 @@ def _collect_word_placeholder_occurrences(scopes: list[dict[str, Any]]) -> list[
                         "location": cell["location"],
                         "text": cell["text"],
                     })
+    for structure in complex_structures or []:
+        if structure.get("kind") != "content_control":
+            continue
+        text = structure.get("text_preview", "")
+        for token in _find_tokens(text):
+            occurrences.append({
+                "token": token,
+                "scope": structure.get("scope", ""),
+                "location": structure.get("location", ""),
+                "text": text,
+            })
     return occurrences
 
 

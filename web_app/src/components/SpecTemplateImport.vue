@@ -686,6 +686,13 @@ const adjustableFieldOptions = computed(() => {
       }
     }
   }
+  for (const structure of preview.complex_structures) {
+    if (structure.kind !== 'content_control') continue
+    options.push({
+      value: `${structure.scope}|${structure.location}`,
+      label: `${structure.label} ${scopeLabel(structure.scope)} ${structure.location} / ${structure.text_preview || '无可读文本'}`,
+    })
+  }
   return options
 })
 
