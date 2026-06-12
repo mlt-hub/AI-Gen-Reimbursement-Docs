@@ -19,6 +19,7 @@
 - profile 专属 warning 仍保持只读质量门，不阻断生成；如需升级为阻断或自动重试，需要先补更大样本的误报评估。
 - 新增 profile 或 rule_set 时继续采用 `contract + fixture + 稳定性抽样`，不要复制 Python 流程。
 - 真实模型抽样应继续按日期归档，尤其要覆盖 `multi-profile-real-model` 之外的真实项目样本，避免只保留单次通过记录。
+- 当前最小落地路线没有剩余必做切片；后续推进只由新增真实项目样本、profile 口径调整或质量门升级触发。
 
 ## 背景
 
@@ -128,14 +129,14 @@ EI / EQ / EO / ILF / EIF
 普通服务不生成 EIF
 ```
 
-而 `unified_ui` 更关注统一 UI/API/数据库改造类工作量，例如：
+而 `unified_ui` 更关注统一界面交付口径下的界面和非界面能力，例如：
 
 ```text
 界面开发
-接口开发
-后台数据库变更
-外部系统对接
-配置/权限/流程类改造
+逻辑接口开发
+导入处理开发
+导出处理开发
+外部接口联调调用
 ```
 
 因此，当前骨架对 `unified_ui` 可以作为审计和调试信息，但不应直接驱动生成约束。
@@ -148,20 +149,20 @@ EI / EQ / EO / ILF / EIF
 
 | profile | 当前 harness | 当前成熟度 |
 |---|---|---|
-| `unified_ui` | 配置校验、prompt 渲染、三级模块界面行、非界面过程行、同名非界面行合并、prompt payload contract、profile golden fixture、`workload_judgement` / `unified_quality_review` 只读审计。 | supported，已有真实模型归零记录，仍需更多项目样本。 |
-| `multi_uis` | 独立 `kind: multi_uis`、独立 `multi_uis_contract`、多界面同名行保留、拆分理由进入 review/check 元数据、profile golden fixture、非界面业务动作沿用 `unified_ui` harness。 | supported，已有真实模型归零记录，仍需更多项目样本。 |
-| `ui_api_mapping` | 默认界面 EI、默认接口 ILF、明确后端调用 ILF、多接口行、重复默认行、prompt payload contract、profile golden fixture、`mapping_judgement` / `mapping_quality_review` 只读审计。 | supported，已有真实模型归零记录，仍需更多项目样本。 |
+| `unified_ui` | 配置校验、prompt 渲染、三级模块界面行、非界面过程行、同名非界面行合并、prompt payload contract、profile golden fixture、`workload_judgement` / `unified_quality_review` 只读审计。 | supported，已有真实模型归零记录；更多项目样本属于持续治理。 |
+| `multi_uis` | 独立 `kind: multi_uis`、独立 `multi_uis_contract`、多界面同名行保留、拆分理由进入 review/check 元数据、profile golden fixture、非界面业务动作沿用 `unified_ui` harness。 | supported，已有真实模型归零记录；更多项目样本属于持续治理。 |
+| `ui_api_mapping` | 默认界面 EI、默认接口 ILF、明确后端调用 ILF、多接口行、重复默认行、prompt payload contract、profile golden fixture、`mapping_judgement` / `mapping_quality_review` 只读审计。 | supported，已有真实模型归零记录；更多项目样本属于持续治理。 |
 | 自定义 profile | 主要依赖所复用 kind 和 rule_set 的配置校验与基础规则。 | 需要自行补 profile 级 fixture。 |
 
 这些 profile 目前仍没有达到 `strict_fpa` 的 harness 水平：
 
-- profile 专属 golden fixture 已覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的核心 contract，但仍需随真实项目样本扩展。
-- 已有真实模型 preset 和归零记录，但仍需要持续按日期归档。
+- profile 专属 golden fixture 已覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的核心 contract；真实项目出现新边界时再增量扩展。
+- 已有真实模型 preset 和归零记录；后续真实模型复跑继续按日期归档。
 - 已有 `profile_quality_issue_count` 质量门；是否升级为阻断或自动重试仍未决定。
 - profile 专属 review 仍是只读 warning，prompt 会读取 judgement，但 warning 本身不直接阻断或改写 rows。
 - `type_judgement`、`merge_review`、`quality_review` 仍保留为 `strict_fpa` 语义的调试信息。
 
-因此，非 strict profile 可以作为 supported 组合使用，但还不能按 `strict_fpa` 的 certified 级稳定性结论直接背书。后续治理重点是随真实项目样本扩充 profile 级 golden fixtures、真实模型归档和 warning 误报评估，再决定是否把只读 warning 升级为阻断或自动重试。
+因此，非 strict profile 可以作为 supported 组合使用，但还不能按 `strict_fpa` 的 certified 级稳定性结论直接背书。持续治理重点是随真实项目样本扩充 profile 级 golden fixtures、真实模型归档和 warning 误报评估，再决定是否把只读 warning 升级为阻断或自动重试。
 
 ## Profile 组合 Harness 分层
 
@@ -187,9 +188,9 @@ profile × kind × strategy × rule_set × prompt × model
 | 组合 | 等级 | 说明 |
 |---|---|---|
 | `strict_fpa + ai_first + strict_fpa_rs` | `certified` | 当前最成熟，已完成真实模型 recommended 连续复测归零。 |
-| `unified_ui + rules_first + unified_ui_rs` | `supported` | 规则和配置路径可用，已有 profile review 与真实模型归零记录，仍需扩大样本。 |
+| `unified_ui + rules_first + unified_ui_rs` | `supported` | 规则和配置路径可用，已有 profile review 与真实模型归零记录；扩大样本属于持续治理。 |
 | `multi_uis + rules_first + multi_uis_rs` | `supported` | 已提升为独立 kind，已有多界面同名/拆分理由 harness 和真实模型归零记录。 |
-| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 默认映射规则清楚，已有 profile review 与真实模型归零记录，仍需扩大样本。 |
+| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 默认映射规则清楚，已有 profile review 与真实模型归零记录；扩大样本属于持续治理。 |
 | `strict_fpa + rules_first + unified_ui_rs` 等跨口径混搭 | `experimental / invalid` | 只保证可追踪或明确报错，不承诺业务正确。 |
 
 规则集扩展建议采用继承式 harness：
@@ -315,37 +316,40 @@ agent_contracts:
   unified_ui_contract:
     categories:
       - 界面开发
-      - 接口开发
-      - 后台数据库变更
-      - 外部系统对接
-      - 配置/权限/流程类改造
+      - 逻辑接口开发
+      - 导入处理开发
+      - 导出处理开发
+      - 外部接口联调调用
     judgement_rules:
       - id: ui_change
         when: operation in [query, create, update, delete, maintain]
         suggest: 界面开发
       - id: api_change
         when: operation in [query, create, update, delete, output]
-        suggest: 接口开发
-      - id: db_change
-        when: changes_internal_data == true
-        suggest: 后台数据库变更
+        suggest: 逻辑接口开发
+      - id: import_change
+        when: operation == import
+        suggest: 导入处理开发
+      - id: export_change
+        when: operation == export
+        suggest: 导出处理开发
       - id: external_integration
         when: ordinary_external_service == true or external_data_group_evidence exists
-        suggest: 外部系统对接
+        suggest: 外部接口联调调用
     merge_rules:
       - id: same_module_ui
         when: same(module_path) and category == 界面开发
         recommendation: merge
-      - id: same_target_api
-        when: same(target_data_group) and category == 接口开发
+      - id: same_target_logic
+        when: same(target_data_group) and category == 逻辑接口开发
         recommendation: merge
-      - id: same_target_database
-        when: same(target_data_group) and category == 后台数据库变更
+      - id: same_target_external
+        when: same(target_data_group) and category == 外部接口联调调用
         recommendation: merge
     quality_checks:
       - ui_flow_missing_ui_row
-      - action_missing_api_row
-      - internal_change_missing_database_row
+      - action_missing_logic_interface_row
+      - import_or_export_missing_processing_row
       - duplicate_same_category_same_target
       - source_process_ids_out_of_scope
       - explanation_structure_missing
@@ -458,9 +462,10 @@ contract.prompt_exposure
 ```text
 workload_judgement
   -> 界面开发
-  -> 接口开发
-  -> 逻辑处理开发
-  -> 外部系统对接
+  -> 逻辑接口开发
+  -> 导入处理开发
+  -> 导出处理开发
+  -> 外部接口联调调用
 ```
 
 ### 第四步：为 `unified_ui` 增加 quality review（已完成，只读）
@@ -469,8 +474,9 @@ workload_judgement
 
 ```text
 有界面流程但漏界面开发
-有动作流程但漏接口开发
-有内部数据变更但漏逻辑处理开发
+有动作流程但漏逻辑接口开发
+有导入或导出流程但漏对应处理开发行
+有内部数据变更但漏对应逻辑接口开发行
 同一类别同一目标重复计数
 source_process_ids 越界
 ```
