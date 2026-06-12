@@ -4,11 +4,12 @@ Web UI for ai-gen-reimbursement-docs.
 """
 
 import os
+from urllib.parse import urlparse
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from web_app.routes.artifacts import create_router as create_artifacts_router
 from web_app.routes.auth import router as auth_router
@@ -59,6 +60,25 @@ _MODE_MAP: dict[str, str] = {
     "from-excel-gen-spec": "gen-spec",
 }
 
+PUBLIC_API_PATHS = frozenset({
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/me",
+    "/api/auth/register",
+    "/api/default-work-mode",
+    "/api/health",
+    "/api/is-local",
+    "/api/license/status",
+    "/api/log-level",
+    "/api/modes",
+    "/api/templates/input",
+    "/api/templates/output",
+    "/api/version",
+})
+PUBLIC_API_PREFIXES = (
+    "/api/templates/output/",
+)
+
 def _spa_index():
     """SPA 入口：返回 Vite 构建产物。"""
     dist_index = Path(__file__).parent / "static" / "dist" / "index.html"
@@ -85,6 +105,32 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI生成项目报账文档", lifespan=lifespan)
+
+
+def _origin_allowed(request: Request, origin_value: str) -> bool:
+    parsed = urlparse(origin_value)
+    if not parsed.scheme or not parsed.hostname:
+        return False
+    request_host = request.url.hostname or ""
+    origin_host = parsed.hostname
+    if origin_host == request_host:
+        return True
+    from ai_gen_reimbursement_docs.auth import is_local_host
+
+    return is_local_host(origin_host) and is_local_host(request_host)
+
+
+@app.middleware("http")
+async def reject_cross_origin_writes(request: Request, call_next):
+    if request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+        source = origin or referer
+        if source and not _origin_allowed(request, source):
+            return JSONResponse({"detail": "跨站请求被拒绝"}, status_code=403)
+    return await call_next(request)
+
+
 app.include_router(create_artifacts_router(session_manager, base_dir=BASE_DIR))
 app.include_router(auth_router)
 app.include_router(config_router)

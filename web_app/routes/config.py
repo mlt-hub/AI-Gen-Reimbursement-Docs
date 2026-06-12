@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ai_gen_reimbursement_docs.auth import user_config_dir
-from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
+from web_app.dependencies import is_local_ip, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
     AdvancedConfigError,
     build_ai_prompt_settings_view,
@@ -44,7 +44,7 @@ router = APIRouter()
 
 
 def _require_local_advanced_config(request: Request) -> Path:
-    if not is_local_mode(request):
+    if not (is_local_mode(request) and is_local_ip(request)):
         raise HTTPException(403, "高级配置文件只能由本机管理员编辑")
     return config_dir()
 
@@ -58,8 +58,9 @@ async def get_default_work_mode():
 
 
 @router.get("/api/config")
-async def get_config():
-    data = read_config()
+async def get_config(request: Request, user: str = Depends(require_auth)):
+    target_dir = config_dir() if is_local_ip(request) else user_config_dir(user)
+    data = read_config() if is_local_ip(request) else read_config_from_dir(target_dir)
     if isinstance(data.get("_env"), dict):
         data["_env"] = redact_env_dict(data["_env"])
     return data
@@ -455,11 +456,10 @@ async def save_config(data: dict, _local: None = Depends(require_local)):
 
 
 @router.get("/api/config-read")
-async def config_read(request: Request):
+async def config_read(request: Request, user: str = Depends(require_auth)):
     """读取配置文件内容。远程登录用户返回个人配置+全局默认，本机返回本机配置。"""
-    username = get_auth_user(request)
-    if username and not is_local_mode(request):
-        user_dir = user_config_dir(username)
+    if not is_local_ip(request):
+        user_dir = user_config_dir(user)
         result: dict = {}
         for key, fname in [("env", ".env"), ("system_config", "system_config.yaml")]:
             fp = user_dir / fname
@@ -467,16 +467,10 @@ async def config_read(request: Request):
                 result[key] = mask_env_content(fp) if fp.exists() else ""
             else:
                 result[key] = fp.read_text(encoding="utf-8") if fp.exists() else ""
-
-        biz_path = Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs" / "business_rules.yaml"
-        result["business_rules"] = biz_path.read_text(encoding="utf-8") if biz_path.exists() else ""
-
-        global_dir = Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs"
-        fp_sys = global_dir / "system_config.yaml"
-        result["global_system"] = fp_sys.read_text(encoding="utf-8") if fp_sys.exists() else ""
-        fp_env = global_dir / ".env"
-        result["global_env"] = mask_env_content(fp_env) if fp_env.exists() else ""
-        result["username"] = username
+        result["business_rules"] = ""
+        result["global_system"] = ""
+        result["global_env"] = ""
+        result["username"] = user
         return result
 
     cfg_dir = Path(os.path.expanduser("~")) / ".ai-gen-reimbursement-docs"

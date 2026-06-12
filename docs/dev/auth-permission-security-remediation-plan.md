@@ -21,6 +21,28 @@
 4. Cookie token 不应长期无条件有效；用户禁用、改密、角色变更后，旧 token 应失效。
 5. 使用 cookie 鉴权的写接口应具备 CSRF 或 Origin 校验。
 
+## 实施状态
+
+本轮已完成以下整改：
+
+- `prompt_debug.py` 的 AI 调试接口已接入权限边界：通用 prompt 调试需登录，读取服务端 Excel 路径的调试接口仅允许本机访问。
+- `/api/config` 与 `/api/config-read` 已接入 `require_auth`；远程用户只能读取个人配置作用域，不再返回全局配置原文。
+- `require_auth` 已收紧为“真实本机 IP + 本地模式”才免登录，远程 IP 不会因 `web_work_mode=local` 配置误设而绕过登录。
+- `require_admin` 已同步收紧：只有真实本机 IP 的本地模式可作为本机管理员放行，其他请求必须具备管理员角色。
+- `SessionManager.can_access` 已收紧：远程请求不能因为目标 session 是 local 类型而直接访问。
+- token 已增加过期时间和 `session_version` 校验；改密会提升 session version、撤销旧 token，并由改密接口下发新的 cookie。
+- remember-me token 恢复时会复核用户仍存在、未禁用且 session version 匹配。
+- Web 入口增加了写接口 Origin/Referer 校验，跨站来源的 `POST`、`PUT`、`PATCH`、`DELETE` 会被拒绝。
+- `web_app/server.py` 已显式声明 `PUBLIC_API_PATHS` / `PUBLIC_API_PREFIXES`，作为公开 API 白名单基线。
+
+本轮验证结果：
+
+```powershell
+F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
+```
+
+结果：`952 passed, 2 skipped`。
+
 ## 风险清单
 
 ### P0: 调试 AI 接口未鉴权
@@ -259,4 +281,4 @@
 
 ## 备注
 
-本次文档只整理审查结果和可实施整改方案，不修改业务代码。后续实施时应按 P0、P1、P2 分批提交，避免把鉴权策略、会话模型和前端调用改动混在一个不可回滚的大变更中。
+本文件最初用于整理审查结果和可实施整改方案；本轮已按该方案完成核心代码和测试整改。后续如果新增 Web API，应先判断是否属于 `PUBLIC_API_PATHS` / `PUBLIC_API_PREFIXES`，否则默认接入 `require_auth`、`require_admin` 或 `require_local`。

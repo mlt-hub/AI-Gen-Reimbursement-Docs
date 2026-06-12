@@ -91,6 +91,31 @@ def test_remember_me_token_survives_memory_clear(monkeypatch, tmp_path):
     assert get_username_by_token(token) == ADMIN_USERNAME
 
 
+def test_change_password_revokes_existing_tokens(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    token = create_token(ADMIN_USERNAME, remember_me=True)
+    assert get_username_by_token(token) == ADMIN_USERNAME
+
+    assert change_password(ADMIN_USERNAME, ADMIN_INITIAL_PASSWORD, "changed-secret") is True
+
+    auth._tokens.clear()
+    assert get_username_by_token(token) is None
+
+
+def test_disabled_user_token_is_rejected(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    token = create_token(ADMIN_USERNAME, remember_me=True)
+    db = tmp_path / ".ai-gen-reimbursement-docs" / "users.db"
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute("UPDATE users SET disabled = 1 WHERE username = ?", (ADMIN_USERNAME,))
+        conn.commit()
+
+    auth._tokens.clear()
+    assert get_username_by_token(token) is None
+
+
 def test_create_invite_uses_defaults(monkeypatch, tmp_path):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 

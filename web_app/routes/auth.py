@@ -116,12 +116,21 @@ async def auth_change_password(data: dict, request: Request):
         raise HTTPException(400, "新密码不能继续使用初始密码")
     if not change_password(username, current_password, new_password):
         raise HTTPException(400, "当前密码错误或修改失败")
-    return {
+    token = create_token(username)
+    resp = JSONResponse({
         "ok": True,
         "username": username,
         "role": get_user_role(username),
         "must_change_password": False,
-    }
+    })
+    resp.set_cookie(
+        key="ard_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+    )
+    return resp
 
 
 @router.post("/api/admin/invites")
