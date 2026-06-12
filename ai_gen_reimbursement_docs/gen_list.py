@@ -144,6 +144,17 @@ def _write_named_cell_if_configured(
     return True
 
 
+def _named_cell_row(wb, ws, sheet_spec: dict[str, Any], key: str, default_row: int) -> int:
+    name = _manifest_named_cell(sheet_spec, key)
+    if not name:
+        return default_row
+    target = _named_cell_target(wb, name, expected_sheet=ws.title)
+    if target is None:
+        return default_row
+    _sheet_name, row, _col = target
+    return row
+
+
 def _column_by_header(
     headers: dict[str, int],
     sheet_spec: dict[str, Any],
@@ -193,7 +204,7 @@ def generate_list_xlsx_from_md(
     project_spec = _sheet_spec(manifest, "project_info", default_name="项目信息概览")
     ws1 = wb[project_spec["name"]]
     project_header_row = project_spec["header_row"]
-    project_data_row = project_spec["data_start_row"]
+    project_data_row = _named_cell_row(wb, ws1, project_spec, "data_start", project_spec["data_start_row"])
     project_headers = _header_map(ws1, project_header_row)
 
     title = meta.get("项目信息概览-标题", "")
@@ -228,7 +239,7 @@ def generate_list_xlsx_from_md(
     function_spec = _sheet_spec(manifest, "function_list", default_name="功能清单")
     ws2 = wb[function_spec["name"]]
     function_header_row = function_spec["header_row"]
-    function_data_start_row = function_spec["data_start_row"]
+    function_data_start_row = _named_cell_row(wb, ws2, function_spec, "data_start", function_spec["data_start_row"])
     function_style_source_row = function_spec["style_source_row"]
     function_headers = _header_map(ws2, function_header_row)
 

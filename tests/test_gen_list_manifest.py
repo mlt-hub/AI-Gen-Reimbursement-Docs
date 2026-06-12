@@ -254,3 +254,85 @@ sheets:
     ws2 = wb["清单自定义"]
     assert ws2.cell(5, 1).value is None
     assert ws2.cell(5, 9).value == 1
+
+
+def test_generate_list_uses_function_list_data_start_named_cell(tmp_path):
+    meta = tmp_path / "meta.md"
+    tree = tmp_path / "tree.md"
+    template = tmp_path / "custom-list.xlsx"
+    output = tmp_path / "out.xlsx"
+
+    _write_meta(meta)
+    _write_tree(tree)
+    _write_template(template)
+
+    wb = openpyxl.load_workbook(template)
+    ws2 = wb["清单自定义"]
+    ws2.cell(5, 9, "old row")
+    wb.defined_names.add(DefinedName("LIST_FUNCTION_DATA_START", attr_text="'清单自定义'!$I$8"))
+    wb.save(template)
+
+    template.with_suffix(".manifest.yaml").write_text(
+        """template_id: list_function_data_start_named_cell_test
+kind: list
+version: 1
+sheets:
+  project_info:
+    name: 概览自定义
+    header_row: 4
+    data_start_row: 5
+    columns:
+      project_name:
+        header: 项目名称
+      department:
+        header: 需求部门
+      workload:
+        header: 送审工作量
+      cfp:
+        header: 送审功能点
+  function_list:
+    name: 清单自定义
+    header_row: 4
+    data_start_row: 5
+    style_source_row: 5
+    named_cells:
+      data_start: LIST_FUNCTION_DATA_START
+    columns:
+      seq:
+        header: 序号
+      project_name:
+        header: 项目名称
+      subsystem:
+        header: 子系统
+      module_l1:
+        header: 一级功能模块名称
+      module_l2:
+        header: 二级功能模块名称
+      module_l3:
+        header: 三级功能模块名称
+      type:
+        header: 类型
+      workload:
+        header: 送审工作量
+      cfp:
+        header: 送审功能点
+""",
+        encoding="utf-8",
+    )
+
+    generate_list_xlsx_from_md(
+        str(meta),
+        str(tree),
+        str(template),
+        str(output),
+        cfp_total=12.5,
+        fpa_reduced=8.5,
+    )
+
+    wb = openpyxl.load_workbook(output)
+    ws2 = wb["清单自定义"]
+    assert ws2.cell(5, 9).value == "old row"
+    assert ws2.cell(8, 9).value == 1
+    assert ws2.cell(8, 2).value == "新建报销单"
+    assert ws2.cell(8, 5).value == 12.5
+    assert ws2.cell(8, 6).value == 8.5
