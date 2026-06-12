@@ -1,4 +1,4 @@
-# unified_ui profile 口径调整方案
+# unified_ui profile 口径调整收口记录
 
 ## 背景
 
@@ -9,11 +9,11 @@
 - 非界面行名称多使用“逻辑处理开发”“查询处理开发”等旧表达。
 - 界面行虽然已有合并要求，但还需要更明确约束“不要把简单页面拆得过细”。
 
-本方案记录新的 `unified_ui` profile 目标口径，作为后续配置、规则、测试和文档修改依据。
+本文记录 `unified_ui` profile 口径调整的目标、落地范围和验收结果；当前基础实现已收口，后续只在新增真实项目边界或口径变化时继续扩展。
 
 ## 推进状态
 
-截至本轮推进，配置结构、`unified_ui` 类型口径、fallback 命名、配置诊断、核心测试和 profile 文档已经完成落地：
+截至 2026-06-12，配置结构、`unified_ui` 类型口径、fallback 命名、配置诊断、核心测试和 profile 文档已经完成落地：
 
 1. `calculation_explanation_rules` 已提升为顶层配置段，默认 profile 已通过 `profiles.<profile>.calculation_explanation_rules` 显式绑定。
 2. `unified_ui` 与 `multi_uis` 已使用统一界面口径的说明规则，`strict_fpa` 保留标准 FPA 结构化证据说明。
@@ -85,9 +85,9 @@
 4. 不编造输入中没有的表名、接口名、外部系统、权限规则或审批流程。
 5. FPA 用户可见字段统一使用“新增/修改功能点”“类型”“计算依据归类”“计算依据说明”“生成方式”。
 
-## 配置结构调整
+## 配置结构
 
-`calculation_explanation_rules` 应从旧的 `prompt_fragments.calculation_explanation_rules.default` 结构中提升出来，成为与 `core_rules`、`system_prompt_sets`、`user_prompt_sets`、`rule_sets` 同级的顶层配置段。
+`calculation_explanation_rules` 已从旧的 `prompt_fragments.calculation_explanation_rules.default` 结构中提升出来，成为与 `core_rules`、`system_prompt_sets`、`user_prompt_sets`、`rule_sets` 同级的顶层配置段。
 
 每个 profile 在 `profiles.<profile_name>` 下显式绑定使用哪一份 `calculation_explanation_rules`，与 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt` 同级。
 
@@ -194,7 +194,7 @@ calculation_explanation_rules:
 
 已补充运行相关 golden case 测试，确认 `unified_ui` 输出名称、类型、计算依据说明和 profile quality review 均符合预期。
 
-配置结构调整还需要重点验证：
+配置结构调整已覆盖以下重点验证：
 
 1. 默认配置四个官方 profile 都能解析并渲染 `${calculation_explanation_rules}`。
 2. profile 绑定的 `calculation_explanation_rules` key 能正确读取顶层文本。
@@ -202,9 +202,9 @@ calculation_explanation_rules:
 4. profile 绑定了不存在的 key 时，应明确报错。
 5. user prompt 未引用 `${calculation_explanation_rules}` 时，仍只给 warning，不强制要求绑定。
 
-## 验收清单
+## 已满足的验收清单
 
-实施完成后，应满足以下验收项：
+实施完成后，以下验收项已作为文档和测试口径固定：
 
 - 默认 `config/fpa_config.yaml.example` 不再包含 `prompt_fragments.calculation_explanation_rules`。
 - 顶层存在 `calculation_explanation_rules.strict_fpa_ce`、`calculation_explanation_rules.unified_ui_ce`、`calculation_explanation_rules.multi_uis_ce`、`calculation_explanation_rules.ui_api_mapping_ce`、`calculation_explanation_rules.ui_api_mapping_workload_eval_ce`。
@@ -226,10 +226,10 @@ calculation_explanation_rules:
 - Web 配置诊断和 prompt diagnostics 不再显示旧路径 `prompt_fragments.calculation_explanation_rules.default`。
 - `git status` 只包含本轮相关变更；提交前测试命令有明确通过记录或说明未运行原因。
 
-## 风险
+## 已处理的风险
 
-主要风险是 `unified_ui` 现有规则使用类型反推行后缀，例如 `EQ -> 查询处理开发`、`EI -> 导入处理开发`。新口径中“查询 = ILF”“导入 = EQ”，同一类型无法再唯一决定行名称后缀，因此需要改为关键词或业务动作优先的后缀选择策略。
+主要风险曾是 `unified_ui` 现有规则使用类型反推行后缀，例如 `EQ -> 查询处理开发`、`EI -> 导入处理开发`。新口径中“查询 = ILF”“导入 = EQ”，同一类型无法再唯一决定行名称后缀，因此已改为关键词或业务动作优先的后缀选择策略。
 
-另一个风险是 `multi_uis` 当前复用 `unified_ui` kind。实施时应确认是否只改 `unified_ui_rs`，还是同步影响 `multi_uis_rs`。如只调整 `unified_ui`，需要避免共享逻辑导致 `multi_uis` 行名或类型被意外改变。
+另一个风险曾是 `multi_uis` 复用 `unified_ui` kind。当前 `multi_uis` 已提升为独立 `kind: multi_uis`，继续复用统一界面的非界面业务动作规则和审阅能力，但以独立 contract 暴露审计身份。
 
-配置结构调整的风险是 Web 配置诊断页、测试和文档中仍可能显示旧 source path。实施时需要同步更新 diagnostics 输出，避免运行时已使用新结构，但页面或测试仍提示 `prompt_fragments.calculation_explanation_rules.default`。
+配置结构调整的风险是 Web 配置诊断页、测试和文档中仍可能显示旧 source path。当前 diagnostics 输出、测试和常规 profile 文档已同步到 profile 级 `calculation_explanation_rules` 绑定；旧路径只应出现在历史迁移说明或错误提示测试中。

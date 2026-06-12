@@ -45,9 +45,9 @@
 - 新增或扩展 profile 时，优先新增 contract、规则和 fixture，而不是复制一整套 Python 流程。
 - 稳定性报告和 audit trace 能记录 profile、kind、strategy、rule_set、prompt、model 和 fixture suite，便于定位退化来源。
 
-## 实施范围
+## 实际涉及范围
 
-预计涉及以下文件：
+本轮主线实施实际涉及以下范围：
 
 ```text
 ai_gen_reimbursement_docs/fpa_agent_review.py
@@ -67,7 +67,7 @@ docs/fpa/fpa-profiles.md
 docs/fpa/fpa-multi-profile-real-model-validation.md
 ```
 
-如果实施过程中涉及 FPA 预览、审阅或修改页面的用户可见文案，必须先确认并遵循 `docs/fpa/result-review-terminology.md`。
+如果后续继续涉及 FPA 预览、审阅或修改页面的用户可见文案，必须先确认并遵循 `docs/fpa/result-review-terminology.md`。
 
 ## 分阶段实施
 
@@ -142,7 +142,7 @@ tests/fpa_profiles/
   test_profile_prompt_payload_contract.py
 ```
 
-如果暂时不迁移文件，也应在现有测试中按 profile 分组命名，避免 `tests/test_fpa_profiles.py` 继续膨胀。
+新增测试已按 `tests/fpa_profiles/` 分层组织；后续新增 profile harness 也应继续放入该目录，避免 `tests/test_fpa_profiles.py` 继续膨胀。
 
 各 profile 最小覆盖：
 
@@ -194,7 +194,7 @@ unified_quality_review
 建议检查项：
 
 - 有界面流程但缺少界面开发行。
-- 有查询流程但缺少查询处理开发行。
+- 有查询流程但缺少逻辑接口开发行。
 - 有导出流程但缺少导出处理开发行。
 - 明确维护内部数据但缺少对应处理或数据库变更说明。
 - 同一类别同一目标重复计数。
@@ -271,7 +271,7 @@ warning count
 - 运行范围：5 个 standard fixture × 4 个 profile，共 20 次真实模型调用。
 - 基础质量门：`quality_issue_count=0`、`retryable_quality_issue_count=0`、`blocking_retry_count=0`。
 - profile 专属质量门：`profile_quality_issue_count=49`，未通过。
-- 后续方向：优先收敛 `unified_ui` / `multi_uis` 的界面与处理开发行 prompt，以及 `ui_api_mapping` 的默认 UI/API 行和显式后端行 prompt。
+- 当时结论：优先收敛 `unified_ui` / `multi_uis` 的界面与处理开发行 prompt，以及 `ui_api_mapping` 的默认 UI/API 行和显式后端行 prompt。
 
 hardening 后结果：
 
@@ -279,7 +279,7 @@ hardening 后结果：
 - 运行范围：5 个 standard fixture × 4 个 profile，共 20 次真实模型调用。
 - 基础质量门：`quality_issue_count=0`、`retryable_quality_issue_count=0`、`blocking_retry_count=0`。
 - profile 专属质量门：`profile_quality_issue_count=0`，通过。
-- 后续方向：继续扩大真实项目样本，并维持按日期归档。
+- 持续治理：继续扩大真实项目样本，并维持按日期归档。
 
 ## 验证命令
 
@@ -318,4 +318,4 @@ hardening 后结果：
 2. 将真实项目样本中出现的新口径边界沉淀为 profile 级 golden fixtures。
 3. 观察 profile 专属 warning 误报率，再决定是否从只读质量门升级为阻断或自动重试。
 
-这些事项是长期质量治理，不是当前 profile-aware Agent Review 最小落地路线的阻塞项。每个后续切片都应保持现有生成行为可回归，并按仓库规则单独提交。
+这些事项是长期质量治理，不是当前 profile-aware Agent Review 最小落地路线的阻塞项。后续只有在新增真实项目样本、调整 profile 口径或升级 warning 质量门时才需要重新开启专项切片；每个切片都应保持现有生成行为可回归，并按仓库规则单独提交。
