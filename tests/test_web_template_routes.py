@@ -391,6 +391,55 @@ def test_imported_spec_template_adjustments_select_module_sample_table(monkeypat
     assert "{{模块清单表示例}}" in imported_doc.tables[0].cell(0, 0).text
 
 
+def test_imported_spec_template_adjustments_update_table_cell_placeholder(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    import_id = Path(import_resp.json()["template_path"]).parent.name
+    metadata_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/metadata",
+        json={"confirmed": True},
+    )
+    assert metadata_resp.status_code == 200
+
+    preview = client.get(f"/api/templates/spec/imported/{import_id}/preview").json()
+    table = preview["scopes"][0]["tables"][0]
+    cell = next(item for item in table["cells"] if item["text"] == "需求部门")
+    adjust_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/adjustments",
+        json={
+            "placeholders": [
+                {
+                    "scope": "tables",
+                    "location": cell["location"],
+                    "text": "需求部门",
+                    "token": "{{部门名称}}",
+                },
+            ],
+        },
+    )
+
+    assert adjust_resp.status_code == 200
+    adjusted = adjust_resp.json()
+    assert adjusted["changed_fields"] == ["placeholders"]
+    assert any(
+        item["scope"] == "tables"
+        and item["location"] == cell["location"]
+        and item["token"] == "{{部门名称}}"
+        for item in adjusted["preview"]["placeholders"]
+    )
+    updated_doc = Document(import_resp.json()["template_path"])
+    assert updated_doc.tables[0].cell(0, 0).text == "{{部门名称}}"
+    assert adjusted["preview"]["metadata"]["confirmed"] is False
+    assert adjusted["preview"]["metadata"]["published"] is False
+
+
 def test_import_spec_template_route_rejects_non_docx(monkeypatch, tmp_path):
     client = _client(monkeypatch, tmp_path)
 
