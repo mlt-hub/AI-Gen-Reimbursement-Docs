@@ -135,7 +135,7 @@ def test_imported_spec_template_preview_reports_complex_structures(monkeypatch, 
 
     layout = client.get(f"/api/templates/spec/imported/{import_id}/layout-preview").json()
     assert layout["summary"]["complex_structure_count"] >= 2
-    assert any("仅做位置检测" in item for item in layout["limitations"])
+    assert any("可通过在线调整替换字段" in item for item in layout["limitations"])
 
 
 def test_imported_spec_template_preview_reports_toc_status(monkeypatch, tmp_path):
@@ -492,6 +492,62 @@ def test_imported_spec_template_adjustments_update_content_control_placeholder(m
     assert "{{项目名称}}" in adjusted_content_control["text_preview"]
     updated_doc = Document(import_resp.json()["template_path"])
     assert "{{项目名称}}" in updated_doc.element.body.xml
+    assert adjusted["preview"]["metadata"]["confirmed"] is False
+    assert adjusted["preview"]["metadata"]["published"] is False
+
+
+def test_imported_spec_template_adjustments_update_text_box_placeholder(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+    doc = Document(source)
+    _append_complex_word_structures(doc)
+    doc.save(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    import_id = Path(import_resp.json()["template_path"]).parent.name
+    metadata_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/metadata",
+        json={"confirmed": True},
+    )
+    assert metadata_resp.status_code == 200
+
+    preview = client.get(f"/api/templates/spec/imported/{import_id}/preview").json()
+    text_box = next(item for item in preview["complex_structures"] if item["kind"] == "text_box")
+    adjust_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/adjustments",
+        json={
+            "placeholders": [
+                {
+                    "scope": text_box["scope"],
+                    "location": text_box["location"],
+                    "text": "财务部",
+                    "token": "{{需求部门}}",
+                },
+            ],
+        },
+    )
+
+    assert adjust_resp.status_code == 200
+    adjusted = adjust_resp.json()
+    assert adjusted["changed_fields"] == ["placeholders"]
+    assert any(
+        item["scope"] == text_box["scope"]
+        and item["location"] == text_box["location"]
+        and item["token"] == "{{需求部门}}"
+        for item in adjusted["preview"]["placeholders"]
+    )
+    adjusted_text_box = next(
+        item for item in adjusted["preview"]["complex_structures"]
+        if item["kind"] == "text_box"
+    )
+    assert "{{需求部门}}" in adjusted_text_box["text_preview"]
+    updated_doc = Document(import_resp.json()["template_path"])
+    assert "{{需求部门}}" in updated_doc.element.body.xml
     assert adjusted["preview"]["metadata"]["confirmed"] is False
     assert adjusted["preview"]["metadata"]["published"] is False
 

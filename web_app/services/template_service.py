@@ -340,8 +340,8 @@ def _apply_placeholder_adjustment(doc: Document, item: dict[str, Any]) -> bool:
     token = str(item.get("token") or "").strip()
     if not token or not token.startswith("{{") or not token.endswith("}}"):
         raise ValueError("占位符 token 必须使用 {{字段名}} 格式")
-    if location.startswith("content_control:"):
-        return _replace_content_control_text(doc, scope, location, find_text, token)
+    if location.startswith("content_control:") or location.startswith("text_box:"):
+        return _replace_complex_structure_text(doc, scope, location, find_text, token)
     if location.startswith("paragraph:"):
         target = _resolve_paragraph(doc, scope, location)
         target_label = "段落"
@@ -349,7 +349,7 @@ def _apply_placeholder_adjustment(doc: Document, item: dict[str, Any]) -> bool:
         target = _resolve_table_cell(doc, scope, location)
         target_label = "单元格"
     else:
-        raise ValueError("当前仅支持调整段落、正文表格单元格或内容控件中的识别字段")
+        raise ValueError("当前仅支持调整段落、正文表格单元格、内容控件或文本框中的识别字段")
     old = target.text
     if find_text:
         if find_text not in old:
@@ -360,20 +360,20 @@ def _apply_placeholder_adjustment(doc: Document, item: dict[str, Any]) -> bool:
     return target.text != old
 
 
-def _replace_content_control_text(
+def _replace_complex_structure_text(
     doc: Document,
     scope: str,
     location: str,
     find_text: str,
     token: str,
 ) -> bool:
-    element = _resolve_content_control(doc, scope, location)
+    element, label = _resolve_complex_structure(doc, scope, location)
     text_nodes = [
         node for node in element.iter()
         if _xml_local_name(getattr(node, "tag", "")) == "t"
     ]
     if not text_nodes:
-        raise ValueError(f"内容控件中未找到可替换文本：{scope}/{location}")
+        raise ValueError(f"{label}中未找到可替换文本：{scope}/{location}")
     old = "".join(str(node.text or "") for node in text_nodes)
     if find_text:
         for node in text_nodes:
@@ -381,31 +381,36 @@ def _replace_content_control_text(
             if find_text in current:
                 node.text = current.replace(find_text, token, 1)
                 return "".join(str(item.text or "") for item in text_nodes) != old
-        raise ValueError(f"内容控件中未找到待替换文本：{find_text}")
+        raise ValueError(f"{label}中未找到待替换文本：{find_text}")
     text_nodes[0].text = token
     for node in text_nodes[1:]:
         node.text = ""
     return "".join(str(item.text or "") for item in text_nodes) != old
 
 
-def _resolve_content_control(doc: Document, scope: str, location: str):
-    if not location.startswith("content_control:"):
-        raise ValueError(f"内容控件位置无效：{location}")
+def _resolve_complex_structure(doc: Document, scope: str, location: str):
+    kind, _, index_text = location.partition(":")
+    if kind not in {"content_control", "text_box"} or not index_text:
+        raise ValueError(f"复杂结构位置无效：{location}")
     try:
-        expected = int(location.split(":", 1)[1])
-    except (IndexError, ValueError) as exc:
-        raise ValueError(f"内容控件位置无效：{location}") from exc
+        expected = int(index_text)
+    except ValueError as exc:
+        raise ValueError(f"复杂结构位置无效：{location}") from exc
     if expected <= 0:
-        raise ValueError(f"内容控件位置无效：{location}")
+        raise ValueError(f"复杂结构位置无效：{location}")
     count = 0
+    label = "内容控件" if kind == "content_control" else "文本框"
     for root in _complex_structure_roots_for_scope(doc, scope):
         for element in root.iter():
-            if _xml_local_name(getattr(element, "tag", "")) != "sdt":
+            local_name = _xml_local_name(getattr(element, "tag", ""))
+            if _complex_structure_kind(local_name) != kind:
+                continue
+            if local_name == "textbox" and _has_descendant_local_name(element, "txbxContent"):
                 continue
             count += 1
             if count == expected:
-                return element
-    raise ValueError(f"内容控件位置不存在：{scope}/{location}")
+                return element, label
+    raise ValueError(f"{label}位置不存在：{scope}/{location}")
 
 
 def _complex_structure_roots_for_scope(doc: Document, scope: str):
@@ -421,6 +426,23 @@ def _complex_structure_roots_for_scope(doc: Document, scope: str):
 def _xml_local_name(tag: Any) -> str:
     text = str(tag or "")
     return text.rsplit("}", 1)[-1] if "}" in text else text
+
+
+def _complex_structure_kind(local_name: str) -> str:
+    if local_name in {"txbxContent", "textbox"}:
+        return "text_box"
+    if local_name == "sdt":
+        return "content_control"
+    return ""
+
+
+def _has_descendant_local_name(element: Any, name: str) -> bool:
+    for child in element.iter():
+        if child is element:
+            continue
+        if _xml_local_name(getattr(child, "tag", "")) == name:
+            return True
+    return False
 
 
 def _resolve_paragraph(doc: Document, scope: str, location: str) -> Paragraph:
@@ -747,7 +769,7 @@ def build_imported_spec_template_layout_preview(target_root: Path, import_id: st
         "toc": toc,
         "limitations": [
             "当前版式预览为浏览器可渲染的 Word 结构近似，不等同于 Word/Office 像素级分页结果。",
-            "内容控件可通过在线调整替换字段；文本框仅做位置检测，不参与版式渲染或自动字段替换。",
+            "文本框和内容控件可通过在线调整替换字段；该版式预览不渲染复杂浮动对象。",
             "暂不渲染图片文字和复杂浮动对象。",
         ],
     }
@@ -882,7 +904,7 @@ def _collect_word_placeholder_occurrences(
                         "text": cell["text"],
                     })
     for structure in complex_structures or []:
-        if structure.get("kind") != "content_control":
+        if structure.get("kind") not in {"content_control", "text_box"}:
             continue
         text = structure.get("text_preview", "")
         for token in _find_tokens(text):

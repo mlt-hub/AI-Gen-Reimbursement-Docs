@@ -155,8 +155,8 @@ def test_import_spec_word_template_detects_complex_structures_for_confirmation(t
     kinds = {item.kind for item in result.complex_structures}
     assert {"content_control", "text_box"} <= kinds
     assert any("复杂 Word 结构" in item for item in result.pending_confirmations)
-    assert any("内容控件可在线替换字段" in item for item in result.warnings)
-    assert any("文本框仍需人工确认" in item for item in result.warnings)
+    assert any("可在线替换其中的可读文本字段" in item for item in result.warnings)
+    assert any("图片文字仍需人工确认" in item for item in result.warnings)
 
 
 def test_import_spec_word_template_records_toc_status_in_manifest(tmp_path):
