@@ -1338,6 +1338,22 @@ def load_fpa_core_rules_config(profile_name: str) -> PromptConfig:
     return PromptConfig(text=value.strip(), source_label=_user_config_key_source_label(FPA_CONFIG_FILENAME, key_path))
 
 
+def load_fpa_core_rules_config_by_key(core_rule_key: str) -> PromptConfig:
+    """按 core_rules key 读取 FPA 核心口径文本。"""
+    key = str(core_rule_key or "").strip()
+    if not key:
+        raise FpaPromptConfigError("未提供 FPA core_rules key")
+    cfg = load_fpa_config()
+    core_rule_sets = cfg.get("core_rules", {})
+    if not isinstance(core_rule_sets, dict):
+        raise FpaPromptConfigError(f"FPA core_rules 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 core_rules")
+    key_path = f"core_rules.{key}"
+    value = core_rule_sets.get(key, "")
+    if not isinstance(value, str) or not value.strip():
+        raise FpaPromptConfigError(f"未找到 FPA 核心口径配置：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path}")
+    return PromptConfig(text=value.strip(), source_label=_user_config_key_source_label(FPA_CONFIG_FILENAME, key_path))
+
+
 def load_fpa_check_columns() -> dict[str, list[str]]:
     """读取 FPA 审核副本列配置。
 
@@ -1779,6 +1795,16 @@ def load_fpa_user_prompt_config(profile_name: str) -> PromptConfig:
             f"未找到 FPA 用户提示词绑定：配置目录/{FPA_CONFIG_FILENAME} 中的 profiles.{profile_name}.user_prompt"
         )
     return _load_fpa_prompt_text(prompt_key, "user")
+
+
+def load_fpa_system_prompt_config_by_key(prompt_key: str) -> PromptConfig:
+    """按 system_prompt_sets key 读取 FPA system prompt。"""
+    return _load_fpa_prompt_text(str(prompt_key or "").strip(), "system")
+
+
+def load_fpa_user_prompt_config_by_key(prompt_key: str) -> PromptConfig:
+    """按 user_prompt_sets key 读取 FPA user prompt 模板。"""
+    return _load_fpa_prompt_text(str(prompt_key or "").strip(), "user")
 
 
 def load_fpa_user_prompt_template(profile_name: str) -> str:

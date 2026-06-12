@@ -45,8 +45,7 @@
 
         <div>
           <label for="fpa-strategy" class="field-label text-xs">FPA 执行策略</label>
-          <select id="fpa-strategy" v-model="config.fpaStrategy" class="field-control">
-            <option value="">{{ defaultStrategyLabel }}</option>
+          <select id="fpa-strategy" :value="effectiveStrategy" :disabled="!selectedProfileEditable" class="field-control" @change="updateCustomField('fpaStrategy', $event)">
             <option v-for="strategy in fpaOptions.strategies" :key="strategy.name" :value="strategy.name">
               {{ strategy.label }}
             </option>
@@ -55,8 +54,7 @@
 
         <div>
           <label for="fpa-rule-set" class="field-label text-xs">FPA 规则集</label>
-          <select id="fpa-rule-set" v-model="config.fpaRuleSet" class="field-control">
-            <option value="">{{ defaultRuleSetLabel }}</option>
+          <select id="fpa-rule-set" :value="effectiveRuleSet" :disabled="!selectedProfileEditable" class="field-control" @change="updateCustomField('fpaRuleSet', $event)">
             <option v-for="ruleSet in fpaOptions.rule_sets" :key="ruleSet.name" :value="ruleSet.name">
               {{ ruleSet.label }}
             </option>
@@ -65,8 +63,35 @@
         </div>
 
         <div>
+          <label for="fpa-core-rules" class="field-label text-xs">FPA 核心口径</label>
+          <select id="fpa-core-rules" :value="effectiveCoreRules" :disabled="!selectedProfileEditable" class="field-control" @change="updateCustomField('fpaCoreRules', $event)">
+            <option v-for="item in fpaOptions.core_rules" :key="item.name" :value="item.name">
+              {{ item.label }}
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label for="fpa-system-prompt" class="field-label text-xs">FPA 系统提示词</label>
+          <select id="fpa-system-prompt" :value="effectiveSystemPrompt" :disabled="!selectedProfileEditable" class="field-control" @change="updateCustomField('fpaSystemPrompt', $event)">
+            <option v-for="item in fpaOptions.system_prompt_sets" :key="item.name" :value="item.name">
+              {{ item.label }}
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label for="fpa-user-prompt" class="field-label text-xs">FPA 用户提示词</label>
+          <select id="fpa-user-prompt" :value="effectiveUserPrompt" :disabled="!selectedProfileEditable" class="field-control" @change="updateCustomField('fpaUserPrompt', $event)">
+            <option v-for="item in fpaOptions.user_prompt_sets" :key="item.name" :value="item.name">
+              {{ item.label }}
+            </option>
+          </select>
+        </div>
+
+        <div>
           <label for="fpa-confirmation-mode" class="field-label text-xs">FPA 生成模式</label>
-          <select id="fpa-confirmation-mode" v-model="config.fpaConfirmationMode" class="field-control">
+          <select id="fpa-confirmation-mode" :value="effectiveConfirmationMode" :disabled="!selectedProfileEditable" class="field-control" @change="updateConfirmationMode">
             <option v-for="mode in fpaOptions.confirmation_modes" :key="mode.name" :value="mode.name">
               {{ mode.label }}
             </option>
@@ -106,28 +131,31 @@ const selectedProfile = computed(() => (
   fpaOptions.value.profiles.find(profile => profile.name === config.fpaProfile)
   ?? fpaOptions.value.profiles[0]
 ))
-const defaultStrategyLabel = computed(() => {
-  const strategy = fpaOptions.value.strategies.find(item => item.name === selectedProfile.value?.strategy)
-  return strategy ? `跟随方案默认（${strategy.label}）` : '跟随方案默认'
-})
-const defaultRuleSetLabel = computed(() => (
-  selectedProfile.value?.rule_set ? `跟随方案默认（${selectedProfile.value.rule_set}）` : '跟随方案默认'
+const selectedProfileEditable = computed(() => selectedProfile.value?.editable === true)
+const effectiveStrategy = computed(() => selectedProfileEditable.value ? config.fpaStrategy : selectedProfile.value?.strategy || '')
+const effectiveRuleSet = computed(() => selectedProfileEditable.value ? config.fpaRuleSet : selectedProfile.value?.rule_set || '')
+const effectiveCoreRules = computed(() => selectedProfileEditable.value ? config.fpaCoreRules : selectedProfile.value?.core_rules || '')
+const effectiveSystemPrompt = computed(() => selectedProfileEditable.value ? config.fpaSystemPrompt : selectedProfile.value?.system_prompt || '')
+const effectiveUserPrompt = computed(() => selectedProfileEditable.value ? config.fpaUserPrompt : selectedProfile.value?.user_prompt || '')
+const effectiveConfirmationMode = computed(() => (
+  selectedProfileEditable.value ? config.fpaConfirmationMode : selectedProfile.value?.confirmation_mode || 'auto'
 ))
 const selectedStrategyLabel = computed(() => {
-  const current = config.fpaStrategy || selectedProfile.value?.strategy || ''
+  const current = effectiveStrategy.value
   const strategy = fpaOptions.value.strategies.find(item => item.name === current)
   return strategy?.label || '跟随方案默认'
 })
 const selectedRuleSetLabel = computed(() => (
-  config.fpaRuleSet || selectedProfile.value?.rule_set || '跟随方案默认'
+  effectiveRuleSet.value || '跟随方案默认'
 ))
 const selectedConfirmationLabel = computed(() => (
-  fpaOptions.value.confirmation_modes.find(mode => mode.name === config.fpaConfirmationMode)?.label || '自动模式'
+  fpaOptions.value.confirmation_modes.find(mode => mode.name === effectiveConfirmationMode.value)?.label || '自动模式'
 ))
 const settingsSummary = computed(() => [
   selectedProfile.value?.label || config.fpaProfile,
   selectedStrategyLabel.value,
   selectedRuleSetLabel.value,
+  effectiveCoreRules.value,
   selectedConfirmationLabel.value,
 ].filter(Boolean).join(' / '))
 const friendlyFpaOptionsError = computed(() => (
@@ -137,10 +165,40 @@ const friendlyFpaOptionsError = computed(() => (
 ))
 
 watch(
+  () => config.fpaProfile,
+  (profileName, previousProfileName) => {
+    if (profileName !== 'custom_profile') return
+    const sourceName = previousProfileName && previousProfileName !== 'custom_profile'
+      ? previousProfileName
+      : config.fpaBaseProfile
+    const source = fpaOptions.value.profiles.find(profile => profile.name === sourceName && !profile.editable)
+      ?? fpaOptions.value.profiles.find(profile => !profile.editable)
+    if (!source) return
+    config.fpaBaseProfile = source.name
+    if (!config.fpaStrategy) config.fpaStrategy = source.strategy
+    if (!config.fpaRuleSet) config.fpaRuleSet = source.rule_set
+    if (!config.fpaCoreRules) config.fpaCoreRules = source.core_rules
+    if (!config.fpaSystemPrompt) config.fpaSystemPrompt = source.system_prompt
+    if (!config.fpaUserPrompt) config.fpaUserPrompt = source.user_prompt
+    config.fpaConfirmationMode = (source.confirmation_mode || 'auto') as typeof config.fpaConfirmationMode
+  },
+)
+
+watch(
   fpaOptions,
   options => {
+    if (config.fpaProfile !== 'custom_profile') return
     if (config.fpaRuleSet && !options.rule_sets.some(ruleSet => ruleSet.name === config.fpaRuleSet)) {
       config.fpaRuleSet = ''
+    }
+    if (config.fpaCoreRules && !options.core_rules.some(item => item.name === config.fpaCoreRules)) {
+      config.fpaCoreRules = ''
+    }
+    if (config.fpaSystemPrompt && !options.system_prompt_sets.some(item => item.name === config.fpaSystemPrompt)) {
+      config.fpaSystemPrompt = ''
+    }
+    if (config.fpaUserPrompt && !options.user_prompt_sets.some(item => item.name === config.fpaUserPrompt)) {
+      config.fpaUserPrompt = ''
     }
     if (!options.confirmation_modes.some(mode => mode.name === config.fpaConfirmationMode)) {
       config.fpaConfirmationMode = 'auto'
@@ -148,6 +206,20 @@ watch(
   },
   { immediate: true },
 )
+
+function updateCustomField(field: 'fpaStrategy' | 'fpaRuleSet' | 'fpaCoreRules' | 'fpaSystemPrompt' | 'fpaUserPrompt', event: Event) {
+  if (!selectedProfileEditable.value) return
+  const target = event.target as HTMLSelectElement | null
+  if (!target) return
+  config[field] = target.value
+}
+
+function updateConfirmationMode(event: Event) {
+  if (!selectedProfileEditable.value) return
+  const target = event.target as HTMLSelectElement | null
+  if (!target) return
+  config.fpaConfirmationMode = target.value as typeof config.fpaConfirmationMode
+}
 
 onMounted(loadFpaOptions)
 </script>

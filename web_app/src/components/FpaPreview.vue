@@ -640,6 +640,10 @@ async function requestPreview(useConfirmedDecisions: boolean) {
   if (config.fpaProfile) body.append('fpa_profile', config.fpaProfile)
   if (config.fpaStrategy) body.append('fpa_strategy', config.fpaStrategy)
   if (config.fpaRuleSet) body.append('fpa_rule_set', config.fpaRuleSet)
+  if (config.fpaCoreRules) body.append('fpa_core_rules', config.fpaCoreRules)
+  if (config.fpaSystemPrompt) body.append('fpa_system_prompt', config.fpaSystemPrompt)
+  if (config.fpaUserPrompt) body.append('fpa_user_prompt', config.fpaUserPrompt)
+  if (config.fpaBaseProfile) body.append('fpa_base_profile', config.fpaBaseProfile)
   if (config.fpaConfirmationMode) body.append('fpa_confirmation_mode', config.fpaConfirmationMode)
   if (useConfirmedDecisions && Object.keys(confirmedDecisions.value).length) {
     body.append('confirmed_decisions', JSON.stringify(confirmedDecisions.value))

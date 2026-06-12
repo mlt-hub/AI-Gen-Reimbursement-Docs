@@ -23,6 +23,10 @@ DEFAULT_WEB_CONFIG = {
     "fpa_profile": "strict_fpa",
     "fpa_strategy": "",
     "fpa_rule_set": "",
+    "fpa_core_rules": "",
+    "fpa_system_prompt": "",
+    "fpa_user_prompt": "",
+    "fpa_base_profile": "",
     "fpa_confirmation_mode": "auto",
 }
 
@@ -30,6 +34,10 @@ OUTPUT_TEMPLATE_PROFILE_RUN_DEFAULT_KEYS = (
     "fpa_profile",
     "fpa_strategy",
     "fpa_rule_set",
+    "fpa_core_rules",
+    "fpa_system_prompt",
+    "fpa_user_prompt",
+    "fpa_base_profile",
     "fpa_confirmation_mode",
 )
 
@@ -387,6 +395,10 @@ def resolve_task_start_config(
         "fpa_profile": _effective_system_value(explicit, "fpa_profile", user_system, global_system),
         "fpa_strategy": fpa_strategy,
         "fpa_rule_set": _effective_system_value(explicit, "fpa_rule_set", user_system, global_system),
+        "fpa_core_rules": _effective_system_value(explicit, "fpa_core_rules", user_system, global_system),
+        "fpa_system_prompt": _effective_system_value(explicit, "fpa_system_prompt", user_system, global_system),
+        "fpa_user_prompt": _effective_system_value(explicit, "fpa_user_prompt", user_system, global_system),
+        "fpa_base_profile": _effective_system_value(explicit, "fpa_base_profile", user_system, global_system),
         "fpa_confirmation_mode": _effective_system_value(explicit, "fpa_confirmation_mode", user_system, global_system),
         "api_key_source": "explicit" if _first_explicit(explicit, "api_key") else "missing",
         "uses_shared_api_key": False,
@@ -507,6 +519,30 @@ def build_web_config_view(
                 global_system,
                 "fpa_rule_set",
                 DEFAULT_WEB_CONFIG["fpa_rule_set"],
+            ),
+            "fpa_core_rules": _pick_system_field(
+                user_system,
+                global_system,
+                "fpa_core_rules",
+                DEFAULT_WEB_CONFIG["fpa_core_rules"],
+            ),
+            "fpa_system_prompt": _pick_system_field(
+                user_system,
+                global_system,
+                "fpa_system_prompt",
+                DEFAULT_WEB_CONFIG["fpa_system_prompt"],
+            ),
+            "fpa_user_prompt": _pick_system_field(
+                user_system,
+                global_system,
+                "fpa_user_prompt",
+                DEFAULT_WEB_CONFIG["fpa_user_prompt"],
+            ),
+            "fpa_base_profile": _pick_system_field(
+                user_system,
+                global_system,
+                "fpa_base_profile",
+                DEFAULT_WEB_CONFIG["fpa_base_profile"],
             ),
             "fpa_confirmation_mode": _pick_system_field(
                 user_system,
@@ -1908,7 +1944,17 @@ async def save_web_config_to_dir(
         changed_fields.append("templates.active_output_template_profile")
 
     run_defaults = payload.get("run_defaults") if isinstance(payload.get("run_defaults"), dict) else {}
-    for key in ("project_name", "fpa_profile", "fpa_strategy", "fpa_rule_set", "fpa_confirmation_mode"):
+    for key in (
+        "project_name",
+        "fpa_profile",
+        "fpa_strategy",
+        "fpa_rule_set",
+        "fpa_core_rules",
+        "fpa_system_prompt",
+        "fpa_user_prompt",
+        "fpa_base_profile",
+        "fpa_confirmation_mode",
+    ):
         value = run_defaults.get(key)
         if isinstance(value, dict) and "value" in value:
             value = value.get("value")

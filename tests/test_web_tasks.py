@@ -440,8 +440,8 @@ def test_rerun_uses_original_run_config_snapshot(monkeypatch, tmp_path):
     assert args[10] == "strict_fpa"
     assert args[11] == "ai_first"
     assert args[12] == "strict_fpa_rs"
-    assert args[13] == "strict"
-    assert args[15] is True
+    assert args[13] == "auto"
+    assert args[19] is True
 
 
 def test_finish_backfills_missing_project_name_into_history(monkeypatch, tmp_path):
@@ -570,7 +570,7 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     assert calls[0]["args"][10] == "strict_fpa"
     assert calls[0]["args"][11] == "ai_first"
     assert calls[0]["args"][12] == "strict_fpa_rs"
-    assert calls[0]["args"][13] == "strict"
+    assert calls[0]["args"][13] == "auto"
     server.session_manager.cleanup_download(data["session_id"])
 
 
@@ -672,6 +672,11 @@ rule_sets:
             "kind": "unified_ui",
             "strategy": "rules_first",
             "rule_set": "unified_ui_rs",
+            "core_rules": "unified_ui_cr",
+            "system_prompt": "unified_ui_sp",
+            "user_prompt": "unified_ui_up",
+            "confirmation_mode": "auto",
+            "editable": False,
         },
         {
             "name": "strict_fpa",
@@ -679,8 +684,28 @@ rule_sets:
             "kind": "strict_fpa",
             "strategy": "ai_first",
             "rule_set": "strict_fpa_rs",
+            "core_rules": "strict_fpa_cr",
+            "system_prompt": "strict_fpa_sp",
+            "user_prompt": "strict_fpa_up",
+            "confirmation_mode": "auto",
+            "editable": False,
+        },
+        {
+            "name": "custom_profile",
+            "label": "自定义 FPA 方案",
+            "kind": "unified_ui",
+            "strategy": "rules_first",
+            "rule_set": "unified_ui_rs",
+            "core_rules": "unified_ui_cr",
+            "system_prompt": "unified_ui_sp",
+            "user_prompt": "unified_ui_up",
+            "confirmation_mode": "auto",
+            "editable": True,
         },
     ]
+    assert {item["name"] for item in data["core_rules"]} == {"unified_ui_cr", "strict_fpa_cr"}
+    assert {item["name"] for item in data["system_prompt_sets"]} == {"unified_ui_sp", "strict_fpa_sp"}
+    assert {item["name"] for item in data["user_prompt_sets"]} == {"unified_ui_up", "strict_fpa_up"}
     assert {item["name"] for item in data["rule_sets"]} == {
         "unified_ui_rs",
         "strict_fpa_rs",
@@ -745,13 +770,14 @@ rule_sets:
 
     assert resp.status_code == 200
     data = resp.json()
-    assert [profile["name"] for profile in data["profiles"]] == ["client_api", "strict_fpa"]
+    assert [profile["name"] for profile in data["profiles"]] == ["client_api", "strict_fpa", "custom_profile"]
     assert data["profiles"][0]["label"] == "client_api"
     assert data["profiles"][0]["kind"] == "ui_api_mapping"
+    assert data["profiles"][-1]["editable"] is True
     assert {kind["name"] for kind in data["kinds"]} == {"strict_fpa", "unified_ui", "ui_api_mapping"}
-    assert "core_rules" not in resp.text
-    assert "system_prompt" not in resp.text
-    assert "user_prompt" not in resp.text
+    assert {item["name"] for item in data["core_rules"]} == {"shared_cr"}
+    assert {item["name"] for item in data["system_prompt_sets"]} == {"shared_sp"}
+    assert {item["name"] for item in data["user_prompt_sets"]} == {"shared_up"}
 
 
 def test_fpa_options_returns_400_for_invalid_prompt_placeholder(monkeypatch, tmp_path):
@@ -830,9 +856,12 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
             "mode": "from-excel-gen-fpa",
             "api_key": "sk-explicit",
             "fpa_profile": "strict_fpa",
-            "fpa_strategy": "ai_first",
-            "fpa_rule_set": "strict_fpa_rs",
+            "fpa_strategy": "rules_only",
+            "fpa_rule_set": "tampered_rs",
             "fpa_confirmation_mode": "cautious",
+            "fpa_core_rules": "tampered_cr",
+            "fpa_system_prompt": "tampered_sp",
+            "fpa_user_prompt": "tampered_up",
         },
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
@@ -852,7 +881,11 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
     assert calls[0]["args"][10] == "strict_fpa"
     assert calls[0]["args"][11] == "ai_first"
     assert calls[0]["args"][12] == "strict_fpa_rs"
-    assert calls[0]["args"][13] == "cautious"
+    assert calls[0]["args"][13] == "auto"
+    assert calls[0]["args"][14] == "strict_fpa_cr"
+    assert calls[0]["args"][15] == "strict_fpa_sp"
+    assert calls[0]["args"][16] == "strict_fpa_up"
+    assert calls[0]["args"][17] == "strict_fpa"
     server.session_manager.cleanup_download(data["session_id"])
 
 
@@ -924,7 +957,7 @@ def test_run_upload_uses_config_defaults_snapshot(monkeypatch, tmp_path):
     assert calls[0]["args"][7] == "https://global.example.test"
     assert calls[0]["args"][9] == "16K"
     assert calls[0]["args"][10] == "strict_fpa"
-    assert calls[0]["args"][11] == "rules_first"
+    assert calls[0]["args"][11] == "ai_first"
     assert calls[0]["args"][12] == "strict_fpa_rs"
     server.session_manager.cleanup_download(resp.json()["session_id"])
 
@@ -962,7 +995,7 @@ def test_run_upload_loads_project_profile_decisions(monkeypatch, tmp_path):
 
     assert resp.status_code == 200
     assert calls
-    assert calls[0]["args"][14] == {
+    assert calls[0]["args"][18] == {
         "merge_query_demo": {"value": "yes", "scope": "project_profile"},
     }
     state = server.session_manager.get(resp.json()["session_id"])
@@ -1030,7 +1063,7 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
     assert calls[0]["profile_name"] == "unified_ui"
     assert calls[0]["strategy"] == "rules_first"
     assert calls[0]["rule_set"] == "unified_ui_rs"
-    assert calls[0]["fpa_confirmation_mode"] == "cautious"
+    assert calls[0]["fpa_confirmation_mode"] == "auto"
     assert calls[0]["confirmed_decisions"] == {"merge_crud_demo": {"value": "yes", "scope": "current_run"}}
 
 
@@ -1130,9 +1163,9 @@ def test_fpa_preview_upload_uses_config_defaults(monkeypatch, tmp_path):
     assert calls[0]["model"] == "personal-model"
     assert calls[0]["base_url"] == "https://global.example.test"
     assert calls[0]["profile_name"] == "strict_fpa"
-    assert calls[0]["strategy"] == "rules_first"
+    assert calls[0]["strategy"] == "ai_first"
     assert calls[0]["rule_set"] == "strict_fpa_rs"
-    assert calls[0]["fpa_confirmation_mode"] == "strict"
+    assert calls[0]["fpa_confirmation_mode"] == "auto"
 
 
 def test_fpa_preview_upload_blocks_without_available_ai_key(monkeypatch):
@@ -1170,7 +1203,16 @@ def test_fpa_preview_rules_only_allows_missing_ai_key(monkeypatch):
 
     resp = client.post(
         "/api/fpa/preview-module",
-        data={"module_name": "垂直行业管理", "fpa_strategy": "rules_only"},
+        data={
+            "module_name": "垂直行业管理",
+            "fpa_profile": "custom_profile",
+            "fpa_strategy": "rules_only",
+            "fpa_rule_set": "strict_fpa_rs",
+            "fpa_core_rules": "strict_fpa_cr",
+            "fpa_system_prompt": "strict_fpa_sp",
+            "fpa_user_prompt": "strict_fpa_up",
+            "fpa_base_profile": "strict_fpa",
+        },
         files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 

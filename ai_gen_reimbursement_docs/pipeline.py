@@ -207,6 +207,10 @@ def run_pipeline(
     fpa_strategy: str = "",
     fpa_rule_set: str = "",
     fpa_confirmation_mode: str = "",
+    fpa_core_rules: str = "",
+    fpa_system_prompt: str = "",
+    fpa_user_prompt: str = "",
+    fpa_base_profile: str = "",
     confirmed_decisions: object | None = None,
     callbacks: PipelineCallbacks | None = None,
 ) -> PipelineResult:
@@ -245,6 +249,10 @@ def run_pipeline(
                 fpa_strategy=fpa_strategy,
                 fpa_rule_set=fpa_rule_set,
                 fpa_confirmation_mode=fpa_confirmation_mode,
+                fpa_core_rules=fpa_core_rules,
+                fpa_system_prompt=fpa_system_prompt,
+                fpa_user_prompt=fpa_user_prompt,
+                fpa_base_profile=fpa_base_profile,
                 confirmed_decisions=confirmed_decisions,
             )
         except Exception as exc:
@@ -363,6 +371,7 @@ def run_pipeline(
             templates_dict, api_key, model, base_url, project_name, result,
             fpa_reduced, cfp_total,
             fpa_profile, fpa_strategy, fpa_rule_set, fpa_confirmation_mode,
+            fpa_core_rules, fpa_system_prompt, fpa_user_prompt, fpa_base_profile,
             confirmed_decisions,
         )
     elif mode == "gen-basedata":
@@ -374,6 +383,7 @@ def run_pipeline(
             file_path, output_dir, md_dir, tree_md, meta_md, fpa_sum_md, fpa_xlsx,
             templates_dict, api_key, model, base_url, result, fpa_profile,
             fpa_strategy, fpa_rule_set, fpa_confirmation_mode,
+            fpa_core_rules, fpa_system_prompt, fpa_user_prompt, fpa_base_profile,
             confirmed_decisions,
         )
     elif mode == "gen-cosmic":
@@ -613,6 +623,7 @@ def _check_template(templates_dict: dict, key: str, name: str):
 def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
              fpa_sum_md, fpa_xlsx, templates_dict, api_key, model, base_url, result,
              fpa_profile="", fpa_strategy="", fpa_rule_set="", fpa_confirmation_mode="",
+             fpa_core_rules="", fpa_system_prompt="", fpa_user_prompt="", fpa_base_profile="",
              confirmed_decisions=None):
     """第1步：FPA 工作量评估。"""
     _check_cancelled()
@@ -628,6 +639,10 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
         fpa_profile or load_fpa_profile(),
         fpa_strategy,
         fpa_rule_set,
+        core_rules=fpa_core_rules,
+        system_prompt=fpa_system_prompt,
+        user_prompt=fpa_user_prompt,
+        base_profile=fpa_base_profile,
     )
     profile_name = execution.profile.name
     init_fpa_template_md(
@@ -653,6 +668,10 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
             profile_name=profile_name,
             strategy=execution.strategy,
             rule_set=execution.rule_set,
+            core_rules=execution.core_rules,
+            system_prompt=execution.system_prompt,
+            user_prompt=execution.user_prompt,
+            base_profile=execution.base_profile,
             audit_trace_path=fpa_audit_trace,
             fpa_confirmation_mode=fpa_confirmation_mode,
             confirmed_decisions=confirmed_decisions,
@@ -670,6 +689,9 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
             "profile": execution.profile.name,
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
+            "core_rules": execution.core_rules,
+            "system_prompt": execution.system_prompt,
+            "user_prompt": execution.user_prompt,
             "modules": [
                 {
                     "module": _group_tag(group),
@@ -950,7 +972,9 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
              fpa_xlsx, cosmic_xlsx, require_xlsx, spec_docx,
              templates_dict, api_key, model, base_url, project_name, result,
              fpa_reduced=None, cfp_total=None, fpa_profile="", fpa_strategy="",
-             fpa_rule_set="", fpa_confirmation_mode="", confirmed_decisions=None):
+             fpa_rule_set="", fpa_confirmation_mode="", fpa_core_rules="",
+             fpa_system_prompt="", fpa_user_prompt="", fpa_base_profile="",
+             confirmed_decisions=None):
     """全流程：basedata → fpa → spec → cosmic → list（委托独立函数按依赖顺序编排）。"""
 
     # 入口检查所有模板（提前发现模板缺失）
@@ -966,7 +990,9 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     result = _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
                            fpa_sum_md, fpa_xlsx, templates_dict, api_key, model,
                            base_url, result, fpa_profile, fpa_strategy,
-                           fpa_rule_set, fpa_confirmation_mode, confirmed_decisions)
+                           fpa_rule_set, fpa_confirmation_mode,
+                           fpa_core_rules, fpa_system_prompt, fpa_user_prompt,
+                           fpa_base_profile, confirmed_decisions)
 
     # Step 2: SPEC
     result = _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl,
@@ -1061,6 +1087,10 @@ def run_pipeline_simple(
     fpa_strategy: str = "",
     fpa_rule_set: str = "",
     fpa_confirmation_mode: str = "",
+    fpa_core_rules: str = "",
+    fpa_system_prompt: str = "",
+    fpa_user_prompt: str = "",
+    fpa_base_profile: str = "",
     confirmed_decisions: object | None = None,
     callbacks: PipelineCallbacks | None = None,
 ) -> PipelineResult:
@@ -1115,6 +1145,10 @@ def run_pipeline_simple(
         fpa_strategy=fpa_strategy,
         fpa_rule_set=fpa_rule_set,
         fpa_confirmation_mode=fpa_confirmation_mode,
+        fpa_core_rules=fpa_core_rules,
+        fpa_system_prompt=fpa_system_prompt,
+        fpa_user_prompt=fpa_user_prompt,
+        fpa_base_profile=fpa_base_profile,
         confirmed_decisions=confirmed_decisions,
         callbacks=callbacks,
     )

@@ -48,6 +48,7 @@ from ai_gen_reimbursement_docs.fpa_profiles import (
     get_fpa_profile,
     group_tag as _group_tag,
     module_change_status as _module_change_status,
+    render_configured_fpa_prompt_by_keys,
     reset_current_fpa_rule_set_config,
     resolve_fpa_execution_config,
     set_current_fpa_rule_set_config,
@@ -156,6 +157,9 @@ class FpaPromptContext:
     system_prompt: str
     user_prompt: str
     core_rules: str
+    core_rules_key: str
+    system_prompt_key: str
+    user_prompt_key: str
     core_rules_source: str
     system_prompt_source: str
     user_prompt_source: str
@@ -169,6 +173,9 @@ class FpaAuditReport:
     profile_version: str
     strategy: str
     rule_set: str
+    core_rules: str
+    system_prompt: str
+    user_prompt: str
     module: dict[str, object]
     process_total: int
     covered_processes: list[str]
@@ -187,6 +194,9 @@ class FpaAuditReport:
             "profile_version": self.profile_version,
             "strategy": self.strategy,
             "rule_set": self.rule_set,
+            "core_rules": self.core_rules,
+            "system_prompt": self.system_prompt,
+            "user_prompt": self.user_prompt,
             "module": self.module,
             "coverage": {
                 "process_total": self.process_total,
@@ -1882,6 +1892,9 @@ def _build_fpa_audit_report(
     profile_version: str,
     strategy: str,
     rule_set: str,
+    core_rules: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
     raw_source: str = "",
     raw_rows: list[object] | None = None,
     raw_warnings: list[str] | None = None,
@@ -1914,6 +1927,9 @@ def _build_fpa_audit_report(
         profile_version=profile_version,
         strategy=strategy,
         rule_set=rule_set,
+        core_rules=core_rules,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
         module=module,
         process_total=len(process_names),
         covered_processes=covered_processes,
@@ -1984,6 +2000,9 @@ def _build_fpa_audit_reports_for_groups(
     profile_version: str,
     strategy: str,
     rule_set: str,
+    core_rules: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
     raw_audit_by_module: dict[int, dict[str, object]] | None = None,
     rule_hits_by_seq: dict[str, list[dict[str, object]]] | None = None,
 ) -> list[FpaAuditReport]:
@@ -2003,6 +2022,9 @@ def _build_fpa_audit_reports_for_groups(
             profile_version=profile_version,
             strategy=strategy,
             rule_set=rule_set,
+            core_rules=core_rules,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             raw_source=str(raw_audit.get("source", "") or ""),
             raw_rows=raw_audit.get("raw_rows", []) if isinstance(raw_audit.get("raw_rows", []), list) else [],
             raw_warnings=raw_warnings if isinstance(raw_warnings, list) else _warning_items(raw_warnings),
@@ -2056,21 +2078,47 @@ def _build_fpa_ai_prompt_context(
     judgement_rules: list[str],
     domain_context: dict[str, object] | None,
     profile: CustomRulesProfile = FPA_PROFILE,
+    *,
+    core_rules_key: str = "",
+    system_prompt_key: str = "",
+    user_prompt_key: str = "",
 ) -> FpaPromptContext:
     from ai_gen_reimbursement_docs.config_utils import (
         load_fpa_core_rules_config,
+        load_fpa_core_rules_config_by_key,
         load_fpa_system_prompt_config,
+        load_fpa_system_prompt_config_by_key,
         load_fpa_user_prompt_config,
+        load_fpa_user_prompt_config_by_key,
     )
 
-    core_rules_config = load_fpa_core_rules_config(profile.name)
-    system_config = load_fpa_system_prompt_config(profile.name)
-    user_config = load_fpa_user_prompt_config(profile.name)
-    prompt = profile.build_prompt(group, judgement_rules, domain_context)
+    if core_rules_key or system_prompt_key or user_prompt_key:
+        if not (core_rules_key and system_prompt_key and user_prompt_key):
+            raise ValueError("自定义 FPA prompt 配置必须同时提供 core_rules、system_prompt 和 user_prompt")
+        core_rules_config = load_fpa_core_rules_config_by_key(core_rules_key)
+        system_config = load_fpa_system_prompt_config_by_key(system_prompt_key)
+        user_config = load_fpa_user_prompt_config_by_key(user_prompt_key)
+        prompt = render_configured_fpa_prompt_by_keys(
+            profile_name=profile.name,
+            profile_kind=profile.agent_review_profile_kind(),
+            core_rules_key=core_rules_key,
+            user_prompt_key=user_prompt_key,
+            group=group,
+            judgement_rules=judgement_rules,
+            domain_context=domain_context,
+        )
+    else:
+        core_rules_config = load_fpa_core_rules_config(profile.name)
+        system_config = load_fpa_system_prompt_config(profile.name)
+        user_config = load_fpa_user_prompt_config(profile.name)
+        prompt = profile.build_prompt(group, judgement_rules, domain_context)
     return FpaPromptContext(
         system_prompt=_append_fpa_json_only_response_constraint(system_config.text),
         user_prompt=prompt,
         core_rules=core_rules_config.text,
+        core_rules_key=core_rules_key,
+        system_prompt_key=system_prompt_key,
+        user_prompt_key=user_prompt_key,
         core_rules_source=core_rules_config.source_label,
         system_prompt_source=system_config.source_label,
         user_prompt_source=user_config.source_label,
@@ -2086,10 +2134,19 @@ def _ai_plan_fpa_rows_for_l3_debug(
     base_url: str,
     profile: CustomRulesProfile = FPA_PROFILE,
     confirmed_decisions: object | None = None,
+    core_rules: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
 ) -> tuple[list[dict[str, object]], dict[str, object]]:
     """调用 AI 规划一个三级模块的 FPA 行，并返回 Web 预览调试信息。"""
     prompt_context = _build_fpa_ai_prompt_context(
-        group, judgement_rules, domain_context, profile
+        group,
+        judgement_rules,
+        domain_context,
+        profile,
+        core_rules_key=core_rules,
+        system_prompt_key=system_prompt,
+        user_prompt_key=user_prompt,
     )
     debug: dict[str, object] = {
         "ai_called": True,
@@ -2520,12 +2577,22 @@ def _plan_fpa_rows_with_ai(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
+    core_rules: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
     rule_set_config: object | None = None,
     audit_trace_path: str = "",
     confirmed_decisions: object | None = None,
     fpa_confirmation_mode: str = "auto",
 ) -> list[dict[str, object]]:
-    execution = resolve_fpa_execution_config(profile.name, strategy, rule_set)
+    execution = resolve_fpa_execution_config(
+        profile.name,
+        strategy,
+        rule_set,
+        core_rules=core_rules,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+    )
     profile = execution.profile
     strategy = execution.strategy
     rule_set = execution.rule_set
@@ -2543,6 +2610,9 @@ def _plan_fpa_rows_with_ai(
             profile=profile,
             strategy=strategy,
             rule_set=rule_set,
+            core_rules=execution.core_rules,
+            system_prompt=execution.system_prompt,
+            user_prompt=execution.user_prompt,
             rule_set_config=effective_rule_set_config,
             audit_trace_path=audit_trace_path,
             confirmed_decisions=confirmed_decisions,
@@ -2563,6 +2633,9 @@ def _plan_fpa_rows_with_execution(
     profile: CustomRulesProfile = FPA_PROFILE,
     strategy: str = "",
     rule_set: str = "",
+    core_rules: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
     rule_set_config: object | None = None,
     audit_trace_path: str = "",
     confirmed_decisions: object | None = None,
@@ -2614,6 +2687,9 @@ def _plan_fpa_rows_with_execution(
             "profile": profile.name,
             "strategy": strategy,
             "rule_set": rule_set,
+            "core_rules": core_rules,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
             "modules": audit_modules,
         }
         audit_trace["stability_report"] = build_fpa_stability_report(audit_trace)
@@ -2748,7 +2824,13 @@ def _plan_fpa_rows_with_execution(
             continue
 
         prompt_context = _build_fpa_ai_prompt_context(
-            group, judgement_rules, domain_context, profile
+            group,
+            judgement_rules,
+            domain_context,
+            profile,
+            core_rules_key=core_rules,
+            system_prompt_key=system_prompt,
+            user_prompt_key=user_prompt,
         )
         cache_key = _fpa_ai_cache_key(
             group, judgement_rules, domain_context, model,
@@ -3148,6 +3230,9 @@ def _plan_fpa_rows_with_execution(
         "profile": profile.name,
         "strategy": strategy,
         "rule_set": rule_set,
+        "core_rules": core_rules,
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
         "modules": audit_modules,
     }
     audit_trace["stability_report"] = build_fpa_stability_report(audit_trace)
@@ -3401,6 +3486,7 @@ FPA_CHECK_DEFAULT_COLUMNS: dict[str, list[str]] = {
         "计算依据说明", "变更状态", "调整值", "要素数量", "生成方式", "类型理由",
         "源功能过程", "后处理警告", "复杂度", "DET", "RET", "FTR", "复杂度说明",
         "调整值计算方式", "profile", "strategy", "rule_set",
+        "core_rules", "system_prompt", "user_prompt",
     ],
     "覆盖审核": [
         "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
@@ -3411,6 +3497,7 @@ FPA_CHECK_DEFAULT_COLUMNS: dict[str, list[str]] = {
     "规则命中详情": [
         "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
         "FPA行序号", "功能点名称", "生成方式", "rule_set",
+        "core_rules", "system_prompt", "user_prompt",
         "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
     ],
     "AI原始返回": ["模块", "三级模块", "来源", "Warnings", "AI原始Rows JSON"],
@@ -3508,6 +3595,9 @@ def generate_fpa_check_xlsx_from_md(
         profile_version=profile.version,
         strategy=execution_meta.get("strategy", ""),
         rule_set=execution_meta.get("rule_set", ""),
+        core_rules=execution_meta.get("core_rules", ""),
+        system_prompt=execution_meta.get("system_prompt", ""),
+        user_prompt=execution_meta.get("user_prompt", ""),
         raw_audit_by_module=raw_audit_by_module_idx,
         rule_hits_by_seq=rule_hits_by_seq,
     )
@@ -3543,6 +3633,9 @@ def generate_fpa_check_xlsx_from_md(
             "profile": execution_meta.get("profile", ""),
             "strategy": execution_meta.get("strategy", ""),
             "rule_set": execution_meta.get("rule_set", ""),
+            "core_rules": execution_meta.get("core_rules", ""),
+            "system_prompt": execution_meta.get("system_prompt", ""),
+            "user_prompt": execution_meta.get("user_prompt", ""),
         })
         for warning in _warning_items(row.get("后处理警告", "")):
             source_rule_id, source_rule_desc = _warning_source_for_row(
@@ -3641,6 +3734,9 @@ def generate_fpa_check_xlsx_from_md(
                 "功能点名称": hit.get("function_point", ""),
                 "生成方式": hit.get("generation", ""),
                 "rule_set": audit_report.rule_set,
+                "core_rules": audit_report.core_rules,
+                "system_prompt": audit_report.system_prompt,
+                "user_prompt": audit_report.user_prompt,
                 "命中对象": hit.get("hit_object", ""),
                 "规则ID": hit.get("rule_id", ""),
                 "规则说明": hit.get("rule_desc", ""),
@@ -3811,6 +3907,10 @@ def plan_fpa_md_from_tree(
     profile_name: str = "",
     strategy: str = "",
     rule_set: str = "",
+    core_rules: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
+    base_profile: str = "",
     audit_trace_path: str = "",
     confirmed_decisions: object | None = None,
     fpa_confirmation_mode: str = "auto",
@@ -3819,8 +3919,15 @@ def plan_fpa_md_from_tree(
     logger.info("第1.3步：AI 规划 FPA 数据...")
     meta = parse_meta_md(meta_md_path)
     rows = parse_module_tree_md(tree_md_path)
-    profile = get_fpa_profile(profile_name)
-    execution = resolve_fpa_execution_config(profile.name, strategy, rule_set)
+    execution = resolve_fpa_execution_config(
+        profile_name,
+        strategy,
+        rule_set,
+        core_rules=core_rules,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        base_profile=base_profile,
+    )
     profile = execution.profile
     judgement_rules = _read_fpa_judgement_rules(template_path)
     if not judgement_rules:
@@ -3839,6 +3946,9 @@ def plan_fpa_md_from_tree(
             profile=profile,
             strategy=execution.strategy,
             rule_set=execution.rule_set,
+            core_rules=execution.core_rules,
+            system_prompt=execution.system_prompt,
+            user_prompt=execution.user_prompt,
             rule_set_config=execution.rule_set_config,
             audit_trace_path=audit_trace_path,
             confirmed_decisions=confirmed_decisions,
@@ -3854,6 +3964,9 @@ def plan_fpa_md_from_tree(
             "profile": execution.profile.name,
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
+            "core_rules": execution.core_rules,
+            "system_prompt": execution.system_prompt,
+            "user_prompt": execution.user_prompt,
         },
     )
     if summary_md_path:
@@ -3990,6 +4103,10 @@ def preview_fpa_module(
     profile_name: str = "",
     strategy: str = "",
     rule_set: str = "",
+    core_rules: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
+    base_profile: str = "",
     fpa_confirmation_mode: str = "auto",
     confirmed_decisions: object | None = None,
     use_preview_cache: bool = False,
@@ -3998,7 +4115,15 @@ def preview_fpa_module(
     """预览单个三级模块的 FPA 规划结果，不生成正式 Excel。"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"功能清单输入文件不存在: {file_path}")
-    execution = resolve_fpa_execution_config(profile_name, strategy, rule_set)
+    execution = resolve_fpa_execution_config(
+        profile_name,
+        strategy,
+        rule_set,
+        core_rules=core_rules,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        base_profile=base_profile,
+    )
     profile = execution.profile
     confirmation_mode = normalize_confirmation_mode(fpa_confirmation_mode or "auto")
     normalized_decisions = normalize_confirmed_decisions(confirmed_decisions or {})
@@ -4085,6 +4210,9 @@ def preview_fpa_module(
                             group, judgement_rules, _build_domain_context(meta), api_key, model, base_url,
                             profile=profile,
                             confirmed_decisions=normalized_decisions,
+                            core_rules=execution.core_rules,
+                            system_prompt=execution.system_prompt,
+                            user_prompt=execution.user_prompt,
                         )
                         debug["reason"] = "rules_first_needs_ai"
                         fpa_rows, warnings = _normalize_ai_fpa_rows_for_l3(
@@ -4131,6 +4259,9 @@ def preview_fpa_module(
                     group, judgement_rules, _build_domain_context(meta), api_key, model, base_url,
                     profile=profile,
                     confirmed_decisions=normalized_decisions,
+                    core_rules=execution.core_rules,
+                    system_prompt=execution.system_prompt,
+                    user_prompt=execution.user_prompt,
                 )
                 fpa_rows, warnings = _normalize_ai_fpa_rows_for_l3(
                     group=group,
@@ -4236,6 +4367,9 @@ def preview_fpa_module(
             profile_version=profile.version,
             strategy=execution.strategy,
             rule_set=execution.rule_set,
+            core_rules=execution.core_rules,
+            system_prompt=execution.system_prompt,
+            user_prompt=execution.user_prompt,
             raw_audit_by_module={
                 1: {
                     "source": raw_source,
@@ -4259,6 +4393,9 @@ def preview_fpa_module(
             "profile_version": profile.version,
             "strategy": execution.strategy,
             "rule_set": execution.rule_set,
+            "core_rules": execution.core_rules,
+            "system_prompt": execution.system_prompt,
+            "user_prompt": execution.user_prompt,
             "audit": audit.to_dict(),
             "preview_md_dir": md_dir,
             "preview_cache_used": cache_used,

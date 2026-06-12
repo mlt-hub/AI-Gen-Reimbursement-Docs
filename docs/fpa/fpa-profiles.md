@@ -190,7 +190,7 @@ ai_only      仅 AI，不用规则兜底补行
 
 ## Web 与 CLI
 
-Web 高级选项和 FPA 预览页会从 `/api/fpa/options` 读取实际配置的 profile。接口返回 profile 的 `name/label/kind/strategy/rule_set`，不会返回内部 prompt 配置 key。
+Web 高级选项和 FPA 预览页会从 `/api/fpa/options` 读取实际配置的 profile。接口返回 profile 的 `name/label/kind/strategy/rule_set/core_rules/system_prompt/user_prompt/editable` 以及可选 key 列表；只返回配置 key，不返回 core rules 或 prompt 正文。
 
 CLI 示例：
 

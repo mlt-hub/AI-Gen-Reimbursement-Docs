@@ -7,6 +7,11 @@ export interface FpaProfileOption {
   kind: string
   strategy: string
   rule_set: string
+  core_rules: string
+  system_prompt: string
+  user_prompt: string
+  confirmation_mode: string
+  editable: boolean
 }
 
 export interface FpaNamedOption {
@@ -25,15 +30,19 @@ export interface FpaOptions {
   confirmation_modes: FpaNamedOption[]
   kinds: FpaNamedOption[]
   rule_sets: FpaRuleSetOption[]
+  core_rules: FpaNamedOption[]
+  system_prompt_sets: FpaNamedOption[]
+  user_prompt_sets: FpaNamedOption[]
 }
 
 const fallbackOptions: FpaOptions = {
   default_profile: 'strict_fpa',
   profiles: [
-    { name: 'strict_fpa', label: '严格 FPA 口径', kind: 'strict_fpa', strategy: 'ai_first', rule_set: 'strict_fpa_rs' },
-    { name: 'unified_ui', label: '统一界面口径', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'unified_ui_rs' },
-    { name: 'multi_uis', label: '多界面口径', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'multi_uis_rs' },
-    { name: 'ui_api_mapping', label: '界面接口映射口径', kind: 'ui_api_mapping', strategy: 'rules_first', rule_set: 'ui_api_mapping_rs' },
+    { name: 'strict_fpa', label: '严格 FPA 口径', kind: 'strict_fpa', strategy: 'ai_first', rule_set: 'strict_fpa_rs', core_rules: 'strict_fpa_cr', system_prompt: 'strict_fpa_sp', user_prompt: 'strict_fpa_up', confirmation_mode: 'auto', editable: false },
+    { name: 'unified_ui', label: '统一界面口径', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'unified_ui_rs', core_rules: 'unified_ui_cr', system_prompt: 'unified_ui_sp', user_prompt: 'unified_ui_up', confirmation_mode: 'auto', editable: false },
+    { name: 'multi_uis', label: '多界面口径', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'multi_uis_rs', core_rules: 'multi_uis_cr', system_prompt: 'multi_uis_sp', user_prompt: 'multi_uis_up', confirmation_mode: 'auto', editable: false },
+    { name: 'ui_api_mapping', label: '界面接口映射口径', kind: 'ui_api_mapping', strategy: 'rules_first', rule_set: 'ui_api_mapping_rs', core_rules: 'ui_api_mapping_cr', system_prompt: 'ui_api_mapping_sp', user_prompt: 'ui_api_mapping_up', confirmation_mode: 'auto', editable: false },
+    { name: 'custom_profile', label: '自定义 FPA 方案', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'unified_ui_rs', core_rules: 'unified_ui_cr', system_prompt: 'unified_ui_sp', user_prompt: 'unified_ui_up', confirmation_mode: 'auto', editable: true },
   ],
   strategies: [
     { name: 'rules_first', label: '规则优先' },
@@ -52,6 +61,9 @@ const fallbackOptions: FpaOptions = {
     { name: 'ui_api_mapping', label: 'ui_api_mapping' },
   ],
   rule_sets: [],
+  core_rules: [],
+  system_prompt_sets: [],
+  user_prompt_sets: [],
 }
 
 const options = ref<FpaOptions | null>(null)
@@ -76,6 +88,9 @@ export function useFpaOptions() {
           confirmation_modes: data.confirmation_modes?.length ? data.confirmation_modes : fallbackOptions.confirmation_modes,
           kinds: data.kinds?.length ? data.kinds : fallbackOptions.kinds,
           rule_sets: data.rule_sets ?? [],
+          core_rules: data.core_rules ?? [],
+          system_prompt_sets: data.system_prompt_sets ?? [],
+          user_prompt_sets: data.user_prompt_sets ?? [],
         }
       })
       .catch(e => {

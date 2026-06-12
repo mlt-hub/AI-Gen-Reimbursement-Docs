@@ -181,6 +181,10 @@ interface RunConfig {
   fpa_profile?: string
   fpa_strategy?: string
   fpa_rule_set?: string
+  fpa_core_rules?: string
+  fpa_system_prompt?: string
+  fpa_user_prompt?: string
+  fpa_base_profile?: string
   fpa_confirmation_mode?: string
   clean?: boolean
   custom_templates_dir?: string
@@ -288,6 +292,10 @@ const runConfigItems = computed(() => {
     { key: 'fpa_profile', label: 'FPA 方案', value: cfg.fpa_profile || '' },
     { key: 'fpa_strategy', label: 'FPA 执行策略', value: cfg.fpa_strategy || '' },
     { key: 'fpa_rule_set', label: 'FPA 规则集', value: cfg.fpa_rule_set || '' },
+    { key: 'fpa_core_rules', label: 'FPA 核心口径', value: cfg.fpa_core_rules || '' },
+    { key: 'fpa_system_prompt', label: 'FPA 系统提示词', value: cfg.fpa_system_prompt || '' },
+    { key: 'fpa_user_prompt', label: 'FPA 用户提示词', value: cfg.fpa_user_prompt || '' },
+    { key: 'fpa_base_profile', label: 'FPA 基准方案', value: cfg.fpa_base_profile || '' },
     { key: 'fpa_confirmation_mode', label: 'FPA 生成模式', value: cfg.fpa_confirmation_mode || '' },
     { key: 'clean', label: '清理输出目录', value: cfg.clean ? '是' : '否' },
   ]

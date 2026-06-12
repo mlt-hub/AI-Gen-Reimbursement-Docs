@@ -109,6 +109,10 @@ RUN_CONFIG_KEYS = (
     "fpa_profile",
     "fpa_strategy",
     "fpa_rule_set",
+    "fpa_core_rules",
+    "fpa_system_prompt",
+    "fpa_user_prompt",
+    "fpa_base_profile",
     "fpa_confirmation_mode",
 )
 
@@ -143,6 +147,7 @@ def create_router(
             global_config_root=global_root,
             user_config_root=user_root,
         )
+        snapshot = _finalize_fpa_task_config(snapshot)
         if (
             not local_mode
             and mode_requires_ai(mode, snapshot.get("fpa_strategy", ""))
@@ -152,6 +157,38 @@ def create_router(
                 400,
                 "未配置可用 API Key。请配置个人 API Key，或联系管理员开启共享系统 API Key。",
             )
+        return snapshot
+
+    def _finalize_fpa_task_config(snapshot: dict) -> dict:
+        from ai_gen_reimbursement_docs.config_utils import load_fpa_profile_entry
+        from ai_gen_reimbursement_docs.fpa_profiles import resolve_fpa_execution_config
+
+        profile_name = str(snapshot.get("fpa_profile") or "").strip()
+        if not profile_name:
+            return snapshot
+        if profile_name == "custom_profile":
+            execution = resolve_fpa_execution_config(
+                profile_name,
+                str(snapshot.get("fpa_strategy") or ""),
+                str(snapshot.get("fpa_rule_set") or ""),
+                core_rules=str(snapshot.get("fpa_core_rules") or ""),
+                system_prompt=str(snapshot.get("fpa_system_prompt") or ""),
+                user_prompt=str(snapshot.get("fpa_user_prompt") or ""),
+                base_profile=str(snapshot.get("fpa_base_profile") or ""),
+            )
+        else:
+            execution = resolve_fpa_execution_config(profile_name)
+            entry = load_fpa_profile_entry(execution.profile.name)
+            snapshot["fpa_core_rules"] = str(entry.get("core_rules") or "")
+            snapshot["fpa_system_prompt"] = str(entry.get("system_prompt") or "")
+            snapshot["fpa_user_prompt"] = str(entry.get("user_prompt") or "")
+            snapshot["fpa_confirmation_mode"] = "auto"
+        snapshot["fpa_strategy"] = execution.strategy
+        snapshot["fpa_rule_set"] = execution.rule_set
+        snapshot["fpa_core_rules"] = execution.core_rules
+        snapshot["fpa_system_prompt"] = execution.system_prompt
+        snapshot["fpa_user_prompt"] = execution.user_prompt
+        snapshot["fpa_base_profile"] = execution.base_profile
         return snapshot
 
     def _resolve_local_xlsx_input(xlsx_path: str) -> Path:
@@ -422,6 +459,10 @@ def create_router(
                     task_config["fpa_strategy"],
                     task_config["fpa_rule_set"],
                     task_config["fpa_confirmation_mode"],
+                    task_config["fpa_core_rules"],
+                    task_config["fpa_system_prompt"],
+                    task_config["fpa_user_prompt"],
+                    task_config["fpa_base_profile"],
                     profile_decisions,
                     clean,
                     task_mode,
@@ -508,6 +549,10 @@ def create_router(
                 task_config["fpa_strategy"],
                 task_config["fpa_rule_set"],
                 task_config["fpa_confirmation_mode"],
+                task_config["fpa_core_rules"],
+                task_config["fpa_system_prompt"],
+                task_config["fpa_user_prompt"],
+                task_config["fpa_base_profile"],
                 profile_decisions,
                 clean,
                 task_mode,
@@ -534,6 +579,9 @@ def create_router(
             cfg = load_fpa_config()
             profiles = cfg.get("profiles", {})
             rule_sets = cfg.get("rule_sets", {})
+            core_rules = cfg.get("core_rules", {})
+            system_prompt_sets = cfg.get("system_prompt_sets", {})
+            user_prompt_sets = cfg.get("user_prompt_sets", {})
             if not isinstance(profiles, dict) or not isinstance(rule_sets, dict):
                 raise ValueError("FPA 配置结构无效")
 
@@ -548,7 +596,25 @@ def create_router(
                     "kind": str(entry.get("kind") or ""),
                     "strategy": str(entry.get("strategy") or ""),
                     "rule_set": str(entry.get("rule_set") or ""),
+                    "core_rules": str(entry.get("core_rules") or ""),
+                    "system_prompt": str(entry.get("system_prompt") or ""),
+                    "user_prompt": str(entry.get("user_prompt") or ""),
+                    "confirmation_mode": "auto",
+                    "editable": False,
                 })
+            first_profile = profile_options[0] if profile_options else {}
+            profile_options.append({
+                "name": "custom_profile",
+                "label": "自定义 FPA 方案",
+                "kind": str(first_profile.get("kind") or ""),
+                "strategy": str(first_profile.get("strategy") or ""),
+                "rule_set": str(first_profile.get("rule_set") or ""),
+                "core_rules": str(first_profile.get("core_rules") or ""),
+                "system_prompt": str(first_profile.get("system_prompt") or ""),
+                "user_prompt": str(first_profile.get("user_prompt") or ""),
+                "confirmation_mode": "auto",
+                "editable": True,
+            })
 
             rule_set_options = []
             for name, entry in rule_sets.items():
@@ -580,6 +646,18 @@ def create_router(
                 ],
                 "kinds": [{"name": name, "label": name} for name in sorted(VALID_FPA_PROFILE_KINDS)],
                 "rule_sets": rule_set_options,
+                "core_rules": [
+                    {"name": str(name), "label": str(name)}
+                    for name in (core_rules if isinstance(core_rules, dict) else {})
+                ],
+                "system_prompt_sets": [
+                    {"name": str(name), "label": str(name)}
+                    for name in (system_prompt_sets if isinstance(system_prompt_sets, dict) else {})
+                ],
+                "user_prompt_sets": [
+                    {"name": str(name), "label": str(name)}
+                    for name in (user_prompt_sets if isinstance(user_prompt_sets, dict) else {})
+                ],
             }
         except Exception as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -802,6 +880,10 @@ def create_router(
         fpa_profile: str = Form(""),
         fpa_strategy: str = Form(""),
         fpa_rule_set: str = Form(""),
+        fpa_core_rules: str = Form(""),
+        fpa_system_prompt: str = Form(""),
+        fpa_user_prompt: str = Form(""),
+        fpa_base_profile: str = Form(""),
         fpa_confirmation_mode: str = Form(""),
         clean: str = Form(""),
         fpa_template: UploadFile | None = File(None),
@@ -832,6 +914,10 @@ def create_router(
                 fpa_profile=fpa_profile,
                 fpa_strategy=fpa_strategy,
                 fpa_rule_set=fpa_rule_set,
+                fpa_core_rules=fpa_core_rules,
+                fpa_system_prompt=fpa_system_prompt,
+                fpa_user_prompt=fpa_user_prompt,
+                fpa_base_profile=fpa_base_profile,
                 fpa_confirmation_mode=fpa_confirmation_mode,
             ),
             local_mode=True,
@@ -912,6 +998,10 @@ def create_router(
                 task_config["fpa_strategy"],
                 task_config["fpa_rule_set"],
                 task_config["fpa_confirmation_mode"],
+                task_config["fpa_core_rules"],
+                task_config["fpa_system_prompt"],
+                task_config["fpa_user_prompt"],
+                task_config["fpa_base_profile"],
                 profile_decisions,
                 bool(clean),
                 mode,
@@ -935,6 +1025,10 @@ def create_router(
         fpa_profile: str = Form(""),
         fpa_strategy: str = Form(""),
         fpa_rule_set: str = Form(""),
+        fpa_core_rules: str = Form(""),
+        fpa_system_prompt: str = Form(""),
+        fpa_user_prompt: str = Form(""),
+        fpa_base_profile: str = Form(""),
         fpa_confirmation_mode: str = Form(""),
         clean: str = Form(""),
         fpa_template: UploadFile | None = File(None),
@@ -964,6 +1058,10 @@ def create_router(
                 fpa_profile=fpa_profile,
                 fpa_strategy=fpa_strategy,
                 fpa_rule_set=fpa_rule_set,
+                fpa_core_rules=fpa_core_rules,
+                fpa_system_prompt=fpa_system_prompt,
+                fpa_user_prompt=fpa_user_prompt,
+                fpa_base_profile=fpa_base_profile,
                 fpa_confirmation_mode=fpa_confirmation_mode,
             ),
             local_mode=False,
@@ -1053,6 +1151,10 @@ def create_router(
                 task_config["fpa_strategy"],
                 task_config["fpa_rule_set"],
                 task_config["fpa_confirmation_mode"],
+                task_config["fpa_core_rules"],
+                task_config["fpa_system_prompt"],
+                task_config["fpa_user_prompt"],
+                task_config["fpa_base_profile"],
                 profile_decisions,
                 bool(clean),
                 mode,
@@ -1077,6 +1179,10 @@ def create_router(
         fpa_profile: str = Form(""),
         fpa_strategy: str = Form(""),
         fpa_rule_set: str = Form(""),
+        fpa_core_rules: str = Form(""),
+        fpa_system_prompt: str = Form(""),
+        fpa_user_prompt: str = Form(""),
+        fpa_base_profile: str = Form(""),
         fpa_confirmation_mode: str = Form(""),
         confirmed_decisions: str = Form(""),
         session_id: str = Form(""),
@@ -1118,6 +1224,10 @@ def create_router(
                     fpa_profile=fpa_profile,
                     fpa_strategy=fpa_strategy,
                     fpa_rule_set=fpa_rule_set,
+                    fpa_core_rules=fpa_core_rules,
+                    fpa_system_prompt=fpa_system_prompt,
+                    fpa_user_prompt=fpa_user_prompt,
+                    fpa_base_profile=fpa_base_profile,
                     fpa_confirmation_mode=fpa_confirmation_mode,
                 ),
                 local_mode=local_preview,
@@ -1151,6 +1261,10 @@ def create_router(
                 profile_name=task_config["fpa_profile"],
                 strategy=task_config["fpa_strategy"],
                 rule_set=task_config["fpa_rule_set"],
+                core_rules=task_config["fpa_core_rules"],
+                system_prompt=task_config["fpa_system_prompt"],
+                user_prompt=task_config["fpa_user_prompt"],
+                base_profile=task_config["fpa_base_profile"],
                 fpa_confirmation_mode=task_config["fpa_confirmation_mode"] or "auto",
                 confirmed_decisions=confirmed_decisions_payload,
             )

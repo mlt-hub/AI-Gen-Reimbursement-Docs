@@ -65,6 +65,10 @@ export interface UserSettings {
   fpaProfile: string
   fpaStrategy: string
   fpaRuleSet: string
+  fpaCoreRules: string
+  fpaSystemPrompt: string
+  fpaUserPrompt: string
+  fpaBaseProfile: string
   fpaConfirmationMode: FpaConfirmationMode
   pipelineMode: PipelineMode
   clean: boolean
@@ -91,6 +95,10 @@ export const useConfigStore = defineStore('config', () => {
   const fpaProfile = ref(normalizeFpaProfile(loadStr('fpaProfile', 'strict_fpa')))
   const fpaStrategy = ref(normalizeFpaStrategy(loadStr('fpaStrategy', '')))
   const fpaRuleSet = ref(loadStr('fpaRuleSet', ''))
+  const fpaCoreRules = ref(loadStr('fpaCoreRules', ''))
+  const fpaSystemPrompt = ref(loadStr('fpaSystemPrompt', ''))
+  const fpaUserPrompt = ref(loadStr('fpaUserPrompt', ''))
+  const fpaBaseProfile = ref(normalizeFpaProfile(loadStr('fpaBaseProfile', 'strict_fpa')))
   const fpaConfirmationMode = ref<FpaConfirmationMode>(normalizeFpaConfirmationMode(loadStr('fpaConfirmationMode', 'auto')))
   const clean = ref(loadBool('clean', false))
   const selectedFile = ref<File | null>(null)
@@ -103,6 +111,10 @@ export const useConfigStore = defineStore('config', () => {
   watch(fpaProfile, v => saveStr('fpaProfile', normalizeFpaProfile(v)))
   watch(fpaStrategy, v => saveStr('fpaStrategy', normalizeFpaStrategy(v)))
   watch(fpaRuleSet, v => saveStr('fpaRuleSet', v))
+  watch(fpaCoreRules, v => saveStr('fpaCoreRules', v))
+  watch(fpaSystemPrompt, v => saveStr('fpaSystemPrompt', v))
+  watch(fpaUserPrompt, v => saveStr('fpaUserPrompt', v))
+  watch(fpaBaseProfile, v => saveStr('fpaBaseProfile', normalizeFpaProfile(v)))
   watch(fpaConfirmationMode, v => saveStr('fpaConfirmationMode', normalizeFpaConfirmationMode(v)))
   watch(pipelineMode, v => saveStr('pipelineMode', v))
   watch(clean, v => saveBool('clean', v))
@@ -123,6 +135,10 @@ export const useConfigStore = defineStore('config', () => {
     fpaProfile.value = 'strict_fpa'
     fpaStrategy.value = ''
     fpaRuleSet.value = ''
+    fpaCoreRules.value = ''
+    fpaSystemPrompt.value = ''
+    fpaUserPrompt.value = ''
+    fpaBaseProfile.value = 'strict_fpa'
     fpaConfirmationMode.value = 'auto'
     clean.value = false
     selectedFile.value = null
@@ -138,6 +154,10 @@ export const useConfigStore = defineStore('config', () => {
       fpaProfile: fpaProfile.value,
       fpaStrategy: fpaStrategy.value,
       fpaRuleSet: fpaRuleSet.value,
+      fpaCoreRules: fpaCoreRules.value,
+      fpaSystemPrompt: fpaSystemPrompt.value,
+      fpaUserPrompt: fpaUserPrompt.value,
+      fpaBaseProfile: fpaBaseProfile.value,
       fpaConfirmationMode: fpaConfirmationMode.value,
       pipelineMode: pipelineMode.value,
       clean: clean.value,
@@ -157,6 +177,10 @@ export const useConfigStore = defineStore('config', () => {
       if (data.fpaProfile !== undefined) fpaProfile.value = normalizeFpaProfile(data.fpaProfile)
       if (data.fpaStrategy !== undefined) fpaStrategy.value = normalizeFpaStrategy(data.fpaStrategy)
       if (data.fpaRuleSet !== undefined) fpaRuleSet.value = data.fpaRuleSet
+      if (data.fpaCoreRules !== undefined) fpaCoreRules.value = data.fpaCoreRules
+      if (data.fpaSystemPrompt !== undefined) fpaSystemPrompt.value = data.fpaSystemPrompt
+      if (data.fpaUserPrompt !== undefined) fpaUserPrompt.value = data.fpaUserPrompt
+      if (data.fpaBaseProfile !== undefined) fpaBaseProfile.value = normalizeFpaProfile(data.fpaBaseProfile)
       if (data.fpaConfirmationMode !== undefined) fpaConfirmationMode.value = normalizeFpaConfirmationMode(data.fpaConfirmationMode)
       if (data.pipelineMode !== undefined) pipelineMode.value = data.pipelineMode
       if (data.clean !== undefined) clean.value = data.clean
@@ -169,7 +193,8 @@ export const useConfigStore = defineStore('config', () => {
   const apiKeyForRequest = computed(() => normalizeApiKeyInput(apiKey.value))
 
   return { workMode, backendStatus, pipelineMode, xlsxPath, outputDir, apiKey, apiKeyForRequest, model, baseUrl,
-           maxTokens, projectName, fpaProfile, fpaStrategy, fpaRuleSet, fpaConfirmationMode, clean, selectedFile, isValid, reset,
+           maxTokens, projectName, fpaProfile, fpaStrategy, fpaRuleSet, fpaCoreRules, fpaSystemPrompt, fpaUserPrompt,
+           fpaBaseProfile, fpaConfirmationMode, clean, selectedFile, isValid, reset,
            exportSettings, importSettings }
 })
 

@@ -1153,6 +1153,10 @@ interface OutputTemplateProfileConfig {
   fpa_profile?: string
   fpa_strategy?: string
   fpa_rule_set?: string
+  fpa_core_rules?: string
+  fpa_system_prompt?: string
+  fpa_user_prompt?: string
+  fpa_base_profile?: string
   fpa_confirmation_mode?: string
 }
 
@@ -1505,6 +1509,10 @@ const webRunForm = reactive({
   fpaProfile: '',
   fpaStrategy: '',
   fpaRuleSet: '',
+  fpaCoreRules: '',
+  fpaSystemPrompt: '',
+  fpaUserPrompt: '',
+  fpaBaseProfile: '',
   fpaConfirmationMode: 'auto',
 })
 const webTemplateForm = reactive({
@@ -1645,6 +1653,9 @@ const selectedTemplateProfileFpaPolicy = computed(() => {
   const values = [
     selectedTemplateProfile.value?.fpa_rule_set,
     selectedTemplateProfile.value?.fpa_strategy,
+    selectedTemplateProfile.value?.fpa_core_rules,
+    selectedTemplateProfile.value?.fpa_system_prompt,
+    selectedTemplateProfile.value?.fpa_user_prompt,
     selectedTemplateProfile.value?.fpa_confirmation_mode,
   ].filter(Boolean)
   return values.length ? values.join(' / ') : '未配置'
@@ -2561,6 +2572,10 @@ function applyWebConfigToForm(data: WebConfigResponse) {
   webRunForm.fpaProfile = fieldValue(data.run_defaults.fpa_profile) || 'strict_fpa'
   webRunForm.fpaStrategy = fieldValue(data.run_defaults.fpa_strategy)
   webRunForm.fpaRuleSet = fieldValue(data.run_defaults.fpa_rule_set)
+  webRunForm.fpaCoreRules = fieldValue(data.run_defaults.fpa_core_rules)
+  webRunForm.fpaSystemPrompt = fieldValue(data.run_defaults.fpa_system_prompt)
+  webRunForm.fpaUserPrompt = fieldValue(data.run_defaults.fpa_user_prompt)
+  webRunForm.fpaBaseProfile = fieldValue(data.run_defaults.fpa_base_profile)
   webRunForm.fpaConfirmationMode = fieldValue(data.run_defaults.fpa_confirmation_mode) || 'auto'
   webTemplateForm.outTemplatesJson = JSON.stringify(data.templates.out_templates.value || {}, null, 2)
   webTemplateForm.activeProfile = String(data.templates.active_output_template_profile?.value || '')
@@ -2620,6 +2635,10 @@ async function saveRunDefaults() {
       fpa_profile: { value: webRunForm.fpaProfile },
       fpa_strategy: { value: webRunForm.fpaStrategy },
       fpa_rule_set: { value: webRunForm.fpaRuleSet },
+      fpa_core_rules: { value: webRunForm.fpaCoreRules },
+      fpa_system_prompt: { value: webRunForm.fpaSystemPrompt },
+      fpa_user_prompt: { value: webRunForm.fpaUserPrompt },
+      fpa_base_profile: { value: webRunForm.fpaBaseProfile },
       fpa_confirmation_mode: { value: webRunForm.fpaConfirmationMode },
     },
   }, '运行默认值保存成功')
@@ -2650,6 +2669,10 @@ async function saveTemplateSettings() {
       fpa_profile: { value: webRunForm.fpaProfile },
       fpa_strategy: { value: webRunForm.fpaStrategy },
       fpa_rule_set: { value: webRunForm.fpaRuleSet },
+      fpa_core_rules: { value: webRunForm.fpaCoreRules },
+      fpa_system_prompt: { value: webRunForm.fpaSystemPrompt },
+      fpa_user_prompt: { value: webRunForm.fpaUserPrompt },
+      fpa_base_profile: { value: webRunForm.fpaBaseProfile },
       fpa_confirmation_mode: { value: webRunForm.fpaConfirmationMode },
     },
   }, '模板配置保存成功')
@@ -2661,6 +2684,10 @@ function applySelectedTemplateProfileRunDefaults() {
   if (profile.fpa_profile) webRunForm.fpaProfile = profile.fpa_profile
   if (profile.fpa_strategy) webRunForm.fpaStrategy = profile.fpa_strategy
   if (profile.fpa_rule_set) webRunForm.fpaRuleSet = profile.fpa_rule_set
+  if (profile.fpa_core_rules) webRunForm.fpaCoreRules = profile.fpa_core_rules
+  if (profile.fpa_system_prompt) webRunForm.fpaSystemPrompt = profile.fpa_system_prompt
+  if (profile.fpa_user_prompt) webRunForm.fpaUserPrompt = profile.fpa_user_prompt
+  if (profile.fpa_base_profile) webRunForm.fpaBaseProfile = profile.fpa_base_profile
   if (profile.fpa_confirmation_mode) webRunForm.fpaConfirmationMode = profile.fpa_confirmation_mode
 }
 
@@ -2718,6 +2745,10 @@ function applySavedWebConfig(data: WebConfigResponse) {
   configStore.fpaProfile = fieldValue(data.run_defaults.fpa_profile) || 'strict_fpa'
   configStore.fpaStrategy = fieldValue(data.run_defaults.fpa_strategy)
   configStore.fpaRuleSet = fieldValue(data.run_defaults.fpa_rule_set)
+  configStore.fpaCoreRules = fieldValue(data.run_defaults.fpa_core_rules)
+  configStore.fpaSystemPrompt = fieldValue(data.run_defaults.fpa_system_prompt)
+  configStore.fpaUserPrompt = fieldValue(data.run_defaults.fpa_user_prompt)
+  configStore.fpaBaseProfile = fieldValue(data.run_defaults.fpa_base_profile) || 'strict_fpa'
   configStore.fpaConfirmationMode = (fieldValue(data.run_defaults.fpa_confirmation_mode) || 'auto') as any
   applyWebConfigToForm(data)
 }

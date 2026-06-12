@@ -250,11 +250,22 @@ npm run build
 
 - 官方 profile：后端忽略前端传入的细项覆盖值，只按 profile 配置中的绑定解析 `strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`。
 - `custom_profile`：后端使用前端显式提交的 `fpa_strategy`、`fpa_rule_set`、`fpa_core_rules`、`fpa_system_prompt`、`fpa_user_prompt`、`fpa_confirmation_mode`。
+- `custom_profile` 同时提交内部继承字段 `fpa_base_profile`，用于决定自定义运行时复用哪个官方 profile 的行为 kind、审阅口径和兜底逻辑；该字段不是用户直接编辑项。
 - `custom_profile` 缺少任一必填细项时，后端返回明确 400 错误，不静默回退官方 profile。
 - `fpa_core_rules`、`fpa_system_prompt`、`fpa_user_prompt` 必须引用已存在的配置 key，不能直接传大段 prompt 文本。
 - 运行历史 `run_config` 需要保存 profile 和最终细项 key，方便重跑和排错。
 - FPA audit trace 和 check Excel 需要保存同一组最终细项 key：`strategy`、`rule_set`、`core_rules`、`system_prompt`、`user_prompt`、`confirmation_mode`。
 - 生成 check Excel 时必须以 audit trace 或任务最终解析配置为准，不能只回显前端原始提交值；官方 profile 被前端篡改细项时，check Excel 仍展示后端解析后的官方绑定值。
+
+### 实施记录
+
+2026-06-12 已完成第一版闭环：
+
+- `/api/fpa/options` 已返回 profile 绑定值、`editable`、`core_rules/system_prompt_sets/user_prompt_sets` 可选 key 列表，并追加运行时 `custom_profile`。
+- 生成页 `FPA 策略与运行参数` 已新增 `core_rules`、`system_prompt`、`user_prompt` 选择控件；官方 profile 显示绑定值但禁用，`custom_profile` 可编辑。
+- 前端任务启动、FPA 预览、运行默认值和任务详情已纳入 `fpa_core_rules`、`fpa_system_prompt`、`fpa_user_prompt`、`fpa_base_profile`。
+- 后端任务快照会对官方 profile 重新解析绑定值并忽略前端细项覆盖；`custom_profile` 会校验显式 key 并使用 `fpa_base_profile` 继承行为 kind。
+- FPA audit trace 和 `FPA工作量评估-check.xlsx` 默认列已写入最终解析后的 `core_rules`、`system_prompt`、`user_prompt` key。
 
 ### 修改范围
 

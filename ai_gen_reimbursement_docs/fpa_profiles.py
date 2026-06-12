@@ -166,8 +166,13 @@ class FpaExecutionConfig:
     """一次 FPA 执行使用的 profile、策略和规则集。"""
 
     profile: "CustomRulesProfile"
+    requested_profile: str
+    base_profile: str
     strategy: str
     rule_set: str
+    core_rules: str
+    system_prompt: str
+    user_prompt: str
     rule_set_config: "FpaRuleSetConfig"
 
 
@@ -588,6 +593,40 @@ def _render_configured_fpa_prompt(
     prompt_template = Template(template)
     values = {
         "core_rules": configured_core_rules or core_rules,
+        "judgement_rules": _numbered_judgement_rules(judgement_rules),
+        "payload_json": json.dumps(
+            _prompt_payload(group, domain_context, profile_name, profile_kind),
+            ensure_ascii=False,
+            indent=2,
+        ),
+    }
+    if "calculation_explanation_rules" in set(prompt_template.get_identifiers()):
+        values["calculation_explanation_rules"] = load_fpa_calculation_explanation_rules(profile_name).text
+    return prompt_template.substitute(values)
+
+
+def render_configured_fpa_prompt_by_keys(
+    *,
+    profile_name: str,
+    profile_kind: str,
+    core_rules_key: str,
+    user_prompt_key: str,
+    group: dict[str, object],
+    judgement_rules: list[str],
+    domain_context: dict[str, object] | None = None,
+) -> str:
+    """按配置 key 渲染 FPA user prompt，用于 Web/API 运行时自定义 profile。"""
+    import json
+    from ai_gen_reimbursement_docs.config_utils import (
+        load_fpa_calculation_explanation_rules,
+        load_fpa_core_rules_config_by_key,
+        load_fpa_user_prompt_config_by_key,
+    )
+
+    template = load_fpa_user_prompt_config_by_key(user_prompt_key).text
+    prompt_template = Template(template)
+    values = {
+        "core_rules": load_fpa_core_rules_config_by_key(core_rules_key).text,
         "judgement_rules": _numbered_judgement_rules(judgement_rules),
         "payload_json": json.dumps(
             _prompt_payload(group, domain_context, profile_name, profile_kind),
@@ -2272,14 +2311,69 @@ def resolve_fpa_execution_config(
     profile_name: str = "",
     strategy: str = "",
     rule_set: str = "",
+    core_rules: str = "",
+    system_prompt: str = "",
+    user_prompt: str = "",
+    base_profile: str = "",
 ) -> FpaExecutionConfig:
     """统一解析一次 FPA 执行配置。"""
-    profile = get_fpa_profile(profile_name)
+    requested_profile = (profile_name or "").strip()
+    if requested_profile == "custom_profile":
+        from ai_gen_reimbursement_docs.config_utils import (
+            load_fpa_core_rules_config_by_key,
+            load_fpa_profile,
+            load_fpa_system_prompt_config_by_key,
+            load_fpa_user_prompt_config_by_key,
+        )
+
+        inherited_profile = (base_profile or "").strip() or load_fpa_profile()
+        if inherited_profile == "custom_profile":
+            inherited_profile = load_fpa_profile()
+        profile = get_fpa_profile(inherited_profile)
+        resolved_strategy = (strategy or "").strip()
+        if resolved_strategy not in VALID_FPA_STRATEGIES:
+            raise ValueError(f"未知 FPA strategy: {strategy}")
+        resolved_rule_set = (rule_set or "").strip()
+        if not resolved_rule_set:
+            raise ValueError("custom_profile 缺少 fpa_rule_set")
+        resolved_core_rules = (core_rules or "").strip()
+        resolved_system_prompt = (system_prompt or "").strip()
+        resolved_user_prompt = (user_prompt or "").strip()
+        if not resolved_core_rules:
+            raise ValueError("custom_profile 缺少 fpa_core_rules")
+        if not resolved_system_prompt:
+            raise ValueError("custom_profile 缺少 fpa_system_prompt")
+        if not resolved_user_prompt:
+            raise ValueError("custom_profile 缺少 fpa_user_prompt")
+        load_fpa_core_rules_config_by_key(resolved_core_rules)
+        load_fpa_system_prompt_config_by_key(resolved_system_prompt)
+        load_fpa_user_prompt_config_by_key(resolved_user_prompt)
+        rule_set_config = resolve_fpa_rule_set_config(resolved_rule_set)
+        return FpaExecutionConfig(
+            profile=profile,
+            requested_profile="custom_profile",
+            base_profile=profile.name,
+            strategy=resolved_strategy,
+            rule_set=resolved_rule_set,
+            core_rules=resolved_core_rules,
+            system_prompt=resolved_system_prompt,
+            user_prompt=resolved_user_prompt,
+            rule_set_config=rule_set_config,
+        )
+
+    profile = get_fpa_profile(requested_profile)
+    from ai_gen_reimbursement_docs.config_utils import load_fpa_profile_entry
+    profile_entry = load_fpa_profile_entry(profile.name)
     resolved_rule_set = resolve_fpa_rule_set(profile.name, rule_set)
     rule_set_config = resolve_fpa_rule_set_config(resolved_rule_set)
     return FpaExecutionConfig(
         profile=profile,
+        requested_profile=profile.name,
+        base_profile=profile.name,
         strategy=resolve_fpa_strategy(profile.name, strategy),
         rule_set=resolved_rule_set,
+        core_rules=str(profile_entry.get("core_rules") or ""),
+        system_prompt=str(profile_entry.get("system_prompt") or ""),
+        user_prompt=str(profile_entry.get("user_prompt") or ""),
         rule_set_config=rule_set_config,
     )
