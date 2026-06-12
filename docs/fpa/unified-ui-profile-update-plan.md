@@ -11,6 +11,18 @@
 
 本方案记录新的 `unified_ui` profile 目标口径，作为后续配置、规则、测试和文档修改依据。
 
+## 推进状态
+
+截至本轮推进，配置结构、`unified_ui` 类型口径、fallback 命名、配置诊断、核心测试和 profile 文档已经完成落地：
+
+1. `calculation_explanation_rules` 已提升为顶层配置段，默认 profile 已通过 `profiles.<profile>.calculation_explanation_rules` 显式绑定。
+2. `unified_ui` 与 `multi_uis` 已使用统一界面口径的说明规则，`strict_fpa` 保留标准 FPA 结构化证据说明。
+3. `unified_ui_rs` 已将查询/查看类能力按 `ILF` 输出为“逻辑接口开发”，导入按 `EQ` 输出为“导入处理开发”，导出按 `EO` 输出为“导出处理开发”，明确外部边界按 `EIF` 输出为“外部接口联调调用”。
+4. fallback 行命名已从单纯按类型推后缀调整为优先按关键词/业务动作命中规则，再使用对应类型后缀。
+5. 垂直行业管理 golden case 已收敛为单一“查询垂直行业-逻辑接口开发”能力行，避免继续按列表查询和条件查询拆成两条非界面行。
+
+后续已有 `ui_api_mapping` 专项方案对计算依据说明做了差异化增强，因此当前默认配置保留 `ui_api_mapping_workload_eval_ce` 绑定，不再强行回退为与 `unified_ui_ce` 完全一致的 `ui_api_mapping_ce`。`ui_api_mapping_ce` 仍作为通用别名存在，便于自定义 profile 复用统一界面说明口径。
+
 ## 目标行为
 
 `unified_ui` 输出应以三级模块为主要组织粒度，界面类能力合并，非界面能力按业务动作或数据处理能力拆分。

@@ -110,10 +110,12 @@ class TestGenFpa:
         assert rule_hit_headers == [
             "模块序号", "客户端类型", "一级模块", "二级模块", "三级模块",
             "FPA行序号", "功能点名称", "生成方式", "rule_set",
+            "core_rules", "system_prompt", "user_prompt",
             "命中对象", "规则ID", "规则说明", "建议类型", "是否采用", "Warnings",
         ]
         assert ws_rule_hits.max_row > 1
-        rule_ids = [ws_rule_hits.cell(row=row, column=11).value for row in range(2, ws_rule_hits.max_row + 1)]
+        rule_id_column = rule_hit_headers.index("规则ID") + 1
+        rule_ids = [ws_rule_hits.cell(row=row, column=rule_id_column).value for row in range(2, ws_rule_hits.max_row + 1)]
         assert any(rule_id for rule_id in rule_ids)
         assert ws_rule_hits.freeze_panes == "A2"
         assert ws_rule_hits.auto_filter.ref is not None

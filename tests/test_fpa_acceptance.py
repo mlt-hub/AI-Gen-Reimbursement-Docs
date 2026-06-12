@@ -155,7 +155,7 @@ def test_fpa_acceptance_formula_projection_matches_summary_across_type_strategie
         totals[profile_name] = _summary_total(summary_md)
         projections[profile_name] = calculate_fpa_excel_formula_projection(str(fpa_xlsx))
 
-    assert totals == {"unified_ui": 52.0, "strict_fpa": 23.0}
+    assert totals == {"unified_ui": 8.0, "strict_fpa": 23.0}
     assert projections == totals
 
 
@@ -199,9 +199,9 @@ def test_fpa_acceptance_strict_rules_formal_check_workbook_from_golden_case(tmp_
 
     ws_coverage = wb["覆盖审核"]
     coverage_headers = _headers(ws_coverage)
-    assert ws_coverage.cell(2, coverage_headers.index("功能过程总数") + 1).value == 7
+    assert ws_coverage.cell(2, coverage_headers.index("功能过程总数") + 1).value == 6
     assert ws_coverage.cell(2, coverage_headers.index("未覆盖数") + 1).value == 0
-    assert ws_coverage.cell(2, coverage_headers.index("已覆盖数") + 1).value == 7
+    assert ws_coverage.cell(2, coverage_headers.index("已覆盖数") + 1).value == 6
 
     ws_rule_hits = wb["规则命中详情"]
     rule_ids = [

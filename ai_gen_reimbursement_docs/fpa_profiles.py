@@ -1176,22 +1176,13 @@ class CustomRulesProfile:
         return ""
 
     def logic_point_name(self, name: str, desc: str = "") -> str:
-        text = f"{name} {desc}"
         process_rule = self._configured_process_row_planning_rule()
         if process_rule is None or process_rule.enabled is False:
             return name
-        for rule in self._configured_keyword_rules():
-            if not rule.matches(text):
-                continue
-            suffix = process_rule.type_suffixes.get(rule.fpa_type)
-            if suffix:
-                return f"{name}-{suffix}"
-        for rule in self._configured_type_mapping_rules():
-            if not rule.matches(text):
-                continue
-            suffix = process_rule.type_suffixes.get(rule.fpa_type)
-            if suffix:
-                return f"{name}-{suffix}"
+        fpa_type, _ = self.infer_type(name, desc)
+        suffix = process_rule.type_suffixes.get(fpa_type)
+        if suffix:
+            return f"{name}-{suffix}"
         return f"{name}-{process_rule.default_name_suffix}" if process_rule.default_name_suffix else name
 
     def normalize_output_name(self, name: str, desc: str = "") -> str:
