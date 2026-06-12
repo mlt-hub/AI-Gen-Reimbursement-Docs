@@ -300,6 +300,7 @@ const combinedLog = ref('')
 function stateLabel(state: RunState) {
   const map: Record<RunState, string> = {
     idle: '就绪',
+    queued: '排队中',
     running: '运行中',
     done: '完成',
     error: '失败',

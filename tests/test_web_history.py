@@ -72,3 +72,50 @@ def test_history_remote_filters_by_owner(monkeypatch, tmp_path):
     assert resp.status_code == 200
     ids = [item["run_id"] for item in resp.json()["items"]]
     assert ids == ["alice1"]
+
+
+def test_startup_cleanup_cancels_stale_queued_web_runs(monkeypatch, tmp_path):
+    user_db = tmp_path / "user_history.sqlite3"
+    service_db = tmp_path / "service_history.sqlite3"
+    monkeypatch.setattr(run_history_service, "user_history_path", lambda: user_db)
+    monkeypatch.setattr(run_history_service, "service_history_path", lambda base_dir: service_db)
+
+    run_history_service.start_web_run(
+        base_dir=tmp_path,
+        session_id="queued_local",
+        mode="local",
+        task_mode="gen-all",
+        input_path=str(tmp_path / "功能清单.xlsx"),
+        output_dir=str(tmp_path / "out"),
+        run_state="queued",
+    )
+    run_history_service.start_web_run(
+        base_dir=tmp_path,
+        session_id="queued_remote",
+        mode="remote",
+        task_mode="gen-all",
+        input_path=str(tmp_path / "remote.xlsx"),
+        owner_id="alice",
+        owner_label="alice",
+        run_state="queued",
+    )
+
+    count = run_history_service.cancel_stale_queued_web_runs(base_dir=tmp_path)
+
+    assert count == 2
+    local = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id="queued_local",
+        local_mode=True,
+        owner_id="",
+    )
+    remote = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id="queued_remote",
+        local_mode=False,
+        owner_id="alice",
+    )
+    assert local["run_state"] == "cancelled"
+    assert remote["run_state"] == "cancelled"
+    assert "服务重启" in local["error"]
+    assert "服务重启" in remote["error"]

@@ -32,6 +32,8 @@ def start_background_task(
     session_manager: SessionManager,
     session_id: str,
     target: Callable[[], None],
+    *,
+    on_done: Callable[[], None] | None = None,
 ) -> asyncio.Task:
     """启动后台任务并记录其生命周期。"""
     logger = logging.getLogger("ai_gen_reimbursement_docs")
@@ -55,6 +57,9 @@ def start_background_task(
             state = session_manager.get(session_id)
             if state is None or state.task_done_at is None:
                 session_manager.mark_task_finished(session_id)
+        finally:
+            if on_done:
+                on_done()
 
     task.add_done_callback(_record_done)
     return task

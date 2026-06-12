@@ -26,6 +26,7 @@
         </select>
         <select v-model="filters.state" class="field-control w-auto min-w-32" @change="loadHistory">
           <option value="all">全部状态</option>
+          <option value="queued">排队中</option>
           <option value="running">运行中</option>
           <option value="done">完成</option>
           <option value="error">失败</option>
@@ -221,6 +222,7 @@ function projectName(item: HistoryItem) {
 
 function stateLabel(state: string) {
   const map: Record<string, string> = {
+    queued: '排队中',
     running: '运行中',
     done: '完成',
     error: '失败',
@@ -232,6 +234,7 @@ function stateLabel(state: string) {
 
 function stateClass(state: string) {
   if (state === 'done') return 'status-badge--success'
+  if (state === 'queued') return 'status-badge--warning'
   if (state === 'running') return 'status-badge--info'
   if (state === 'error') return 'status-badge--danger'
   if (state === 'cancelled') return 'status-badge--neutral'
@@ -240,11 +243,15 @@ function stateClass(state: string) {
 }
 
 function artifactLabel(item: HistoryItem) {
+  if (item.run_state === 'queued') return '等待运行'
+  if (item.run_state === 'running') return '生成中'
   if (item.artifact_kind === 'remote_zip') return item.download_available ? '下载可用' : '下载已过期'
   return item.open_folder_available ? '目录可用' : '目录不存在'
 }
 
 function unavailableLabel(item: HistoryItem) {
+  if (item.run_state === 'queued') return '等待运行'
+  if (item.run_state === 'running') return '生成中'
   return item.artifact_kind === 'remote_zip' ? '已过期' : '目录不存在'
 }
 

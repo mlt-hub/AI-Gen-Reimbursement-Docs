@@ -21,6 +21,7 @@
         </select>
         <select v-model="filters.state" class="field-control w-auto min-w-32" @change="loadTasks">
           <option value="all">全部状态</option>
+          <option value="queued">排队中</option>
           <option value="running">运行中</option>
           <option value="done">完成</option>
           <option value="error">失败</option>
@@ -56,6 +57,9 @@
             <tr v-for="item in items" :key="item.run_id" class="border-b border-[var(--color-rule)] last:border-b-0">
               <td class="px-4 py-3 align-top">
                 <span :class="['status-badge', stateClass(item.run_state)]">{{ stateLabel(item.run_state) }}</span>
+                <div v-if="item.run_state === 'queued'" class="mt-1 text-xs text-[var(--color-ink-soft)]">
+                  {{ queuePositionText(item) }}
+                </div>
               </td>
               <td class="px-4 py-3 align-top">
                 <div class="font-semibold">{{ item.task_mode || '-' }}</div>
@@ -107,6 +111,14 @@
                     @click="markUnrecoverable(item)"
                   >
                     标记已取消
+                  </button>
+                  <button
+                    v-if="item.run_state === 'queued'"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                    :disabled="actionId === item.run_id"
+                    @click="cancelQueued(item)"
+                  >
+                    取消排队
                   </button>
                   <button
                     v-if="canRerun(item)"
@@ -179,6 +191,7 @@ interface TaskItem {
   done_files: DoneFile[]
   run_config?: RunConfig
   session_available?: boolean
+  queue_position?: number | null
 }
 
 interface TasksResponse {
@@ -224,6 +237,7 @@ function projectName(item: TaskItem) {
 
 function stateLabel(state: string) {
   const map: Record<string, string> = {
+    queued: '排队中',
     running: '运行中',
     done: '完成',
     error: '失败',
@@ -234,6 +248,7 @@ function stateLabel(state: string) {
 
 function stateClass(state: string) {
   if (state === 'done') return 'status-badge--success'
+  if (state === 'queued') return 'status-badge--warning'
   if (state === 'running') return 'status-badge--info'
   if (state === 'error') return 'status-badge--danger'
   if (state === 'cancelled') return 'status-badge--neutral'
@@ -241,6 +256,7 @@ function stateClass(state: string) {
 }
 
 function artifactLabel(item: TaskItem) {
+  if (item.run_state === 'queued') return '等待运行'
   if (item.run_state === 'running') return '生成中'
   if (item.artifact_kind === 'remote_zip') return item.download_available ? '下载可用' : '下载已过期'
   return item.open_folder_available ? '目录可用' : '目录不存在'
@@ -260,6 +276,10 @@ function canOpenCosmicPreview(item: TaskItem) {
 
 function canContinue(item: TaskItem) {
   return item.run_state === 'running' && item.session_available
+}
+
+function queuePositionText(item: TaskItem) {
+  return item.queue_position ? `队列位置 ${item.queue_position}` : '已进入等待队列'
 }
 
 function isUnrecoverableRunning(item: TaskItem) {
@@ -311,6 +331,22 @@ async function markUnrecoverable(item: TaskItem) {
   try {
     await apiFetch(`/api/tasks/${item.run_id}/mark-unrecoverable`, { method: 'POST' })
     notice.value = '任务已标记为已取消，可以重新执行'
+    await loadTasks()
+  } catch (err) {
+    error.value = normalizeApiError(err)
+  } finally {
+    actionId.value = ''
+  }
+}
+
+async function cancelQueued(item: TaskItem) {
+  if (!window.confirm('确认取消该排队任务？')) return
+  actionId.value = item.run_id
+  error.value = ''
+  notice.value = ''
+  try {
+    await apiFetch(`/api/cancel/${item.session_id || item.run_id}`, { method: 'POST' })
+    notice.value = '排队任务已取消'
     await loadTasks()
   } catch (err) {
     error.value = normalizeApiError(err)

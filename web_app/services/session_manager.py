@@ -36,6 +36,7 @@ class SessionState:
     task_created_at: datetime | None = None
     task_done_at: datetime | None = None
     last_error: str | None = None
+    queue_position: int | None = None
     done_files: list[dict[str, Any]] = field(default_factory=list)
     progress_steps: dict[str, dict[str, Any]] = field(default_factory=dict)
     log_entries: list[dict[str, Any]] = field(default_factory=list)
@@ -208,7 +209,26 @@ class SessionManager:
                 state.task_created_at = now
                 state.task_done_at = None
                 state.last_error = None
+                state.queue_position = None
                 state.updated_at = now
+
+    def mark_task_queued(self, session_id: str, queue_position: int) -> None:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state:
+                now = _now_utc()
+                state.task_created_at = None
+                state.task_done_at = None
+                state.last_error = None
+                state.queue_position = queue_position
+                state.updated_at = now
+
+    def set_queue_position(self, session_id: str, queue_position: int | None) -> None:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state:
+                state.queue_position = queue_position
+                state.updated_at = _now_utc()
 
     def mark_task_finished(
         self,
@@ -222,7 +242,34 @@ class SessionManager:
                 now = _now_utc()
                 state.task_done_at = now
                 state.last_error = last_error
+                state.queue_position = None
                 state.updated_at = now
+
+    def run_state(self, session_id: str) -> str | None:
+        state = self.get(session_id)
+        if state is None:
+            return None
+        if state.queue_position is not None and state.task_created_at is None and state.task_done_at is None:
+            return "queued"
+        if state.last_error == "cancelled":
+            return "cancelled"
+        if state.last_error:
+            return "error"
+        if state.task_done_at is not None:
+            return "done"
+        if state.task_created_at is not None:
+            return "running"
+        return "queued"
+
+    def running_count(self) -> int:
+        with self._lock:
+            return sum(
+                1
+                for state in self._sessions.values()
+                if state.task_created_at is not None
+                and state.task_done_at is None
+                and not state.last_error
+            )
 
     def set_done_files(self, session_id: str, files: list[dict[str, Any]]) -> None:
         with self._lock:

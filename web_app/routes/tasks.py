@@ -17,6 +17,7 @@ from ai_gen_reimbursement_docs.auth import user_config_dir
 from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
     config_dir,
+    max_concurrent_tasks,
     mode_requires_ai,
     read_config,
     read_config_from_dir,
@@ -31,9 +32,12 @@ from web_app.services.fpa_project_profile_service import (
     serialize_decisions,
 )
 from web_app.services.run_history_service import (
+    cancel_web_run,
     close_history_item,
+    fail_web_run,
     finish_web_run,
     list_tasks,
+    mark_web_run_started,
     mark_unrecoverable_history_item,
     require_rerunnable_history_item,
     start_web_run,
@@ -45,6 +49,7 @@ from web_app.services.task_runner import (
     execute_in_session,
     start_background_task,
 )
+from web_app.services.task_queue import QueuedTask, TaskQueue
 from web_app.services.template_service import (
     build_templates_dict,
     save_custom_templates,
@@ -52,7 +57,9 @@ from web_app.services.template_service import (
 )
 
 
-def _session_run_state(state) -> Literal["running", "done", "error", "cancelled"]:
+def _session_run_state(state) -> Literal["queued", "running", "done", "error", "cancelled"]:
+    if state.queue_position is not None and state.task_created_at is None and state.task_done_at is None:
+        return "queued"
     if state.last_error == "cancelled":
         return "cancelled"
     if state.last_error:
@@ -69,6 +76,7 @@ def _session_status_payload(session_id: str, state) -> dict:
         "session_id": session_id,
         "mode": state.mode,
         "run_state": _session_run_state(state),
+        "queue_position": state.queue_position,
         "output_dir": str(output_dir) if output_dir else "",
         "has_zip": bool(zip_path and zip_path.exists()),
         "done_files": state.done_files,
@@ -125,6 +133,21 @@ def create_router(
     base_dir: Path,
 ) -> APIRouter:
     router = APIRouter()
+
+    def _start_queued_background_task(sm, sid, target, *, on_done=None):
+        try:
+            return start_background_task(sm, sid, target, on_done=on_done)
+        except TypeError:
+            task = start_background_task(sm, sid, target)
+            if on_done:
+                on_done()
+            return task
+
+    task_queue = TaskQueue(
+        session_manager=session_manager,
+        max_concurrent_tasks=max_concurrent_tasks,
+        start_fn=_start_queued_background_task,
+    )
 
     def _explicit_task_config(**values: str) -> dict[str, str]:
         return {key: value for key, value in values.items() if str(value or "").strip()}
@@ -382,6 +405,72 @@ def create_router(
         local = is_local_mode(request)
         return local, "" if local else (user or get_auth_user(request) or "")
 
+    def _safe_output_segment(value: str) -> str:
+        import re
+
+        cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", value or "").strip(" ._")
+        return cleaned or "task"
+
+    def _project_or_input_name(*, task_config: dict, input_path: Path) -> str:
+        project_name = str(task_config.get("project_name") or "").strip()
+        if project_name:
+            return project_name
+        return input_path.stem or "task"
+
+    def _local_session_output_dir(
+        *,
+        output_root: Path,
+        task_config: dict,
+        input_path: Path,
+        session_id: str,
+    ) -> Path:
+        segment = _safe_output_segment(
+            _project_or_input_name(task_config=task_config, input_path=input_path)
+        )
+        target = output_root / f"{segment}_{session_id}"
+        if target.exists():
+            raise HTTPException(400, f"目标输出目录已存在: {target}")
+        target.mkdir(parents=True)
+        return target
+
+    def _queue_task(
+        *,
+        session_id: str,
+        mode: Literal["local", "remote"],
+        owner: str,
+        target,
+    ) -> dict:
+        result = task_queue.submit(
+            QueuedTask(
+                session_id=session_id,
+                mode=mode,
+                owner=owner,
+                target=target,
+                on_started=lambda: mark_web_run_started(
+                    base_dir=base_dir,
+                    session_id=session_id,
+                    mode=mode,
+                ),
+                on_cancelled=lambda message: cancel_web_run(
+                    base_dir=base_dir,
+                    session_id=session_id,
+                    mode=mode,
+                    error=message,
+                ),
+                on_failed_to_start=lambda message: fail_web_run(
+                    base_dir=base_dir,
+                    session_id=session_id,
+                    mode=mode,
+                    error=message,
+                ),
+            )
+        )
+        return {
+            "session_id": session_id,
+            "run_state": result["run_state"],
+            "queue_position": result["queue_position"],
+        }
+
     def _start_rerun(record: dict, *, local_mode: bool, user: str) -> dict:
         mode = str(record.get("mode") or "")
         task_mode = str(record.get("task_mode") or "")
@@ -405,8 +494,15 @@ def create_router(
         clean = _rerun_clean(record)
 
         if mode == "local":
-            output_dir = Path(str(record.get("output_dir") or input_path.parent))
-            output_dir.mkdir(parents=True, exist_ok=True)
+            previous_output_dir = Path(str(record.get("output_dir") or ""))
+            output_root = previous_output_dir.parent if previous_output_dir else input_path.parent
+            output_root.mkdir(parents=True, exist_ok=True)
+            output_dir = _local_session_output_dir(
+                output_root=output_root,
+                task_config=task_config,
+                input_path=input_path,
+                session_id=session_id,
+            )
             profile_root = _profile_config_root(local_mode=True)
             profile_decisions = _load_profile_decision_payload(profile_root)
             session_manager.create(
@@ -427,6 +523,7 @@ def create_router(
                     clean=clean,
                     custom_t_dir=custom_templates_dir,
                 ),
+                run_state="queued",
             )
 
             def run_local_rerun():
@@ -471,8 +568,13 @@ def create_router(
                     on_finish=_finish,
                 )
 
-            start_background_task(session_manager, session_id, run_local_rerun)
-            return {"session_id": session_id, "mode": "local", "output_dir": str(output_dir)}
+            queued = _queue_task(
+                session_id=session_id,
+                mode="local",
+                owner="",
+                target=run_local_rerun,
+            )
+            return {**queued, "mode": "local", "output_dir": str(output_dir)}
 
         work_dir = Path(tempfile.mkdtemp(prefix=f"ard_web_{session_id}_"))
         input_dir = work_dir / "input"
@@ -508,6 +610,7 @@ def create_router(
                 clean=clean,
                 custom_t_dir=str(custom_t_dir),
             ),
+            run_state="queued",
         )
 
         def run_remote_rerun():
@@ -562,8 +665,13 @@ def create_router(
                 on_finish=_finish,
             )
 
-        start_background_task(session_manager, session_id, run_remote_rerun)
-        return {"session_id": session_id, "mode": "remote", "has_download": True}
+        queued = _queue_task(
+            session_id=session_id,
+            mode="remote",
+            owner=user,
+            target=run_remote_rerun,
+        )
+        return {**queued, "mode": "remote", "has_download": True}
 
     @router.get("/api/fpa/options")
     async def api_fpa_options(user: str = Depends(require_auth)):
@@ -684,13 +792,19 @@ def create_router(
         for item in result["items"]:
             session_id = str(item.get("session_id") or item.get("run_id") or "")
             item["session_available"] = bool(
-                item.get("run_state") == "running"
+                item.get("run_state") in {"queued", "running"}
                 and session_manager.can_access(
                     session_id,
                     owner_id,
                     local_mode=local,
                 )
             )
+            if item.get("run_state") == "queued":
+                item["queue_position"] = task_queue.visible_position(
+                    session_id,
+                    local_mode=local,
+                    owner=owner_id,
+                )
         return result
 
     @router.post("/api/tasks/{run_id}/close")
@@ -772,7 +886,15 @@ def create_router(
         state = session_manager.get(session_id)
         if state is None:
             raise HTTPException(404, "未知会话")
-        return _session_status_payload(session_id, state)
+        payload = _session_status_payload(session_id, state)
+        if payload.get("run_state") == "queued":
+            local, owner_id = _request_scope(request, user)
+            payload["queue_position"] = task_queue.visible_position(
+                session_id,
+                local_mode=local,
+                owner=owner_id,
+            )
+        return payload
 
     @router.get("/api/sessions/{session_id}/logs")
     async def get_session_logs(
@@ -798,6 +920,13 @@ def create_router(
     ):
         """停止指定 session 的执行。"""
         require_session_access(session_manager, session_id, request, user)
+        state = session_manager.get(session_id)
+        if state is not None and _session_run_state(state) == "queued":
+            task_queue.cancel(session_id)
+            return {
+                "ok": True,
+                "run_state": "cancelled",
+            }
         session_manager.cancel(session_id)
         return {"ok": True}
 
@@ -836,6 +965,24 @@ def create_router(
         user: str = Depends(require_auth),
     ):
         require_session_access(session_manager, session, request, user)
+        state = session_manager.get(session)
+        if state is not None and _session_run_state(state) == "queued":
+            async def queued_generate():
+                data = {
+                    "type": "log",
+                    "level": "INFO",
+                    "msg": "任务正在排队，请在详情页等待启动",
+                }
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+            return StreamingResponse(
+                queued_generate(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
         subscription = session_manager.subscribe_log_stream(session)
         if subscription is None:
             raise HTTPException(404, "未知会话")
@@ -901,9 +1048,6 @@ def create_router(
             from_dir = xlsx_path
         xlsx = _resolve_local_xlsx_input(xlsx_path)
 
-        import re
-        from ai_gen_reimbursement_docs.pipeline import _try_read_project_name
-
         task_config = _resolve_task_config_snapshot(
             explicit=_explicit_task_config(
                 api_key=api_key,
@@ -923,29 +1067,21 @@ def create_router(
             local_mode=True,
             mode=mode,
         )
-        project_name = task_config["project_name"]
 
-        if output_dir:
-            out = Path(output_dir)
-        elif project_name:
-            root = Path(from_dir) if from_dir else xlsx.parent
-            safe = re.sub(r'[\/:*?"<>|]', "_", project_name)
-            out = root / safe
-        else:
-            root = Path(from_dir) if from_dir else xlsx.parent
-            auto_name = _try_read_project_name(str(xlsx))
-            if auto_name:
-                safe = re.sub(r'[\/:*?"<>|]', "_", auto_name)
-                out = root / safe
-            else:
-                out = root
-        out.mkdir(parents=True, exist_ok=True)
+        session_id = uuid.uuid4().hex[:8]
+        output_root = Path(output_dir) if output_dir else (Path(from_dir) if from_dir else xlsx.parent)
+        output_root.mkdir(parents=True, exist_ok=True)
+        out = _local_session_output_dir(
+            output_root=output_root,
+            task_config=task_config,
+            input_path=xlsx,
+            session_id=session_id,
+        )
 
         custom_t_dir = await save_custom_templates(
             out, fpa_template, cosmic_template, list_template, spec_template
         )
 
-        session_id = uuid.uuid4().hex[:8]
         profile_root = _profile_config_root(local_mode=True)
         profile_decisions = _load_profile_decision_payload(profile_root)
         session_manager.create(
@@ -966,6 +1102,7 @@ def create_router(
                 clean=bool(clean),
                 custom_t_dir=custom_t_dir,
             ),
+            run_state="queued",
         )
 
         def run():
@@ -1010,8 +1147,13 @@ def create_router(
                 on_finish=_finish,
             )
 
-        start_background_task(session_manager, session_id, run)
-        return {"session_id": session_id, "output_dir": str(out)}
+        queued = _queue_task(
+            session_id=session_id,
+            mode="local",
+            owner="",
+            target=run,
+        )
+        return {**queued, "output_dir": str(out)}
 
     @router.post("/api/run-upload")
     async def api_run_upload(
@@ -1108,6 +1250,7 @@ def create_router(
                 clean=bool(clean),
                 custom_t_dir=str(custom_t_dir),
             ),
+            run_state="queued",
         )
 
         def run():
@@ -1164,8 +1307,13 @@ def create_router(
                 on_finish=_finish,
             )
 
-        start_background_task(session_manager, session_id, run)
-        return {"session_id": session_id, "has_download": True}
+        queued = _queue_task(
+            session_id=session_id,
+            mode="remote",
+            owner=user,
+            target=run,
+        )
+        return {**queued, "has_download": True}
 
     @router.post("/api/fpa/preview-module")
     async def api_preview_fpa_module(

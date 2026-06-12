@@ -262,6 +262,8 @@ import type { StepProgress } from '@/stores/steps.ts'
 interface RunTaskResponse {
   session_id: string
   output_dir?: string
+  run_state: RunState
+  queue_position?: number | null
 }
 
 interface SessionStatusResponse {
@@ -271,6 +273,7 @@ interface SessionStatusResponse {
   output_dir?: string
   done_files?: DoneFile[]
   progress_steps?: Record<string, StepProgress>
+  queue_position?: number | null
 }
 
 interface AiInteraction {
@@ -313,7 +316,14 @@ const FOCUS_HIGHLIGHT_CLASSES = [
   'rounded-lg',
 ]
 
-const runStateLabels = { idle: '就绪', running: '运行中', done: '已完成', error: '出错', cancelled: '已停止' }
+const runStateLabels: Record<RunState, string> = {
+  idle: '就绪',
+  queued: '排队中',
+  running: '运行中',
+  done: '已完成',
+  error: '出错',
+  cancelled: '已停止',
+}
 const runTitle = computed(() => {
   if (session.outputDir) return session.outputDir
   if (!session.sessionId) return '等待任务启动'
@@ -326,6 +336,7 @@ const runStateText = computed(() => {
 const runStateClass = computed(() => {
   const map = {
     idle: 'border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]',
+    queued: 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
     running: 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]',
     done: 'border-[var(--color-success)] bg-[var(--color-success-soft)] text-[var(--color-success)]',
     error: 'border-[var(--color-danger)] bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
@@ -336,6 +347,7 @@ const runStateClass = computed(() => {
 const runDotClass = computed(() => {
   const map = {
     idle: 'bg-[var(--color-ink-soft)]',
+    queued: 'bg-[var(--color-warning)]',
     running: 'bg-[var(--color-accent)]',
     done: 'bg-[var(--color-success)]',
     error: 'bg-[var(--color-danger)]',
@@ -518,10 +530,15 @@ async function startTask() {
 
   try {
     const data = await apiFetch<RunTaskResponse>(url, { method: 'POST', body })
-    session.start(data.session_id, data.output_dir || '')
+    session.start(data.session_id, data.output_dir || '', data.run_state)
     startupError.value = null
     localStorage.setItem(LAST_SESSION_KEY, data.session_id)
-    log.connect(data.session_id)
+    if (data.run_state === 'queued') {
+      const position = data.queue_position ? `，当前位置 ${data.queue_position}` : ''
+      log.append({ level: 'INFO', msg: `任务已进入等待队列${position}`, time: '' })
+    } else {
+      log.connect(data.session_id)
+    }
   } catch (e) {
     const msg = normalizeApiError(e)
     startupError.value = {
@@ -558,7 +575,10 @@ async function restoreSessionById(sid: string, options: { explicit?: boolean } =
     steps.applySnapshot(data.progress_steps)
     log.clear()
     localStorage.setItem(LAST_SESSION_KEY, data.session_id)
-    if (data.run_state === 'running') {
+    if (data.run_state === 'queued') {
+      const position = data.queue_position ? `，当前位置 ${data.queue_position}` : ''
+      log.append({ level: 'INFO', msg: `已恢复排队中的任务${position}`, time: '' })
+    } else if (data.run_state === 'running') {
       log.append({ level: 'INFO', msg: '已恢复正在运行的任务，继续接收后续日志', time: '' })
       log.connect(data.session_id)
     } else if (data.run_state === 'done') {

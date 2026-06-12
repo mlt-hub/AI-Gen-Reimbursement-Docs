@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from ai_gen_reimbursement_docs.run_history import (
+    connect,
     get_run,
+    init_db,
     list_runs,
     now_iso,
     service_history_path,
@@ -85,10 +87,12 @@ def start_web_run(
     owner_label: str = "",
     output_dir: str = "",
     run_config: dict[str, Any] | None = None,
+    run_state: str = "running",
 ) -> None:
     now = now_iso()
     path = _history_path(base_dir=base_dir, mode=mode)
     input_name = Path(input_path).name
+    state = run_state if run_state in {"queued", "running"} else "running"
     try:
         upsert_run(
             {
@@ -99,13 +103,13 @@ def start_web_run(
                 "owner_id": owner_id if mode == "remote" else "",
                 "owner_label": owner_label if mode == "remote" else "",
                 "task_mode": task_mode,
-                "run_state": "running",
+                "run_state": state,
                 "input_name": input_name,
                 "input_path": input_path,
                 "output_dir": output_dir if mode == "local" else "",
                 "artifact_kind": "remote_zip" if mode == "remote" else "local_dir",
                 "created_at": now,
-                "started_at": now,
+                "started_at": now if state == "running" else "",
                 "updated_at": now,
                 "run_config": run_config or {},
             },
@@ -113,6 +117,78 @@ def start_web_run(
         )
     except Exception as exc:
         logger.warning("运行历史写入失败: %s", exc)
+
+
+def mark_web_run_started(
+    *,
+    base_dir: Path,
+    session_id: str,
+    mode: str,
+) -> None:
+    now = now_iso()
+    path = _history_path(base_dir=base_dir, mode=mode)
+    try:
+        updated = update_run_state(
+            session_id,
+            path,
+            run_state="running",
+            error="",
+            updated_at=now,
+        )
+        if updated is None:
+            return
+        init_db(path)
+        with connect(path) as conn:
+            conn.execute(
+                "UPDATE run_history SET started_at = ? WHERE run_id = ?",
+                (now, session_id),
+            )
+    except Exception as exc:
+        logger.warning("运行历史启动状态更新失败: %s", exc)
+
+
+def cancel_web_run(
+    *,
+    base_dir: Path,
+    session_id: str,
+    mode: str,
+    error: str = "cancelled",
+) -> None:
+    now = now_iso()
+    path = _history_path(base_dir=base_dir, mode=mode)
+    try:
+        update_run_state(
+            session_id,
+            path,
+            run_state="cancelled",
+            error=error,
+            finished_at=now,
+            updated_at=now,
+        )
+    except Exception as exc:
+        logger.warning("运行历史取消状态更新失败: %s", exc)
+
+
+def fail_web_run(
+    *,
+    base_dir: Path,
+    session_id: str,
+    mode: str,
+    error: str,
+) -> None:
+    now = now_iso()
+    path = _history_path(base_dir=base_dir, mode=mode)
+    try:
+        update_run_state(
+            session_id,
+            path,
+            run_state="error",
+            error=error,
+            finished_at=now,
+            updated_at=now,
+        )
+    except Exception as exc:
+        logger.warning("运行历史失败状态更新失败: %s", exc)
 
 
 def finish_web_run(
@@ -265,6 +341,36 @@ def list_tasks(
         offset=offset,
     )
     return {"items": items}
+
+
+def cancel_stale_queued_web_runs(*, base_dir: Path) -> int:
+    message = "服务重启，排队任务已取消"
+    total = 0
+    for path in (user_history_path(), service_history_path(base_dir)):
+        try:
+            while True:
+                items = list_runs(
+                    path,
+                    filters={"source": "web", "run_state": "queued"},
+                    limit=200,
+                    offset=0,
+                )
+                if not items:
+                    break
+                for item in items:
+                    now = now_iso()
+                    if update_run_state(
+                        str(item.get("run_id") or ""),
+                        path,
+                        run_state="cancelled",
+                        error=message,
+                        finished_at=now,
+                        updated_at=now,
+                    ) is not None:
+                        total += 1
+        except Exception as exc:
+            logger.warning("清理遗留排队任务失败: %s", exc)
+    return total
 
 
 def get_history_item(

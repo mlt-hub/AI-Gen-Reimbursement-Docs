@@ -261,6 +261,22 @@ def remote_session_retention_seconds(default: int = 24 * 3600) -> int:
     return int(days * 24 * 3600) if days > 0 else default
 
 
+def max_concurrent_tasks(default: int = 1) -> int:
+    """读取 Web 后台任务并发上限，非法配置按 1 处理。"""
+    system_config = read_config().get("_system", {})
+    web_config = system_config.get("web", {})
+    value = None
+    if isinstance(web_config, dict):
+        value = web_config.get("max_concurrent_tasks")
+    if value is None:
+        value = system_config.get("web.max_concurrent_tasks")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return max(1, default)
+    return parsed if parsed >= 1 else max(1, default)
+
+
 def _mask_env_text(text: str) -> str:
     sensitive_keys = re.compile(
         r'^(.*_(?:KEY|SECRET|TOKEN|PASSWORD)\s*=)(.+)$',

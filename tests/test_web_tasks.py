@@ -561,17 +561,155 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     assert resp.status_code == 200
     data = resp.json()
     state = server.session_manager.get(data["session_id"])
-    assert data["output_dir"] == str(output_dir)
+    actual_output_dir = Path(data["output_dir"])
+    assert data["run_state"] == "running"
+    assert data["queue_position"] is None
+    assert actual_output_dir.parent == output_dir
+    assert actual_output_dir.name.startswith("功能清单_")
     assert state is not None
     assert state.mode == "local"
-    assert state.output_dir == output_dir
+    assert state.output_dir == actual_output_dir
     assert state.task_created_at is not None
     assert calls
+    assert Path(calls[0]["args"][3]) == actual_output_dir
     assert calls[0]["args"][10] == "strict_fpa"
     assert calls[0]["args"][11] == "ai_first"
     assert calls[0]["args"][12] == "strict_fpa_rs"
     assert calls[0]["args"][13] == "auto"
     server.session_manager.cleanup_download(data["session_id"])
+
+
+def test_run_local_uses_session_isolated_output_dir(monkeypatch, tmp_path):
+    client = _client(monkeypatch, local_mode=True)
+    xlsx_path = tmp_path / "功能清单.xlsx"
+    output_root = tmp_path / "out"
+    xlsx_path.write_bytes(b"placeholder")
+
+    monkeypatch.setattr(tasks, "execute_in_session", lambda *args, **kwargs: None)
+
+    first = client.post(
+        "/api/run-local",
+        data={
+            "xlsx_path": str(xlsx_path),
+            "output_dir": str(output_root),
+            "mode": "from-excel-gen-fpa",
+        },
+    )
+    second = client.post(
+        "/api/run-local",
+        data={
+            "xlsx_path": str(xlsx_path),
+            "output_dir": str(output_root),
+            "mode": "from-excel-gen-fpa",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_out = Path(first.json()["output_dir"])
+    second_out = Path(second.json()["output_dir"])
+    assert first_out.parent == output_root
+    assert second_out.parent == output_root
+    assert first_out != second_out
+    assert first_out.exists()
+    assert second_out.exists()
+    assert first_out.name.startswith("功能清单_")
+    assert second_out.name.startswith("功能清单_")
+    server.session_manager.cleanup_download(first.json()["session_id"])
+    server.session_manager.cleanup_download(second.json()["session_id"])
+
+
+def test_run_local_rejects_existing_session_output_dir(monkeypatch, tmp_path):
+    client = _client(monkeypatch, local_mode=True)
+    xlsx_path = tmp_path / "功能清单.xlsx"
+    output_root = tmp_path / "out"
+    xlsx_path.write_bytes(b"placeholder")
+    existing = output_root / "功能清单_deadbeef"
+    existing.mkdir(parents=True)
+
+    class FixedUuid:
+        hex = "deadbeefcafebabe"
+
+    monkeypatch.setattr(tasks.uuid, "uuid4", lambda: FixedUuid())
+
+    resp = client.post(
+        "/api/run-local",
+        data={
+            "xlsx_path": str(xlsx_path),
+            "output_dir": str(output_root),
+            "mode": "from-excel-gen-fpa",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "目标输出目录已存在" in resp.json()["detail"]
+
+
+def test_run_local_queues_when_concurrency_limit_is_reached(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    monkeypatch.setattr(
+        "web_app.services.config_service.read_config",
+        lambda: {"_system": {"web": {"max_concurrent_tasks": 1}}},
+    )
+    client = _client(monkeypatch, local_mode=True)
+    xlsx_path = tmp_path / "功能清单.xlsx"
+    output_root = tmp_path / "out"
+    xlsx_path.write_bytes(b"placeholder")
+    started: list[str] = []
+
+    def fake_start_background_task(session_manager, session_id, target, *, on_done=None):
+        session_manager.mark_task_started(session_id)
+        started.append(session_id)
+        return None
+
+    monkeypatch.setattr(tasks, "start_background_task", fake_start_background_task)
+
+    first = client.post(
+        "/api/run-local",
+        data={
+            "xlsx_path": str(xlsx_path),
+            "output_dir": str(output_root),
+            "mode": "from-excel-gen-fpa",
+        },
+    )
+    second = client.post(
+        "/api/run-local",
+        data={
+            "xlsx_path": str(xlsx_path),
+            "output_dir": str(output_root),
+            "mode": "from-excel-gen-fpa",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["run_state"] == "running"
+    assert second.json()["run_state"] == "queued"
+    assert second.json()["queue_position"] == 1
+    assert started == [first.json()["session_id"]]
+    queued_status = client.get(f"/api/sessions/{second.json()['session_id']}")
+    assert queued_status.status_code == 200
+    assert queued_status.json()["run_state"] == "queued"
+    assert queued_status.json()["queue_position"] == 1
+
+    cancel_resp = client.post(f"/api/cancel/{second.json()['session_id']}")
+
+    assert cancel_resp.status_code == 200
+    assert cancel_resp.json()["run_state"] == "cancelled"
+    cancelled_status = client.get(f"/api/sessions/{second.json()['session_id']}")
+    assert cancelled_status.status_code == 200
+    assert cancelled_status.json()["run_state"] == "cancelled"
+    history = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id=second.json()["session_id"],
+        local_mode=True,
+        owner_id="",
+    )
+    assert history is not None
+    assert history["run_state"] == "cancelled"
+    server.session_manager.cleanup_download(first.json()["session_id"])
+    server.session_manager.cleanup_download(second.json()["session_id"])
 
 
 def test_local_user_config_redacts_api_key(monkeypatch, tmp_path):

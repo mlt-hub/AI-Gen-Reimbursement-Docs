@@ -20,6 +20,7 @@ from web_app.routes.system import create_router as create_system_router
 from web_app.routes.tasks import create_router as create_tasks_router
 from web_app.routes.templates import router as templates_router
 from web_app.services.logging_bootstrap import setup_web_logging
+from web_app.services.run_history_service import cancel_stale_queued_web_runs
 from web_app.services.session_manager import SessionManager
 from web_app.services.task_runner import cleanup_expired_sessions as _cleanup_expired_sessions
 
@@ -75,6 +76,7 @@ def cancel_all_sessions() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    cancel_stale_queued_web_runs(base_dir=BASE_DIR)
     yield
     cancel_all_sessions()
 

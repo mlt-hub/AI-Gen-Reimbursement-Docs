@@ -39,6 +39,9 @@
             <span class="h-2 w-2 rounded-full" :class="runDotClass" />
             {{ stateLabel(effectiveRunState) }}
           </div>
+          <div v-if="effectiveRunState === 'queued'" class="mt-2 text-xs text-[var(--color-ink-muted)]">
+            {{ queuePositionText }}
+          </div>
         </div>
         <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface-raised)] p-3">
           <div class="text-xs font-semibold text-[var(--color-ink-soft)]">来源</div>
@@ -221,6 +224,7 @@ interface SessionStatusResponse {
   progress_steps?: Record<string, StepProgress>
   last_error?: string
   updated_at?: string
+  queue_position?: number | null
 }
 
 interface RawLogEvent {
@@ -279,7 +283,11 @@ const canRerun = computed(() => historyItem.value?.source === 'web' && ['done', 
 const canOpenFolder = computed(() => effectiveMode.value === 'local' && Boolean(historyItem.value?.open_folder_available || sessionStatus.value?.output_dir))
 const canDownload = computed(() => effectiveMode.value === 'remote' && Boolean(historyItem.value?.download_available || sessionStatus.value?.has_zip))
 const logText = computed(() => logEntries.value.map(entry => `[${entry.time || '--'}] ${entry.level} ${entry.msg}`).join('\n'))
-const logEmptyText = computed(() => sessionAvailable.value ? '暂无日志，运行中日志会在这里继续追加。' : '当前 session 不在内存中，无法读取实时日志快照。')
+const queuePositionText = computed(() => sessionStatus.value?.queue_position ? `队列位置 ${sessionStatus.value.queue_position}` : '已进入等待队列')
+const logEmptyText = computed(() => {
+  if (effectiveRunState.value === 'queued') return '任务正在排队，启动后会显示运行日志。'
+  return sessionAvailable.value ? '暂无日志，运行中日志会在这里继续追加。' : '当前 session 不在内存中，无法读取实时日志快照。'
+})
 
 const runConfigItems = computed(() => {
   const cfg = historyItem.value?.run_config || {}
@@ -303,6 +311,7 @@ const runConfigItems = computed(() => {
 
 const runStateClass = computed(() => {
   const map: Record<string, string> = {
+    queued: 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
     running: 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]',
     done: 'border-[var(--color-success)] bg-[var(--color-success-soft)] text-[var(--color-success)]',
     error: 'border-[var(--color-danger)] bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
@@ -314,6 +323,7 @@ const runStateClass = computed(() => {
 
 const runDotClass = computed(() => {
   const map: Record<string, string> = {
+    queued: 'bg-[var(--color-warning)]',
     running: 'bg-[var(--color-accent)]',
     done: 'bg-[var(--color-success)]',
     error: 'bg-[var(--color-danger)]',
@@ -369,8 +379,8 @@ async function loadLogs() {
 }
 
 function connectIfRunning() {
-  closeStream()
   if (sessionStatus.value?.run_state !== 'running') return
+  if (eventSource) return
   eventSource = new EventSource(`/api/log-stream?session=${sessionId.value}`)
   eventSource.onmessage = (event) => {
     try {
@@ -489,6 +499,7 @@ function download() {
 
 function stateLabel(state: string) {
   const map: Record<string, string> = {
+    queued: '排队中',
     running: '运行中',
     done: '完成',
     error: '失败',
@@ -522,8 +533,10 @@ watch(sessionId, () => {
 onMounted(() => {
   loadDetail()
   pollTimer = window.setInterval(() => {
-    if (sessionStatus.value?.run_state === 'running') {
-      loadSessionStatus()
+    if (sessionStatus.value?.run_state === 'queued' || sessionStatus.value?.run_state === 'running') {
+      loadSessionStatus().then(() => {
+        if (sessionStatus.value?.run_state === 'running') connectIfRunning()
+      })
     }
   }, 5000)
 })

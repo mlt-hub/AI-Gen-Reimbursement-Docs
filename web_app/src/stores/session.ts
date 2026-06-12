@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 
-export type RunState = 'idle' | 'running' | 'done' | 'error' | 'cancelled'
+export type RunState = 'idle' | 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 
 export interface InputPrompt {
   sessionId: string
@@ -58,6 +58,7 @@ export interface SessionSnapshot {
   run_state: RunState
   output_dir?: string
   done_files?: DoneFile[]
+  queue_position?: number | null
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -69,13 +70,13 @@ export const useSessionStore = defineStore('session', () => {
   const fpaConfirmationPrompt = ref<FpaConfirmationPrompt | null>(null)
   const doneFiles = ref<DoneFile[]>([])
 
-  const isRunning = computed(() => runState.value === 'running')
+  const isRunning = computed(() => runState.value === 'queued' || runState.value === 'running')
   const isDone = computed(() => runState.value === 'done')
 
-  function start(sid: string, out: string) {
+  function start(sid: string, out: string, state: RunState = 'running') {
     sessionId.value = sid
     outputDir.value = out
-    runState.value = 'running'
+    runState.value = state
     inputPrompt.value = null
     listPrompt.value = null
     fpaConfirmationPrompt.value = null
