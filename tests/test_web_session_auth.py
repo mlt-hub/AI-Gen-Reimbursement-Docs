@@ -104,3 +104,19 @@ def test_local_mode_allows_existing_remote_session(monkeypatch, tmp_path):
     assert resp.json()["content"] == "local"
     server.session_manager.cleanup_download(session_id)
     _cleanup_overrides()
+
+
+def test_remote_request_cannot_read_local_session(monkeypatch, tmp_path):
+    client = _client_as_user(monkeypatch, "alice", local_mode=False)
+    session_id = "auth_local_denied"
+    out_dir = tmp_path / "output"
+    log_dir = out_dir / "日志"
+    log_dir.mkdir(parents=True)
+    (log_dir / "ai_对话日志.md").write_text("local secret", encoding="utf-8")
+    server.session_manager.create(session_id, mode="local", output_dir=out_dir)
+
+    resp = client.get(f"/api/ai-log/{session_id}")
+
+    assert resp.status_code == 404
+    server.session_manager.cleanup_download(session_id)
+    _cleanup_overrides()

@@ -22,17 +22,18 @@ _log = logging.getLogger("ai_gen_reimbursement_docs.auth")
 
 # ── 常量 ──────────────────────────────────────────────────
 
-_LOCAL_IPS = frozenset({"127.0.0.1", "::1", "localhost"})
+_LOCAL_IPS = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
 ADMIN_USERNAME = "admin"
 ADMIN_INITIAL_PASSWORD = "mlt123"
 REMEMBER_ME_DAYS = 30
+SESSION_TOKEN_HOURS = 12
 DEFAULT_INVITE_DAYS = 7
 DEFAULT_INVITE_USES = 1
 INVITE_CODE_LENGTH = 16
 
 # ── Token 管理（内存） ────────────────────────────────────
 
-_tokens: dict[str, str] = {}  # token → username
+_tokens: dict[str, dict[str, object]] = {}  # token → session metadata
 
 
 class InviteError(ValueError):
@@ -55,26 +56,39 @@ def create_token(username: str, *, remember_me: bool = False) -> str:
     """创建登录 token 并返回。"""
     cleanup_expired_sessions()
     username = username.strip().lower()
+    session_version = _user_session_version(username)
+    if session_version is None:
+        raise ValueError("用户不存在或已停用")
     token = secrets.token_hex(32)
-    _tokens[token] = username
+    expires_at = _utc_now() + timedelta(
+        days=REMEMBER_ME_DAYS,
+    ) if remember_me else _utc_now() + timedelta(hours=SESSION_TOKEN_HOURS)
+    _tokens[token] = {
+        "username": username,
+        "expires_at": expires_at,
+        "session_version": session_version,
+    }
     if remember_me:
-        expires_at = _utc_now() + timedelta(days=REMEMBER_ME_DAYS)
         _init_db()
         with sqlite3.connect(str(_db_path())) as conn:
             conn.execute(
                 """
-                INSERT INTO auth_sessions (token_hash, username, expires_at, last_seen_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO auth_sessions (token_hash, username, expires_at, last_seen_at, session_version)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (_hash_token(token), username, _dt_text(expires_at), _dt_text(_utc_now())),
+                (
+                    _hash_token(token),
+                    username,
+                    _dt_text(expires_at),
+                    _dt_text(_utc_now()),
+                    session_version,
+                ),
             )
             conn.commit()
     return token
 
 
-def remove_token(token: str) -> None:
-    """移除 token（登出）。"""
-    cleanup_expired_sessions()
+def _remove_token_record(token: str) -> None:
     _tokens.pop(token, None)
     if token:
         _init_db()
@@ -83,22 +97,36 @@ def remove_token(token: str) -> None:
             conn.commit()
 
 
+def remove_token(token: str) -> None:
+    """移除 token（登出）。"""
+    cleanup_expired_sessions()
+    _remove_token_record(token)
+
+
 def get_username_by_token(token: str) -> str | None:
     """根据 token 返回用户名，token 无效返回 None。"""
     cleanup_expired_sessions()
     if not token:
         return None
-    username = _tokens.get(token)
-    if username:
-        return username
+    now_dt = _utc_now()
+    cached = _tokens.get(token)
+    if cached:
+        username = str(cached.get("username") or "")
+        expires_at = cached.get("expires_at")
+        raw_session_version = cached.get("session_version")
+        session_version = int(raw_session_version) if raw_session_version is not None else -1
+        if isinstance(expires_at, datetime) and expires_at > now_dt and _user_session_version(username) == session_version:
+            return username
+        _remove_token_record(token)
+        return None
 
     _init_db()
-    now = _dt_text(_utc_now())
+    now = _dt_text(now_dt)
     token_hash = _hash_token(token)
     with sqlite3.connect(str(_db_path())) as conn:
         row = conn.execute(
             """
-            SELECT username
+            SELECT username, expires_at, session_version
             FROM auth_sessions
             WHERE token_hash = ? AND expires_at > ?
             """,
@@ -106,14 +134,55 @@ def get_username_by_token(token: str) -> str | None:
         ).fetchone()
         if not row:
             return None
-        username = row[0]
+        username = str(row[0])
+        session_version = int(row[2])
+        if _user_session_version(username) != session_version:
+            conn.execute("DELETE FROM auth_sessions WHERE token_hash = ?", (token_hash,))
+            conn.commit()
+            return None
         conn.execute(
             "UPDATE auth_sessions SET last_seen_at = ? WHERE token_hash = ?",
             (now, token_hash),
         )
         conn.commit()
-    _tokens[token] = username
+    try:
+        expires_at = datetime.fromisoformat(str(row[1]))
+    except ValueError:
+        _remove_token_record(token)
+        return None
+    _tokens[token] = {
+        "username": username,
+        "expires_at": expires_at,
+        "session_version": session_version,
+    }
     return username
+
+
+def _user_session_version(username: str) -> int | None:
+    username = username.strip().lower()
+    if not username:
+        return None
+    _init_db()
+    with sqlite3.connect(str(_db_path())) as conn:
+        row = conn.execute(
+            "SELECT session_version FROM users WHERE username = ? AND disabled = 0",
+            (username,),
+        ).fetchone()
+    return int(row[0]) if row else None
+
+
+def revoke_user_tokens(username: str) -> None:
+    """撤销指定用户的所有 token。"""
+    username = username.strip().lower()
+    if not username:
+        return
+    for token, meta in list(_tokens.items()):
+        if str(meta.get("username") or "") == username:
+            _tokens.pop(token, None)
+    _init_db()
+    with sqlite3.connect(str(_db_path())) as conn:
+        conn.execute("DELETE FROM auth_sessions WHERE username = ?", (username,))
+        conn.commit()
 
 
 # ── 密码处理 ──────────────────────────────────────────────
@@ -149,6 +218,7 @@ def _init_db() -> None:
                 role        TEXT NOT NULL DEFAULT 'user',
                 disabled    INTEGER NOT NULL DEFAULT 0,
                 must_change_password INTEGER NOT NULL DEFAULT 0,
+                session_version INTEGER NOT NULL DEFAULT 0,
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -160,9 +230,11 @@ def _init_db() -> None:
                 username     TEXT NOT NULL,
                 expires_at   TIMESTAMP NOT NULL,
                 created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_seen_at TIMESTAMP
+                last_seen_at TIMESTAMP,
+                session_version INTEGER NOT NULL DEFAULT 0
             )
         """)
+        _ensure_auth_session_schema(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS registration_invites (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -219,6 +291,14 @@ def _ensure_user_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
     if "must_change_password" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+    if "session_version" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_auth_session_schema(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(auth_sessions)").fetchall()}
+    if "session_version" not in columns:
+        conn.execute("ALTER TABLE auth_sessions ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
 
 
 def register_user(username: str, password: str, *, role: str = "user") -> bool:
@@ -369,13 +449,17 @@ def change_password(username: str, current_password: str, new_password: str) -> 
         cursor = conn.execute(
             """
             UPDATE users
-            SET password = ?, salt = ?, must_change_password = 0
+            SET password = ?, salt = ?, must_change_password = 0,
+                session_version = session_version + 1
             WHERE username = ? AND disabled = 0
             """,
             (pw_hash, salt, username),
         )
         conn.commit()
-    return cursor.rowcount > 0
+    changed = cursor.rowcount > 0
+    if changed:
+        revoke_user_tokens(username)
+    return changed
 
 
 def allow_register() -> bool:
@@ -413,9 +497,11 @@ def _init_db_without_admin() -> None:
                 username     TEXT NOT NULL,
                 expires_at   TIMESTAMP NOT NULL,
                 created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_seen_at TIMESTAMP
+                last_seen_at TIMESTAMP,
+                session_version INTEGER NOT NULL DEFAULT 0
             )
         """)
+        _ensure_auth_session_schema(conn)
         conn.commit()
 
 

@@ -49,12 +49,13 @@ def test_can_access_remote_session_only_for_owner():
     assert manager.can_access("s1", None) is False
 
 
-def test_can_access_allows_local_mode_and_local_sessions():
+def test_can_access_allows_only_request_local_mode_for_local_sessions():
     manager = SessionManager()
     manager.create("local-session", mode="local")
     manager.create("remote-session", mode="remote", owner="alice")
 
-    assert manager.can_access("local-session", None) is True
+    assert manager.can_access("local-session", None) is False
+    assert manager.can_access("local-session", None, local_mode=True) is True
     assert manager.can_access("remote-session", None, local_mode=True) is True
     assert manager.can_access("missing", "alice", local_mode=True) is False
 

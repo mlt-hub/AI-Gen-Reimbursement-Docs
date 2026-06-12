@@ -1,14 +1,16 @@
 import os
 import logging
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException
+
+from web_app.dependencies import require_auth, require_local
 
 
 router = APIRouter()
 
 
 @router.post("/api/test-prompt")
-async def test_prompt(data: dict):
+async def test_prompt(data: dict, _user: str = Depends(require_auth)):
     """提交系统提示词和用户提示词，返回 AI 生成结果。"""
     system_prompt = data.get("system_prompt", "").strip()
     user_prompt = data.get("user_prompt", "").strip()
@@ -65,7 +67,10 @@ async def test_prompt(data: dict):
 
 
 @router.post("/api/test-ai-reliability-desc")
-async def test_reliability_desc(xlsx_path: str = Form("")):
+async def test_reliability_desc(
+    xlsx_path: str = Form(""),
+    _local: None = Depends(require_local),
+):
     """测试调整因子中的可靠性描述 AI 生成。"""
     import glob
 
@@ -137,7 +142,11 @@ async def test_reliability_desc(xlsx_path: str = Form("")):
 
 
 @router.post("/api/test-ai-metadata")
-async def test_metadata(xlsx_path: str = Form(""), field_key: str = Form("")):
+async def test_metadata(
+    xlsx_path: str = Form(""),
+    field_key: str = Form(""),
+    _local: None = Depends(require_local),
+):
     """测试元数据中指定字段的 #AI生成# 效果。"""
     import glob
 

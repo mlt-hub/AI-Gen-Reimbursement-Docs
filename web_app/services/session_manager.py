@@ -140,8 +140,10 @@ class SessionManager:
         state = self.get(session_id)
         if state is None:
             return False
-        if local_mode or state.mode == "local":
+        if local_mode:
             return True
+        if state.mode == "local":
+            return False
         return bool(user and state.owner == user)
 
     def cancel(self, session_id: str) -> None:

@@ -41,8 +41,8 @@ def require_local(request: Request):
 
 
 def require_auth(request: Request) -> str:
-    """依赖：本地模式放行，远程模式需登录。返回用户名或空字符串。"""
-    if is_local_mode(request):
+    """依赖：本机本地模式放行，其他请求需登录。返回用户名或空字符串。"""
+    if is_local_mode(request) and is_local_ip(request):
         return ""
     username = get_auth_user(request)
     if not username:
@@ -51,9 +51,9 @@ def require_auth(request: Request) -> str:
 
 
 def require_admin(request: Request) -> str:
-    """依赖：远程模式需管理员；本地模式放行。"""
+    """依赖：本机本地模式放行，其他请求需管理员。"""
     username = require_auth(request)
-    if is_local_mode(request):
+    if is_local_mode(request) and is_local_ip(request):
         return username
     if not is_admin(username):
         raise HTTPException(403, "仅管理员可访问")
