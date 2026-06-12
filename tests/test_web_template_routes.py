@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import yaml
 from docx import Document
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
@@ -343,6 +344,51 @@ def test_imported_spec_template_adjustments_update_placeholders_and_anchors(monk
     assert module_details["location"] == "paragraph:2"
     assert adjusted["preview"]["metadata"]["confirmed"] is False
     assert adjusted["preview"]["metadata"]["published"] is False
+
+
+def test_imported_spec_template_adjustments_select_module_sample_table(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    source = tmp_path / "customer.docx"
+    _write_docx(source)
+
+    with source.open("rb") as f:
+        import_resp = client.post(
+            "/api/templates/spec/import",
+            files={"file": ("customer.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    import_id = Path(import_resp.json()["template_path"]).parent.name
+    metadata_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/metadata",
+        json={"confirmed": True},
+    )
+    assert metadata_resp.status_code == 200
+
+    preview = client.get(f"/api/templates/spec/imported/{import_id}/preview").json()
+    table = preview["scopes"][0]["tables"][0]
+    adjust_resp = client.put(
+        f"/api/templates/spec/imported/{import_id}/adjustments",
+        json={
+            "module_table_sample": {
+                "scope": "tables",
+                "location": f"table:{table['index']}",
+                "marker": "{{模块清单表示例}}",
+            },
+        },
+    )
+
+    assert adjust_resp.status_code == 200
+    adjusted = adjust_resp.json()
+    assert adjusted["changed_fields"] == ["module_table.sample_table"]
+    assert adjusted["preview"]["capabilities"]["module_table"]["supports_sample_table"] is True
+    assert adjusted["preview"]["capabilities"]["module_table"]["sample_table_marker"] == "{{模块清单表示例}}"
+    assert adjusted["preview"]["metadata"]["confirmed"] is False
+    assert adjusted["preview"]["metadata"]["published"] is False
+
+    item_dir = Path(import_resp.json()["template_path"]).parent
+    manifest = yaml.safe_load((item_dir / "项目需求说明书-输出模板.manifest.yaml").read_text(encoding="utf-8"))
+    assert manifest["module_table"]["sample_table"]["marker"] == "{{模块清单表示例}}"
+    imported_doc = Document(item_dir / "项目需求说明书-输出模板.docx")
+    assert "{{模块清单表示例}}" in imported_doc.tables[0].cell(0, 0).text
 
 
 def test_import_spec_template_route_rejects_non_docx(monkeypatch, tmp_path):
