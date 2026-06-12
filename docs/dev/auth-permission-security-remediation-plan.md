@@ -23,7 +23,16 @@
 
 ## 实施状态
 
-本轮已完成以下整改：
+当前状态：已实施并合并到 `master`。
+
+落地提交：
+
+- 实现提交：`8faf3e9 fix: harden web auth and session access`
+- 合并提交：`2830d78 merge: integrate auth permission hardening`
+- 临时 worktree：`..\ai_gen_reimbursement_docs_security_wt` 已清理。
+- 临时分支：`security-auth-remediation` 已删除。
+
+已完成以下整改：
 
 - `prompt_debug.py` 的 AI 调试接口已接入权限边界：通用 prompt 调试需登录，读取服务端 Excel 路径的调试接口仅允许本机访问。
 - `/api/config` 与 `/api/config-read` 已接入 `require_auth`；远程用户只能读取个人配置作用域，不再返回全局配置原文。
@@ -38,14 +47,16 @@
 本轮验证结果：
 
 ```powershell
-F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m pytest
 ```
 
-结果：`952 passed, 2 skipped`。
+结果：`953 passed, 2 skipped`。
 
 ## 风险清单
 
 ### P0: 调试 AI 接口未鉴权
+
+状态：已修复。
 
 涉及位置：
 
@@ -77,6 +88,8 @@ F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
 
 ## P0: 配置读取接口绕过鉴权
 
+状态：已修复。
+
 涉及位置：
 
 - `web_app/routes/config.py`
@@ -103,6 +116,8 @@ F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
 - 本机模式下现有配置页功能不回退。
 
 ## P1: 本地模式成为全局鉴权旁路
+
+状态：已修复。
 
 涉及位置：
 
@@ -133,6 +148,8 @@ F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
 
 ## P1: Local session 在远程请求下可被直接放行
 
+状态：已修复。
+
 涉及位置：
 
 - `web_app/services/session_manager.py`
@@ -158,6 +175,8 @@ F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
 - 更新 `tests/test_session_manager.py` 和 `tests/test_web_session_auth.py` 中对应预期。
 
 ## P1: Token 生命周期和撤销机制不足
+
+状态：已修复。
 
 涉及位置：
 
@@ -192,6 +211,8 @@ F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
 
 ## P2: Cookie 写接口缺少 CSRF 或 Origin 校验
 
+状态：已修复，当前采用 Origin/Referer 校验方案。
+
 涉及位置：
 
 - 所有使用 cookie 鉴权的写接口。
@@ -217,6 +238,8 @@ F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
 - 覆盖至少一个配置保存接口和一个任务操作接口。
 
 ## P2: 公开模板和系统信息接口需要明确白名单
+
+状态：已建立公开 API 白名单基线。
 
 涉及位置：
 
@@ -267,17 +290,17 @@ F:\mlt\mlt-projects\ai_gen_reimbursement_docs\.venv\Scripts\python.exe -m pytest
 - `tests/test_auth_config.py`
   - 改密后旧 token 失效。
   - disabled 用户 token 失效。
-- `tests/test_web_csrf.py`
+- `tests/test_web_origin_protection.py`
   - 跨站 Origin 的 POST 被拒绝。
   - 同源 POST 正常通过。
 
 ## 验收命令
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_web_session_auth.py tests/test_web_admin_invites.py tests/test_auth_config.py
+.\.venv\Scripts\python.exe -m pytest
 ```
 
-在完成对应修复后，再补充运行新增测试文件。
+最终主工作区验证结果：`953 passed, 2 skipped`。
 
 ## 备注
 
