@@ -1,0 +1,177 @@
+[
+  {
+    "name": "passed_all_clear",
+    "expected_status": "passed",
+    "expected_issue_codes": {},
+    "cfp_formula": "=SUM(CFP)",
+    "items": [
+      {
+        "project": "样例项目",
+        "module_l1": "业务管理",
+        "module_l2": "客户管理",
+        "module_l3": "客户资料",
+        "user": "发起者：客户资料|接收者：客户资料",
+        "trigger": "用户触发",
+        "process": "维护客户资料",
+        "movements": [
+          {"order": 1, "sub_process": "录入客户资料", "move_type": "E", "data_group": "客户资料", "data_attrs": "姓名,证件号", "reuse": "新增"},
+          {"order": 2, "sub_process": "保存客户资料", "move_type": "W", "data_group": "客户资料", "data_attrs": "姓名,证件号", "reuse": "新增"}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "warning_only_draft_review",
+    "expected_status": "review_required",
+    "expected_issue_codes": {"EMPTY_DATA_ATTRS": 1},
+    "cfp_formula": "=SUM(CFP)",
+    "items": [
+      {
+        "project": "样例项目",
+        "module_l1": "业务管理",
+        "module_l2": "客户管理",
+        "module_l3": "客户资料",
+        "user": "发起者：客户资料|接收者：客户资料",
+        "trigger": "用户触发",
+        "process": "维护客户资料",
+        "movements": [
+          {"order": 1, "sub_process": "录入客户资料", "move_type": "E", "data_group": "客户资料", "data_attrs": "", "reuse": "新增"},
+          {"order": 2, "sub_process": "保存客户资料", "move_type": "W", "data_group": "客户资料", "data_attrs": "姓名,证件号", "reuse": "新增"}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "blocked_missing_formal_trigger",
+    "expected_status": "blocked",
+    "expected_issue_codes": {"MISSING_TRIGGER": 1},
+    "cfp_formula": "=SUM(CFP)",
+    "items": [
+      {
+        "project": "样例项目",
+        "module_l1": "业务管理",
+        "module_l2": "客户管理",
+        "module_l3": "客户资料",
+        "user": "发起者：客户资料|接收者：客户资料",
+        "trigger": "",
+        "process": "维护客户资料",
+        "movements": [
+          {"order": 1, "sub_process": "录入客户资料", "move_type": "E", "data_group": "客户资料", "data_attrs": "姓名", "reuse": "新增"},
+          {"order": 2, "sub_process": "保存客户资料", "move_type": "W", "data_group": "客户资料", "data_attrs": "姓名", "reuse": "新增"}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ai_empty_result",
+    "expected_status": "blocked",
+    "expected_issue_codes": {"NO_COSMIC_ITEMS": 1},
+    "cfp_formula": "=SUM(CFP)",
+    "items": []
+  },
+  {
+    "name": "missing_cfp_formula",
+    "expected_status": "blocked",
+    "expected_issue_codes": {"MISSING_CFP_FORMULA": 1},
+    "cfp_formula": "",
+    "items": [
+      {
+        "project": "样例项目",
+        "module_l1": "业务管理",
+        "module_l2": "客户管理",
+        "module_l3": "客户资料",
+        "user": "发起者：客户资料|接收者：客户资料",
+        "trigger": "用户触发",
+        "process": "维护客户资料",
+        "movements": [
+          {"order": 1, "sub_process": "录入客户资料", "move_type": "E", "data_group": "客户资料", "data_attrs": "姓名", "reuse": "新增"},
+          {"order": 2, "sub_process": "保存客户资料", "move_type": "W", "data_group": "客户资料", "data_attrs": "姓名", "reuse": "新增"}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "generic_function_user",
+    "expected_status": "review_required",
+    "expected_issue_codes": {"GENERIC_FUNCTION_USER": 1},
+    "cfp_formula": "=SUM(CFP)",
+    "items": [
+      {
+        "project": "样例项目",
+        "module_l1": "业务管理",
+        "module_l2": "客户管理",
+        "module_l3": "客户资料",
+        "user": "发起者：操作员|接收者：系统",
+        "trigger": "用户触发",
+        "process": "维护客户资料",
+        "movements": [
+          {"order": 1, "sub_process": "录入客户资料", "move_type": "E", "data_group": "客户资料", "data_attrs": "姓名", "reuse": "新增"},
+          {"order": 2, "sub_process": "保存客户资料", "move_type": "W", "data_group": "客户资料", "data_attrs": "姓名", "reuse": "新增"}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "control_command_movement",
+    "expected_status": "review_required",
+    "expected_issue_codes": {"CONTROL_COMMAND_MOVEMENT": 1},
+    "cfp_formula": "=SUM(CFP)",
+    "items": [
+      {
+        "project": "样例项目",
+        "module_l1": "业务管理",
+        "module_l2": "客户管理",
+        "module_l3": "客户资料",
+        "user": "发起者：客户资料|接收者：客户资料",
+        "trigger": "用户触发",
+        "process": "查询客户资料",
+        "movements": [
+          {"order": 1, "sub_process": "录入查询条件", "move_type": "E", "data_group": "查询条件", "data_attrs": "客户名称", "reuse": "新增"},
+          {"order": 2, "sub_process": "点击下一页并排序列表", "move_type": "X", "data_group": "页面状态", "data_attrs": "排序状态", "reuse": "新增"}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "internal_technical_boundary",
+    "expected_status": "review_required",
+    "expected_issue_codes": {"INTERNAL_TECHNICAL_BOUNDARY": 1},
+    "cfp_formula": "=SUM(CFP)",
+    "items": [
+      {
+        "project": "样例项目",
+        "module_l1": "业务管理",
+        "module_l2": "客户管理",
+        "module_l3": "客户资料",
+        "user": "发起者：客户资料|接收者：客户资料",
+        "trigger": "用户触发",
+        "process": "同步客户资料",
+        "movements": [
+          {"order": 1, "sub_process": "录入同步条件", "move_type": "E", "data_group": "同步条件", "data_attrs": "客户编号", "reuse": "新增"},
+          {"order": 2, "sub_process": "调用内部接口同步数据", "move_type": "X", "data_group": "客户资料", "data_attrs": "客户编号,状态", "reuse": "新增"}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "complex_non_functional_scope",
+    "expected_status": "review_required",
+    "expected_issue_codes": {"COMPLEX_NON_FUNCTIONAL_SCOPE": 1, "NON_FUNCTIONAL_SCOPE": 1},
+    "cfp_formula": "=SUM(CFP)",
+    "items": [
+      {
+        "project": "样例项目",
+        "module_l1": "工程支撑",
+        "module_l2": "接口联调",
+        "module_l3": "联调安排",
+        "user": "发起者：联调安排|接收者：联调安排",
+        "trigger": "用户触发",
+        "process": "接口联调安排",
+        "movements": [
+          {"order": 1, "sub_process": "录入联调安排", "move_type": "E", "data_group": "联调安排", "data_attrs": "时间,系统", "reuse": "新增"},
+          {"order": 2, "sub_process": "保存联调安排", "move_type": "W", "data_group": "联调安排", "data_attrs": "时间,系统", "reuse": "新增"}
+        ]
+      }
+    ]
+  }
+]

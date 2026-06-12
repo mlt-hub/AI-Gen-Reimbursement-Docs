@@ -209,7 +209,7 @@ AI 调用限制：
 
 当前实现：首步 `E`、末步 `W/X`、至少两步、缺少模块路径、缺少功能过程名称、缺少触发事件等规则已经进入结构化校验。存在 `error` 时报告状态为 `blocked`，默认不会写正式 Excel；存在 `warning` 且没有 `error` 时报告状态为 `review_required`，默认也不会写正式 Excel。
 
-影响：当前批处理输出已经能阻断明显不符合送审规则的结果；跨模块归属和功能用户一对一关系已具备配置化诊断入口，但审批流和强制修复仍需要后续阶段继续工程化。
+影响：当前批处理输出已经能阻断明显不符合送审规则的结果；跨模块归属和功能用户一对一关系已具备配置化诊断入口，配置页也已提供 COSMIC 治理专用编辑入口；审批权限和强制修复状态机仍需要后续阶段继续工程化。
 
 ### CFP 和复用口径待确认
 
@@ -266,9 +266,9 @@ AI 调用限制：
 ## 当前风险和重构关注点
 
 1. 边界识别不足：prompt 已加入送审口径硬约束，内部技术交互、控制命令、部分纯数据运算、错误/确认消息和部分非功能事项已有待审 warning 和建议动作；复杂边界和复杂非功能事项默认仍依赖人工确认，但可通过 `gen_cosmic.governance.auto_apply_review_actions` 和白名单逐步启用自动治理。
-2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；`GENERIC_FUNCTION_USER` 会提供候选修复动作，预览页可一键采用候选功能用户并在保存时重校验；系统已支持确认 JSON 和组织级 `gen_cosmic.governance.function_user_role_map`，也可开启 `FUNCTION_USER_ROLE_CONFLICT` 诊断，但审批和强制修复仍待治理。
+2. 功能用户口径仍偏弱：当前已经记录功能用户匹配依据并要求三级模块匹配；`GENERIC_FUNCTION_USER` 会提供候选修复动作，预览页可一键采用候选功能用户并在保存时重校验；系统已支持确认 JSON、组织级 `gen_cosmic.governance.function_user_role_map` 和配置页专用编辑入口，也可开启 `FUNCTION_USER_ROLE_CONFLICT` 诊断，但审批权限和强制修复状态机仍待治理。
 3. CFP 口径已具备基础配置：缺公式已阻断；确认后导出 CFP 汇总会按 `cfp_policy_effective` 计算，内置默认 `新增/修改=1`、`复用=1/3`、`利旧/优化未改=0`，可通过 `gen_cosmic.cfp_policy` 配置组织级默认值，并允许确认 JSON 中的 `cfp_policy` 覆盖；已支持可选 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但 Excel 公式的完整解析和审批仍需继续完善。
-4. 预览审阅导出闭环已完成基础闭环：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口、审阅结果 JSON 保存/读取接口和确认后 Excel 再导出接口；远程 session 导出后会刷新 ZIP，前端交付物清单和运行历史都会记录确认后 Excel 与确认后 CFP 汇总。预览页已支持编辑功能过程、功能用户、触发事件和数据移动，并把编辑后的 `items` 保存到会话审阅结果 JSON；控制命令、纯数据运算和内部技术边界 warning 已能提供排除计数或合并建议，审阅动作会写入 `review_actions/review_audit` 并在保存时重校验。
+4. 预览审阅导出闭环已完成基础闭环：当前已有 `preview_rows`、`review_items`、`confirmation`、`confirmation_summary` 和 `export_policy` 数据结构，也已有预览页、会话级 COSMIC JSON 草稿读取接口、审阅结果 JSON 保存/读取接口和确认后 Excel 再导出接口；远程 session 导出后会刷新 ZIP，前端交付物清单和运行历史都会记录确认后 Excel 与确认后 CFP 汇总。预览页已支持编辑功能过程、功能用户、触发事件和数据移动，并把编辑后的 `items` 保存到会话审阅结果 JSON；控制命令、纯数据运算和内部技术边界 warning 已能提供排除计数或合并建议，审阅动作会写入 `review_actions/review_audit` 并在保存时重校验；`rollback_review_action` 已可恢复功能用户、排除标记、合并标记和行级 CFP 覆盖。
 5. 解析格式敏感：`parse_md_to_items` 仍保留给兼容或排查场景，不适合承载复杂人工编辑；当前人工编辑闭环基于结构化 JSON `items`，不依赖 Markdown 反解析。
 6. 送审规则未完整工程化：软评填报参考手册中的启发式规则尚未完整进入 prompt、结构化校验和结果状态。
 
@@ -375,7 +375,7 @@ AI 调用限制：
 
 1. AI 失败诊断进一步细分：限制跳过并保留空占位功能过程时会产生 `AI_LIMIT_PARTIAL_PLACEHOLDER`，单模块响应解析失败会产生 `AI_MODULE_PARSE_FAILED`，重试后仍失败会产生 `AI_RETRY_EXHAUSTED`；这些 code 与既有 `PARTIAL_AI_FAILURE` 并存，便于后续按失败类型重试或回归。
 2. 数据移动支持行级 `cfp_override` 和 `cfp_basis`。确认后 CFP 汇总优先采用行级人工覆盖值；覆盖值缺失、非法或为负数时回退到 `cfp_policy_effective`。
-3. 审阅动作新增 `set_movement_cfp`，用于对单条数据移动进行 CFP 人工覆盖；已应用动作会写入 `approval_status` 和 `rollback_action`，为后续正式审批流和回滚界面提供稳定 JSON 契约。
+3. 审阅动作新增 `set_movement_cfp`，用于对单条数据移动进行 CFP 人工覆盖；已应用动作会写入 `approval_status` 和 `rollback_action`，`rollback_review_action` 可按契约恢复原始功能用户、排除状态、合并状态或 CFP 覆盖值，为后续正式审批流和回滚界面提供稳定 JSON 契约。
 4. CFP 公式一致性解析新增 `XLOOKUP/LOOKUP` 数组映射识别，覆盖 `XLOOKUP(L{row},{"新增","修改","复用","利旧"},{1,1,1/3,0},1)` 这类模板公式。
 5. 审计追踪新增可选外部 ledger 镜像：配置 `gen_cosmic.governance.audit_ledger_path_env` 指向服务端环境变量，且该环境变量提供 JSONL 路径时，保存确认会把审计摘要、记录 hash 和最终 hash 追加写入 ledger；hash 链仍保留在确认 JSON 内。
 6. 当前仍不声称已经具备真正 WORM 或第三方不可篡改存储；外部 ledger 是后续接独立审计服务前的追加式交接契约。
@@ -822,7 +822,7 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `review_actions` | `array` | 否 | 待应用的人工审阅动作；保存会话审阅结果时后端会应用这些动作并重校验。 |
 | `review_audit` | `array` | 否 | 已应用审阅动作的 JSON 级审计记录。 |
 | `review_audit[].approval_status` | `string` | 否 | 动作审批状态，当前人工动作默认为 `approved`，自动治理动作为 `auto_applied`。 |
-| `review_audit[].rollback_action` | `object` | 否 | 可回滚动作契约，用于后续审阅界面或审批流恢复字段。 |
+| `review_audit[].rollback_action` | `object` | 否 | 可回滚动作契约；前端提交 `rollback_review_action` 后，后端会恢复功能用户、排除状态、合并状态或 CFP 覆盖值。 |
 | `review_audit[].previous_audit_hash` | `string` | 否 | 前一条审计记录的 SHA-256 hash；默认开启 hash 链时写入。 |
 | `review_audit[].audit_hash` | `string` | 否 | 当前审计记录的 SHA-256 hash；用于发现 JSON 级审计记录被改写。 |
 | `review_audit_hash_chain` | `object` | 否 | 保存审阅结果时写入的 hash 链校验元数据，包含 `algorithm`、`valid`、`checked_record_count`、`record_count`、`final_audit_hash` 和可选外部 ledger 写入状态。 |

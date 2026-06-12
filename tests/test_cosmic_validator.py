@@ -1,6 +1,7 @@
 """COSMIC deterministic validation tests."""
 
 import json
+from pathlib import Path
 
 from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.cosmic_validator import (
@@ -37,6 +38,29 @@ def _item(**overrides):
     return CosmicItem(**data)
 
 
+def _item_from_fixture(raw):
+    return CosmicItem(
+        project=raw["project"],
+        module_l1=raw["module_l1"],
+        module_l2=raw["module_l2"],
+        module_l3=raw["module_l3"],
+        user=raw["user"],
+        trigger=raw["trigger"],
+        process=raw["process"],
+        movements=[
+            DataMovement(
+                order=movement["order"],
+                sub_process=movement["sub_process"],
+                move_type=movement["move_type"],
+                data_group=movement["data_group"],
+                data_attrs=movement["data_attrs"],
+                reuse=movement.get("reuse", "新增"),
+            )
+            for movement in raw.get("movements", [])
+        ],
+    )
+
+
 def _codes(result):
     return [issue.code for issue in result.issues]
 
@@ -48,6 +72,32 @@ def test_passed_item_has_no_issues():
     assert result.issues == []
     assert result.basis["function_user"]["matched"] is True
     assert result.basis["function_user"]["match_source"] == "module_l3"
+
+
+def test_cosmic_regression_fixtures_cover_core_governance_paths():
+    fixture_path = Path(__file__).parent / "fixtures" / "cosmic_regression_cases.json"
+    cases = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    assert {case["name"] for case in cases} == {
+        "passed_all_clear",
+        "warning_only_draft_review",
+        "blocked_missing_formal_trigger",
+        "ai_empty_result",
+        "missing_cfp_formula",
+        "generic_function_user",
+        "control_command_movement",
+        "internal_technical_boundary",
+        "complex_non_functional_scope",
+    }
+
+    for case in cases:
+        report = validate_cosmic_items(
+            [_item_from_fixture(item) for item in case["items"]],
+            project_name="样例项目",
+            cfp_formula=case.get("cfp_formula", ""),
+        )
+        assert report.status == case["expected_status"], case["name"]
+        assert report.issue_codes == case["expected_issue_codes"], case["name"]
 
 
 def test_missing_trigger_is_error():

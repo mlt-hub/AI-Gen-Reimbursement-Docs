@@ -2644,6 +2644,92 @@ def test_cosmic_confirmed_export_uses_movement_cfp_override(monkeypatch, tmp_pat
     server.session_manager.cleanup_download(session_id)
 
 
+def test_cosmic_review_action_rolls_back_movement_cfp_override(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_rollback_cfp_override"
+    payload = _cosmic_export_payload()
+    payload["status"] = "passed"
+    payload["review_items"] = []
+    payload["items"][0]["status"] = "passed"
+    payload["items"][0]["movements"][1]["reuse"] = "复用"
+    payload["review_actions"] = [
+        {
+            "action": "set_movement_cfp",
+            "item_index": 0,
+            "movement_order": 2,
+            "cfp_override": 0.75,
+            "review_id": "item::0::CFP_POLICY_FORMULA_MISMATCH::cfp_policy_effective::",
+            "reason": "人工确认该复用子过程按 0.75 CFP 计",
+        },
+        {
+            "action": "rollback_review_action",
+            "target_action": "set_movement_cfp",
+            "item_index": 0,
+            "movement_order": 2,
+            "review_id": "rollback::item::0::CFP_POLICY_FORMULA_MISMATCH::cfp_policy_effective::",
+            "restore_cfp_override": None,
+            "restore_cfp_basis": None,
+            "reason": "撤销 CFP 人工覆盖",
+        },
+    ]
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    movement = saved_payload["items"][0]["movements"][1]
+    assert "cfp_override" not in movement
+    assert "cfp_basis" not in movement
+    assert saved_payload["review_audit"][1]["target_action"] == "set_movement_cfp"
+    assert saved_payload["review_audit"][1]["approval_status"] == "approved"
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_review_action_rolls_back_excluded_movement(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_rollback_excluded_movement"
+    payload = _cosmic_export_payload()
+    payload["items"][0]["movements"].append({
+        "order": 3,
+        "sub_process": "点击下一页并排序列表",
+        "move_type": "X",
+        "data_group": "页面状态",
+        "data_attrs": "排序状态",
+        "reuse": "新增",
+    })
+    payload["review_actions"] = [
+        {
+            "action": "exclude_movement",
+            "item_index": 0,
+            "movement_order": 3,
+            "review_id": "item::0::CONTROL_COMMAND_MOVEMENT::movements[2].sub_process::3",
+            "reason": "控制命令不计数",
+        },
+        {
+            "action": "rollback_review_action",
+            "target_action": "exclude_movement",
+            "item_index": 0,
+            "movement_order": 3,
+            "review_id": "rollback::item::0::CONTROL_COMMAND_MOVEMENT::movements[2].sub_process::3",
+            "restore_excluded_from_cfp": None,
+            "restore_review_action": None,
+            "reason": "撤销排除",
+        },
+    ]
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    movement = saved_payload["items"][0]["movements"][2]
+    assert "excluded_from_cfp" not in movement
+    assert "review_action" not in movement
+    assert "CONTROL_COMMAND_MOVEMENT" in saved_payload["issue_codes"]
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_cosmic_confirmed_export_uses_configured_cfp_policy(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="alice")
     session_id = "cosmic_export_configured_cfp_policy"

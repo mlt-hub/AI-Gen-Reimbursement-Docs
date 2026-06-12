@@ -20,3 +20,16 @@ def test_task_detail_view_exposes_closed_restore_action():
     assert "恢复任务" in source
     assert "/api/tasks/${historyItem.value.run_id}/restore" in source
     assert "canRestore" in source
+
+
+def test_config_view_exposes_cosmic_governance_editor_contract():
+    source = (ROOT / "web_app" / "src" / "views" / "Config.vue").read_text(encoding="utf-8")
+
+    assert "COSMIC 治理" in source
+    assert "/api/web-config/cosmic-governance" in source
+    assert "auto_apply_review_actions" in source
+    assert "auto_apply_issue_codes" in source
+    assert "function_user_role_map" in source
+    assert "boundary_context" in source
+    assert "rule_matrix" in source
+    assert "audit_ledger_path_env" in source

@@ -257,10 +257,67 @@ def _rollback_action_for(action: dict, target: dict | None = None) -> dict:
     }
     if target and action_type == "apply_function_user":
         rollback["restore_user"] = target.get("user")
+    if target and action_type == "exclude_process":
+        rollback["restore_item_excluded_from_cfp"] = target.get("excluded_from_cfp")
+        rollback["restore_item_review_action"] = target.get("review_action")
+        rollback["restore_movements"] = target.get("movements")
+    if target and action_type in {"exclude_movement", "merge_movement"}:
+        rollback["restore_excluded_from_cfp"] = target.get("excluded_from_cfp")
+        rollback["restore_review_action"] = target.get("review_action")
+        rollback["restore_merged_into_order"] = target.get("merged_into_order")
     if target and action_type == "set_movement_cfp":
         rollback["restore_cfp_override"] = target.get("cfp_override")
         rollback["restore_cfp_basis"] = target.get("cfp_basis")
     return rollback
+
+
+def _restore_optional_key(target: dict, key: str, value: object) -> None:
+    if value is None:
+        target.pop(key, None)
+    else:
+        target[key] = value
+
+
+def _rollback_review_action(item: dict, action: dict) -> None:
+    target_action = str(action.get("target_action") or "")
+    if target_action == "apply_function_user":
+        item["user"] = str(action.get("restore_user") or "")
+        return
+    if target_action == "exclude_process":
+        _restore_optional_key(item, "excluded_from_cfp", action.get("restore_item_excluded_from_cfp"))
+        _restore_optional_key(item, "review_action", action.get("restore_item_review_action"))
+        movements = item.get("movements")
+        restore_movements = action.get("restore_movements")
+        if isinstance(movements, list) and isinstance(restore_movements, list):
+            for index, raw_movement in enumerate(movements):
+                if not isinstance(raw_movement, dict) or index >= len(restore_movements):
+                    continue
+                previous = restore_movements[index]
+                if not isinstance(previous, dict):
+                    continue
+                _restore_optional_key(raw_movement, "excluded_from_cfp", previous.get("excluded_from_cfp"))
+                _restore_optional_key(raw_movement, "review_action", previous.get("review_action"))
+        return
+    if target_action not in {"exclude_movement", "merge_movement", "set_movement_cfp"}:
+        return
+    movements = item.get("movements")
+    if not isinstance(movements, list):
+        return
+    for movement_index, raw_movement in enumerate(movements):
+        if not _movement_action_matches(raw_movement, action, movement_index):
+            continue
+        if not isinstance(raw_movement, dict):
+            break
+        if target_action == "set_movement_cfp":
+            _restore_optional_key(raw_movement, "cfp_override", action.get("restore_cfp_override"))
+            _restore_optional_key(raw_movement, "cfp_basis", action.get("restore_cfp_basis"))
+            _restore_optional_key(raw_movement, "review_action", action.get("restore_review_action"))
+            break
+        _restore_optional_key(raw_movement, "excluded_from_cfp", action.get("restore_excluded_from_cfp"))
+        _restore_optional_key(raw_movement, "review_action", action.get("restore_review_action"))
+        if target_action == "merge_movement":
+            _restore_optional_key(raw_movement, "merged_into_order", action.get("restore_merged_into_order"))
+        break
 
 
 def _apply_review_actions(payload: dict) -> dict:
@@ -277,6 +334,9 @@ def _apply_review_actions(payload: dict) -> dict:
         item = items[item_index]
         if not isinstance(item, dict):
             continue
+        if action_type == "rollback_review_action":
+            _rollback_review_action(item, action)
+            continue
         if action_type == "apply_function_user":
             previous_user = item.get("user")
             suggested_user = str(
@@ -290,6 +350,18 @@ def _apply_review_actions(payload: dict) -> dict:
                 action.setdefault("rollback_action", _rollback_action_for(action, {"user": previous_user}))
             continue
         if action_type == "exclude_process":
+            previous_item = {
+                "excluded_from_cfp": item.get("excluded_from_cfp"),
+                "review_action": item.get("review_action"),
+                "movements": [
+                    {
+                        "excluded_from_cfp": raw_movement.get("excluded_from_cfp"),
+                        "review_action": raw_movement.get("review_action"),
+                    }
+                    for raw_movement in item.get("movements", [])
+                    if isinstance(raw_movement, dict)
+                ] if isinstance(item.get("movements"), list) else [],
+            }
             item["excluded_from_cfp"] = True
             item["review_action"] = action_type
             movements = item.get("movements")
@@ -298,6 +370,7 @@ def _apply_review_actions(payload: dict) -> dict:
                     if isinstance(raw_movement, dict):
                         raw_movement["excluded_from_cfp"] = True
                         raw_movement["review_action"] = action_type
+            action.setdefault("rollback_action", _rollback_action_for(action, previous_item))
             continue
         if action_type not in {"exclude_movement", "merge_movement", "set_movement_cfp"}:
             continue
@@ -317,6 +390,7 @@ def _apply_review_actions(payload: dict) -> dict:
                     previous = {
                         "cfp_override": raw_movement.get("cfp_override"),
                         "cfp_basis": raw_movement.get("cfp_basis"),
+                        "review_action": raw_movement.get("review_action"),
                     }
                     raw_movement["cfp_override"] = override
                     raw_movement["cfp_basis"] = {
@@ -327,10 +401,16 @@ def _apply_review_actions(payload: dict) -> dict:
                     raw_movement["review_action"] = action_type
                     action.setdefault("rollback_action", _rollback_action_for(action, previous))
                     break
+                previous = {
+                    "excluded_from_cfp": raw_movement.get("excluded_from_cfp"),
+                    "review_action": raw_movement.get("review_action"),
+                    "merged_into_order": raw_movement.get("merged_into_order"),
+                }
                 raw_movement["excluded_from_cfp"] = True
                 raw_movement["review_action"] = action_type
                 if action_type == "merge_movement":
                     raw_movement["merged_into_order"] = action.get("merged_into_order") or max(1, int(raw_movement.get("order") or 1) - 1)
+                action.setdefault("rollback_action", _rollback_action_for(action, previous))
             break
     return data
 

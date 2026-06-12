@@ -534,6 +534,137 @@
       </div>
     </section>
 
+    <section v-if="activeConfigSection === 'advanced' && !showUserConfig" class="surface rounded-lg p-5">
+      <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">COSMIC 治理</p>
+          <h2 class="mt-1 text-lg font-semibold">审阅规则与计数策略</h2>
+        </div>
+        <button class="btn-secondary w-fit" :disabled="cosmicGovernanceLoading || cosmicGovernanceSaving" @click="loadCosmicGovernanceSettings">
+          {{ cosmicGovernanceLoading ? '加载中...' : '刷新治理配置' }}
+        </button>
+      </div>
+
+      <p v-if="cosmicGovernanceError" class="text-sm text-[var(--color-warning)]">{{ cosmicGovernanceError }}</p>
+      <div v-else class="space-y-4">
+        <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+          <div class="grid gap-3 md:grid-cols-2">
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)]">
+              <input
+                v-model="cosmicGovernanceForm.allowDraftExcelOutput"
+                type="checkbox"
+                class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+              />
+              允许 COSMIC 草稿 Excel
+            </label>
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)]">
+              <input
+                v-model="cosmicGovernanceForm.autoApplyReviewActions"
+                type="checkbox"
+                class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+              />
+              自动应用允许的治理动作
+            </label>
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)]">
+              <input
+                v-model="cosmicGovernanceForm.requireUniqueFunctionUser"
+                type="checkbox"
+                class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+              />
+              功能用户强绑定
+            </label>
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)]">
+              <input
+                v-model="cosmicGovernanceForm.cfpFormulaConsistencyCheck"
+                type="checkbox"
+                class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+              />
+              CFP 公式一致性检查
+            </label>
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-ink-muted)]">
+              <input
+                v-model="cosmicGovernanceForm.auditHashChain"
+                type="checkbox"
+                class="rounded border-[var(--color-rule-strong)] text-[var(--color-accent)] focus:ring-[var(--color-focus)]"
+              />
+              审计哈希链
+            </label>
+          </div>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+            <label for="cosmic-auto-issue-codes" class="field-label text-xs">自动治理 issue code</label>
+            <textarea
+              id="cosmic-auto-issue-codes"
+              v-model="cosmicGovernanceForm.autoApplyIssueCodesText"
+              rows="4"
+              class="field-control font-mono text-xs leading-relaxed"
+              spellcheck="false"
+            />
+          </div>
+          <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+            <label for="cosmic-cfp-policy" class="field-label text-xs">CFP 策略 JSON</label>
+            <textarea
+              id="cosmic-cfp-policy"
+              v-model="cosmicGovernanceForm.cfpPolicyText"
+              rows="4"
+              class="field-control font-mono text-xs leading-relaxed"
+              spellcheck="false"
+            />
+          </div>
+          <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+            <label for="cosmic-function-user-role-map" class="field-label text-xs">功能用户映射 JSON</label>
+            <textarea
+              id="cosmic-function-user-role-map"
+              v-model="cosmicGovernanceForm.functionUserRoleMapText"
+              rows="6"
+              class="field-control font-mono text-xs leading-relaxed"
+              spellcheck="false"
+            />
+          </div>
+          <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+            <label for="cosmic-boundary-context" class="field-label text-xs">边界上下文 JSON</label>
+            <textarea
+              id="cosmic-boundary-context"
+              v-model="cosmicGovernanceForm.boundaryContextText"
+              rows="6"
+              class="field-control font-mono text-xs leading-relaxed"
+              spellcheck="false"
+            />
+          </div>
+          <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4 lg:col-span-2">
+            <label for="cosmic-rule-matrix" class="field-label text-xs">治理规则矩阵 JSON</label>
+            <textarea
+              id="cosmic-rule-matrix"
+              v-model="cosmicGovernanceForm.ruleMatrixText"
+              rows="8"
+              class="field-control font-mono text-xs leading-relaxed"
+              spellcheck="false"
+            />
+          </div>
+          <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+            <label for="cosmic-audit-secret-env" class="field-label text-xs">签名密钥环境变量</label>
+            <input id="cosmic-audit-secret-env" v-model.trim="cosmicGovernanceForm.auditSignatureSecretEnv" type="text" class="field-control font-mono text-sm" />
+          </div>
+          <div class="rounded-lg border border-[var(--color-rule)] bg-[var(--color-surface)] p-4">
+            <label for="cosmic-audit-ledger-env" class="field-label text-xs">外部审计账本路径环境变量</label>
+            <input id="cosmic-audit-ledger-env" v-model.trim="cosmicGovernanceForm.auditLedgerPathEnv" type="text" class="field-control font-mono text-sm" />
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <span :class="['w-fit rounded-md px-2 py-1 text-xs font-semibold', cosmicGovernanceStatusClass]">{{ cosmicGovernanceStatusText }}</span>
+            <p v-if="cosmicGovernanceMsg" :class="['mt-2 text-sm', cosmicGovernanceOk ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]']">{{ cosmicGovernanceMsg }}</p>
+          </div>
+          <button class="btn-primary w-fit" :disabled="cosmicGovernanceSaving || !hasCosmicGovernanceChanges" @click="saveCosmicGovernanceSettings">
+            {{ cosmicGovernanceSaving ? '保存中...' : '保存 COSMIC 治理' }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section v-if="activeConfigSection === 'fpa' && !showUserConfig" class="surface rounded-lg p-5">
       <div class="mb-4 flex flex-col gap-3 border-b border-[var(--color-rule)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -1312,6 +1443,43 @@ interface BusinessRulesResponse {
   exists: boolean
 }
 
+interface CosmicGovernanceRuleAction {
+  action: string
+  label?: string
+  reason?: string
+  [key: string]: unknown
+}
+
+interface CosmicGovernanceRule {
+  code: string
+  target: string
+  severity?: string
+  message?: string
+  scope_policy?: string
+  governance_category?: string
+  description?: string
+  terms?: string[]
+  suggested_actions?: CosmicGovernanceRuleAction[]
+}
+
+interface CosmicGovernanceResponse {
+  exists: boolean
+  allow_draft_excel_output: boolean
+  cfp_policy: Record<string, number>
+  governance: {
+    auto_apply_review_actions: boolean
+    auto_apply_issue_codes: string[]
+    function_user_role_map: Record<string, string>
+    require_unique_function_user: boolean
+    cfp_formula_consistency_check: boolean
+    audit_hash_chain: boolean
+    audit_signature_secret_env: string
+    audit_ledger_path_env: string
+    boundary_context: Record<string, string[]>
+    rule_matrix: CosmicGovernanceRule[]
+  }
+}
+
 interface AiPromptItem {
   id: number
   name: string
@@ -1474,6 +1642,26 @@ const businessRulesOk = ref(false)
 const businessRulesSnapshot = ref('')
 const businessRulesForm = reactive({
   cfpFormula: '',
+})
+const cosmicGovernanceLoading = ref(false)
+const cosmicGovernanceSaving = ref(false)
+const cosmicGovernanceError = ref('')
+const cosmicGovernanceMsg = ref('')
+const cosmicGovernanceOk = ref(false)
+const cosmicGovernanceSnapshot = ref('')
+const cosmicGovernanceForm = reactive({
+  allowDraftExcelOutput: false,
+  autoApplyReviewActions: false,
+  autoApplyIssueCodesText: '',
+  functionUserRoleMapText: '{}',
+  requireUniqueFunctionUser: false,
+  cfpFormulaConsistencyCheck: false,
+  auditHashChain: true,
+  auditSignatureSecretEnv: 'COSMIC_REVIEW_AUDIT_SIGNING_KEY',
+  auditLedgerPathEnv: 'COSMIC_REVIEW_AUDIT_LEDGER_PATH',
+  cfpPolicyText: '{}',
+  boundaryContextText: '{}',
+  ruleMatrixText: '[]',
 })
 const aiPrompts = ref<AiPromptItem[]>([])
 const aiPromptNextId = ref(1)
@@ -1700,6 +1888,23 @@ const businessRulesFormSnapshot = computed(() => JSON.stringify({
 const hasBusinessRulesChanges = computed(() => (
   businessRulesSnapshot.value !== '' && businessRulesFormSnapshot.value !== businessRulesSnapshot.value
 ))
+const cosmicGovernanceFormSnapshot = computed(() => JSON.stringify({
+  allowDraftExcelOutput: cosmicGovernanceForm.allowDraftExcelOutput,
+  autoApplyReviewActions: cosmicGovernanceForm.autoApplyReviewActions,
+  autoApplyIssueCodesText: cosmicGovernanceForm.autoApplyIssueCodesText.trim(),
+  functionUserRoleMapText: cosmicGovernanceForm.functionUserRoleMapText.trim(),
+  requireUniqueFunctionUser: cosmicGovernanceForm.requireUniqueFunctionUser,
+  cfpFormulaConsistencyCheck: cosmicGovernanceForm.cfpFormulaConsistencyCheck,
+  auditHashChain: cosmicGovernanceForm.auditHashChain,
+  auditSignatureSecretEnv: cosmicGovernanceForm.auditSignatureSecretEnv.trim(),
+  auditLedgerPathEnv: cosmicGovernanceForm.auditLedgerPathEnv.trim(),
+  cfpPolicyText: cosmicGovernanceForm.cfpPolicyText.trim(),
+  boundaryContextText: cosmicGovernanceForm.boundaryContextText.trim(),
+  ruleMatrixText: cosmicGovernanceForm.ruleMatrixText.trim(),
+}))
+const hasCosmicGovernanceChanges = computed(() => (
+  cosmicGovernanceSnapshot.value !== '' && cosmicGovernanceFormSnapshot.value !== cosmicGovernanceSnapshot.value
+))
 const aiPromptsSnapshotCurrent = computed(() => JSON.stringify(
   aiPrompts.value.map(({ name, scene, system, examples }) => ({ name, scene, system, examples })),
 ))
@@ -1806,6 +2011,18 @@ const businessRulesStatusClass = computed(() => {
   if (hasBusinessRulesChanges.value) return statusClass.warn
   return statusClass.ok
 })
+const cosmicGovernanceStatusText = computed(() => {
+  if (cosmicGovernanceSaving.value) return '保存中'
+  if (cosmicGovernanceMsg.value && !cosmicGovernanceOk.value) return '保存失败'
+  if (hasCosmicGovernanceChanges.value) return '有未保存修改'
+  return '已保存'
+})
+const cosmicGovernanceStatusClass = computed(() => {
+  if (cosmicGovernanceSaving.value) return statusClass.neutral
+  if (cosmicGovernanceMsg.value && !cosmicGovernanceOk.value) return statusClass.warn
+  if (hasCosmicGovernanceChanges.value) return statusClass.warn
+  return statusClass.ok
+})
 const aiPromptsStatusText = computed(() => {
   if (aiPromptsSaving.value) return '保存中'
   if (aiPromptsMsg.value && !aiPromptsOk.value) return '保存失败'
@@ -1845,6 +2062,7 @@ onMounted(async () => {
     await loadFpaStrategySettings()
     await loadFpaJudgementRules()
     await loadBusinessRulesSettings()
+    await loadCosmicGovernanceSettings()
     await loadDomainContextSettings()
     await loadAiPromptSettings()
     await loadAdvancedConfigFiles()
@@ -2246,6 +2464,118 @@ async function saveBusinessRulesSettings() {
     businessRulesMsg.value = presentConfigError(e)
   } finally {
     businessRulesSaving.value = false
+  }
+}
+
+function formatJsonField(value: unknown, fallback: unknown): string {
+  const target = value === undefined || value === null ? fallback : value
+  return JSON.stringify(target, null, 2)
+}
+
+function parseJsonObjectField(text: string, label: string): Record<string, unknown> {
+  const value = JSON.parse(text || '{}')
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    throw new Error(`${label} 必须是 JSON 对象`)
+  }
+  return value as Record<string, unknown>
+}
+
+function parseJsonArrayField(text: string, label: string): unknown[] {
+  const value = JSON.parse(text || '[]')
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} 必须是 JSON 数组`)
+  }
+  return value
+}
+
+function splitCosmicIssueCodes(text: string): string[] {
+  return text
+    .split(/[\n,，]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function applyCosmicGovernanceSettings(data: CosmicGovernanceResponse) {
+  const governance = data.governance || {}
+  cosmicGovernanceForm.allowDraftExcelOutput = Boolean(data.allow_draft_excel_output)
+  cosmicGovernanceForm.autoApplyReviewActions = Boolean(governance.auto_apply_review_actions)
+  cosmicGovernanceForm.autoApplyIssueCodesText = (governance.auto_apply_issue_codes || []).join('\n')
+  cosmicGovernanceForm.functionUserRoleMapText = formatJsonField(governance.function_user_role_map, {})
+  cosmicGovernanceForm.requireUniqueFunctionUser = Boolean(governance.require_unique_function_user)
+  cosmicGovernanceForm.cfpFormulaConsistencyCheck = Boolean(governance.cfp_formula_consistency_check)
+  cosmicGovernanceForm.auditHashChain = governance.audit_hash_chain !== false
+  cosmicGovernanceForm.auditSignatureSecretEnv = governance.audit_signature_secret_env || 'COSMIC_REVIEW_AUDIT_SIGNING_KEY'
+  cosmicGovernanceForm.auditLedgerPathEnv = governance.audit_ledger_path_env || 'COSMIC_REVIEW_AUDIT_LEDGER_PATH'
+  cosmicGovernanceForm.cfpPolicyText = formatJsonField(data.cfp_policy, {})
+  cosmicGovernanceForm.boundaryContextText = formatJsonField(governance.boundary_context, {})
+  cosmicGovernanceForm.ruleMatrixText = formatJsonField(governance.rule_matrix, [])
+  cosmicGovernanceMsg.value = ''
+  cosmicGovernanceOk.value = true
+  cosmicGovernanceSnapshot.value = cosmicGovernanceFormSnapshot.value
+}
+
+function buildCosmicGovernancePayload(): Record<string, unknown> {
+  return {
+    allow_draft_excel_output: cosmicGovernanceForm.allowDraftExcelOutput,
+    cfp_policy: parseJsonObjectField(cosmicGovernanceForm.cfpPolicyText, 'CFP 策略'),
+    governance: {
+      auto_apply_review_actions: cosmicGovernanceForm.autoApplyReviewActions,
+      auto_apply_issue_codes: splitCosmicIssueCodes(cosmicGovernanceForm.autoApplyIssueCodesText),
+      function_user_role_map: parseJsonObjectField(cosmicGovernanceForm.functionUserRoleMapText, '功能用户映射'),
+      require_unique_function_user: cosmicGovernanceForm.requireUniqueFunctionUser,
+      cfp_formula_consistency_check: cosmicGovernanceForm.cfpFormulaConsistencyCheck,
+      audit_hash_chain: cosmicGovernanceForm.auditHashChain,
+      audit_signature_secret_env: cosmicGovernanceForm.auditSignatureSecretEnv,
+      audit_ledger_path_env: cosmicGovernanceForm.auditLedgerPathEnv,
+      boundary_context: parseJsonObjectField(cosmicGovernanceForm.boundaryContextText, '边界上下文'),
+      rule_matrix: parseJsonArrayField(cosmicGovernanceForm.ruleMatrixText, '治理规则矩阵'),
+    },
+  }
+}
+
+async function loadCosmicGovernanceSettings() {
+  cosmicGovernanceLoading.value = true
+  cosmicGovernanceError.value = ''
+  try {
+    const data = await apiFetch<CosmicGovernanceResponse>('/api/web-config/cosmic-governance')
+    applyCosmicGovernanceSettings(data)
+  } catch (e) {
+    cosmicGovernanceSnapshot.value = ''
+    cosmicGovernanceError.value = presentConfigError(e)
+  } finally {
+    cosmicGovernanceLoading.value = false
+  }
+}
+
+async function saveCosmicGovernanceSettings() {
+  let payload: Record<string, unknown>
+  try {
+    payload = buildCosmicGovernancePayload()
+  } catch (e) {
+    cosmicGovernanceOk.value = false
+    cosmicGovernanceMsg.value = e instanceof Error ? e.message : 'COSMIC 治理配置格式错误'
+    return
+  }
+
+  cosmicGovernanceSaving.value = true
+  cosmicGovernanceMsg.value = ''
+  try {
+    const data = await apiFetch<CosmicGovernanceResponse>('/api/web-config/cosmic-governance', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    applyCosmicGovernanceSettings(data)
+    cosmicGovernanceOk.value = true
+    cosmicGovernanceMsg.value = '保存成功'
+    await loadConfigBackups()
+    await loadLocalConfig()
+    await loadAdvancedConfigFiles()
+  } catch (e) {
+    cosmicGovernanceOk.value = false
+    cosmicGovernanceMsg.value = presentConfigError(e)
+  } finally {
+    cosmicGovernanceSaving.value = false
   }
 }
 
