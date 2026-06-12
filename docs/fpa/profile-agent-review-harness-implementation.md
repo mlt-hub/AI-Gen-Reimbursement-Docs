@@ -24,14 +24,16 @@
 | `96687da` | 为 `multi_uis` 增加独立 contract 变体。 |
 | `854cdc2` | 真实模型验证模板补齐 profile 专属质量指标。 |
 | `ae27e47` | 增加自定义 profile 继承式 harness 示例，并对齐 `ui_api_mapping` 显式后端行提取与审阅口径。 |
-| 当前切片 | 增加 `multi-profile-real-model` preset，区分 primary/debug_only 基础质量门，并归档首轮多 profile 真实模型基线。 |
+| `docs/fpa/validation-runs/2026-06-09-multi-profile-real-model-hardened.md` | 收敛 prompt 和确定性补齐/审阅，`profile_quality_issue_count=0`。 |
+| 当前切片 | 将 `multi_uis` 提升为独立 `kind: multi_uis`，保持生成规则复用统一界面能力，并同步 contract / harness / 文档。 |
 
 当前实现约束：
 
-- 非 strict profile 的专属 review 只进入 `agent_review` 和稳定性报告。
+- 非 strict profile 的专属 review 进入 `agent_review` 和稳定性报告，prompt 会读取对应 judgement。
 - profile 专属 warning 不阻断、不自动重试、不改写 rows。
 - `strict_fpa` 的 `type_judgement`、`merge_review`、`quality_review` 语义保持不变。
-- 已执行首轮多 profile 真实模型基线：20 次调用均走 AI 路径，基础 strict 质量门为 0，但 profile 专属质量门失败，需要继续收敛 `unified_ui` / `multi_uis` / `ui_api_mapping` prompt。
+- 已执行首轮多 profile 真实模型基线和 hardening 后复测：20 次调用均走 AI 路径，基础 strict 质量门为 0，hardening 后 `profile_quality_issue_count=0`。
+- `multi_uis` 已具备独立 `kind: multi_uis` 和 `multi_uis_contract`，内部继续复用统一界面 workload / quality review 能力。
 
 ## 目标行为
 
@@ -269,6 +271,14 @@ warning count
 - profile 专属质量门：`profile_quality_issue_count=49`，未通过。
 - 后续方向：优先收敛 `unified_ui` / `multi_uis` 的界面与处理开发行 prompt，以及 `ui_api_mapping` 的默认 UI/API 行和显式后端行 prompt。
 
+hardening 后结果：
+
+- 记录文件：`docs/fpa/validation-runs/2026-06-09-multi-profile-real-model-hardened.md`
+- 运行范围：5 个 standard fixture × 4 个 profile，共 20 次真实模型调用。
+- 基础质量门：`quality_issue_count=0`、`retryable_quality_issue_count=0`、`blocking_retry_count=0`。
+- profile 专属质量门：`profile_quality_issue_count=0`，通过。
+- 后续方向：继续扩大真实项目样本，并维持按日期归档。
+
 ## 验证命令
 
 当前 profile contract / harness / stability 汇总建议运行：
@@ -302,8 +312,8 @@ warning count
 
 ## 后续切片
 
-1. 根据 `docs/fpa/validation-runs/2026-06-09-multi-profile-real-model.md` 的 profile issue 分布，收敛 `unified_ui` / `multi_uis` / `ui_api_mapping` prompt。
-2. 重新运行 `multi-profile-real-model` preset，目标是 `profile_quality_issue_count=0`。
-3. 如果 `multi_uis` 真实项目需求稳定，评估是否新增独立 `kind: multi_uis` 和独立 contract。
+1. 扩大 `multi-profile-real-model` 之外的真实项目样本，继续按 `docs/fpa/validation-runs/multi-profile-run-template.md` 归档。
+2. 为 `unified_ui` / `multi_uis` / `ui_api_mapping` 增补更贴近真实项目的 profile 级 golden fixtures。
+3. 观察 profile 专属 warning 误报率，再决定是否从只读质量门升级为阻断或自动重试。
 
 每个切片都应保持现有生成行为可回归，并按仓库规则单独提交。

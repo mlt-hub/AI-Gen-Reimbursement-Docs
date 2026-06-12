@@ -1711,7 +1711,7 @@ def _supplement_ai_rows_with_rules(
     coverage_rules = rule_set_config.coverage_rules if isinstance(rule_set_config, FpaRuleSetConfig) else None
     require_process_coverage = True if coverage_rules is None or coverage_rules.require_process_coverage is None else coverage_rules.require_process_coverage
     require_data_function = True if coverage_rules is None or coverage_rules.require_data_function is None else coverage_rules.require_data_function
-    require_profile_exact_rows = profile.agent_review_profile_kind() in {"unified_ui", "ui_api_mapping"}
+    require_profile_exact_rows = profile.agent_review_profile_kind() in {"unified_ui", "multi_uis", "ui_api_mapping"}
     if not require_process_coverage and not require_data_function and not require_profile_exact_rows:
         return ai_rows, []
 

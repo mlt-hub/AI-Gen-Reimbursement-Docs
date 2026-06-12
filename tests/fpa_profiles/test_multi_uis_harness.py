@@ -1,4 +1,4 @@
-from ai_gen_reimbursement_docs.fpa_profiles import CustomRulesProfile
+from ai_gen_reimbursement_docs.fpa_profiles import MULTI_UIS_PROFILE
 from ai_gen_reimbursement_docs.gen_fpa import _normalize_ai_fpa_rows_for_l3
 
 
@@ -51,7 +51,7 @@ def test_multi_uis_harness_keeps_multiple_ui_rows_with_split_reason_metadata():
             },
         ],
         judgement_rules=["规则一"],
-        profile=CustomRulesProfile(name="multi_uis"),
+        profile=MULTI_UIS_PROFILE,
     )
 
     ui_rows = [row for row in rows if "界面开发" in str(row["新增/修改功能点"])]
@@ -85,7 +85,7 @@ def test_multi_uis_harness_keeps_duplicate_ui_names_and_warns_for_review():
             },
         ],
         judgement_rules=["规则一"],
-        profile=CustomRulesProfile(name="multi_uis"),
+        profile=MULTI_UIS_PROFILE,
     )
 
     ui_rows = [row for row in rows if "界面开发" in str(row["新增/修改功能点"])]

@@ -50,7 +50,7 @@ UNIFIED_UI_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
 
 MULTI_UIS_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
     name="multi_uis_contract",
-    profile_kind="unified_ui",
+    profile_kind="multi_uis",
     categories=("多界面开发", "逻辑接口开发", "导入处理开发", "导出处理开发", "外部接口联调调用"),
     judgement_output_key="workload_judgement",
     merge_review_output_key="unified_merge_review",
@@ -69,6 +69,9 @@ UI_API_MAPPING_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
 )
 
 
+UNIFIED_REVIEW_PROFILE_KINDS = {"unified_ui", "multi_uis"}
+
+
 def build_fpa_agent_review(
     *,
     group: dict[str, object],
@@ -82,10 +85,14 @@ def build_fpa_agent_review(
     process_facts = extract_fpa_process_facts(group)
     merge_review = build_fpa_merge_review(group)
     type_judgement = build_fpa_type_judgement(group)
-    workload_judgement = _build_unified_workload_judgement(process_facts) if contract.profile_kind == "unified_ui" else {}
+    workload_judgement = (
+        _build_unified_workload_judgement(process_facts)
+        if contract.profile_kind in UNIFIED_REVIEW_PROFILE_KINDS
+        else {}
+    )
     unified_merge_review = (
         _build_unified_merge_review(group, process_facts, workload_judgement)
-        if contract.profile_kind == "unified_ui"
+        if contract.profile_kind in UNIFIED_REVIEW_PROFILE_KINDS
         else {}
     )
     mapping_judgement = _build_mapping_judgement(group) if contract.profile_kind == "ui_api_mapping" else {}
@@ -109,7 +116,7 @@ def build_fpa_agent_review(
             workload_judgement=workload_judgement,
             contract_name=contract.name,
         )
-        if contract.profile_kind == "unified_ui"
+        if contract.profile_kind in UNIFIED_REVIEW_PROFILE_KINDS
         else {}
     )
     mapping_quality_review = (
@@ -164,7 +171,7 @@ def build_fpa_agent_review(
             summary=_quality_summary(quality_review),
         ),
     ]
-    if contract.profile_kind == "unified_ui":
+    if contract.profile_kind in UNIFIED_REVIEW_PROFILE_KINDS:
         roles.extend([
             _role(
                 name="workload_judge",
@@ -253,7 +260,7 @@ def resolve_fpa_agent_review_contract(
     kind = (profile_kind or profile_name or "strict_fpa").strip()
     if kind == "strict_fpa":
         return STRICT_FPA_AGENT_REVIEW_CONTRACT
-    if name == "multi_uis":
+    if kind == "multi_uis" or name == "multi_uis":
         return MULTI_UIS_AGENT_REVIEW_CONTRACT
     if kind == "ui_api_mapping":
         return UI_API_MAPPING_AGENT_REVIEW_CONTRACT
@@ -334,7 +341,7 @@ def _profile_review_outputs(
     mapping_merge_review: dict[str, object],
     mapping_quality_review: dict[str, object],
 ) -> dict[str, object]:
-    if contract.profile_kind == "unified_ui":
+    if contract.profile_kind in UNIFIED_REVIEW_PROFILE_KINDS:
         return {
             "workload_judgement": workload_judgement,
             "unified_merge_review": unified_merge_review,
@@ -354,7 +361,7 @@ def _profile_quality_review(
     unified_quality_review: dict[str, object],
     mapping_quality_review: dict[str, object],
 ) -> dict[str, object]:
-    if contract.profile_kind == "unified_ui":
+    if contract.profile_kind in UNIFIED_REVIEW_PROFILE_KINDS:
         return unified_quality_review
     if contract.profile_kind == "ui_api_mapping":
         return mapping_quality_review
@@ -372,7 +379,9 @@ def _build_unified_workload_judgement(process_facts: list[dict[str, object]]) ->
             categories.append("导入处理开发")
         elif operation == "query" or bool(fact.get("changes_internal_data")):
             categories.append("逻辑接口开发")
-        if bool(fact.get("ordinary_external_service")) or str(fact.get("external_data_group_evidence", "") or ""):
+        has_external_data_evidence = bool(str(fact.get("external_data_group_evidence", "") or ""))
+        has_external_service_evidence = bool(fact.get("ordinary_external_service")) and operation != "import"
+        if has_external_service_evidence or has_external_data_evidence:
             categories.append("外部接口联调调用")
         judgements.append({
             "process_id": str(fact.get("process_id", "") or ""),
@@ -521,7 +530,7 @@ def _has_unified_ui_evidence(rows: list[dict[str, object]], *, contract_name: st
 
 def _is_multi_uis_ui_row(row: dict[str, object]) -> bool:
     row_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
-    if row_type != "EI":
+    if row_type not in {"EI", "EQ", "EO"}:
         return False
     generation = str(row.get("生成方式", "") or row.get("generation", "") or "").strip()
     split_reason = str(row.get("split_reason", "") or row.get("拆分理由", "") or "").strip()

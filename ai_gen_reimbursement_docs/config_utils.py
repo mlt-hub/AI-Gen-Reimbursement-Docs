@@ -445,7 +445,7 @@ FPA_RUNTIME_CONFIG_FILES = (
     FPA_JUDGEMENT_RULES_FILENAME,
     FPA_DOMAIN_CONTEXT_FILENAME,
 )
-VALID_FPA_PROFILE_KINDS = {"strict_fpa", "unified_ui", "ui_api_mapping"}
+VALID_FPA_PROFILE_KINDS = {"strict_fpa", "unified_ui", "multi_uis", "ui_api_mapping"}
 VALID_FPA_STRATEGIES = {"rules_first", "ai_first", "rules_only", "ai_only"}
 VALID_FPA_JUDGEMENT_RULES_SOURCES = {"config", "template"}
 VALID_FPA_TYPES = {"EI", "EQ", "EO", "ILF", "EIF"}

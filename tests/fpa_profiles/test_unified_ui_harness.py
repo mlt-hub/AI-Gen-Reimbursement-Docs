@@ -44,7 +44,12 @@ def _rule_set():
                 fpa_type="EI",
                 reason="三级模块兜底合并界面能力。",
                 empty_process_text="完成三级模块页面交互能力",
-                explanation_template="{name}，具体为以下：\n{items}",
+                explanation_template=(
+                    "来源场景：{name}\n"
+                    "业务数据：客户档案。\n"
+                    "业务规则：覆盖以下功能过程：\n{items}\n"
+                    "计算说明：按 EI 识别。"
+                ),
             ),
             process_rows=FpaProcessRowsPlanningRule(
                 enabled=True,
@@ -56,7 +61,12 @@ def _rule_set():
                     "EO": "导出处理开发",
                     "EIF": "外部接口联调调用",
                 },
-                explanation_template="{name}，具体为以下：\n1、{description}",
+                explanation_template=(
+                    "来源场景：{name}\n"
+                    "业务数据：客户档案。\n"
+                    "业务规则：{description}\n"
+                    "计算说明：按 EI/ILF/EQ/EO/EIF 之一识别并计量。"
+                ),
             ),
         ),
     )

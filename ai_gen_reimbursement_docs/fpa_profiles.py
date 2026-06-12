@@ -17,6 +17,7 @@ VALID_RULE_MERGE_MODES = {"append", "replace"}
 RULE_HITS_KEY = "_规则命中详情"
 
 UNIFIED_UI_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.unified_ui_cr 配置 unified_ui 核心口径。"
+MULTI_UIS_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.multi_uis_cr 配置 multi_uis 核心口径。"
 STRICT_FPA_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.strict_fpa_cr 配置 strict_fpa 核心口径。"
 UI_API_MAPPING_CORE_RULES = "请在 fpa_config.yaml 的 core_rules.ui_api_mapping_cr 配置 ui_api_mapping 核心口径。"
 
@@ -1340,6 +1341,19 @@ class CustomRulesProfile:
 
 
 @dataclass(frozen=True)
+class MultiUisProfile(CustomRulesProfile):
+    """多界面口径，复用统一界面兜底规则并暴露独立 agent review kind。"""
+
+    name: str = "multi_uis"
+    version: str = "1"
+    description: str = "多界面口径：允许按独立页面、业务对象、业务流程或用户端拆分多条界面开发行。"
+    core_rules: str = MULTI_UIS_CORE_RULES
+
+    def agent_review_profile_kind(self) -> str:
+        return "multi_uis"
+
+
+@dataclass(frozen=True)
 class StrictFpaProfile(CustomRulesProfile):
     """严格 FPA 口径。"""
 
@@ -2254,10 +2268,12 @@ class UiApiMappingProfile(CustomRulesProfile):
 
 UNIFIED_UI_PROFILE = CustomRulesProfile()
 CUSTOM_RULES_PROFILE = UNIFIED_UI_PROFILE
+MULTI_UIS_PROFILE = MultiUisProfile()
 STRICT_FPA_PROFILE = StrictFpaProfile()
 UI_API_MAPPING_PROFILE = UiApiMappingProfile()
 FPA_PROFILES = {
     UNIFIED_UI_PROFILE.name: UNIFIED_UI_PROFILE,
+    MULTI_UIS_PROFILE.name: MULTI_UIS_PROFILE,
     STRICT_FPA_PROFILE.name: STRICT_FPA_PROFILE,
     UI_API_MAPPING_PROFILE.name: UI_API_MAPPING_PROFILE,
 }
@@ -2268,6 +2284,8 @@ def _profile_from_kind(profile_name: str, kind: str) -> CustomRulesProfile:
         return StrictFpaProfile(name=profile_name)
     if kind == "unified_ui":
         return CustomRulesProfile(name=profile_name)
+    if kind == "multi_uis":
+        return MultiUisProfile(name=profile_name)
     if kind == "ui_api_mapping":
         return UiApiMappingProfile(name=profile_name)
     raise ValueError(f"未知 FPA profile kind: {kind}")
