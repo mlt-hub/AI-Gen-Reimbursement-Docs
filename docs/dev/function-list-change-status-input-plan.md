@@ -2,10 +2,12 @@
 
 ## 实施状态
 
-已实施完成，代码提交为：
+已实施完成，相关提交为：
 
 ```text
 cc893a7121480b8198f97eb1ea8381449dc28c8b fix: map function list change status input
+a4008dd test: use change_status in FPA process fixtures
+ffc8f37 Merge function list change status fixture follow-up
 ```
 
 本次实施已完成以下事项：
@@ -15,7 +17,7 @@ cc893a7121480b8198f97eb1ea8381449dc28c8b fix: map function list change status in
 - FPA 内部源需求状态已统一命名为 `change_status`，不再复用 `type`。
 - FPA profile 聚合、AI prompt payload、业务事实层、采样器和真实模型验证脚本已同步改为读取 `change_status` / `变更状态`。
 - `config/fpa_config.yaml.example` 已明确 `变更状态` 只是源需求状态参考，不作为 EI、EQ、EO、ILF、EIF 的 FPA 类型判定依据。
-- 输入功能清单相关测试、golden fixtures 和测试 Excel fixture 已切换到新字段结构。
+- 输入功能清单相关测试、golden fixtures、测试 Excel fixture、FPA profile/agent review 测试和 profile fixture 已切换到新字段结构。
 - 项目需求清单输出模板中的 `功能过程类型` 保持不改；由于输入侧不再提供该类型，当前清单生成不会把 `变更状态` 误写入该输出列。
 
 已完成验证：
@@ -27,14 +29,19 @@ cc893a7121480b8198f97eb1ea8381449dc28c8b fix: map function list change status in
 结果：
 
 ```text
-864 passed, 2 skipped
+921 passed, 2 skipped
 ```
 
 另已使用主工作区真实模板 `data/in_templates/功能清单-录入模板.xlsx` 执行基础数据生成校验，确认生成的模块树表头为新表头，首行 `功能过程描述` 和 `变更状态` 分别来自 H、I 列。
 
+补充检查结果：
+
+- `rg -n '功能过程类型|p\.get\("type"\)|r\.get\("功能过程类型"\)|"type": "新增"|"type": "修改"|"type": "查询"' ai_gen_reimbursement_docs tests scripts config` 中，输入功能清单和 FPA 源状态链路已无旧字段读取或旧测试契约残留。
+- 搜索结果中保留的 `功能过程类型` 仅位于 `constants.py` / `gen_list.py` 的项目需求清单输出模板相关逻辑。
+
 遗留边界：
 
-- 主工作区中真实输入模板 `data/in_templates/功能清单-录入模板.xlsx` 仍是用户已有未提交修改，本次实现提交未纳入该文件。
+- 真实输入模板 `data/in_templates/功能清单-录入模板.xlsx` 本轮仅用于生成校验，未作为本轮文档收尾变更修改。
 - 旧术语 `功能过程类型` 仅保留在项目需求清单输出模板相关常量和生成逻辑中，不再用于输入功能清单到 FPA 的传递链路。
 
 ## 背景
