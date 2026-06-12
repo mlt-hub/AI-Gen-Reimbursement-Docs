@@ -123,11 +123,11 @@ class TestBuildFpaRuleRows:
         assert "具体为以下" in g_val
 
     def test_adjustment_values(self):
-        """默认 standard_fpa 下，规则兜底行使用配置兜底复杂度计算调整值。"""
+        """默认 unified_ui 下，规则兜底行使用 legacy_workload 调整值。"""
         rows = [self._make_row()]
         result = _build_fpa_rule_rows(rows, self._make_meta())
-        assert result[0]["调整值"] == 3
-        assert result[1]["调整值"] == 7
+        assert result[0]["调整值"] == 2
+        assert result[1]["调整值"] == 1
 
     def test_uses_meta_subsystem_and_asset(self):
         """子系统名和资产标识取自 meta。"""

@@ -71,7 +71,12 @@ def validate_fpa_rows(
                 retryable=True,
             ))
 
-        if fpa_type == "EI" and _looks_query_only(evidence) and not _looks_maintenance(evidence):
+        if (
+            fpa_type == "EI"
+            and _looks_query_only(evidence)
+            and not _looks_maintenance(evidence)
+            and not _looks_ui_workload_row(name)
+        ):
             issues.append(FpaValidationIssue(
                 code="validator.query_as_ei",
                 message=f"{name} 疑似查询类流程被判为 EI，应按只读查询优先判为 EQ",
@@ -165,6 +170,10 @@ def _row_source_text(row: dict[str, object], id_to_process: dict[str, dict[str, 
 
 def _looks_query_only(text: str) -> bool:
     return any(keyword in text for keyword in QUERY_KEYWORDS)
+
+
+def _looks_ui_workload_row(name: str) -> bool:
+    return "界面开发" in name
 
 
 def _looks_maintenance(text: str) -> bool:

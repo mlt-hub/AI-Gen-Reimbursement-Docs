@@ -50,6 +50,20 @@ def test_validator_flags_query_process_misclassified_as_ei():
     assert "查询/列表/搜索/查看且不改变数据的流程不得判 EI" in validation_feedback(issues)
 
 
+def test_validator_allows_unified_ui_query_covered_by_ui_row():
+    rows = [{
+        "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-界面开发",
+        "类型": "EI",
+        "计算依据说明": "来源场景：垂直行业管理界面开发。\n业务数据：垂直行业列表。\n业务规则：界面覆盖列表查询组件。\n计算说明：按界面开发 EI 计量。",
+        "源功能过程": "查询垂直行业数据",
+        "source_process_ids": ["m1_p1"],
+    }]
+
+    issues = validate_fpa_rows(group=_group(), rows=rows)
+
+    assert not any(issue.code == "validator.query_as_ei" for issue in issues)
+
+
 def test_validator_flags_ordinary_service_as_eif_without_external_data_evidence():
     group = {
         "client_type": "地市后台",
