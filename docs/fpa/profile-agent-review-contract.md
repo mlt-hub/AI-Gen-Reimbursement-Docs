@@ -10,7 +10,7 @@
 - `multi_uis` 使用独立 `kind: multi_uis` 和 `multi_uis_contract`，生成规则仍复用统一界面兜底能力，继续输出只读的 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。
 - `ui_api_mapping` 使用 `ui_api_mapping_contract`，`applicability: debug_only`，已输出只读的 `mapping_judgement`、`mapping_merge_review`、`mapping_quality_review`。
 - profile 专属 quality review 进入 `agent_review` 和稳定性报告；prompt 已明确读取 profile 专属 judgement，但 warning 仍不阻断、不自动重试、不直接改写 rows。
-- `tests/fpa_profiles/` 已补充 `unified_ui`、`multi_uis`、`ui_api_mapping` 的分层 harness、自定义 profile 继承式 harness，以及 prompt payload contract 覆盖。
+- `tests/fpa_profiles/` 已补充 `unified_ui`、`multi_uis`、`ui_api_mapping` 的分层 harness、自定义 profile 继承式 harness、prompt payload contract 覆盖，以及 profile 级 golden fixture contract 覆盖。
 - 稳定性报告已新增独立指标 `profile_quality_issue_count` 和 `profile_issue_code_counts`，不混入原 `quality_issue_count`。
 - 真实模型抽样记录模板已新增到 `docs/fpa/validation-runs/multi-profile-run-template.md`，首轮多 profile 基线与 hardening 后归零记录已归档。
 
@@ -18,7 +18,7 @@
 
 - profile 专属 warning 仍保持只读质量门，不阻断生成；如需升级为阻断或自动重试，需要先补更大样本的误报评估。
 - 新增 profile 或 rule_set 时继续采用 `contract + fixture + 稳定性抽样`，不要复制 Python 流程。
-- 真实模型抽样应继续按日期归档，避免只保留单次通过记录。
+- 真实模型抽样应继续按日期归档，尤其要覆盖 `multi-profile-real-model` 之外的真实项目样本，避免只保留单次通过记录。
 
 ## 背景
 
@@ -148,20 +148,20 @@ EI / EQ / EO / ILF / EIF
 
 | profile | 当前 harness | 当前成熟度 |
 |---|---|---|
-| `unified_ui` | 配置校验、prompt 渲染、三级模块界面行、非界面过程行、同名非界面行合并、prompt payload contract、`workload_judgement` / `unified_quality_review` 只读审计。 | supported，缺真实模型稳定性基线。 |
-| `multi_uis` | 独立 `kind: multi_uis`、独立 `multi_uis_contract`、多界面同名行保留、拆分理由进入 review/check 元数据、非界面业务动作沿用 `unified_ui` harness。 | supported，已有真实模型归零记录，仍需更多项目样本。 |
-| `ui_api_mapping` | 默认界面 EI、默认接口 ILF、明确后端调用 ILF、多接口行、重复默认行、prompt payload contract、`mapping_judgement` / `mapping_quality_review` 只读审计。 | supported，缺 AI 稳定性抽样。 |
+| `unified_ui` | 配置校验、prompt 渲染、三级模块界面行、非界面过程行、同名非界面行合并、prompt payload contract、profile golden fixture、`workload_judgement` / `unified_quality_review` 只读审计。 | supported，已有真实模型归零记录，仍需更多项目样本。 |
+| `multi_uis` | 独立 `kind: multi_uis`、独立 `multi_uis_contract`、多界面同名行保留、拆分理由进入 review/check 元数据、profile golden fixture、非界面业务动作沿用 `unified_ui` harness。 | supported，已有真实模型归零记录，仍需更多项目样本。 |
+| `ui_api_mapping` | 默认界面 EI、默认接口 ILF、明确后端调用 ILF、多接口行、重复默认行、prompt payload contract、profile golden fixture、`mapping_judgement` / `mapping_quality_review` 只读审计。 | supported，已有真实模型归零记录，仍需更多项目样本。 |
 | 自定义 profile | 主要依赖所复用 kind 和 rule_set 的配置校验与基础规则。 | 需要自行补 profile 级 fixture。 |
 
 这些 profile 目前仍没有达到 `strict_fpa` 的 harness 水平：
 
-- profile 专属 golden fixture 集合仍偏薄。
+- profile 专属 golden fixture 已覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的核心 contract，但仍需随真实项目样本扩展。
 - 已有真实模型 preset 和归零记录，但仍需要持续按日期归档。
 - 已有 `profile_quality_issue_count` 质量门；是否升级为阻断或自动重试仍未决定。
 - profile 专属 review 仍是只读 warning，prompt 会读取 judgement，但 warning 本身不直接阻断或改写 rows。
 - `type_judgement`、`merge_review`、`quality_review` 仍保留为 `strict_fpa` 语义的调试信息。
 
-因此，非 strict profile 可以运行，但不能按 `strict_fpa` 的稳定性结论直接背书。后续应优先补 profile 级 golden fixtures 和行为断言，再考虑把 agent review contract 扩展到各自的工作量口径。
+因此，非 strict profile 可以运行，但不能按 `strict_fpa` 的稳定性结论直接背书。后续应继续扩充 profile 级 golden fixtures、真实项目样本和 warning 误报评估，再考虑是否把只读 warning 升级为阻断或自动重试。
 
 ## Profile 组合 Harness 分层
 
@@ -475,15 +475,11 @@ workload_judgement
 source_process_ids 越界
 ```
 
-### 第五步：补 profile harness / fixture（已完成基础分层、自定义 profile 继承示例和真实模型归零记录）
+### 第五步：补 profile harness / fixture（已完成基础分层、自定义 profile 继承示例、profile golden fixtures 和真实模型归零记录）
 
-已补充 `tests/fpa_profiles/` 分层 harness，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的基础行为，并通过配置解析路径覆盖自定义 `kind: unified_ui` / `kind: ui_api_mapping` profile 的继承式 harness。`multi_uis` 已提升为独立 `kind: multi_uis`，真实模型抽样基线和 hardening 后归零记录已归档到 `docs/fpa/validation-runs/`。
+已补充 `tests/fpa_profiles/` 分层 harness，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的基础行为，并通过配置解析路径覆盖自定义 `kind: unified_ui` / `kind: ui_api_mapping` profile 的继承式 harness。`multi_uis` 已提升为独立 `kind: multi_uis`，profile 级 golden fixture 已覆盖 `unified_ui` 复合业务动作、`multi_uis` 多界面拆分和 `ui_api_mapping` 默认 UI/API + 显式后端行，真实模型抽样基线和 hardening 后归零记录已归档到 `docs/fpa/validation-runs/`。
 
-建议继续补 2 到 3 个 `unified_ui` golden fixtures：
-
-- 查询/新增/编辑/删除同一模块，期望界面和接口计量稳定。
-- 明确保存内部数据，期望数据库变更不漏。
-- 普通外部服务调用，期望外部对接或接口项合理，不误计数据库变更。
+后续 fixture 扩展应跟随真实项目样本增量补充，而不是在当前样例集上复制相近场景。
 
 ### 第六步：prompt 硬约束与只读 warning 分层（已完成 prompt 消费，warning 仍只读）
 
