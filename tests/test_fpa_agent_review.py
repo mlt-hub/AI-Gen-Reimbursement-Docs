@@ -91,7 +91,7 @@ def test_multi_uis_quality_accepts_ui_row_name_without_development_suffix():
         },
     ]
 
-    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="unified_ui")
+    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="multi_uis")
 
     codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
     assert "unified_ui.missing_ui_row" not in codes
@@ -115,7 +115,7 @@ def test_multi_uis_quality_accepts_ai_split_ei_rows_as_multi_ui_evidence():
         },
     ]
 
-    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="unified_ui")
+    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="multi_uis")
 
     codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
     assert "unified_ui.missing_ui_row" not in codes
@@ -146,7 +146,7 @@ def test_multi_uis_quality_accepts_ai_ei_row_with_source_process_as_ui_evidence(
         },
     ]
 
-    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="unified_ui")
+    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="multi_uis")
 
     codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
     assert "unified_ui.missing_ui_row" not in codes
@@ -183,7 +183,7 @@ def test_unified_workload_judgement_recommends_import_process_row():
         },
     ]
 
-    review = build_fpa_agent_review(group=group, rows=rows, profile_name="multi_uis", profile_kind="unified_ui")
+    review = build_fpa_agent_review(group=group, rows=rows, profile_name="multi_uis", profile_kind="multi_uis")
 
     judgement = review["workload_judgement"]["judgements"][0]
     assert "导入处理开发" in judgement["recommended_categories"]

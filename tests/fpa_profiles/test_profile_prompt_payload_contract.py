@@ -36,7 +36,7 @@ profiles:
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up
   multi_uis:
-    kind: unified_ui
+    kind: multi_uis
     strategy: rules_first
     rule_set: unified_ui_rs
     adjustment_value_method: legacy_workload
@@ -203,7 +203,7 @@ def test_multi_uis_prompt_payload_uses_multi_uis_contract_variant(tmp_path):
 
     review = payload["agent_review"]
     assert review["profile"] == "multi_uis"
-    assert review["profile_kind"] == "unified_ui"
+    assert review["profile_kind"] == "multi_uis"
     assert review["contract"] == "multi_uis_contract"
     assert review["categories"][0] == "多界面开发"
     assert review["contract_outputs"]["quality_review"] == "unified_quality_review"

@@ -24,6 +24,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
 )
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
+    MULTI_UIS_PROFILE,
     STRICT_FPA_PROFILE,
     UI_API_MAPPING_PROFILE,
     CustomRulesProfile,
@@ -1660,7 +1661,7 @@ def test_multi_uis_duplicate_ui_rows_are_kept_with_review_metadata():
         meta=_meta(),
         ai_rows=ai_rows,
         judgement_rules=["规则一"],
-        profile=CustomRulesProfile(name="multi_uis"),
+        profile=MULTI_UIS_PROFILE,
     )
 
     ui_rows = [row for row in rows if "界面开发" in str(row["新增/修改功能点"])]

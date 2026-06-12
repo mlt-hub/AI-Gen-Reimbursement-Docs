@@ -105,7 +105,7 @@ profiles:
     calculation_explanation_rules: unified_ui_ce
 
   multi_uis:
-    kind: unified_ui
+    kind: multi_uis
     strategy: rules_first
     rule_set: multi_uis_rs
     adjustment_value_method: legacy_workload

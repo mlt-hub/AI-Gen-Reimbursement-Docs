@@ -18,20 +18,20 @@ rule_set = 具体规则集
 ```text
 strict_fpa     严格 FPA 口径，kind: strict_fpa，默认 ai_first + strict_fpa_rs
 unified_ui     统一界面口径，kind: unified_ui，默认 rules_first + unified_ui_rs
-multi_uis      多界面口径，kind: unified_ui，默认 rules_first + multi_uis_rs
+multi_uis      多界面口径，kind: multi_uis，默认 rules_first + multi_uis_rs
 ui_api_mapping 界面接口映射口径，kind: ui_api_mapping，默认 rules_first + ui_api_mapping_rs
 ```
 
-也就是说，当前输出结果口径有 4 套 profile，但底层代码行为类型只有 3 类：
+也就是说，当前输出结果口径有 4 套 profile，底层代码行为类型也有 4 类；其中 `multi_uis` 是独立 kind，但内部复用统一界面的兜底生成和审阅能力：
 
 ```text
 strict_fpa      -> kind: strict_fpa
 unified_ui      -> kind: unified_ui
-multi_uis       -> kind: unified_ui
+multi_uis       -> kind: multi_uis
 ui_api_mapping  -> kind: ui_api_mapping
 ```
 
-`multi_uis` 暂时不是独立 kind，而是通过 `unified_ui` kind + `multi_uis_rs` + `multi_uis` prompt 形成的多界面口径变体。后续如果需要稳定的规则兜底拆分算法，再考虑新增独立 `kind: multi_uis`。
+`multi_uis` 使用独立 `kind: multi_uis` 和 `multi_uis_contract` 暴露审计身份；非界面业务动作仍沿用统一界面口径，避免为多界面 profile 复制整套 Python 流程。
 
 用户配置可以只保留实际需要的 profile，也可以新增自定义 profile。自定义 profile 只要绑定支持的 `kind`，并引用存在的 `rule_set/core_rules/system_prompt/user_prompt` 即可；如果 user prompt 引用了 `${calculation_explanation_rules}`，还必须显式绑定 `profiles.<profile>.calculation_explanation_rules` 到顶层 `calculation_explanation_rules` 中存在的 key。
 
@@ -67,9 +67,9 @@ profile × kind × strategy × rule_set × prompt × model
 | 组合 | 当前等级 | 说明 |
 |---|---|---|
 | `strict_fpa + ai_first + strict_fpa_rs` | `certified` | 已有 golden、validator、确认流、稳定性报告和真实模型 recommended 连续复测。 |
-| `unified_ui + rules_first + unified_ui_rs` | `supported` | 有配置、规则兜底、分层 harness 和只读 profile review；缺真实模型稳定性基线。 |
-| `multi_uis + rules_first + multi_uis_rs` | `supported / experimental` | 多界面同名行和拆分理由已有分层 harness，但主要依赖 prompt/rule_set。 |
-| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 规则兜底、固定 EI/ILF harness 和只读 mapping review 较清楚；缺 AI 稳定性抽样。 |
+| `unified_ui + rules_first + unified_ui_rs` | `supported` | 有配置、规则兜底、分层 harness、只读 profile review 和真实模型归零记录。 |
+| `multi_uis + rules_first + multi_uis_rs` | `supported` | 独立 kind、独立 contract、多界面同名行和拆分理由已有分层 harness，并有真实模型归零记录。 |
+| `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 规则兜底、固定 EI/ILF harness、只读 mapping review 和真实模型归零记录较清楚。 |
 | 任意 profile + 自定义 rule_set | 视继承关系而定 | 继承推荐 rule_set 时复用 base harness，再补扩展断言。 |
 | 任意 profile + 明显不匹配 rule_set | `experimental / invalid` | 只保证配置错误可见或输出可审计，不承诺业务正确。 |
 
@@ -134,6 +134,15 @@ profiles:
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
     calculation_explanation_rules: unified_ui_ce
+  multi_uis:
+    kind: multi_uis
+    strategy: rules_first
+    rule_set: multi_uis_rs
+    adjustment_value_method: standard_fpa
+    core_rules: multi_uis_cr
+    system_prompt: multi_uis_sp
+    user_prompt: multi_uis_up
+    calculation_explanation_rules: multi_uis_ce
 
 calculation_explanation_rules:
   strict_fpa_ce: |-
