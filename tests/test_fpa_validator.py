@@ -16,19 +16,19 @@ def _group():
                 "process_id": "m1_p1",
                 "process_name": "查询垂直行业数据",
                 "description": "按行业名称查询垂直行业列表，支持分页。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p2",
                 "process_name": "添加垂直行业",
                 "description": "输入垂直行业名称并保存。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p3",
                 "process_name": "编辑垂直行业",
                 "description": "修改垂直行业名称并保存。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }
@@ -74,7 +74,7 @@ def test_validator_flags_ordinary_service_as_eif_without_external_data_evidence(
             "process_id": "m1_p1",
             "process_name": "发送测试短信",
             "description": "调用短信平台发送测试短信。",
-            "type": "新增",
+            "change_status": "新增",
         }],
     }
     rows = [{
@@ -100,7 +100,7 @@ def test_validator_allows_eif_with_external_maintained_data_group_evidence():
             "process_id": "m1_p1",
             "process_name": "引用统一用户中心账号",
             "description": "读取统一用户中心维护的人员账号，本系统不维护账号主数据。",
-            "type": "新增",
+            "change_status": "新增",
         }],
     }
     rows = [{

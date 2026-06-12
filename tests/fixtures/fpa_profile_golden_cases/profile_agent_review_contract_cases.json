@@ -15,22 +15,22 @@
       "processes": [
         {
           "name": "查询客户资料",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "按客户名称查询客户资料列表。"
         },
         {
           "name": "导出客户资料",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "按查询条件导出客户资料文件。"
         },
         {
           "name": "导入客户资料",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "上传客户资料 Excel 文件并导入有效记录。"
         },
         {
           "name": "保存客户资料",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "保存客户基础信息和联系人信息。"
         }
       ]
@@ -74,12 +74,12 @@
       "processes": [
         {
           "name": "维护客户档案",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "维护客户基础信息。"
         },
         {
           "name": "维护联系人",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "维护客户联系人。"
         }
       ]
@@ -159,17 +159,17 @@
       "processes": [
         {
           "name": "查询合同列表",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "查询合同列表。"
         },
         {
           "name": "提交合同审批",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "提交合同审批，调用 OA 审批接口。"
         },
         {
           "name": "保存合同草稿",
-          "type": "新增",
+          "change_status": "新增",
           "desc": "保存合同草稿。"
         }
       ]

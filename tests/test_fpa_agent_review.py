@@ -12,13 +12,13 @@ def _group():
                 "process_id": "m1_p1",
                 "process_name": "添加垂直行业",
                 "description": "输入垂直行业名称并保存。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p2",
                 "process_name": "编辑垂直行业",
                 "description": "修改垂直行业名称并保存。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }
@@ -163,7 +163,7 @@ def test_unified_workload_judgement_recommends_import_process_row():
                 "process_id": "p1",
                 "process_name": "导入客户名单",
                 "description": "上传 Excel 文件，校验手机号并保存有效记录。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }
@@ -202,7 +202,7 @@ def test_ui_api_mapping_default_api_row_is_not_unexpected_explicit_backend_row()
                 "process_id": "m1_p1",
                 "process_name": "选择归属组织",
                 "description": "从主数据平台组织主数据中选择归属组织并保存到当前业务对象。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }
@@ -238,7 +238,7 @@ def test_ui_api_mapping_still_flags_unexpected_backend_row():
                 "process_id": "m1_p1",
                 "process_name": "选择归属组织",
                 "description": "从主数据平台组织主数据中选择归属组织并保存到当前业务对象。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }

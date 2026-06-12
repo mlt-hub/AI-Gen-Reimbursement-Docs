@@ -101,7 +101,7 @@ def _unified_group():
                 "name": "查询客户",
                 "description": "按客户名称查询客户列表。",
                 "desc": "按客户名称查询客户列表。",
-                "type": "新增",
+                "change_status": "新增",
             }
         ],
     }
@@ -120,7 +120,7 @@ def _mapping_group():
                 "name": "提交合同审批",
                 "description": "提交合同审批，调用 OA 审批接口。",
                 "desc": "提交合同审批，调用 OA 审批接口。",
-                "type": "新增",
+                "change_status": "新增",
             }
         ],
     }

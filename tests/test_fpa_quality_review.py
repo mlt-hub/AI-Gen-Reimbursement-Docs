@@ -16,19 +16,19 @@ def _group():
                 "process_id": "m1_p1",
                 "process_name": "添加垂直行业",
                 "description": "输入垂直行业名称并保存。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p2",
                 "process_name": "编辑垂直行业",
                 "description": "修改垂直行业名称并保存。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p3",
                 "process_name": "查询垂直行业",
                 "description": "按行业名称查询垂直行业列表。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }
@@ -115,7 +115,7 @@ def test_quality_review_requires_external_data_function_row_without_rejecting_tr
                 "process_id": "m1_p1",
                 "process_name": "选择业务负责人",
                 "description": "从用户中心账号中选择负责人并保存到本系统业务对象。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }
@@ -156,7 +156,7 @@ def test_quality_review_matches_rules_rows_by_source_process_name():
                 "process_id": "m1_p1",
                 "process_name": "选择归属组织",
                 "description": "从主数据平台组织主数据中选择归属组织并保存到当前业务对象。",
-                "type": "新增",
+                "change_status": "新增",
             },
         ],
     }
@@ -192,13 +192,13 @@ def test_quality_review_accepts_payment_gateway_service_without_eif_row():
                 "process_id": "m1_p1",
                 "process_name": "发起退款",
                 "description": "调用支付网关提交退款请求，并记录本系统退款申请状态。",
-                "type": "新增",
+                "change_status": "新增",
             },
             {
                 "process_id": "m1_p2",
                 "process_name": "查看退款结果",
                 "description": "查询支付网关返回的退款状态、失败原因和处理时间。",
-                "type": "查询",
+                "change_status": "查询",
             },
         ],
     }
