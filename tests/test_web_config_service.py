@@ -27,6 +27,31 @@ def test_remote_session_retention_seconds_falls_back_for_invalid_days(monkeypatc
     assert config_service.remote_session_retention_seconds(default=60) == 60
 
 
+def test_task_assets_retention_seconds_reads_days_and_allows_disable(monkeypatch, tmp_path):
+    monkeypatch.setattr(config_service, "config_dir", lambda: tmp_path)
+    (tmp_path / "system_config.yaml").write_text(
+        "task_assets_retention_days: 2\n",
+        encoding="utf-8",
+    )
+    assert config_service.task_assets_retention_seconds() == 2 * 24 * 3600
+
+    (tmp_path / "system_config.yaml").write_text(
+        "task_assets_retention_days: 0\n",
+        encoding="utf-8",
+    )
+    assert config_service.task_assets_retention_seconds() == 0
+
+
+def test_local_task_input_snapshot_enabled_reads_boolean(monkeypatch, tmp_path):
+    monkeypatch.setattr(config_service, "config_dir", lambda: tmp_path)
+    (tmp_path / "system_config.yaml").write_text(
+        "local_task_input_snapshot_enabled: true\n",
+        encoding="utf-8",
+    )
+
+    assert config_service.local_task_input_snapshot_enabled() is True
+
+
 def test_mask_env_content_hides_sensitive_values_without_fragments(tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text(

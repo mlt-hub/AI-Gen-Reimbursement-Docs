@@ -261,6 +261,28 @@ def remote_session_retention_seconds(default: int = 24 * 3600) -> int:
     return int(days * 24 * 3600) if days > 0 else default
 
 
+def task_assets_retention_seconds(default: int = 30 * 24 * 3600) -> int:
+    """读取重跑资产快照保留期，配置以天为主；小于等于 0 表示不自动清理。"""
+    system_config = read_config().get("_system", {})
+    value = system_config.get("task_assets_retention_days", default / (24 * 3600))
+    try:
+        days = float(value)
+    except (TypeError, ValueError):
+        return default
+    return int(days * 24 * 3600) if days > 0 else 0
+
+
+def local_task_input_snapshot_enabled(default: bool = False) -> bool:
+    """读取本机 Web 任务是否保存输入文件快照；默认保持路径引用语义。"""
+    system_config = read_config().get("_system", {})
+    value = system_config.get("local_task_input_snapshot_enabled", default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+    return bool(value)
+
+
 def max_concurrent_tasks(default: int = 1) -> int:
     """读取 Web 后台任务并发上限，非法配置按 1 处理。"""
     system_config = read_config().get("_system", {})

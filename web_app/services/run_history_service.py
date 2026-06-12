@@ -17,7 +17,11 @@ from ai_gen_reimbursement_docs.run_history import (
     upsert_run,
     user_history_path,
 )
-from web_app.services.config_service import remote_session_retention_seconds
+from web_app.services.config_service import (
+    local_task_input_snapshot_enabled,
+    remote_session_retention_seconds,
+)
+from web_app.services.task_assets_service import task_assets_retention_label
 
 
 logger = logging.getLogger("ai_gen_reimbursement_docs")
@@ -307,6 +311,8 @@ def list_history(
     return {
         "retention": {
             "remote_download_retention_days": round(remote_session_retention_seconds() / 86400, 2),
+            "task_assets_retention_label": task_assets_retention_label(),
+            "local_input_snapshot_enabled": local_task_input_snapshot_enabled(),
             "local_retention_label": "本机与 CLI 文件不由 Web UI 自动清理",
         },
         "items": items,
@@ -446,18 +452,62 @@ def restore_closed_history_item(
         run_config = {}
     previous_state = str(run_config.get("closed_from_state") or "").strip()
     if previous_state not in {"done", "error", "cancelled"}:
-        error = str(record.get("error") or "")
-        if error == "cancelled":
-            previous_state = "cancelled"
-        elif error:
-            previous_state = "error"
-        else:
-            previous_state = "done"
+        previous_state = _infer_closed_restore_state(record)
 
     updated = update_run_state(run_id, path, run_state=previous_state)
     if updated is None:
         raise ValueError("历史记录不存在")
     return updated
+
+
+def backfill_closed_from_state(*, base_dir: Path) -> int:
+    total = 0
+    for path in (user_history_path(), service_history_path(base_dir)):
+        try:
+            total += _backfill_closed_from_state_for_path(path)
+        except Exception as exc:
+            logger.warning("回填关闭任务恢复状态失败: %s", exc)
+    return total
+
+
+def _backfill_closed_from_state_for_path(path: Path) -> int:
+    updated = 0
+    offset = 0
+    while True:
+        items = list_runs(
+            path,
+            filters={"source": "web", "run_state": "closed"},
+            limit=200,
+            offset=offset,
+        )
+        if not items:
+            break
+        for item in items:
+            run_config = item.get("run_config")
+            if not isinstance(run_config, dict):
+                run_config = {}
+            else:
+                run_config = dict(run_config)
+            if str(run_config.get("closed_from_state") or "").strip():
+                continue
+            run_config["closed_from_state"] = _infer_closed_restore_state(item)
+            if update_run_config(
+                str(item.get("run_id") or ""),
+                path,
+                run_config=run_config,
+            ) is not None:
+                updated += 1
+        offset += len(items)
+    return updated
+
+
+def _infer_closed_restore_state(record: dict[str, Any]) -> str:
+    error = str(record.get("error") or "")
+    if error == "cancelled":
+        return "cancelled"
+    if error:
+        return "error"
+    return "done"
 
 
 def mark_unrecoverable_history_item(

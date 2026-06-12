@@ -655,6 +655,46 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     server.session_manager.cleanup_download(data["session_id"])
 
 
+def test_run_local_can_snapshot_input_for_future_rerun(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    monkeypatch.setattr(tasks, "local_task_input_snapshot_enabled", lambda: True)
+    client = _client(monkeypatch, local_mode=True)
+    xlsx_path = tmp_path / "功能清单.xlsx"
+    output_dir = tmp_path / "out"
+    xlsx_path.write_bytes(b"local-input")
+    calls: list[dict] = []
+
+    def fake_execute_in_session(*args, **kwargs):
+        calls.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(tasks, "execute_in_session", fake_execute_in_session)
+
+    resp = client.post(
+        "/api/run-local",
+        data={
+            "xlsx_path": str(xlsx_path),
+            "output_dir": str(output_dir),
+            "mode": "from-excel-gen-fpa",
+        },
+    )
+
+    assert resp.status_code == 200
+    session_id = resp.json()["session_id"]
+    item = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id=session_id,
+        local_mode=True,
+        owner_id="",
+    )
+    history_input = Path(item["input_path"])
+    assert "task_assets" in history_input.parts
+    assert history_input.read_bytes() == b"local-input"
+    assert calls
+    assert Path(calls[0]["args"][2]) == xlsx_path
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_run_local_uses_session_isolated_output_dir(monkeypatch, tmp_path):
     client = _client(monkeypatch, local_mode=True)
     xlsx_path = tmp_path / "功能清单.xlsx"

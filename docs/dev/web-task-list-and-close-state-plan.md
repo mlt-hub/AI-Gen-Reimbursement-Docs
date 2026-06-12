@@ -2,7 +2,7 @@
 
 ## 推进状态
 
-状态：任务列表、关闭状态、继续执行、不可恢复任务标记、重跑配置快照、项目名展示和完成时回写项目名均已落地到 `master`。本轮继续推进关闭任务恢复、重跑前 API Key 前置校验、远程输入文件持久快照和自定义模板持久快照。
+状态：任务列表、关闭状态、继续执行、不可恢复任务标记、重跑配置快照、项目名展示、完成时回写项目名、关闭任务恢复、重跑前 API Key 前置校验、远程输入文件持久快照和自定义模板持久快照均已落地到 `master`。本轮继续推进 `task_assets` 生命周期策略、本机输入可选快照、旧关闭记录迁移和前端回归契约。
 
 相关提交：
 
@@ -31,14 +31,20 @@
 - 远程上传任务会把重跑所需输入文件复制到服务侧 `products/task_assets/{session_id}/input`，历史记录中的 `input_path` 指向该持久快照。
 - 使用自定义模板的任务会把模板复制到服务侧 `products/task_assets/{session_id}/custom_templates`，重跑优先复用该持久快照。
 - 重跑需要 AI 且当前无可用 API Key 时，接口会在创建新任务前返回明确错误。
+- `products/task_assets` 默认保留 30 天，可通过 `task_assets_retention_days` 调整；小于等于 0 表示不自动清理。
+- 新任务启动和服务启动会清理过期 `task_assets`，并向 `products/task_assets_cleanup.jsonl` 写入清理审计记录。
+- 历史页展示重跑输入和模板快照保留策略，以及本机输入快照是否开启。
+- 本机 Web 任务支持通过 `local_task_input_snapshot_enabled` 开启输入文件快照；默认关闭以保留原始路径引用语义。
+- 服务启动会为缺少 `closed_from_state` 的旧关闭记录回填恢复目标状态。
+- 已补充前端静态契约测试，覆盖历史页资产保留提示、恢复入口和详情页恢复入口。
 
 已验证：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests\test_run_history.py tests\test_web_history.py tests\test_web_tasks.py
+.\.venv\Scripts\python.exe -m pytest tests\test_run_history.py tests\test_web_history.py tests\test_web_tasks.py tests\test_web_config_service.py tests\test_task_assets_service.py tests\test_web_frontend_contracts.py
 ```
 
-结果：`95 passed`。
+结果：`159 passed`。
 
 ```powershell
 npm run build
@@ -48,10 +54,10 @@ npm run build
 
 后续策略项：
 
-- 明确 `products/task_assets` 生命周期：保留周期、清理触发条件、清理后的用户提示和审计记录。
-- 评估本机任务是否也需要可选输入快照，避免原始 Excel 被移动或删除后无法重跑。
-- 评估是否为旧历史补一次数据迁移，将缺少 `closed_from_state` 的关闭记录显式标记恢复目标状态。
-- 如需扩大前端回归覆盖，可补充任务列表、历史页和详情页的组件测试，覆盖恢复、关闭、重跑和会话不可恢复提示。
+- `products/task_assets` 生命周期已明确：默认 30 天，可配置，启动任务和服务启动时触发清理，并写入清理审计。
+- 本机任务输入快照已提供可选开关：默认关闭，需要更强可重跑性时开启 `local_task_input_snapshot_enabled`。
+- 旧关闭记录迁移已接入服务启动流程：缺少 `closed_from_state` 的记录会被回填恢复目标状态。
+- 前端已补充静态契约测试；后续如引入 Vitest 或组件测试框架，可再升级为交互级组件测试。
 - API Key 明文仍不得进入任务启动参数快照；重跑继续只使用当前可用配置。
 
 ## 背景
@@ -432,10 +438,10 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 
 - “继续执行”依赖服务进程内存中的 `SessionManager`，服务重启后无法恢复实时后台线程。
 - 历史记录中的 `running` 不等价于当前还有可继续执行的 session；UI 需要区分“运行中且可继续”和“运行记录显示运行中但会话不可恢复”。
-- 重跑需要复用原始输入与启动参数；远程任务已改为保存服务侧输入快照，若 `products/task_assets` 被外部清理仍可能无法重跑。
+- 重跑需要复用原始输入与启动参数；远程任务已改为保存服务侧输入快照，若 `products/task_assets` 过期或被外部清理仍可能无法重跑。
 - 重跑不保存也不复用原任务 API Key；如果当前配置没有可用 API Key，需要 AI 的重跑任务会在创建前返回配置错误。
 - 项目名优先来自启动参数快照；启动时未填写的任务会在完成时尝试从输入 Excel 回写，旧历史记录或无法读取 Excel 时仍显示 `-`。
-- 本机任务仍依赖原始 `input_path` 重跑；远程任务依赖服务侧 `task_assets` 输入快照。
-- 自定义模板已保存服务侧快照；若 `task_assets` 被外部清理，重跑无法保证复现。
+- 本机任务默认仍依赖原始 `input_path` 重跑；开启 `local_task_input_snapshot_enabled` 后会使用服务侧 `task_assets` 输入快照。
+- 自定义模板已保存服务侧快照；若 `task_assets` 过期或被外部清理，重跑无法保证复现。
 - 如果远程交付物过期，重跑不应依赖旧交付物。
-- 旧关闭记录如果没有 `closed_from_state`，恢复目标状态会按错误信息回退推断。
+- 旧关闭记录迁移时如果无法从错误信息识别状态，会按成功完成任务恢复为 `done`。

@@ -7,6 +7,9 @@
           <p class="mt-1 text-sm text-[var(--color-ink-muted)]">
             远程任务交付物下载默认保留 {{ retentionDays }} 天；过期后运行记录仍保留。本机与 CLI 任务交付物保存在本机输出目录，系统不会自动删除。
           </p>
+          <p class="mt-1 text-sm text-[var(--color-ink-muted)]">
+            重跑输入和模板快照保留策略：{{ taskAssetsRetentionLabel }}；本机输入快照：{{ localInputSnapshotLabel }}。
+          </p>
         </div>
         <button class="btn-secondary w-fit" :disabled="loading" @click="loadHistory">
           {{ loading ? '刷新中...' : '刷新' }}
@@ -182,6 +185,8 @@ interface HistoryItem {
 interface HistoryResponse {
   retention: {
     remote_download_retention_days: number
+    task_assets_retention_label?: string
+    local_input_snapshot_enabled?: boolean
     local_retention_label: string
   }
   items: HistoryItem[]
@@ -193,6 +198,8 @@ const error = ref('')
 const notice = ref('')
 const items = ref<HistoryItem[]>([])
 const retentionDays = ref(1)
+const taskAssetsRetentionLabel = ref('-')
+const localInputSnapshotLabel = ref('关闭')
 const filters = reactive({ source: 'all', mode: 'all', state: 'all' })
 const router = useRouter()
 
@@ -211,6 +218,8 @@ async function loadHistory() {
     const data = await apiFetch<HistoryResponse>(`/api/history?${query.value}`)
     items.value = data.items
     retentionDays.value = data.retention.remote_download_retention_days
+    taskAssetsRetentionLabel.value = data.retention.task_assets_retention_label || '-'
+    localInputSnapshotLabel.value = data.retention.local_input_snapshot_enabled ? '开启' : '关闭'
   } catch (err) {
     error.value = normalizeApiError(err)
   } finally {
