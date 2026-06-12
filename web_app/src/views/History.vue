@@ -118,8 +118,16 @@
                   >
                     重跑
                   </button>
+                  <button
+                    v-if="canRestore(item)"
+                    class="btn-secondary min-h-0 px-3 py-1.5 text-xs"
+                    :disabled="actionId === item.run_id"
+                    @click="restoreTask(item)"
+                  >
+                    恢复
+                  </button>
                   <span
-                    v-if="!item.download_available && !item.open_folder_available && !canOpenFpaDebug(item) && !canOpenCosmicPreview(item) && !canRerun(item)"
+                    v-if="!item.download_available && !item.open_folder_available && !canOpenFpaDebug(item) && !canOpenCosmicPreview(item) && !canRerun(item) && !canRestore(item)"
                     class="status-badge status-badge--neutral"
                   >
                     {{ unavailableLabel(item) }}
@@ -264,6 +272,10 @@ function canRerun(item: HistoryItem) {
   return item.source === 'web' && ['done', 'error', 'cancelled'].includes(item.run_state)
 }
 
+function canRestore(item: HistoryItem) {
+  return item.source === 'web' && item.run_state === 'closed'
+}
+
 function formatTime(value: string) {
   if (!value) return '-'
   return new Date(value).toLocaleString()
@@ -289,6 +301,21 @@ async function rerun(item: HistoryItem) {
     const data = await apiFetch<{ session_id: string }>(`/api/tasks/${item.run_id}/rerun`, { method: 'POST' })
     notice.value = `已创建重跑任务 ${data.session_id}`
     await router.push(`/tasks/${data.session_id}`)
+  } catch (err) {
+    error.value = normalizeApiError(err)
+  } finally {
+    actionId.value = ''
+  }
+}
+
+async function restoreTask(item: HistoryItem) {
+  actionId.value = item.run_id
+  error.value = ''
+  notice.value = ''
+  try {
+    await apiFetch(`/api/tasks/${item.run_id}/restore`, { method: 'POST' })
+    notice.value = '任务已恢复到任务列表'
+    await loadHistory()
   } catch (err) {
     error.value = normalizeApiError(err)
   } finally {

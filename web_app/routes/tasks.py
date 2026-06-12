@@ -36,6 +36,7 @@ from web_app.services.run_history_service import (
     list_tasks,
     mark_unrecoverable_history_item,
     require_rerunnable_history_item,
+    restore_closed_history_item,
     start_web_run,
 )
 from web_app.services.session_access import require_session_access
@@ -135,6 +136,7 @@ def create_router(
         local_mode: bool,
         user: str = "",
         mode: str,
+        require_api_key: bool = False,
     ) -> dict:
         global_root = config_dir()
         user_root = user_config_dir(user) if user and not local_mode else None
@@ -149,7 +151,7 @@ def create_router(
         )
         snapshot = _finalize_fpa_task_config(snapshot)
         if (
-            not local_mode
+            (require_api_key or not local_mode)
             and mode_requires_ai(mode, snapshot.get("fpa_strategy", ""))
             and not snapshot.get("api_key")
         ):
@@ -158,6 +160,40 @@ def create_router(
                 "未配置可用 API Key。请配置个人 API Key，或联系管理员开启共享系统 API Key。",
             )
         return snapshot
+
+    def _task_assets_dir(session_id: str) -> Path:
+        safe_id = "".join(ch for ch in session_id if ch.isalnum() or ch in "-_")
+        if not safe_id:
+            safe_id = uuid.uuid4().hex[:8]
+        path = base_dir / "products" / "task_assets" / safe_id
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _snapshot_input_file(session_id: str, source: Path) -> Path:
+        target_dir = _task_assets_dir(session_id) / "input"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / source.name
+        shutil.copy2(source, target)
+        return target
+
+    def _snapshot_custom_templates(session_id: str, source_dir: str) -> str:
+        if not source_dir:
+            return ""
+        source = Path(source_dir)
+        if not source.exists() or not source.is_dir():
+            return ""
+        templates = build_templates_dict(str(source))
+        if not templates:
+            return ""
+        target = _task_assets_dir(session_id) / "custom_templates"
+        if target.exists():
+            shutil.rmtree(target)
+        target.mkdir(parents=True, exist_ok=True)
+        for template_path in templates.values():
+            source_file = Path(template_path)
+            if source_file.exists() and source_file.is_file():
+                shutil.copy2(source_file, target / source_file.name)
+        return str(target)
 
     def _finalize_fpa_task_config(snapshot: dict) -> dict:
         from ai_gen_reimbursement_docs.config_utils import load_fpa_profile_entry
@@ -400,6 +436,7 @@ def create_router(
             local_mode=local_mode,
             user=user,
             mode=task_mode,
+            require_api_key=True,
         )
         custom_templates_dir = _resolve_rerun_custom_templates(record)
         clean = _rerun_clean(record)
@@ -415,6 +452,10 @@ def create_router(
                 output_dir=output_dir,
                 config_root=profile_root,
             )
+            history_custom_templates_dir = _snapshot_custom_templates(
+                session_id,
+                custom_templates_dir,
+            )
             start_web_run(
                 base_dir=base_dir,
                 session_id=session_id,
@@ -425,7 +466,7 @@ def create_router(
                 run_config=_run_config_snapshot(
                     task_config=task_config,
                     clean=clean,
-                    custom_t_dir=custom_templates_dir,
+                    custom_t_dir=history_custom_templates_dir,
                 ),
             )
 
@@ -486,6 +527,11 @@ def create_router(
                     shutil.copy2(source, custom_t_dir / source.name)
         rerun_input = input_dir / input_path.name
         shutil.copy2(input_path, rerun_input)
+        history_input = _snapshot_input_file(session_id, rerun_input)
+        history_custom_templates_dir = _snapshot_custom_templates(
+            session_id,
+            str(custom_t_dir),
+        )
         profile_root = _profile_config_root(local_mode=False, user=user)
         profile_decisions = _load_profile_decision_payload(profile_root)
         session_manager.create(
@@ -500,13 +546,13 @@ def create_router(
             session_id=session_id,
             mode="remote",
             task_mode=task_mode,
-            input_path=str(rerun_input),
+            input_path=str(history_input),
             owner_id=user,
             owner_label=user,
             run_config=_run_config_snapshot(
                 task_config=task_config,
                 clean=clean,
-                custom_t_dir=str(custom_t_dir),
+                custom_t_dir=history_custom_templates_dir,
             ),
         )
 
@@ -526,7 +572,7 @@ def create_router(
                     session_id=sid,
                     mode="remote",
                     task_mode=task_mode,
-                    input_path=str(rerun_input),
+                    input_path=str(history_input),
                     owner_id=user,
                     owner_label=user,
                     zip_path=str(zip_path) if zip_path else "",
@@ -702,6 +748,28 @@ def create_router(
         local, owner_id = _request_scope(request, user)
         try:
             item = close_history_item(
+                base_dir=base_dir,
+                run_id=run_id,
+                local_mode=local,
+                owner_id=owner_id,
+            )
+        except PermissionError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True, "item": item}
+
+    @router.post("/api/tasks/{run_id}/restore")
+    async def api_restore_task(
+        run_id: str,
+        request: Request,
+        user: str = Depends(require_auth),
+    ):
+        local, owner_id = _request_scope(request, user)
+        try:
+            item = restore_closed_history_item(
                 base_dir=base_dir,
                 run_id=run_id,
                 local_mode=local,
@@ -948,6 +1016,7 @@ def create_router(
         session_id = uuid.uuid4().hex[:8]
         profile_root = _profile_config_root(local_mode=True)
         profile_decisions = _load_profile_decision_payload(profile_root)
+        history_custom_templates_dir = _snapshot_custom_templates(session_id, custom_t_dir)
         session_manager.create(
             session_id,
             mode="local",
@@ -964,7 +1033,7 @@ def create_router(
             run_config=_run_config_snapshot(
                 task_config=task_config,
                 clean=bool(clean),
-                custom_t_dir=custom_t_dir,
+                custom_t_dir=history_custom_templates_dir,
             ),
         )
 
@@ -1085,6 +1154,8 @@ def create_router(
         await save_custom_templates_into(
             custom_t_dir, fpa_template, cosmic_template, list_template, spec_template
         )
+        history_input = _snapshot_input_file(session_id, file_path)
+        history_custom_templates_dir = _snapshot_custom_templates(session_id, str(custom_t_dir))
 
         profile_root = _profile_config_root(local_mode=False, user=user)
         profile_decisions = _load_profile_decision_payload(profile_root)
@@ -1100,13 +1171,13 @@ def create_router(
             session_id=session_id,
             mode="remote",
             task_mode=mode,
-            input_path=str(file_path),
+            input_path=str(history_input),
             owner_id=user,
             owner_label=user,
             run_config=_run_config_snapshot(
                 task_config=task_config,
                 clean=bool(clean),
-                custom_t_dir=str(custom_t_dir),
+                custom_t_dir=history_custom_templates_dir,
             ),
         )
 
@@ -1128,7 +1199,7 @@ def create_router(
                     session_id=sid,
                     mode="remote",
                     task_mode=mode,
-                    input_path=str(file_path),
+                    input_path=str(history_input),
                     owner_id=user,
                     owner_label=user,
                     zip_path=str(zip_path) if zip_path else "",
