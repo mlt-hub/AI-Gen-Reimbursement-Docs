@@ -340,17 +340,22 @@ def _apply_placeholder_adjustment(doc: Document, item: dict[str, Any]) -> bool:
     token = str(item.get("token") or "").strip()
     if not token or not token.startswith("{{") or not token.endswith("}}"):
         raise ValueError("占位符 token 必须使用 {{字段名}} 格式")
-    if not location.startswith("paragraph:"):
-        raise ValueError("当前仅支持调整段落中的识别字段")
-    paragraph = _resolve_paragraph(doc, scope, location)
-    old = paragraph.text
+    if location.startswith("paragraph:"):
+        target = _resolve_paragraph(doc, scope, location)
+        target_label = "段落"
+    elif location.startswith("table:"):
+        target = _resolve_table_cell(doc, scope, location)
+        target_label = "单元格"
+    else:
+        raise ValueError("当前仅支持调整段落或正文表格单元格中的识别字段")
+    old = target.text
     if find_text:
         if find_text not in old:
-            raise ValueError(f"段落中未找到待替换文本：{find_text}")
-        paragraph.text = old.replace(find_text, token, 1)
+            raise ValueError(f"{target_label}中未找到待替换文本：{find_text}")
+        target.text = old.replace(find_text, token, 1)
     else:
-        paragraph.text = token
-    return paragraph.text != old
+        target.text = token
+    return target.text != old
 
 
 def _resolve_paragraph(doc: Document, scope: str, location: str) -> Paragraph:
@@ -370,6 +375,28 @@ def _resolve_paragraph(doc: Document, scope: str, location: str) -> Paragraph:
     if index < 0 or index >= len(paragraphs):
         raise ValueError(f"段落位置不存在：{scope}/{location}")
     return paragraphs[index]
+
+
+def _resolve_table_cell(doc: Document, scope: str, location: str):
+    if scope != "tables":
+        raise ValueError("当前仅支持调整正文表格单元格中的识别字段")
+    parts = location.split(":")
+    if len(parts) != 5 or parts[0] != "table" or parts[2] != "cell":
+        raise ValueError(f"表格单元格位置无效：{location}")
+    try:
+        table_index = int(parts[1])
+        row_index = int(parts[3])
+        column_index = int(parts[4])
+    except ValueError as exc:
+        raise ValueError(f"表格单元格位置无效：{location}") from exc
+    if table_index < 0 or table_index >= len(doc.tables):
+        raise ValueError(f"表格位置不存在：{location}")
+    table = doc.tables[table_index]
+    if row_index < 0 or row_index >= len(table.rows):
+        raise ValueError(f"表格行位置不存在：{location}")
+    if column_index < 0 or column_index >= len(table.rows[row_index].cells):
+        raise ValueError(f"表格列位置不存在：{location}")
+    return table.rows[row_index].cells[column_index]
 
 
 def _move_body_anchors(
@@ -735,8 +762,21 @@ def _table_previews(tables) -> list[dict[str, Any]]:
     previews: list[dict[str, Any]] = []
     for index, table in enumerate(tables):
         cell_texts: list[str] = []
-        for row in table.rows[:5]:
-            row_text = " | ".join(_compact_text(cell.text) for cell in row.cells)
+        cells: list[dict[str, Any]] = []
+        for row_index, row in enumerate(table.rows[:5]):
+            row_cell_texts: list[str] = []
+            for column_index, cell in enumerate(row.cells):
+                text = _compact_text(cell.text)
+                row_cell_texts.append(text)
+                if text:
+                    cells.append({
+                        "row_index": row_index,
+                        "column_index": column_index,
+                        "location": f"table:{index}:cell:{row_index}:{column_index}",
+                        "text": text[:300],
+                        "placeholders": _find_tokens(text),
+                    })
+            row_text = " | ".join(row_cell_texts)
             if row_text.strip():
                 cell_texts.append(row_text)
         joined = "\n".join(cell_texts)
@@ -747,6 +787,7 @@ def _table_previews(tables) -> list[dict[str, Any]]:
             "style": str(table.style.name if table.style else ""),
             "text_preview": joined[:500],
             "placeholders": _find_tokens(joined),
+            "cells": cells[:80],
         })
     return previews[:40]
 
@@ -764,13 +805,14 @@ def _collect_word_placeholder_occurrences(scopes: list[dict[str, Any]]) -> list[
                     "text": paragraph["text"],
                 })
         for table in scope["tables"]:
-            for token in table.get("placeholders", []):
-                occurrences.append({
-                    "token": token,
-                    "scope": scope_name if scope_name != "body" else "tables",
-                    "location": f"table:{table['index']}",
-                    "text": table["text_preview"],
-                })
+            for cell in table.get("cells", []):
+                for token in cell.get("placeholders", []):
+                    occurrences.append({
+                        "token": token,
+                        "scope": scope_name if scope_name != "body" else "tables",
+                        "location": cell["location"],
+                        "text": cell["text"],
+                    })
     return occurrences
 
 

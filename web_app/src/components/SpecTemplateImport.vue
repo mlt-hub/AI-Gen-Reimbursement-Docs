@@ -257,10 +257,10 @@
                     </select>
                   </div>
                   <div>
-                    <label class="field-label text-xs">字段段落</label>
+                    <label class="field-label text-xs">字段位置</label>
                     <select v-model="adjustmentForm.placeholderLocation" class="field-control text-xs">
                       <option value="">不调整字段</option>
-                      <option v-for="option in adjustableParagraphOptions" :key="option.value" :value="option.value">
+                      <option v-for="option in adjustableFieldOptions" :key="option.value" :value="option.value">
                         {{ option.label }}
                       </option>
                     </select>
@@ -495,6 +495,14 @@ interface PreviewParagraph {
   placeholders: string[]
 }
 
+interface PreviewTableCell {
+  row_index: number
+  column_index: number
+  location: string
+  text: string
+  placeholders: string[]
+}
+
 interface PreviewTable {
   index: number
   row_count: number
@@ -502,6 +510,7 @@ interface PreviewTable {
   style: string
   text_preview: string
   placeholders: string[]
+  cells: PreviewTableCell[]
 }
 
 interface PreviewScope {
@@ -655,7 +664,7 @@ const statusClass = computed(() => {
   return 'status-badge--neutral'
 })
 
-const adjustableParagraphOptions = computed(() => {
+const adjustableFieldOptions = computed(() => {
   const preview = activePreview.value
   if (!preview) return []
   const options: Array<{ value: string; label: string }> = []
@@ -665,6 +674,16 @@ const adjustableParagraphOptions = computed(() => {
         value: `${scope.scope}|paragraph:${paragraph.index}`,
         label: `${scopeLabel(scope.scope)} paragraph:${paragraph.index} / ${paragraph.text}`,
       })
+    }
+    if (scope.scope === 'body') {
+      for (const table of scope.tables) {
+        for (const cell of table.cells || []) {
+          options.push({
+            value: `tables|${cell.location}`,
+            label: `表格 ${cell.location} / ${cell.text}`,
+          })
+        }
+      }
     }
   }
   return options
