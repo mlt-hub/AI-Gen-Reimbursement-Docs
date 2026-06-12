@@ -276,7 +276,7 @@ def write_cosmic_xlsx(
     wb = safe_load_workbook(template_path, '项目功能点拆分表')
     ws = wb[sheet_spec["name"]]
     _data_start_row = _named_cell_row(wb, ws, sheet_spec, "data_start", sheet_spec["data_start_row"])
-    _style_source_row = sheet_spec["style_source_row"]
+    _style_source_row = _named_cell_row(wb, ws, sheet_spec, "style_source", sheet_spec["style_source_row"])
     columns = _cosmic_columns(ws, sheet_spec)
     field_by_col = {col: key for key, col in columns.items()}
     data_col_max = max(FP_TOTAL_COLS - 1, ws.max_column, *columns.values())
