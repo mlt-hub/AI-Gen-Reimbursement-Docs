@@ -1429,6 +1429,11 @@ class TestLoadFpaUserPromptTemplate:
         assert "payload_json.merge_review.groups" in strict
         assert "agent_review.type_judgement" in strict_system
         assert "不得用 EI 替代 EIF" in strict_system
+        assert "FPA 功能点评估助手" in strict_system
+        for prompt in (unified_system, multi_uis_system, mapping_system):
+            assert "项目工作量评估助手" in prompt
+            assert "项目自定义工作量拆分规则" in prompt
+            assert "FPA 功能点评估助手" not in prompt
         for prompt in (unified_system, multi_uis_system, unified, multi_uis):
             assert "payload_json.agent_review.workload_judgement.judgements" in prompt
             assert "recommended_categories" in prompt
