@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 import re
-from typing import Iterable
+from typing import Any, Iterable
 
 import yaml
 from docx import Document
@@ -30,11 +30,21 @@ class ImportedAnchor:
 
 
 @dataclass(frozen=True)
+class ComplexWordStructure:
+    kind: str
+    label: str
+    scope: str
+    location: str
+    text_preview: str
+
+
+@dataclass(frozen=True)
 class SpecTemplateImportResult:
     template_path: Path
     manifest_path: Path
     detected_placeholders: list[ImportedPlaceholder] = field(default_factory=list)
     inserted_anchors: list[ImportedAnchor] = field(default_factory=list)
+    complex_structures: list[ComplexWordStructure] = field(default_factory=list)
     pending_confirmations: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -89,7 +99,13 @@ def import_spec_word_template(
     doc = Document(str(source_path))
     detected = _replace_known_fields(doc)
     inserted_anchors, anchor_note = _ensure_split_requirement_anchors(doc)
-    pending_confirmations = _pending_confirmations(detected, inserted_anchors, anchor_note)
+    complex_structures = collect_complex_word_structures(doc)
+    pending_confirmations = _pending_confirmations(
+        detected,
+        inserted_anchors,
+        anchor_note,
+        complex_structures,
+    )
 
     doc.save(str(template_path))
     manifest = _build_manifest(
@@ -107,10 +123,9 @@ def import_spec_word_template(
         manifest_path=manifest_path,
         detected_placeholders=detected,
         inserted_anchors=inserted_anchors,
+        complex_structures=complex_structures,
         pending_confirmations=pending_confirmations,
-        warnings=[
-            "暂不识别文本框、内容控件和图片文字中的字段；如客户模板使用这些结构，需要人工确认。",
-        ],
+        warnings=_import_warnings(complex_structures),
     )
 
 
@@ -265,10 +280,94 @@ def _all_plain_text(doc: Document) -> list[str]:
     return texts
 
 
+def collect_complex_word_structures(doc: Document) -> list[ComplexWordStructure]:
+    """Detect Word structures that the importer can surface but not rewrite."""
+    items: list[ComplexWordStructure] = []
+    for scope, root in _iter_complex_structure_roots(doc):
+        seen: set[str] = set()
+        counters: dict[str, int] = {"text_box": 0, "content_control": 0}
+        for element in root.iter():
+            local_name = _xml_local_name(getattr(element, "tag", ""))
+            kind = _complex_structure_kind(local_name)
+            if not kind:
+                continue
+            if local_name == "textbox" and _has_descendant_local_name(element, "txbxContent"):
+                continue
+            element_path = _xml_element_path(element)
+            if element_path in seen:
+                continue
+            seen.add(element_path)
+            counters[kind] += 1
+            items.append(
+                ComplexWordStructure(
+                    kind=kind,
+                    label=_complex_structure_label(kind),
+                    scope=scope,
+                    location=f"{kind}:{counters[kind]}",
+                    text_preview=_compact_text(_xml_text(element))[:200],
+                )
+            )
+    return items
+
+
+def _iter_complex_structure_roots(doc: Document):
+    yield "body", doc.element.body
+    for section in doc.sections:
+        yield "headers", section.header._element
+        yield "footers", section.footer._element
+
+
+def _complex_structure_kind(local_name: str) -> str:
+    if local_name in {"txbxContent", "textbox"}:
+        return "text_box"
+    if local_name == "sdt":
+        return "content_control"
+    return ""
+
+
+def _complex_structure_label(kind: str) -> str:
+    return {
+        "text_box": "文本框",
+        "content_control": "内容控件",
+    }.get(kind, kind)
+
+
+def _xml_local_name(tag: Any) -> str:
+    text = str(tag or "")
+    return text.rsplit("}", 1)[-1] if "}" in text else text
+
+
+def _xml_text(element: Any) -> str:
+    texts: list[str] = []
+    for child in element.iter():
+        if _xml_local_name(getattr(child, "tag", "")) == "t" and child.text:
+            texts.append(str(child.text))
+    return "".join(texts)
+
+
+def _xml_element_path(element: Any) -> str:
+    try:
+        return str(element.getroottree().getpath(element))
+    except Exception:
+        return str(id(element))
+
+
+def _has_descendant_local_name(element: Any, local_name: str) -> bool:
+    for child in element.iter():
+        if child is not element and _xml_local_name(getattr(child, "tag", "")) == local_name:
+            return True
+    return False
+
+
+def _compact_text(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "")).strip()
+
+
 def _pending_confirmations(
     detected: list[ImportedPlaceholder],
     anchors: list[ImportedAnchor],
     anchor_note: str,
+    complex_structures: list[ComplexWordStructure],
 ) -> list[str]:
     confirmations: list[str] = []
     detected_keys = {item.key for item in detected}
@@ -283,7 +382,21 @@ def _pending_confirmations(
         confirmations.append(anchor_note)
     if any(anchor.location == "existing" for anchor in anchors):
         confirmations.append("模板已存在功能需求锚点，请确认模块清单表和功能过程详情位置符合交付要求。")
+    if complex_structures:
+        labels = sorted({item.label for item in complex_structures})
+        confirmations.append(
+            f"检测到复杂 Word 结构：{'、'.join(labels)}；当前不会自动替换其中字段，请在预览中人工确认。"
+        )
     return confirmations
+
+
+def _import_warnings(complex_structures: list[ComplexWordStructure]) -> list[str]:
+    warnings = ["暂不识别图片文字中的字段；如客户模板使用图片承载文字，需要人工确认。"]
+    if complex_structures:
+        warnings.append("已检测文本框/内容控件的位置，但当前不会自动替换其中字段。")
+    else:
+        warnings.append("未检测到文本框或内容控件；若客户模板使用图片文字，仍需人工确认。")
+    return warnings
 
 
 def _build_manifest(
