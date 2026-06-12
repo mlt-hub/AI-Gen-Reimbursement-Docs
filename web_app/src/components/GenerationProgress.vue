@@ -49,7 +49,10 @@
         <div v-if="step.artifacts.length" class="mt-3 border-t border-[var(--color-rule)] pt-3">
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">阶段产物</p>
           <div v-for="artifact in step.artifacts" :key="artifact.path || artifact.name" class="mt-2 flex items-center justify-between gap-3 text-xs">
-            <span class="min-w-0 truncate text-[var(--color-ink-muted)]">{{ artifact.name || artifact.label }}</span>
+            <span class="min-w-0">
+              <span class="block truncate text-[var(--color-ink-muted)]">{{ artifact.name || artifact.label }}</span>
+              <span v-if="artifact.toc_note" class="mt-0.5 block text-[var(--color-ink-soft)]">{{ artifact.toc_note }}</span>
+            </span>
             <span v-if="artifact.is_temp" class="shrink-0 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[var(--color-ink-soft)]">中间文件</span>
             <button
               v-else-if="canUseArtifactAction"

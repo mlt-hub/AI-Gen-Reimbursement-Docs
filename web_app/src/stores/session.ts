@@ -51,6 +51,8 @@ export interface DoneFile {
   path: string
   size_kb: number
   is_temp: boolean
+  toc_status?: string
+  toc_note?: string
 }
 
 export interface SessionSnapshot {

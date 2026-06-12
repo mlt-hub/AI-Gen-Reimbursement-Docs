@@ -8,6 +8,8 @@ export interface StepArtifact {
   name?: string
   path?: string
   is_temp?: boolean
+  toc_status?: string
+  toc_note?: string
 }
 
 export interface StepProgress {

@@ -43,6 +43,34 @@ def test_cli_history_records_and_prints_json(monkeypatch, tmp_path, capsys):
     assert data[0]["done_files"][0]["name"] == "fpa.xlsx"
 
 
+def test_cli_done_files_include_spec_toc_note(tmp_path):
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    spec = output_dir / "spec.docx"
+    spec.write_bytes(b"docx")
+
+    result = SimpleNamespace(
+        fpa_xlsx="",
+        cosmic_xlsx="",
+        require_xlsx="",
+        spec_docx=str(spec),
+        spec_toc_status="manual_required",
+        spec_toc_note="需要手动更新目录",
+    )
+
+    files = cli_main._done_files_from_result(result)
+
+    assert files == [{
+        "label": "项目需求说明书",
+        "name": "spec.docx",
+        "path": str(spec),
+        "size_kb": 0,
+        "is_temp": False,
+        "toc_note": "需要手动更新目录",
+        "toc_status": "manual_required",
+    }]
+
+
 def test_cli_history_plain_output_marks_missing_directory(monkeypatch, tmp_path, capsys):
     db = tmp_path / "run_history.sqlite3"
     missing_output = tmp_path / "missing"

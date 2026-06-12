@@ -151,12 +151,15 @@
         <span
           v-for="file in doneFiles"
           :key="file.path || file.relative_path || file.name || file.label"
-          :class="['inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold',
+          :class="['inline-flex items-start gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold',
             file.is_temp ? 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]' : 'border-[var(--color-success)] bg-[var(--color-success-soft)] text-[var(--color-success)]']"
           :title="file.path || file.relative_path || file.name || ''"
         >
-          {{ file.label || file.name || file.relative_path || file.path }}
-          <span v-if="file.size_kb" class="opacity-60">{{ file.size_kb }} KB</span>
+          <span>
+            <span>{{ file.label || file.name || file.relative_path || file.path }}</span>
+            <span v-if="file.size_kb" class="opacity-60"> {{ file.size_kb }} KB</span>
+            <span v-if="file.toc_note" class="block font-normal opacity-80">{{ file.toc_note }}</span>
+          </span>
         </span>
       </div>
       <div v-else class="empty-state mt-4">
@@ -182,6 +185,8 @@ interface DetailDoneFile {
   relative_path?: string
   size_kb?: number
   is_temp?: boolean
+  toc_status?: string
+  toc_note?: string
 }
 
 interface RunConfig {
