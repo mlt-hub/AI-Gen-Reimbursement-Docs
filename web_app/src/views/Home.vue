@@ -1,7 +1,7 @@
 <template>
   <div class="box-border flex h-full max-w-full min-w-0 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 xl:p-5">
     <!-- 主操作区 -->
-    <section class="surface min-h-0 w-full max-w-full min-w-0 rounded-xl p-4">
+    <section class="surface w-full max-w-full min-w-0 shrink-0 rounded-xl p-4">
       <div class="mb-5 border-b border-[var(--color-rule)] pb-4">
         <p class="text-xs font-semibold text-[var(--color-ink-soft)]">主操作区</p>
         <h2 class="mt-1 text-xl font-bold text-[var(--color-ink)]">生成任务</h2>
@@ -13,7 +13,7 @@
       </div>
     </section>
 
-    <section class="surface flex min-h-[280px] min-w-0 flex-col overflow-hidden rounded-xl">
+    <section class="surface flex min-h-[280px] min-w-0 shrink-0 flex-col overflow-hidden rounded-xl">
       <div class="border-b border-[var(--color-rule)] px-5 py-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="min-w-0">
