@@ -114,8 +114,8 @@ profiles:
     calculation_explanation_rules: unified_ui_ce
 
   multi_uis:
-    kind: unified_ui
-    strategy: ai_first
+    kind: multi_uis
+    strategy: rules_first
     rule_set: multi_uis_rs
     core_rules: multi_uis_cr
     system_prompt: multi_uis_sp
@@ -124,12 +124,12 @@ profiles:
 
   ui_api_mapping:
     kind: ui_api_mapping
-    strategy: ai_first
+    strategy: rules_first
     rule_set: ui_api_mapping_rs
     core_rules: ui_api_mapping_cr
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up
-    calculation_explanation_rules: ui_api_mapping_ce
+    calculation_explanation_rules: ui_api_mapping_workload_eval_ce
 
 calculation_explanation_rules:
   strict_fpa_ce: |-
@@ -142,21 +142,23 @@ calculation_explanation_rules:
     # 内容同 unified_ui_ce
   ui_api_mapping_ce: |-
     # 内容同 unified_ui_ce
+  ui_api_mapping_workload_eval_ce: |-
+    # ui_api_mapping 专属编号清单式说明规则
 ```
 
 调整后，user prompt 仍继续通过 `${calculation_explanation_rules}` 引用规则文本；运行时渲染时先读取当前 profile 的 `calculation_explanation_rules` 绑定 key，再从顶层 `calculation_explanation_rules.<key>` 读取实际文本。
 
 原 `default` calculation_explanation_rules 改名为 `strict_fpa_ce`，并绑定到 `strict_fpa` profile。`unified_ui` profile 新增并绑定 `unified_ui_ce`，用于承载统一界面口径下“按建设内容描述、界面合并、逻辑接口/表按能力拆分”的计算依据说明规则。
 
-`multi_uis` profile 绑定 `multi_uis_ce`，`ui_api_mapping` profile 绑定 `ui_api_mapping_ce`。两者的规则内容与 `unified_ui_ce` 保持一致，先通过独立 key 保留 profile 级配置边界，后续如需针对多界面拆分或界面接口映射补充差异化说明规则，可以只调整对应 CE key 的文本。
+`multi_uis` profile 绑定 `multi_uis_ce`，规则内容与 `unified_ui_ce` 保持一致。`ui_api_mapping` 曾规划绑定 `ui_api_mapping_ce`，但后续已根据界面接口映射说明质量要求升级为绑定 `ui_api_mapping_workload_eval_ce`；`ui_api_mapping_ce` 仍作为通用规则 key 保留，便于自定义 profile 复用统一界面说明口径。
 
 `unified_ui_ce` 不应只是 `strict_fpa_ce` 的改名复用。`strict_fpa_ce` 保留标准 FPA 结构化证据说明，重点解释来源路径、业务数据、系统元素和当前 FPA 类型；`unified_ui_ce` 必须体现统一界面交付口径，`计算依据说明` 要按系统建设内容描述，不按用户点击路径或页面跳转顺序叙述。界面开发行应概括同一三级模块内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；逻辑接口/表能力行应说明添加、编辑、查询、删除、状态更新或数据结构调整归属的业务动作；导入、导出和外部接口联调调用行只描述输入中有证据的建设内容，不补写表名、接口名、外部系统、权限或审批流程。
 
 由于本系统尚未上线，不建议保留旧 `prompt_fragments.calculation_explanation_rules` 兼容回退，也不建议继续保留 `default_calculation_explanation_rules` 这类泛化命名。配置校验应直接要求引用 `${calculation_explanation_rules}` 的 profile 显式配置 `profiles.<profile>.calculation_explanation_rules`，且绑定 key 必须存在于顶层 `calculation_explanation_rules`。
 
-## 拟修改范围
+## 已修改范围
 
-后续实施时建议修改以下范围：
+本轮及前置切片已完成以下范围：
 
 | 文件 | 修改内容 |
 |---|---|
@@ -168,29 +170,29 @@ calculation_explanation_rules:
 | `tests/fixtures/fpa_golden_cases/vertical_industry_management.json` | 更新垂直行业管理 golden case，补齐查询逻辑接口行，并将非界面行命名调整为“逻辑接口开发”。 |
 | `docs/fpa/fpa-profiles.md`、`docs/fpa/calculation-basis-explanation-rules.md` | 同步 profile 文档和计算依据说明文档，移除旧 `prompt_fragments.calculation_explanation_rules` 路径说明，改为 profile 级绑定说明。 |
 
-## 实施顺序
+## 实施结果
 
-建议按以下顺序实施，降低配置结构调整和 profile 行为调整互相干扰的风险：
+实际落地顺序如下：
 
-1. 调整 `config/fpa_config.yaml.example` 的配置结构：新增顶层 `calculation_explanation_rules`，将原 default 规则文本改名为 `strict_fpa_ce`，新增 `unified_ui_ce`、`multi_uis_ce`、`ui_api_mapping_ce`，并在四个 profile 下显式绑定。
+1. 调整 `config/fpa_config.yaml.example` 的配置结构：新增顶层 `calculation_explanation_rules`，将原 default 规则文本改名为 `strict_fpa_ce`，新增 `unified_ui_ce`、`multi_uis_ce`、`ui_api_mapping_ce` 和 `ui_api_mapping_workload_eval_ce`，并在四个 profile 下显式绑定。
 2. 调整 `ai_gen_reimbursement_docs/config_utils.py`：允许 `profiles.<profile>.calculation_explanation_rules` 字段，校验绑定 key 存在，移除旧 `prompt_fragments.calculation_explanation_rules` 读取路径，并更新 diagnostics 的 source path。
 3. 先更新配置结构相关测试：覆盖默认配置可加载、profile 绑定 key 可解析、缺失绑定报错、绑定不存在 key 报错、未引用占位符只 warning。
 4. 调整 `unified_ui` profile 口径：更新 `unified_ui_cr`、`unified_ui_sp`、`unified_ui_up`、`unified_ui_rs`，落实界面合并、逻辑接口/表、导入、导出、外部接口联调调用的类型规则。
 5. 调整 `ai_gen_reimbursement_docs/fpa_profiles.py` 的 fallback/规则兜底命名逻辑：从“按类型推后缀”改为“按业务动作或关键词优先推后缀”，确保查询为 `ILF` 时仍输出“逻辑接口开发”，导入为 `EQ` 时仍输出导入类行。
 6. 更新 `unified_ui` 相关测试和 golden case：重点覆盖垂直行业管理、查询逻辑接口、导入、导出、外部接口联调调用，以及 `multi_uis`、`ui_api_mapping` 是否保持预期行为。
-7. 同步文档：更新 `docs/fpa/fpa-profiles.md` 和 `docs/fpa/calculation-basis-explanation-rules.md` 中的配置路径、profile 绑定和新口径说明。
+7. 同步文档：更新 `docs/fpa/fpa-profiles.md`、`docs/fpa/calculation-basis-explanation-rules.md` 和本记录中的配置路径、profile 绑定和新口径说明。
 8. 运行完整验证命令，确认配置加载、prompt 渲染、fallback、AI 后处理和验收样例均通过。
 
 ## 验证方式
 
-后续实施完成后，至少运行：
+实施完成后已运行：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\fpa_profiles\test_unified_ui_harness.py
 .\.venv\Scripts\python.exe -m pytest tests\test_gen_fpa_ai.py tests\test_fpa_profiles.py tests\test_fpa_acceptance.py
 ```
 
-如修改 golden case，应补充运行相关 golden case 测试，确认 `unified_ui` 输出名称、类型、计算依据说明和 profile quality review 均符合预期。
+已补充运行相关 golden case 测试，确认 `unified_ui` 输出名称、类型、计算依据说明和 profile quality review 均符合预期。
 
 配置结构调整还需要重点验证：
 
@@ -205,13 +207,13 @@ calculation_explanation_rules:
 实施完成后，应满足以下验收项：
 
 - 默认 `config/fpa_config.yaml.example` 不再包含 `prompt_fragments.calculation_explanation_rules`。
-- 顶层存在 `calculation_explanation_rules.strict_fpa_ce`、`calculation_explanation_rules.unified_ui_ce`、`calculation_explanation_rules.multi_uis_ce`、`calculation_explanation_rules.ui_api_mapping_ce`。
+- 顶层存在 `calculation_explanation_rules.strict_fpa_ce`、`calculation_explanation_rules.unified_ui_ce`、`calculation_explanation_rules.multi_uis_ce`、`calculation_explanation_rules.ui_api_mapping_ce`、`calculation_explanation_rules.ui_api_mapping_workload_eval_ce`。
 - 原 `default` calculation_explanation_rules 文本迁移为 `strict_fpa_ce`。
 - `profiles.strict_fpa.calculation_explanation_rules` 绑定 `strict_fpa_ce`。
 - `profiles.unified_ui.calculation_explanation_rules` 绑定 `unified_ui_ce`。
 - `profiles.multi_uis.calculation_explanation_rules` 绑定 `multi_uis_ce`。
-- `profiles.ui_api_mapping.calculation_explanation_rules` 绑定 `ui_api_mapping_ce`。
-- `multi_uis_ce` 和 `ui_api_mapping_ce` 的规则内容与 `unified_ui_ce` 保持一致。
+- `profiles.ui_api_mapping.calculation_explanation_rules` 绑定 `ui_api_mapping_workload_eval_ce`。
+- `multi_uis_ce` 的规则内容与 `unified_ui_ce` 保持一致；`ui_api_mapping_ce` 作为通用 key 保留，`ui_api_mapping_workload_eval_ce` 承载界面接口映射专属说明规则。
 - 默认四个官方 profile 的 user prompt 均能成功渲染 `${calculation_explanation_rules}`，最终 prompt 中不残留 `${...}`。
 - 缺失 `profiles.<profile>.calculation_explanation_rules` 或绑定不存在 key 时，配置校验给出明确错误。
 - `unified_ui` 界面类输出合并为三级模块级 `EI` 行，不按按钮、弹窗、列表、状态组件拆成多行。
