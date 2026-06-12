@@ -107,6 +107,13 @@ async def import_spec_template(
             }
             for item in result.complex_structures
         ],
+        "toc": {
+            "present": result.toc.present,
+            "field_count": result.toc.field_count,
+            "styled_paragraph_count": result.toc.styled_paragraph_count,
+            "update_required": result.toc.update_required,
+            "note": result.toc.note,
+        },
         "pending_confirmations": result.pending_confirmations,
         "warnings": result.warnings,
         "out_templates_patch": {

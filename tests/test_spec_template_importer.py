@@ -62,6 +62,20 @@ def _append_complex_word_structures(doc: Document) -> None:
     body.insert(len(body) - 1, text_box)
 
 
+def _append_toc_field(doc: Document) -> None:
+    toc = parse_xml(
+        f"""
+        <w:p {nsdecls('w')}>
+          <w:fldSimple w:instr="TOC \\o &quot;1-3&quot; \\h \\z \\u">
+            <w:r><w:t>目录</w:t></w:r>
+          </w:fldSimple>
+        </w:p>
+        """
+    )
+    body = doc.element.body
+    body.insert(len(body) - 1, toc)
+
+
 def test_import_spec_word_template_creates_draft_and_manifest(tmp_path):
     source = tmp_path / "customer.docx"
     output_dir = tmp_path / "custom_templates"
@@ -102,6 +116,11 @@ def test_import_spec_word_template_creates_draft_and_manifest(tmp_path):
     validation = validate_output_template("spec", str(result.template_path))
     assert validation.ok
     assert validation.capabilities["anchor_mode"] == "split"
+    assert manifest["toc"] == {
+        "present": False,
+        "auto_update": "none",
+        "update_required": False,
+    }
 
 
 def test_import_spec_word_template_appends_anchors_when_section_not_found(tmp_path):
@@ -137,3 +156,27 @@ def test_import_spec_word_template_detects_complex_structures_for_confirmation(t
     assert {"content_control", "text_box"} <= kinds
     assert any("复杂 Word 结构" in item for item in result.pending_confirmations)
     assert any("不会自动替换" in item for item in result.warnings)
+
+
+def test_import_spec_word_template_records_toc_status_in_manifest(tmp_path):
+    source = tmp_path / "customer.docx"
+    output_dir = tmp_path / "custom_templates"
+    doc = Document()
+    doc.add_paragraph("项目名称：客户报账系统")
+    doc.add_paragraph("总体描述：用于测试导入")
+    _append_toc_field(doc)
+    doc.add_paragraph("功能需求")
+    doc.save(source)
+
+    result = import_spec_word_template(source, output_dir)
+
+    assert result.toc.present is True
+    assert result.toc.field_count == 1
+    assert result.toc.update_required is True
+    assert any("目录字段" in item for item in result.pending_confirmations)
+    manifest = yaml.safe_load(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["toc"] == {
+        "present": True,
+        "auto_update": "optional",
+        "update_required": True,
+    }

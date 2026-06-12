@@ -60,6 +60,13 @@
           </ul>
         </div>
 
+        <div v-if="result.toc.note">
+          <p class="text-xs font-semibold text-[var(--color-ink-soft)]">目录</p>
+          <p class="mt-1 text-xs text-[var(--color-ink-muted)]">
+            {{ result.toc.present ? '已检测到目录' : '未检测到目录' }} / {{ result.toc.note }}
+          </p>
+        </div>
+
         <div v-if="result.pending_confirmations.length">
           <p class="text-xs font-semibold text-[var(--color-warning)]">待确认</p>
           <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[var(--color-warning)]">
@@ -187,6 +194,9 @@
                 >
                   复杂结构：{{ activePreview.summary.complex_structure_count }}
                 </div>
+                <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
+                  目录：{{ activePreview.summary.toc_present ? '有' : '无' }}
+                </div>
               </div>
 
               <div v-if="activePreview.anchors.length">
@@ -214,6 +224,13 @@
                     {{ structure.label }} / {{ scopeLabel(structure.scope) }} / {{ structure.location }} / {{ structure.text_preview || '无可读文本' }}
                   </li>
                 </ul>
+              </div>
+
+              <div v-if="activePreview.toc.note">
+                <p class="text-xs font-semibold text-[var(--color-ink-soft)]">目录状态</p>
+                <p class="mt-1 text-xs text-[var(--color-ink-muted)]">
+                  字段 {{ activePreview.toc.field_count }} 个 / 样式段落 {{ activePreview.toc.styled_paragraph_count }} 个 / {{ activePreview.toc.note }}
+                </p>
               </div>
 
               <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
@@ -312,6 +329,9 @@
                 >
                   复杂结构：{{ activeLayout.summary.complex_structure_count }}
                 </div>
+                <div class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] px-2 py-1">
+                  目录：{{ activeLayout.summary.toc_present ? '有' : '无' }}
+                </div>
               </div>
 
               <div class="overflow-auto rounded border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
@@ -362,6 +382,13 @@
                 </ul>
               </div>
 
+              <div v-if="activeLayout.toc.note" class="rounded border border-[var(--color-rule)] bg-[var(--color-surface)] p-3">
+                <p class="text-xs font-semibold text-[var(--color-ink-soft)]">目录状态</p>
+                <p class="mt-1 text-xs text-[var(--color-ink-muted)]">
+                  字段 {{ activeLayout.toc.field_count }} 个 / 样式段落 {{ activeLayout.toc.styled_paragraph_count }} 个 / {{ activeLayout.toc.note }}
+                </p>
+              </div>
+
               <ul class="list-disc space-y-1 pl-5 text-xs text-[var(--color-ink-muted)]">
                 <li v-for="item in activeLayout.limitations" :key="item">{{ item }}</li>
               </ul>
@@ -399,6 +426,14 @@ interface ComplexStructure {
   text_preview: string
 }
 
+interface TocInfo {
+  present: boolean
+  field_count: number
+  styled_paragraph_count: number
+  update_required: boolean
+  note: string
+}
+
 interface ImportResult {
   template_path: string
   manifest_path: string
@@ -407,6 +442,7 @@ interface ImportResult {
   detected_placeholders: ImportPlaceholder[]
   inserted_anchors: ImportAnchor[]
   complex_structures: ComplexStructure[]
+  toc: TocInfo
   pending_confirmations: string[]
   warnings: string[]
   out_templates_patch: Record<string, string>
@@ -497,11 +533,13 @@ interface ImportedDraftPreview {
     placeholder_count: number
     anchor_count: number
     complex_structure_count: number
+    toc_present: boolean
     section_candidate_count: number
   }
   placeholders: PreviewOccurrence[]
   anchors: PreviewAnchor[]
   complex_structures: ComplexStructure[]
+  toc: TocInfo
   section_candidates: PreviewCandidate[]
   scopes: PreviewScope[]
 }
@@ -539,12 +577,14 @@ interface ImportedLayoutPreview {
     footer_block_count: number
     placeholder_count: number
     complex_structure_count: number
+    toc_present: boolean
     truncated: boolean
   }
   headers: LayoutBlock[]
   body: LayoutBlock[]
   footers: LayoutBlock[]
   complex_structures: ComplexStructure[]
+  toc: TocInfo
   limitations: string[]
 }
 
