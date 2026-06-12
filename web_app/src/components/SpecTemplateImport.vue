@@ -120,7 +120,7 @@
                 <p v-if="item.note" class="mt-1 text-xs text-[var(--color-ink-muted)]">{{ item.note }}</p>
                 <p class="mt-1 break-all font-mono text-xs text-[var(--color-ink-soft)]">{{ item.template_path }}</p>
                 <p v-if="item.capabilities?.anchor_mode" class="mt-1 text-xs text-[var(--color-ink-muted)]">
-                  {{ anchorModeLabel(item.capabilities.anchor_mode) }} / 模块表 {{ moduleColumnCount(item) }} 列
+                  {{ anchorModeLabel(item.capabilities.anchor_mode) }} / 模块表 {{ moduleColumnCount(item) }} 列{{ supportsSampleTable(item) ? ' / 样例表' : '' }}
                 </p>
                 <ul v-if="item.errors.length" class="mt-2 list-disc space-y-1 pl-5 text-xs text-[var(--color-danger)]">
                   <li v-for="error in item.errors" :key="error">{{ error }}</li>
@@ -268,6 +268,19 @@
                   <div>
                     <label class="field-label text-xs">替换为占位符</label>
                     <input v-model.trim="adjustmentForm.placeholderToken" type="text" class="field-control font-mono text-xs" placeholder="{{字段名}}" />
+                  </div>
+                  <div>
+                    <label class="field-label text-xs">模块清单样例表</label>
+                    <select v-model="adjustmentForm.sampleTableLocation" class="field-control text-xs">
+                      <option value="">不调整样例表</option>
+                      <option v-for="option in sampleTableOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label text-xs">样例表 marker</label>
+                    <input v-model.trim="adjustmentForm.sampleTableMarker" type="text" class="field-control font-mono text-xs" placeholder="{{模块清单表示例}}" />
                   </div>
                   <div class="md:col-span-2">
                     <label class="field-label text-xs">待替换文本</label>
@@ -624,6 +637,8 @@ const adjustmentForm = ref({
   placeholderLocation: '',
   placeholderText: '',
   placeholderToken: '',
+  sampleTableLocation: '',
+  sampleTableMarker: '{{模块清单表示例}}',
 })
 
 const statusText = computed(() => {
@@ -653,6 +668,17 @@ const adjustableParagraphOptions = computed(() => {
     }
   }
   return options
+})
+
+const sampleTableOptions = computed(() => {
+  const preview = activePreview.value
+  if (!preview) return []
+  const body = preview.scopes.find((scope) => scope.scope === 'body')
+  if (!body) return []
+  return body.tables.map((table) => ({
+    value: `table:${table.index}`,
+    label: `table:${table.index} / ${table.row_count} x ${table.column_count} / ${table.text_preview || '空表格'}`,
+  }))
 })
 
 function onFileChange(event: Event) {
@@ -873,12 +899,19 @@ async function saveAdjustments(item: ImportedDraft) {
         token: adjustmentForm.value.placeholderToken,
       })
     }
+    const module_table_sample = adjustmentForm.value.sampleTableLocation
+      ? {
+          scope: 'tables',
+          location: adjustmentForm.value.sampleTableLocation,
+          marker: adjustmentForm.value.sampleTableMarker || '{{模块清单表示例}}',
+        }
+      : {}
     const data = await apiFetch<AdjustmentResponse>(
       `/api/templates/spec/imported/${encodeURIComponent(item.id)}/adjustments`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ anchors, placeholders }),
+        body: JSON.stringify({ anchors, placeholders, module_table_sample }),
       },
     )
     activePreview.value = data.preview
@@ -902,6 +935,8 @@ function resetAdjustmentForm() {
     placeholderLocation: '',
     placeholderText: '',
     placeholderToken: '',
+    sampleTableLocation: '',
+    sampleTableMarker: '{{模块清单表示例}}',
   }
 }
 
@@ -941,6 +976,10 @@ function anchorModeLabel(mode: unknown) {
 function moduleColumnCount(item: ImportedDraft) {
   const moduleTable = item.capabilities?.module_table
   return Number(moduleTable?.column_count || 0)
+}
+
+function supportsSampleTable(item: ImportedDraft) {
+  return Boolean(item.capabilities?.module_table?.supports_sample_table)
 }
 
 function formatBytes(value: number) {

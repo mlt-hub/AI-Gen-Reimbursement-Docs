@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import yaml
 from docx import Document
 from docx.text.paragraph import Paragraph
 from docx.oxml import OxmlElement
@@ -223,6 +224,14 @@ def adjust_imported_spec_template(
             moved = _move_body_anchors(doc, anchor_tokens, anchor_moves)
             changed.extend(f"anchors.{key}" for key in moved)
 
+    sample_table = payload.get("module_table_sample", {})
+    manifest_changed = False
+    if isinstance(sample_table, dict) and str(sample_table.get("location") or "").strip():
+        sample_changed, manifest = _apply_module_table_sample_adjustment(doc, manifest, sample_table)
+        if sample_changed:
+            changed.append("module_table.sample_table")
+            manifest_changed = True
+
     if not changed:
         return {
             "id": import_id,
@@ -231,6 +240,11 @@ def adjust_imported_spec_template(
         }
 
     doc.save(template_path)
+    if manifest_changed:
+        (item_dir / "项目需求说明书-输出模板.manifest.yaml").write_text(
+            yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
     metadata = read_imported_spec_template_metadata(target_root, import_id)
     now = str(int(time.time()))
     metadata.update({
@@ -251,6 +265,62 @@ def adjust_imported_spec_template(
         "changed_fields": sorted(set(changed)),
         "preview": build_imported_spec_template_preview(target_root, import_id),
     }
+
+
+def _apply_module_table_sample_adjustment(
+    doc: Document,
+    manifest: dict[str, Any],
+    item: dict[str, Any],
+) -> tuple[bool, dict[str, Any]]:
+    scope = str(item.get("scope") or "tables")
+    location = str(item.get("location") or "").strip()
+    marker = str(item.get("marker") or "{{模块清单表示例}}").strip()
+    if scope != "tables":
+        raise ValueError("当前仅支持选择正文表格作为模块清单样例表")
+    if not marker or not marker.startswith("{{") or not marker.endswith("}}"):
+        raise ValueError("模块清单样例表 marker 必须使用 {{字段名}} 格式")
+    table = _resolve_body_table(doc, location)
+
+    changed = False
+    for existing in doc.tables:
+        for row in existing.rows:
+            for cell in row.cells:
+                if marker in cell.text:
+                    cell.text = cell.text.replace(marker, "").strip()
+                    changed = True
+
+    first_cell = table.cell(0, 0)
+    if marker not in first_cell.text:
+        first_cell.text = "\n".join(part for part in [first_cell.text.strip(), marker] if part)
+        changed = True
+
+    module_table = manifest.get("module_table")
+    if not isinstance(module_table, dict):
+        module_table = {}
+        manifest["module_table"] = module_table
+    current_sample = module_table.get("sample_table")
+    current_marker = ""
+    if isinstance(current_sample, str):
+        current_marker = current_sample
+    elif isinstance(current_sample, dict):
+        current_marker = str(current_sample.get("marker", "") or "")
+    if current_marker != marker:
+        module_table["sample_table"] = {"marker": marker}
+        changed = True
+
+    return changed, manifest
+
+
+def _resolve_body_table(doc: Document, location: str):
+    if not location.startswith("table:"):
+        raise ValueError("模块清单样例表位置必须是 table:{index}")
+    try:
+        index = int(location.split(":", 1)[1])
+    except (IndexError, ValueError) as exc:
+        raise ValueError(f"模块清单样例表位置无效：{location}") from exc
+    if index < 0 or index >= len(doc.tables):
+        raise ValueError(f"模块清单样例表位置不存在：{location}")
+    return doc.tables[index]
 
 
 def _spec_anchor_tokens(manifest: dict[str, Any]) -> dict[str, str]:
