@@ -109,9 +109,18 @@
 
 - 对 `profile`、`rule_set`、manifest 或行级规则命中已经明确规定的口径，不再弹出确认。
 - 用户确认只用于真正存在业务歧义、材料不足或规则冲突的问题。
+- 用户确认机制默认不启用：未显式选择确认模式时，`fpa_confirmation_mode` 默认为 `auto`，不暂停任务、不弹出确认。
 - `strict_fpa` 下仍保留有价值的人工确认能力。
 - `unified_ui`、`ui_api_mapping` 下不再要求用户确认 profile 已明确规定的 UI、接口、合并和拆分口径。
 - 说明结构、格式补齐等质量问题不走用户确认，改为自动补齐、重试或 warning。
+
+## 已确认默认行为
+
+- 不新增 `system_config.yaml` 开关控制用户确认机制。
+- 通过默认 `fpa_confirmation_mode: auto` 表达“默认不启用用户确认机制”。
+- `auto` 的含义是确认问题列表为空，不触发 `fpa_confirmation_required`，批量任务不会暂停等待用户确认。
+- 用户如需启用确认，可在 Web UI 中显式选择 `cautious` 或 `strict`，或在运行默认值 / 请求参数中显式设置对应模式。
+- 空值、缺省配置和无法识别的前端本地值都应回落到 `auto`，避免无意进入审慎确认流程。
 
 ## 需要覆盖的误问类型
 
@@ -174,6 +183,12 @@
 
 ## 建议实现
 
+默认行为已完成的基线调整：
+
+- `ai_gen_reimbursement_docs/fpa_confirmation.py`：空确认模式归一为 `auto`。
+- `web_app/services/config_service.py`：Web 运行默认值中的 `fpa_confirmation_mode` 默认为 `auto`。
+- `web_app/src/stores/config.ts`、`web_app/src/views/Config.vue`、`web_app/src/components/run/FpaRunSettingsSection.vue`、`web_app/src/stores/log.ts`：前端默认值和兜底文案同步为 `auto` / `自动模式`。
+
 引入一个 profile-aware 的确认策略层，不再让 `fpa_confirmation.py` 直接把 validator issue 裸转换成问题。
 
 建议新增或扩展：
@@ -229,6 +244,17 @@ ConfirmationPolicy
 
 ## 验证方式
 
+默认 `auto` 基线已通过：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_fpa_confirmation.py tests/test_web_config_service.py
+.\.venv\Scripts\python.exe -m pytest tests/test_web_tasks.py
+cd web_app
+npm run build
+```
+
+后续 profile-aware 策略实现后继续运行：
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_fpa_confirmation.py
 .\.venv\Scripts\python.exe -m pytest tests/test_gen_fpa_ai.py
@@ -253,6 +279,7 @@ ConfirmationPolicy
 
 ## 验收标准
 
+- 未显式配置确认模式时，默认使用 `auto`，不会弹出 FPA 用户确认。
 - `ui_api_mapping` 的 UI 行固定 `EI`、接口行固定 `ILF`，不再触发类型、查询合并或 CRUD 合并确认。
 - `unified_ui` 已明确覆盖的界面能力合并、CRUD/query split 不再触发确认。
 - rule_set 明确命中的类型或合并规则不再被重复询问。
