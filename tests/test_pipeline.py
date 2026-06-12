@@ -379,7 +379,7 @@ class TestGenCosmic:
                 ],
                 total_l3_modules=2,
                 ai_called=2,
-                failed_modules=[("系统管理", "用户管理", "用户删除", "")],
+                failed_modules=[("系统管理", "用户管理", "用户删除", "JSON array parse failed")],
             ),
         )
 
@@ -392,6 +392,13 @@ class TestGenCosmic:
         payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
         issue_codes = [issue["code"] for issue in payload["issues"]]
         assert "PARTIAL_AI_FAILURE" in issue_codes
+        partial_issue = next(issue for issue in payload["issues"] if issue["code"] == "PARTIAL_AI_FAILURE")
+        assert partial_issue["details"]["failed_modules"] == [{
+            "module_l1": "系统管理",
+            "module_l2": "用户管理",
+            "module_l3": "用户删除",
+            "error": "JSON array parse failed",
+        }]
 
     def test_partial_ai_limit_skips_are_review_required(self, output_dir, test_excel, monkeypatch):
         monkeypatch.setattr(

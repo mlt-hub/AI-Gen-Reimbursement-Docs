@@ -351,11 +351,11 @@ def _process_module_with_retry(
     user_initiator_rules, user_receiver_rules,
     user_default_initiator, user_default_receiver,
     interactive: bool,
-) -> tuple[list[CosmicItem], int, bool]:
+) -> tuple[list[CosmicItem], int, bool, str]:
     """对单个 三级模块调用 AI 生成 COSMIC 分解，带交互式重试。
 
     Returns:
-        (items, ai_called_count, aborted)
+        (items, ai_called_count, aborted, error_message)
     """
     from ai_gen_reimbursement_docs.config_utils import (
         load_ai_system_prompt, load_ai_examples,
@@ -400,13 +400,13 @@ def _process_module_with_retry(
                 f"  [{idx}/{total}] → {sub_count} 个子过程描述"
                 + (f"（{warn_count}个有警告）" if warn_count else "")
             )
-            return items, _ai_called, False
+            return items, _ai_called, False, ""
 
         except Exception as e:
             _err_msg = str(e)
             logger.warning(f"  [{idx}/{total}] → 出错: {_err_msg}")
             if not sys.stdin.isatty():
-                return [], _ai_called, False
+                return [], _ai_called, False, _err_msg
             try:
                 choice = input(
                     f"  AI 调用出错: {_err_msg}\n"
@@ -414,16 +414,16 @@ def _process_module_with_retry(
                     f"q 结束，Enter 跳过: "
                 ).strip()
                 if choice == 'q':
-                    return [], _ai_called, True
+                    return [], _ai_called, True, _err_msg
                 if choice.startswith('r ') and len(choice) > 2:
                     _current_max_tokens = int(choice[2:].strip())
                     logger.info(
                         f"  重试，max_tokens 设为 {_current_max_tokens}"
                     )
                     continue
-                return [], _ai_called, False
+                return [], _ai_called, False, _err_msg
             except (EOFError, KeyboardInterrupt):
-                return [], _ai_called, False
+                return [], _ai_called, False, _err_msg
 
 
 def _deduplicate_data_groups(all_items: list[CosmicItem]) -> None:
@@ -608,7 +608,7 @@ def generate_cosmic_items_with_diagnostics(
                 ))
             continue
 
-        items, called, aborted = _process_module_with_retry(
+        items, called, aborted, error_message = _process_module_with_retry(
             l3, modules, l1_name, l2_name, project_name,
             api_key, model, base_url, max_tokens, idx, total,
             user_initiator_rules, user_receiver_rules,
@@ -619,7 +619,7 @@ def generate_cosmic_items_with_diagnostics(
         if items:
             all_items.extend(items)
         else:
-            error_modules.append((l1_name, l2_name, l3.name, ""))
+            error_modules.append((l1_name, l2_name, l3.name, error_message))
 
         if aborted:
             logger.warning(

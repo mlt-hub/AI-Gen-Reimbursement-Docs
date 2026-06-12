@@ -88,6 +88,24 @@ _DEFAULT_GOVERNANCE_RULE_MATRIX = [
         ],
     },
     {
+        "code": "EXTERNAL_INTERFACE_BOUNDARY_REVIEW",
+        "target": "movement",
+        "severity": "warning",
+        "message": "外部接口或跨系统交互需确认是否跨 COSMIC 有效边界",
+        "scope_policy": "manual_confirm_boundary",
+        "governance_category": "external_interface_boundary",
+        "description": "子过程疑似调用外部系统、第三方平台或跨系统接口，需要结合接口清单和业务上下文确认是否计列",
+        "terms": [
+            "外部系统", "第三方", "第三方平台", "外部接口", "跨系统", "系统联调",
+            "支付平台", "短信平台", "银行接口", "政务平台", "数据交换平台",
+            "统一认证", "电子签章", "影像平台",
+        ],
+        "suggested_actions": [
+            {"action": "exclude_movement", "label": "排除计数"},
+            {"action": "merge_movement", "label": "合并到上一条"},
+        ],
+    },
+    {
         "code": "INTERNAL_TECHNICAL_BOUNDARY",
         "target": "movement",
         "severity": "warning",
@@ -103,6 +121,23 @@ _DEFAULT_GOVERNANCE_RULE_MATRIX = [
         "suggested_actions": [
             {"action": "exclude_movement", "label": "排除计数"},
             {"action": "merge_movement", "label": "合并到上一条"},
+        ],
+    },
+    {
+        "code": "COMPLEX_NON_FUNCTIONAL_SCOPE",
+        "target": "process",
+        "severity": "warning",
+        "message": "复杂非功能或工程支撑事项需确认是否排除 COSMIC 功能规模",
+        "scope_policy": "manual_exclude_process",
+        "governance_category": "complex_non_functional_scope",
+        "description": "功能过程疑似为联调、迁移、适配、部署或工程支撑内容，应结合模块树和元数据确认是否排除",
+        "terms": [
+            "上线切换", "灰度发布", "容灾", "备份恢复", "数据初始化", "存量数据",
+            "批量迁移", "接口联调", "适配改造", "兼容性改造", "国产化适配",
+            "中间件升级", "数据库升级", "脚本改造", "监控告警", "日志治理",
+        ],
+        "suggested_actions": [
+            {"action": "exclude_process", "label": "排除功能过程"},
         ],
     },
 ]
@@ -414,11 +449,13 @@ def _finding_message(finding: dict[str, object]) -> str:
 
 
 def _finding_details(finding: dict[str, object]) -> dict[str, object]:
+    category = str(finding.get("governance_category", ""))
     details = {
         "matched_terms": list(finding.get("matched_terms", [])),
         "basis_description": str(finding.get("description", "")),
         "scope_policy": str(finding.get("scope_policy", "manual_review")),
-        "governance_category": str(finding.get("governance_category", "")),
+        "governance_category": category,
+        "review_required_reason": _governance_review_reason(category),
     }
     movement_order = finding.get("movement_order")
     suggested_actions = finding.get("suggested_actions")
@@ -434,6 +471,22 @@ def _finding_details(finding: dict[str, object]) -> dict[str, object]:
                 action["reason"] = details["basis_description"]
             details["suggested_actions"].append(action)
     return details
+
+
+def _governance_review_reason(category: str) -> str:
+    if category == "external_interface_boundary":
+        return "需要结合接口清单、外部系统清单或业务上下文确认是否跨有效软件边界"
+    if category == "internal_technical_boundary":
+        return "需要确认该交互是否只是被度量软件内部技术实现细节"
+    if category in {"non_functional_scope", "complex_non_functional_scope"}:
+        return "需要确认该事项是否属于 COSMIC 无法度量的非功能或工程支撑范围"
+    if category == "error_confirmation_message":
+        return "需要确认消息是否已由前置读写数据移动覆盖，避免重复计列"
+    if category == "data_operation_only":
+        return "需要确认该子过程是否只是数据运算或技术准备步骤"
+    if category == "control_command":
+        return "需要确认该操作是否移动兴趣对象数据"
+    return "需要人工确认治理规则命中是否适用于当前业务上下文"
 
 
 def _function_user_details(function_user_basis: dict[str, object]) -> dict[str, object]:
@@ -519,15 +572,31 @@ def validate_cosmic_item(
         governance_config.get("require_unique_function_user") is True
         and _has_function_user_role_conflict(basis["function_user"])
     ):
+        matched_part = str(basis["function_user"].get("matched_part", ""))
+        suggested_user = (
+            f"发起者：{matched_part}|接收者：{matched_part}"
+            if matched_part else ""
+        )
         issues.append(_issue(
             "warning", "FUNCTION_USER_ROLE_CONFLICT",
             "功能用户包含多个不一致业务角色，需确认功能用户与功能过程是否一对一",
             "user", item=item,
             details={
                 "function_user_parts": list(basis["function_user"].get("parts", [])),
-                "matched_part": str(basis["function_user"].get("matched_part", "")),
+                "matched_part": matched_part,
                 "match_source": str(basis["function_user"].get("match_source", "")),
                 "basis_description": "启用强绑定治理后，功能用户应稳定对应当前功能过程和最小颗粒度模块",
+                "approval_required": True,
+                "conflict_resolution_policy": "manual_apply_or_waive",
+                "suggested_actions": (
+                    [{
+                        "action": "apply_function_user",
+                        "label": "统一为匹配功能用户",
+                        "suggested_user": suggested_user,
+                        "reason": "消除同一功能过程内多个不一致业务角色",
+                    }]
+                    if suggested_user else []
+                ),
             },
         ))
 

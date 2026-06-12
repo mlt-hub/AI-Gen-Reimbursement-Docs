@@ -828,11 +828,24 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                 ))
             if cosmic_diagnostics.failed_modules:
                 severity = "warning" if cosmic_items else "error"
-                cosmic_global_issues.append(global_cosmic_issue(
+                issue = global_cosmic_issue(
                     severity, "PARTIAL_AI_FAILURE" if cosmic_items else "AI_GENERATION_FAILED",
                     f"COSMIC AI 有 {len(cosmic_diagnostics.failed_modules)} 个模块生成失败",
                     "ai_generation",
-                ))
+                )
+                issue.details = {
+                    "failed_modules": [
+                        {
+                            "module_l1": l1,
+                            "module_l2": l2,
+                            "module_l3": l3,
+                            "error": error,
+                        }
+                        for l1, l2, l3, error in cosmic_diagnostics.failed_modules
+                    ],
+                    "basis_description": "记录单个三级模块 AI 调用或响应解析失败明细，便于重试和回归排查",
+                }
+                cosmic_global_issues.append(issue)
             if not cosmic_items:
                 cosmic_global_issues.append(global_cosmic_issue(
                     "error", "AI_GENERATION_EMPTY",

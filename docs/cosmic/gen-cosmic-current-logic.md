@@ -347,6 +347,18 @@ AI 调用限制：
 8. `governance_effective` 会写入保存后的 payload，记录本次启用的治理开关、自动 issue code 白名单、组织级角色映射 key 和配置规则矩阵 code，便于排查。
 9. 本轮仍坚持默认安全策略：不配置时不自动排除、不强制改功能用户、不阻断既有确认后导出；更强的审批、权限签名和跨系统上下文判定仍属于后续治理。
 
+### 2026-06-12 继续推进全部治理入口
+
+本次在既有治理入口基础上继续收口剩余事项，当前状态如下：
+
+1. 内置规则矩阵新增 `EXTERNAL_INTERFACE_BOUNDARY_REVIEW` 和 `COMPLEX_NON_FUNCTIONAL_SCOPE`，用于把外部系统/第三方平台/跨系统接口，以及上线切换、容灾、国产化适配、中间件升级等复杂非功能或工程支撑事项纳入结构化待审。
+2. 治理规则 details 会写入 `review_required_reason`，说明为什么需要结合接口清单、模块树、元数据或业务上下文人工确认。
+3. `FUNCTION_USER_ROLE_CONFLICT` 会写入 `approval_required`、`conflict_resolution_policy` 和 `apply_function_user` 建议动作，便于后续接审批流和冲突处理。
+4. CFP 公式一致性解析增强为按公式分支读取，覆盖 `IF`/`IFS`/`SWITCH` 中 `"复用度", 数值` 和 `1/3` 分数等常见模板写法。
+5. 保存会话审阅结果时会在重写 hash 前校验已有 `review_audit` hash 链；若已有签名链不匹配，会产生全局 `AUDIT_HASH_CHAIN_INVALID` 待审项，并在 `review_audit_hash_chain` 记录保存前校验结果。
+6. AI 单模块生成失败会把失败模块路径和异常文本写入 `PARTIAL_AI_FAILURE` 或 `AI_GENERATION_FAILED` 的 details，便于定位重试。
+7. 默认策略仍保持保守：新增规则只产生待审项，不会在未配置白名单时自动排除、合并或强制修改功能用户。
+
 ### 目标行为
 
 生成 COSMIC 结果后，系统必须为每个功能过程给出校验状态：

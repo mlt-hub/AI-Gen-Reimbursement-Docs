@@ -197,6 +197,26 @@ def test_internal_technical_boundary_requires_review():
     assert result.basis["movement_semantics"][0]["code"] == "INTERNAL_TECHNICAL_BOUNDARY"
 
 
+def test_external_interface_boundary_requires_context_review():
+    external = _movement(2, "X", data_group="外部系统响应", data_attrs="回执状态")
+    external.sub_process = "调用第三方平台外部接口返回回执"
+    result = validate_cosmic_item(
+        _item(movements=[
+            _movement(1, "E", data_group="业务请求", data_attrs="业务编号"),
+            external,
+        ])
+    )
+
+    assert "EXTERNAL_INTERFACE_BOUNDARY_REVIEW" in _codes(result)
+    issue = next(issue for issue in result.issues if issue.code == "EXTERNAL_INTERFACE_BOUNDARY_REVIEW")
+    assert issue.details["governance_category"] == "external_interface_boundary"
+    assert "接口清单" in issue.details["review_required_reason"]
+    assert [action["action"] for action in issue.details["suggested_actions"]] == [
+        "exclude_movement",
+        "merge_movement",
+    ]
+
+
 def test_configured_rule_matrix_adds_custom_movement_rule():
     movement = _movement(2, "X", data_group="专线响应", data_attrs="状态")
     movement.sub_process = "通过外部专线返回处理结果"
@@ -259,6 +279,19 @@ def test_non_functional_scope_requires_review():
     assert "系统迁移" in result.basis["process_semantics"][0]["matched_terms"]
     issue = next(issue for issue in result.issues if issue.code == "NON_FUNCTIONAL_SCOPE")
     assert issue.details["governance_category"] == "non_functional_scope"
+    assert issue.details["suggested_actions"][0]["action"] == "exclude_process"
+
+
+def test_complex_non_functional_scope_requires_review():
+    result = validate_cosmic_item(_item(
+        module_l3="国产化适配",
+        process="完成中间件升级和上线切换",
+        user="发起者：国产化适配|接收者：国产化适配",
+    ))
+
+    assert "COMPLEX_NON_FUNCTIONAL_SCOPE" in _codes(result)
+    issue = next(issue for issue in result.issues if issue.code == "COMPLEX_NON_FUNCTIONAL_SCOPE")
+    assert issue.details["governance_category"] == "complex_non_functional_scope"
     assert issue.details["suggested_actions"][0]["action"] == "exclude_process"
 
 
@@ -548,3 +581,6 @@ def test_unique_function_user_governance_flags_conflicting_roles():
     issue = next(issue for issue in result.issues if issue.code == "FUNCTION_USER_ROLE_CONFLICT")
     assert issue.details["matched_part"] == "客户资料"
     assert issue.details["function_user_parts"] == ["客户资料", "订单管理"]
+    assert issue.details["approval_required"] is True
+    assert issue.details["suggested_actions"][0]["action"] == "apply_function_user"
+    assert issue.details["suggested_actions"][0]["suggested_user"] == "发起者：客户资料|接收者：客户资料"

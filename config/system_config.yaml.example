@@ -100,9 +100,10 @@ gen_cosmic:
     require_unique_function_user: false
     # 是否诊断确认后 CFP policy 与 Excel 公式文本的明显不一致
     cfp_formula_consistency_check: false
-    # 是否给 review_audit 写入前后相连的 SHA-256 hash
+    # 是否给 review_audit 写入前后相连的 SHA-256 hash；保存前若发现已有 hash 链异常，会产生 AUDIT_HASH_CHAIN_INVALID 待审项
     audit_hash_chain: true
-    # COSMIC 治理规则矩阵；不配置时使用内置默认规则。配置同 code 会覆盖内置规则，也可新增组织规则
+    # COSMIC 治理规则矩阵；不配置时使用内置默认规则，覆盖内部/外部边界、控制命令、数据运算、消息输出和非功能范围。
+    # 配置同 code 会覆盖内置规则，也可新增组织规则。
     rule_matrix: []
     # 示例：
     # rule_matrix:

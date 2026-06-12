@@ -421,11 +421,13 @@ def _audit_hash(record: dict, previous_hash: str = "") -> str:
 def _verify_audit_hash_chain(records: list[dict]) -> dict[str, object]:
     previous_hash = ""
     checked = 0
+    unsigned = 0
     for index, record in enumerate(records):
         if not isinstance(record, dict):
             continue
         audit_hash = str(record.get("audit_hash") or "")
         if not audit_hash:
+            unsigned += 1
             continue
         checked += 1
         expected_previous = str(record.get("previous_audit_hash") or "")
@@ -434,6 +436,7 @@ def _verify_audit_hash_chain(records: list[dict]) -> dict[str, object]:
                 "algorithm": "sha256-json-v1",
                 "valid": False,
                 "checked_record_count": checked,
+                "unsigned_record_count": unsigned,
                 "failed_index": index,
                 "reason": "previous_audit_hash 不匹配",
             }
@@ -443,6 +446,7 @@ def _verify_audit_hash_chain(records: list[dict]) -> dict[str, object]:
                 "algorithm": "sha256-json-v1",
                 "valid": False,
                 "checked_record_count": checked,
+                "unsigned_record_count": unsigned,
                 "failed_index": index,
                 "reason": "audit_hash 不匹配",
             }
@@ -451,12 +455,13 @@ def _verify_audit_hash_chain(records: list[dict]) -> dict[str, object]:
         "algorithm": "sha256-json-v1",
         "valid": True,
         "checked_record_count": checked,
+        "unsigned_record_count": unsigned,
         "failed_index": None,
         "reason": "",
     }
 
 
-def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> None:
+def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> list[CosmicIssue]:
     actions = payload.get("review_actions")
     if not isinstance(actions, list):
         actions = []
@@ -480,8 +485,30 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> None:
         keyed[_review_action_key(record)] = record
     records = list(keyed.values())
     governance = load_gen_cosmic_governance_config()
+    issues: list[CosmicIssue] = []
     if governance.get("audit_hash_chain") is not False:
-        payload["review_audit_hash_chain"] = _verify_audit_hash_chain(records)
+        before = _verify_audit_hash_chain(records)
+        if before.get("checked_record_count", 0) and before.get("valid") is False:
+            issue = global_cosmic_issue(
+                "warning",
+                "AUDIT_HASH_CHAIN_INVALID",
+                "COSMIC 审计 hash 链在本次保存前校验失败，需确认历史审阅记录是否被篡改",
+                "review_audit",
+            )
+            issue.details = {
+                "verification_before_save": before,
+                "basis_description": "保存前校验已有 audit_hash 的审计记录，发现 hash 链不连续或记录内容不匹配",
+            }
+            issues.append(issue)
+        payload["review_audit_hash_chain"] = {
+            "algorithm": "sha256-json-v1",
+            "valid": True,
+            "valid_before_save": before.get("valid"),
+            "checked_record_count_before_save": before.get("checked_record_count", 0),
+            "unsigned_record_count_before_save": before.get("unsigned_record_count", 0),
+            "failed_index_before_save": before.get("failed_index"),
+            "reason_before_save": before.get("reason", ""),
+        }
         previous_hash = ""
         for record in records:
             record["previous_audit_hash"] = previous_hash
@@ -492,6 +519,7 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> None:
             "final_audit_hash": previous_hash,
         })
     payload["review_audit"] = records
+    return issues
 
 
 def _review_action_key(action: dict) -> tuple:
@@ -509,7 +537,7 @@ def _revalidate_cosmic_payload(payload: dict, *, cfp_formula: str = "", reviewer
     governance = load_gen_cosmic_governance_config()
     payload = _apply_auto_review_actions(payload)
     acted = _apply_review_actions(payload)
-    _stamp_review_audit(acted, reviewer=reviewer)
+    audit_issues = _stamp_review_audit(acted, reviewer=reviewer)
     confirmations = _confirmation_by_review_id(acted)
     effective_cfp_policy = _cfp_policy_from_payload(acted)
     formula = cfp_formula or _cfp_formula_from_payload(acted)
@@ -517,7 +545,10 @@ def _revalidate_cosmic_payload(payload: dict, *, cfp_formula: str = "", reviewer
         _cosmic_items_from_payload(acted, include_excluded=False),
         project_name=str(acted.get("project") or ""),
         cfp_formula=formula,
-        global_issues=_cfp_policy_formula_issues(formula, effective_cfp_policy),
+        global_issues=[
+            *audit_issues,
+            *_cfp_policy_formula_issues(formula, effective_cfp_policy),
+        ],
         governance_config=governance,
     )
     data = cosmic_report_to_dict(report)
@@ -659,20 +690,68 @@ def _cfp_policy_formula_issues(cfp_formula: str, policy: dict[str, float]) -> li
 
 def _parse_cfp_policy_from_formula(formula: str, reuse_names) -> dict[str, float]:
     parsed: dict[str, float] = {}
-    for reuse in reuse_names:
-        name = str(reuse or "").strip()
-        if not name:
+    normalized_formula = str(formula or "").replace("，", ",")
+    names = [str(reuse or "").strip() for reuse in reuse_names if str(reuse or "").strip()]
+    for name in names:
+        branch_value = _parse_branch_value_after_reuse_name(normalized_formula, name)
+        if branch_value is not None:
+            parsed[name] = branch_value
             continue
-        pattern = re.compile(
-            rf"{re.escape(name)}[\s\S]{{0,80}}?([-+]?\d+(?:\.\d+)?\s*/\s*[-+]?\d+(?:\.\d+)?|[-+]?\d+(?:\.\d+)?)"
-        )
-        match = pattern.search(formula)
-        if not match:
-            continue
-        value = _parse_formula_number(match.group(1))
-        if value is not None:
-            parsed[name] = value
+        fallback_value = _parse_nearby_formula_value(normalized_formula, name)
+        if fallback_value is not None:
+            parsed[name] = fallback_value
     return parsed
+
+
+def _parse_branch_value_after_reuse_name(formula: str, reuse_name: str) -> float | None:
+    name_pattern = re.compile(rf'"{re.escape(reuse_name)}"|{re.escape(reuse_name)}')
+    for match in name_pattern.finditer(formula):
+        cursor = match.end()
+        while cursor < len(formula) and formula[cursor] not in ",":
+            cursor += 1
+        if cursor >= len(formula):
+            continue
+        token, _ = _read_formula_argument(formula, cursor + 1)
+        value = _parse_formula_number(token)
+        if value is not None:
+            return value
+    return None
+
+
+def _parse_nearby_formula_value(formula: str, reuse_name: str) -> float | None:
+    pattern = re.compile(
+        rf"{re.escape(reuse_name)}[\s\S]{{0,120}}?([-+]?\d+(?:\.\d+)?\s*/\s*[-+]?\d+(?:\.\d+)?|[-+]?\d+(?:\.\d+)?)"
+    )
+    match = pattern.search(formula)
+    if not match:
+        return None
+    return _parse_formula_number(match.group(1))
+
+
+def _read_formula_argument(formula: str, start: int) -> tuple[str, int]:
+    depth = 0
+    in_string = False
+    token_chars: list[str] = []
+    index = start
+    while index < len(formula):
+        char = formula[index]
+        if char == '"':
+            in_string = not in_string
+            token_chars.append(char)
+            index += 1
+            continue
+        if not in_string:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif char == "," and depth == 0:
+                break
+        token_chars.append(char)
+        index += 1
+    return "".join(token_chars).strip(), index
 
 
 def _parse_formula_number(text: str) -> float | None:
