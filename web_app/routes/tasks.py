@@ -17,6 +17,7 @@ from ai_gen_reimbursement_docs.auth import user_config_dir
 from web_app.dependencies import get_auth_user, is_local_mode, require_auth, require_local
 from web_app.services.config_service import (
     config_dir,
+    local_task_input_snapshot_enabled,
     max_concurrent_tasks,
     mode_requires_ai,
     read_config,
@@ -44,6 +45,11 @@ from web_app.services.run_history_service import (
     start_web_run,
 )
 from web_app.services.session_access import require_session_access
+from web_app.services.task_assets_service import (
+    cleanup_expired_task_assets,
+    snapshot_custom_templates,
+    snapshot_input_file,
+)
 from web_app.services.session_manager import SessionManager
 from web_app.services.task_runner import (
     cleanup_expired_sessions,
@@ -184,39 +190,42 @@ def create_router(
             )
         return snapshot
 
-    def _task_assets_dir(session_id: str) -> Path:
-        safe_id = "".join(ch for ch in session_id if ch.isalnum() or ch in "-_")
-        if not safe_id:
-            safe_id = uuid.uuid4().hex[:8]
-        path = base_dir / "products" / "task_assets" / safe_id
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+    def _cleanup_task_assets() -> None:
+        cleanup_expired_task_assets(base_dir=base_dir)
 
-    def _snapshot_input_file(session_id: str, source: Path) -> Path:
-        target_dir = _task_assets_dir(session_id) / "input"
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / source.name
-        shutil.copy2(source, target)
-        return target
+    def _snapshot_history_input(
+        *,
+        session_id: str,
+        source: Path,
+        mode: str,
+        owner_id: str = "",
+        source_run_id: str = "",
+    ) -> Path:
+        return snapshot_input_file(
+            base_dir=base_dir,
+            session_id=session_id,
+            source=source,
+            mode=mode,
+            owner_id=owner_id,
+            source_run_id=source_run_id,
+        )
 
-    def _snapshot_custom_templates(session_id: str, source_dir: str) -> str:
-        if not source_dir:
-            return ""
-        source = Path(source_dir)
-        if not source.exists() or not source.is_dir():
-            return ""
-        templates = build_templates_dict(str(source))
-        if not templates:
-            return ""
-        target = _task_assets_dir(session_id) / "custom_templates"
-        if target.exists():
-            shutil.rmtree(target)
-        target.mkdir(parents=True, exist_ok=True)
-        for template_path in templates.values():
-            source_file = Path(template_path)
-            if source_file.exists() and source_file.is_file():
-                shutil.copy2(source_file, target / source_file.name)
-        return str(target)
+    def _snapshot_history_templates(
+        *,
+        session_id: str,
+        source_dir: str,
+        mode: str,
+        owner_id: str = "",
+        source_run_id: str = "",
+    ) -> str:
+        return snapshot_custom_templates(
+            base_dir=base_dir,
+            session_id=session_id,
+            source_dir=source_dir,
+            mode=mode,
+            owner_id=owner_id,
+            source_run_id=source_run_id,
+        )
 
     def _finalize_fpa_task_config(snapshot: dict) -> dict:
         from ai_gen_reimbursement_docs.config_utils import load_fpa_profile_entry
@@ -508,6 +517,7 @@ def create_router(
         }
 
     def _start_rerun(record: dict, *, local_mode: bool, user: str) -> dict:
+        _cleanup_task_assets()
         mode = str(record.get("mode") or "")
         task_mode = str(record.get("task_mode") or "")
         if task_mode not in mode_info:
@@ -548,16 +558,26 @@ def create_router(
                 output_dir=output_dir,
                 config_root=profile_root,
             )
-            history_custom_templates_dir = _snapshot_custom_templates(
-                session_id,
-                custom_templates_dir,
+            history_input = input_path
+            if local_task_input_snapshot_enabled():
+                history_input = _snapshot_history_input(
+                    session_id=session_id,
+                    source=input_path,
+                    mode="local",
+                    source_run_id=str(record.get("run_id") or ""),
+                )
+            history_custom_templates_dir = _snapshot_history_templates(
+                session_id=session_id,
+                source_dir=custom_templates_dir,
+                mode="local",
+                source_run_id=str(record.get("run_id") or ""),
             )
             start_web_run(
                 base_dir=base_dir,
                 session_id=session_id,
                 mode="local",
                 task_mode=task_mode,
-                input_path=str(input_path),
+                input_path=str(history_input),
                 output_dir=str(output_dir),
                 run_config=_run_config_snapshot(
                     task_config=task_config,
@@ -576,7 +596,7 @@ def create_router(
                         session_id=sid,
                         mode="local",
                         task_mode=task_mode,
-                        input_path=str(input_path),
+                        input_path=str(history_input),
                         output_dir=str(output_dir),
                         done_files=files,
                         error=error or "",
@@ -629,10 +649,19 @@ def create_router(
                     shutil.copy2(source, custom_t_dir / source.name)
         rerun_input = input_dir / input_path.name
         shutil.copy2(input_path, rerun_input)
-        history_input = _snapshot_input_file(session_id, rerun_input)
-        history_custom_templates_dir = _snapshot_custom_templates(
-            session_id,
-            str(custom_t_dir),
+        history_input = _snapshot_history_input(
+            session_id=session_id,
+            source=rerun_input,
+            mode="remote",
+            owner_id=user,
+            source_run_id=str(record.get("run_id") or ""),
+        )
+        history_custom_templates_dir = _snapshot_history_templates(
+            session_id=session_id,
+            source_dir=str(custom_t_dir),
+            mode="remote",
+            owner_id=user,
+            source_run_id=str(record.get("run_id") or ""),
         )
         profile_root = _profile_config_root(local_mode=False, user=user)
         profile_decisions = _load_profile_decision_payload(profile_root)
@@ -1110,6 +1139,7 @@ def create_router(
         """本机模式：接受文件路径或目录路径，目录则自动搜索功能清单 xlsx。"""
         if mode not in mode_info:
             raise HTTPException(400, f"未知模式: {mode}")
+        _cleanup_task_assets()
 
         from_dir = ""
         if Path(xlsx_path).is_dir():
@@ -1152,7 +1182,18 @@ def create_router(
 
         profile_root = _profile_config_root(local_mode=True)
         profile_decisions = _load_profile_decision_payload(profile_root)
-        history_custom_templates_dir = _snapshot_custom_templates(session_id, custom_t_dir)
+        history_input = xlsx
+        if local_task_input_snapshot_enabled():
+            history_input = _snapshot_history_input(
+                session_id=session_id,
+                source=xlsx,
+                mode="local",
+            )
+        history_custom_templates_dir = _snapshot_history_templates(
+            session_id=session_id,
+            source_dir=custom_t_dir,
+            mode="local",
+        )
         session_manager.create(
             session_id,
             mode="local",
@@ -1164,7 +1205,7 @@ def create_router(
             session_id=session_id,
             mode="local",
             task_mode=mode,
-            input_path=str(xlsx),
+            input_path=str(history_input),
             output_dir=str(out),
             run_config=_run_config_snapshot(
                 task_config=task_config,
@@ -1183,7 +1224,7 @@ def create_router(
                     session_id=sid,
                     mode="local",
                     task_mode=mode,
-                    input_path=str(xlsx),
+                    input_path=str(history_input),
                     output_dir=str(out),
                     done_files=files,
                     error=error or "",
@@ -1259,6 +1300,7 @@ def create_router(
             session_manager,
             max_age_seconds=remote_session_retention_seconds(),
         )
+        _cleanup_task_assets()
         task_config = _resolve_task_config_snapshot(
             explicit=_explicit_task_config(
                 api_key=api_key,
@@ -1296,8 +1338,18 @@ def create_router(
         await save_custom_templates_into(
             custom_t_dir, fpa_template, cosmic_template, list_template, spec_template
         )
-        history_input = _snapshot_input_file(session_id, file_path)
-        history_custom_templates_dir = _snapshot_custom_templates(session_id, str(custom_t_dir))
+        history_input = _snapshot_history_input(
+            session_id=session_id,
+            source=file_path,
+            mode="remote",
+            owner_id=user,
+        )
+        history_custom_templates_dir = _snapshot_history_templates(
+            session_id=session_id,
+            source_dir=str(custom_t_dir),
+            mode="remote",
+            owner_id=user,
+        )
 
         profile_root = _profile_config_root(local_mode=False, user=user)
         profile_decisions = _load_profile_decision_payload(profile_root)

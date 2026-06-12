@@ -74,6 +74,26 @@ def test_history_remote_filters_by_owner(monkeypatch, tmp_path):
     assert ids == ["alice1"]
 
 
+def test_history_returns_task_asset_retention_metadata(monkeypatch, tmp_path):
+    db = tmp_path / "user_history.sqlite3"
+    monkeypatch.setattr(run_history_service, "user_history_path", lambda: db)
+    monkeypatch.setattr("web_app.services.config_service.config_dir", lambda: tmp_path)
+    monkeypatch.setattr("web_app.services.run_history_service.config_dir", lambda: tmp_path, raising=False)
+    (tmp_path / "system_config.yaml").write_text(
+        "task_assets_retention_days: 7\n"
+        "local_task_input_snapshot_enabled: true\n",
+        encoding="utf-8",
+    )
+    client = _client(monkeypatch, local_mode=True)
+
+    resp = client.get("/api/history")
+
+    assert resp.status_code == 200
+    retention = resp.json()["retention"]
+    assert retention["task_assets_retention_label"] == "7 天"
+    assert retention["local_input_snapshot_enabled"] is True
+
+
 def test_startup_cleanup_cancels_stale_queued_web_runs(monkeypatch, tmp_path):
     user_db = tmp_path / "user_history.sqlite3"
     service_db = tmp_path / "service_history.sqlite3"
@@ -119,3 +139,44 @@ def test_startup_cleanup_cancels_stale_queued_web_runs(monkeypatch, tmp_path):
     assert remote["run_state"] == "cancelled"
     assert "服务重启" in local["error"]
     assert "服务重启" in remote["error"]
+
+
+def test_backfill_closed_from_state_updates_legacy_closed_runs(monkeypatch, tmp_path):
+    user_db = tmp_path / "user_history.sqlite3"
+    service_db = tmp_path / "service_history.sqlite3"
+    monkeypatch.setattr(run_history_service, "user_history_path", lambda: user_db)
+    monkeypatch.setattr(run_history_service, "service_history_path", lambda base_dir: service_db)
+
+    run_history_service.start_web_run(
+        base_dir=tmp_path,
+        session_id="legacy_closed",
+        mode="local",
+        task_mode="gen-all",
+        input_path=str(tmp_path / "功能清单.xlsx"),
+        output_dir=str(tmp_path / "out"),
+    )
+    run_history_service.finish_web_run(
+        base_dir=tmp_path,
+        session_id="legacy_closed",
+        mode="local",
+        task_mode="gen-all",
+        input_path=str(tmp_path / "功能清单.xlsx"),
+        output_dir=str(tmp_path / "out"),
+        error="boom",
+    )
+    run_history_service.update_run_state(
+        "legacy_closed",
+        user_db,
+        run_state="closed",
+    )
+
+    count = run_history_service.backfill_closed_from_state(base_dir=tmp_path)
+
+    assert count == 1
+    item = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id="legacy_closed",
+        local_mode=True,
+        owner_id="",
+    )
+    assert item["run_config"]["closed_from_state"] == "error"
