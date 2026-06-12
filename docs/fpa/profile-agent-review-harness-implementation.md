@@ -1,6 +1,6 @@
 # Profile Agent Review Harness 实施方案
 
-日期：2026-06-09
+日期：2026-06-12
 
 ## 背景
 
@@ -10,7 +10,7 @@
 
 ## 实施状态
 
-截至 2026-06-09，已完成以下切片：
+截至 2026-06-12，已完成以下切片：
 
 | 提交 | 内容 |
 |---|---|
@@ -26,7 +26,7 @@
 | `ae27e47` | 增加自定义 profile 继承式 harness 示例，并对齐 `ui_api_mapping` 显式后端行提取与审阅口径。 |
 | `docs/fpa/validation-runs/2026-06-09-multi-profile-real-model-hardened.md` | 收敛 prompt 和确定性补齐/审阅，`profile_quality_issue_count=0`。 |
 | `0e64714` | 将 `multi_uis` 提升为独立 `kind: multi_uis`，保持生成规则复用统一界面能力，并同步 contract / harness / 文档。 |
-| 当前切片 | 新增 profile 级 golden fixture contract suite，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的当前质量门。 |
+| `6f98bfc` | 新增 profile 级 golden fixture contract suite，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的当前质量门。 |
 
 当前实现约束：
 
@@ -312,10 +312,10 @@ hardening 后结果：
 | 新 profile 复制 Python 流程导致分叉 | 新增 profile 优先新增 contract、规则和 fixture |
 | warning 过多影响审阅体验 | 第一版 warning 只进入 audit/check，不阻断正式生成 |
 
-## 后续切片
+## 持续治理
 
 1. 扩大 `multi-profile-real-model` 之外的真实项目样本，继续按 `docs/fpa/validation-runs/multi-profile-run-template.md` 归档。
 2. 将真实项目样本中出现的新口径边界沉淀为 profile 级 golden fixtures。
 3. 观察 profile 专属 warning 误报率，再决定是否从只读质量门升级为阻断或自动重试。
 
-每个切片都应保持现有生成行为可回归，并按仓库规则单独提交。
+这些事项是长期质量治理，不是当前 profile-aware Agent Review 最小落地路线的阻塞项。每个后续切片都应保持现有生成行为可回归，并按仓库规则单独提交。

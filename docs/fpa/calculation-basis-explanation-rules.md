@@ -33,7 +33,7 @@
 已完成：
 
 - 已更新默认 FPA prompt：`config/fpa_config.yaml.example` 中 `unified_ui` 和 `strict_fpa` 的用户提示词均已加入结构化`计算依据说明`生成规则。
-- 已抽取 profile 绑定式计算依据说明规则：`config/fpa_config.yaml.example` 顶层 `calculation_explanation_rules` 提供 `strict_fpa_ce`、`unified_ui_ce`、`multi_uis_ce`、`ui_api_mapping_ce`，四个默认 profile 均通过 `profiles.<profile>.calculation_explanation_rules` 显式绑定。
+- 已抽取 profile 绑定式计算依据说明规则：`config/fpa_config.yaml.example` 顶层 `calculation_explanation_rules` 提供 `strict_fpa_ce`、`unified_ui_ce`、`multi_uis_ce`、`ui_api_mapping_ce`、`ui_api_mapping_workload_eval_ce`；四个默认 profile 均通过 `profiles.<profile>.calculation_explanation_rules` 显式绑定，其中 `ui_api_mapping` 默认绑定专属的 `ui_api_mapping_workload_eval_ce`。
 - 已支持 profile 级规则边界：运行时先读取当前 profile 的 `calculation_explanation_rules` 绑定 key，再从顶层 `calculation_explanation_rules.<key>` 读取规则文本；自定义 prompt 不引用 `${calculation_explanation_rules}` 时仍可按三个核心占位符渲染并给出 warning。
 - 已实现后处理质量检查：`ai_gen_reimbursement_docs/gen_fpa.py` 中 `postprocess.explanation_quality` 会检查结构化项、来源场景完整路径、FPA 类型、正式输出缺失提示、以及“按后台数据库变更的表个数计量”等归类依据误入说明的问题。
 - 已区分事务功能和数据功能来源路径：`EI/EQ/EO` 检查 `【客户端类型】一级模块-二级模块-三级模块-功能点名称`，`ILF/EIF` 检查 `【客户端类型】一级模块-二级模块-三级模块-数据组名称`。
@@ -595,7 +595,8 @@ ${calculation_explanation_rules}
 
 - `strict_fpa` 绑定 `strict_fpa_ce`，保留标准 FPA 的结构化证据说明规则。
 - `unified_ui` 绑定 `unified_ui_ce`，强调按系统建设内容描述、三级模块界面合并和逻辑接口/表能力拆分。
-- `multi_uis` 绑定 `multi_uis_ce`，`ui_api_mapping` 绑定 `ui_api_mapping_ce`；两者当前规则内容与 `unified_ui_ce` 保持一致，但保留独立 key 便于后续差异化。
+- `multi_uis` 绑定 `multi_uis_ce`，当前规则内容与 `unified_ui_ce` 保持一致。
+- `ui_api_mapping` 绑定 `ui_api_mapping_workload_eval_ce`，使用与界面接口映射 profile 匹配的编号清单式说明规则；`ui_api_mapping_ce` 仍作为通用规则 key 保留，可供自定义 profile 复用统一界面说明口径。
 - 不再保留 `default` 回退；引用 `${calculation_explanation_rules}` 的 profile 必须显式绑定存在的顶层规则 key。
 
 `unified_ui_ce` 与 `strict_fpa_ce` 的差异必须在文案中可见，不能只把标准规则换名复用。`strict_fpa_ce` 负责标准 FPA 证据链说明；`unified_ui_ce` 负责统一界面建设口径，要求 `计算依据说明` 描述“系统建设了什么”，而不是复述用户操作流程。它应明确覆盖：三级模块内界面能力合并描述、逻辑接口/表能力按业务动作归属描述、导入/导出/外部接口联调调用只基于输入证据描述，以及不得编造表名、接口名、外部系统、权限或审批流程。
@@ -612,6 +613,10 @@ profiles:
     calculation_explanation_rules: strict_fpa_ce
   unified_ui:
     calculation_explanation_rules: unified_ui_ce
+  multi_uis:
+    calculation_explanation_rules: multi_uis_ce
+  ui_api_mapping:
+    calculation_explanation_rules: ui_api_mapping_workload_eval_ce
 
 calculation_explanation_rules:
   strict_fpa_ce: |-
@@ -621,6 +626,8 @@ calculation_explanation_rules:
   multi_uis_ce: |-
     multi_uis 专属规则...
   ui_api_mapping_ce: |-
+    统一界面通用规则...
+  ui_api_mapping_workload_eval_ce: |-
     ui_api_mapping 专属规则...
 ```
 
@@ -812,7 +819,7 @@ profiles:
   multi_uis:
     calculation_explanation_rules: multi_uis_ce
   ui_api_mapping:
-    calculation_explanation_rules: ui_api_mapping_ce
+    calculation_explanation_rules: ui_api_mapping_workload_eval_ce
 
 calculation_explanation_rules:
   strict_fpa_ce: |-
@@ -823,6 +830,8 @@ calculation_explanation_rules:
     统一界面口径计算依据说明生成规则：...
   ui_api_mapping_ce: |-
     统一界面口径计算依据说明生成规则：...
+  ui_api_mapping_workload_eval_ce: |-
+    ui_api_mapping 计算依据说明生成规则：...
 ```
 
 引用 `${calculation_explanation_rules}` 的 profile 必须配置 `profiles.<profile>.calculation_explanation_rules`，且绑定 key 必须存在于顶层 `calculation_explanation_rules` 并为非空字符串。

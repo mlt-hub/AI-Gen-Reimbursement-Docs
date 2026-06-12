@@ -14,7 +14,7 @@
 - 稳定性报告已新增独立指标 `profile_quality_issue_count` 和 `profile_issue_code_counts`，不混入原 `quality_issue_count`。
 - 真实模型抽样记录模板已新增到 `docs/fpa/validation-runs/multi-profile-run-template.md`，首轮多 profile 基线与 hardening 后归零记录已归档。
 
-后续仍需持续推进的事项：
+持续治理事项：
 
 - profile 专属 warning 仍保持只读质量门，不阻断生成；如需升级为阻断或自动重试，需要先补更大样本的误报评估。
 - 新增 profile 或 rule_set 时继续采用 `contract + fixture + 稳定性抽样`，不要复制 Python 流程。
@@ -161,7 +161,7 @@ EI / EQ / EO / ILF / EIF
 - profile 专属 review 仍是只读 warning，prompt 会读取 judgement，但 warning 本身不直接阻断或改写 rows。
 - `type_judgement`、`merge_review`、`quality_review` 仍保留为 `strict_fpa` 语义的调试信息。
 
-因此，非 strict profile 可以运行，但不能按 `strict_fpa` 的稳定性结论直接背书。后续应继续扩充 profile 级 golden fixtures、真实项目样本和 warning 误报评估，再考虑是否把只读 warning 升级为阻断或自动重试。
+因此，非 strict profile 可以作为 supported 组合使用，但还不能按 `strict_fpa` 的 certified 级稳定性结论直接背书。后续治理重点是随真实项目样本扩充 profile 级 golden fixtures、真实模型归档和 warning 误报评估，再决定是否把只读 warning 升级为阻断或自动重试。
 
 ## Profile 组合 Harness 分层
 
@@ -479,7 +479,7 @@ source_process_ids 越界
 
 已补充 `tests/fpa_profiles/` 分层 harness，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的基础行为，并通过配置解析路径覆盖自定义 `kind: unified_ui` / `kind: ui_api_mapping` profile 的继承式 harness。`multi_uis` 已提升为独立 `kind: multi_uis`，profile 级 golden fixture 已覆盖 `unified_ui` 复合业务动作、`multi_uis` 多界面拆分和 `ui_api_mapping` 默认 UI/API + 显式后端行，真实模型抽样基线和 hardening 后归零记录已归档到 `docs/fpa/validation-runs/`。
 
-后续 fixture 扩展应跟随真实项目样本增量补充，而不是在当前样例集上复制相近场景。
+后续 fixture 扩展应跟随真实项目样本增量补充，而不是在当前样例集上复制相近场景；当前最小 contract 覆盖不再有必须补齐的基础缺口。
 
 ### 第六步：prompt 硬约束与只读 warning 分层（已完成 prompt 消费，warning 仍只读）
 

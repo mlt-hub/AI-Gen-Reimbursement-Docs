@@ -1,8 +1,8 @@
-# FPA 多 profile 支持 TODO
+# FPA 多 profile 支持收口记录
 
 日期：2026-06-04
 
-状态：已完成主线实施，并完成二次收口。本文保留为需求与验收依据；当前用户文档入口见 [`../fpa-profiles.md`](../fpa-profiles.md)。
+状态：已完成主线实施、二次收口和 profile 级 golden fixture contract 覆盖。本文保留为需求与验收依据；当前用户文档入口见 [`../fpa-profiles.md`](../fpa-profiles.md)。
 
 ## 实施收口记录
 

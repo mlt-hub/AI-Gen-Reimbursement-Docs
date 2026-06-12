@@ -73,6 +73,8 @@ profile × kind × strategy × rule_set × prompt × model
 | 任意 profile + 自定义 rule_set | 视继承关系而定 | 继承推荐 rule_set 时复用 base harness，再补扩展断言。 |
 | 任意 profile + 明显不匹配 rule_set | `experimental / invalid` | 只保证配置错误可见或输出可审计，不承诺业务正确。 |
 
+`unified_ui`、`multi_uis`、`ui_api_mapping` 当前达到 supported：具备配置校验、规则兜底、prompt payload contract、profile 级 golden fixture、只读 profile review 和真实模型归零记录。继续提升到 certified 需要更多真实项目样本和更稳定的 warning 误报率评估。
+
 规则集扩展不需要重写整套 harness。推荐采用：
 
 ```text
@@ -129,7 +131,7 @@ profiles:
     kind: unified_ui
     strategy: rules_first
     rule_set: unified_ui_rs
-    adjustment_value_method: standard_fpa
+    adjustment_value_method: legacy_workload
     core_rules: unified_ui_cr
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
@@ -138,20 +140,35 @@ profiles:
     kind: multi_uis
     strategy: rules_first
     rule_set: multi_uis_rs
-    adjustment_value_method: standard_fpa
+    adjustment_value_method: legacy_workload
     core_rules: multi_uis_cr
     system_prompt: multi_uis_sp
     user_prompt: multi_uis_up
     calculation_explanation_rules: multi_uis_ce
+  ui_api_mapping:
+    kind: ui_api_mapping
+    strategy: rules_first
+    rule_set: ui_api_mapping_rs
+    adjustment_value_method: legacy_workload
+    core_rules: ui_api_mapping_cr
+    system_prompt: ui_api_mapping_sp
+    user_prompt: ui_api_mapping_up
+    calculation_explanation_rules: ui_api_mapping_workload_eval_ce
 
 calculation_explanation_rules:
   strict_fpa_ce: |-
     计算依据说明生成规则...
   unified_ui_ce: |-
     统一界面口径计算依据说明生成规则...
+  multi_uis_ce: |-
+    统一界面口径计算依据说明生成规则...
+  ui_api_mapping_ce: |-
+    统一界面口径计算依据说明生成规则...
+  ui_api_mapping_workload_eval_ce: |-
+    ui_api_mapping 计算依据说明生成规则...
 ```
 
-`unified_ui` 绑定的 `unified_ui_ce` 不是 `strict_fpa_ce` 的同文复用。它用于约束 `计算依据说明` 按统一界面建设内容叙述：界面行合并同一三级模块内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；逻辑接口/表能力行描述添加、编辑、查询、删除、状态更新或数据结构调整归属；导入、导出和外部接口联调调用行只写输入中有证据的系统建设内容。`multi_uis_ce` 和 `ui_api_mapping_ce` 当前可与 `unified_ui_ce` 内容保持一致，但保留独立 key，避免后续差异化时影响 `unified_ui`。
+`unified_ui` 绑定的 `unified_ui_ce` 不是 `strict_fpa_ce` 的同文复用。它用于约束 `计算依据说明` 按统一界面建设内容叙述：界面行合并同一三级模块内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；逻辑接口/表能力行描述添加、编辑、查询、删除、状态更新或数据结构调整归属；导入、导出和外部接口联调调用行只写输入中有证据的系统建设内容。`multi_uis_ce` 当前与 `unified_ui_ce` 内容保持一致；`ui_api_mapping` 默认绑定 `ui_api_mapping_workload_eval_ce`，用于表达“每个功能过程默认界面开发和接口开发、显式接口/后端调用单独补充”的编号清单式说明规则。`ui_api_mapping_ce` 仍作为通用规则 key 保留，便于自定义 profile 复用统一界面说明口径。
 
 命名约定：
 
@@ -164,7 +181,7 @@ user_prompt: <profile>_up
 calculation_explanation_rules: <profile>_ce
 ```
 
-`default-profile` 必须是非空字符串并存在于 `profiles`。profile entry 必须显式配置 `kind`，且只允许 `strict_fpa`、`unified_ui`、`ui_api_mapping`。
+`default-profile` 必须是非空字符串并存在于 `profiles`。profile entry 必须显式配置 `kind`，且只允许 `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping`。
 
 ## Domain Context
 
