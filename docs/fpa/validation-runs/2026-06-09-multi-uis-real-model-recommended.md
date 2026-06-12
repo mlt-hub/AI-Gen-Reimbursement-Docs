@@ -108,4 +108,4 @@ blocking_retry_count=0
 
 - `multi_uis` 推荐样本真实模型 preset 已可重复执行，并覆盖 10 个 recommended fixture。
 - 批量样本证明单样例后剩余的主要问题在审阅层确定性口径，不是`计算依据说明`结构质量门。
-- 本轮没有新增 `json_output_contract` fragment，也没有复制一套 profile-specific `_explanation_quality_warnings`；仅修正 `multi_uis` 多界面证据识别和导入类 workload 分类。
+- 后续推进已新增 profile 绑定式 `json_output_contract` fragment，并按最小增量方式追加 profile-specific `_explanation_quality_warnings`；未复制整套公共质量门。

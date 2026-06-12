@@ -1283,10 +1283,16 @@ def run_fpa_prompt_sample_preview(
     cfg = _read_fpa_config_from_dir(target_dir)
     profile_key = str(profile_name or cfg.get("default-profile") or "strict_fpa").strip()
     diagnostics = diagnose_fpa_prompt_config(profile_key, cfg=cfg).to_dict()
-    diagnostics["fragments"] = [{
-        "name": "calculation_explanation_rules",
-        **diagnostics["calculation_explanation_rules"],
-    }]
+    diagnostics["fragments"] = [
+        {
+            "name": "calculation_explanation_rules",
+            **diagnostics["calculation_explanation_rules"],
+        },
+        {
+            "name": "json_output_contract",
+            **diagnostics["json_output_contract"],
+        },
+    ]
     diagnostics["rendered_prompt"] = diagnostics["final_prompt_preview"]
     if diagnostics.get("errors"):
         result = _empty_fpa_prompt_sample_result(

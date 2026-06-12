@@ -93,6 +93,7 @@ profiles:
     system_prompt: strict_fpa_sp
     user_prompt: strict_fpa_up
     calculation_explanation_rules: strict_fpa_ce
+    json_output_contract: strict_fpa_json
 
   unified_ui:
     kind: unified_ui
@@ -103,6 +104,7 @@ profiles:
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
     calculation_explanation_rules: unified_ui_ce
+    json_output_contract: unified_ui_json
 
   multi_uis:
     kind: multi_uis
@@ -113,6 +115,7 @@ profiles:
     system_prompt: multi_uis_sp
     user_prompt: multi_uis_up
     calculation_explanation_rules: multi_uis_ce
+    json_output_contract: multi_uis_json
 
   ui_api_mapping:
     kind: ui_api_mapping
@@ -123,6 +126,7 @@ profiles:
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up
     calculation_explanation_rules: ui_api_mapping_workload_eval_ce
+    json_output_contract: ui_api_mapping_json
 
 core_rules:
   strict_fpa_cr: |-
@@ -242,10 +246,54 @@ calculation_explanation_rules:
     8. 导入服务必须说明导入模板字段、数据校验和入库处理。
     9. 不得编造输入中没有的表、接口、字段、权限规则或外部系统。
 
+json_output_contract:
+  unified_ui_json: &unified_ui_json |-
+    JSON 输出契约：
+    1. 不允许输出除 JSON 外的任何内容。
+    2. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本。
+    3. 所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
+    4. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略，且不得影响 rows 完整输出。
+    5. rows[].type 只能使用 EI / ILF / EQ / EO / EIF。
+    6. 请直接输出 JSON，格式如下：
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<多界面拆分理由，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+
+  strict_fpa_json: |-
+    JSON 输出契约：
+    1. 不允许输出除 JSON 外的任何内容。
+    2. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本。
+    3. 所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
+    4. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略，且不得影响 rows 完整输出。
+    5. rows[].type 只能使用 EI / ILF / EQ / EO / EIF。
+    6. 请直接输出 JSON，格式如下：
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<合并或拆分原因，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+
+  multi_uis_json: |-
+    JSON 输出契约：
+    1. 不允许输出除 JSON 外的任何内容。
+    2. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本。
+    3. 所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
+    4. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略，且不得影响 rows 完整输出。
+    5. rows[].type 只能使用 EI / ILF / EQ / EO / EIF。
+    6. rows[].split_reason 必须说明独立页面、独立业务对象、独立业务流程或独立用户端；无法拆分时写明三级模块合并原因。
+    7. 请直接输出 JSON，格式如下：
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<独立页面/独立业务对象/独立业务流程/独立用户端>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+
+  ui_api_mapping_json: |-
+    JSON 输出契约：
+    1. 不允许输出除 JSON 外的任何内容。
+    2. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本。
+    3. 所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
+    4. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略，且不得影响 rows 完整输出。
+    5. rows[].type 只能使用 EI / ILF。
+    6. rows[].split_reason 固定输出空字符串，除非后续规则明确扩展。
+    7. 请直接输出 JSON，格式如下：
+    {"rows":[{"name":"<功能点名称>","type":"EI/ILF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+
 user_prompt_sets:
   # user 模板只支持并且必须包含三个核心占位符：
   # ${core_rules}、${judgement_rules}、${payload_json}
   # 可选引用 ${calculation_explanation_rules} 复用公共计算依据说明生成规则。
+  # 可选引用 ${json_output_contract} 复用 JSON-only 输出契约和 rows schema。
   # domain_context 已包含在 ${payload_json} 中，不是独立占位符。
   unified_ui_up: |-
     ${core_rules}
@@ -272,8 +320,7 @@ user_prompt_sets:
     模块输入 JSON：
     ${payload_json}
 
-    请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<多界面拆分理由，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+    ${json_output_contract}
 
   strict_fpa_up: |-
     ${core_rules}
@@ -305,8 +352,7 @@ user_prompt_sets:
     模块输入 JSON：
     ${payload_json}
 
-    请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<合并或拆分原因，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+    ${json_output_contract}
 
   multi_uis_up: |-
     ${core_rules}
@@ -329,8 +375,7 @@ user_prompt_sets:
     模块输入 JSON：
     ${payload_json}
 
-    请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<独立页面/独立业务对象/独立业务流程/独立用户端>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+    ${json_output_contract}
 
   ui_api_mapping_up: |-
     ${core_rules}
@@ -353,8 +398,7 @@ user_prompt_sets:
     模块输入 JSON：
     ${payload_json}
 
-    请直接输出 JSON，不要输出其他内容。格式：
-    {"rows":[{"name":"<功能点名称>","type":"EI/ILF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
+    ${json_output_contract}
 
 rule_sets:
   # type_mapping_rules：直接把关键词映射到 EI/EQ/EO/ILF/EIF，适合项目级特例、业务对象或数据组边界。

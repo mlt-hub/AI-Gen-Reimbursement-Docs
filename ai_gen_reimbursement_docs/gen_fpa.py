@@ -82,6 +82,7 @@ FPA_PROJECT_DESCRIPTION_MAX_CHARS = 5000
 EXPLANATION_TABLE_COUNT_DETAIL_HINTS = ("数据库表个数=", "表个数=", "表数量", "1张表", "1 张表", "1个表", "1 个表")
 EXPLANATION_SYSTEM_ELEMENT_MARKERS = ("表", "服务", "接口", "文件", "系统", "平台")
 EXPLANATION_INLINE_SYSTEM_ELEMENT_MARKERS = ("表", "服务", "接口", "文件", "平台")
+EXPLANATION_MIN_MEANINGFUL_CHARS = 45
 EXPLANATION_SYSTEM_ELEMENT_SKIP_HINTS = ("未识别到", "未明确", "无明确", "没有明确", "未涉及")
 EXPLANATION_INLINE_SYSTEM_ELEMENT_SKIP_HINTS = (
     "按后台数据库变更的表个数计量",
@@ -270,6 +271,10 @@ def _explanation_quality_warnings(
             f"{name} 计算依据说明疑似将数据库表个数作为详细计量解释，应保留在计算依据归类而非计算依据说明"
         )
 
+    meaningful_text = _meaningful_explanation_text(text)
+    if len(meaningful_text) < EXPLANATION_MIN_MEANINGFUL_CHARS:
+        warnings.append(f"{name} 计算依据说明文本明显过短，无法支撑人工审阅")
+
     fabricated_elements = _suspected_fabricated_system_elements(
         group=group,
         name=name,
@@ -292,6 +297,53 @@ def _explanation_quality_warnings(
             + "、".join(inline_fabricated_elements)
         )
 
+    warnings.extend(_profile_specific_explanation_quality_warnings(
+        name=name,
+        fpa_type=fpa_type,
+        explanation=text,
+        profile_name=profile_name,
+    ))
+
+    return warnings
+
+
+def _meaningful_explanation_text(explanation: str) -> str:
+    text = str(explanation or "")
+    for label in EXPLANATION_STRUCTURED_LABELS:
+        text = text.replace(label, "")
+    return re.sub(r"[\s，。；;：:、,.（）()【】「」“”\"'\-]+", "", text)
+
+
+def _profile_specific_explanation_quality_warnings(
+    *,
+    name: str,
+    fpa_type: str,
+    explanation: str,
+    profile_name: str,
+) -> list[str]:
+    warnings: list[str] = []
+    text = str(explanation or "")
+    profile_key = str(profile_name or "").strip()
+    if profile_key == "unified_ui" and "界面开发" in name:
+        if not any(hint in text for hint in ("同一页面", "三级模块", "列表", "查询条件", "按钮", "弹窗", "状态组件", "界面能力覆盖")):
+            warnings.append(
+                f"{name} 计算依据说明未体现三级模块级界面能力覆盖，需说明同一页面内列表、查询条件、按钮、弹窗或状态组件等合并依据"
+            )
+    if profile_key == "multi_uis" and "界面开发" in name:
+        if not any(hint in text for hint in ("独立页面", "独立业务对象", "独立业务流程", "独立用户端", "三级模块", "拆分", "合并")):
+            warnings.append(
+                f"{name} 计算依据说明未呼应多界面拆分依据，需说明独立页面、独立业务对象、独立业务流程、独立用户端或三级模块合并原因"
+            )
+    if profile_key == "ui_api_mapping":
+        if "界面开发" in name and fpa_type != "EI":
+            warnings.append(f"{name} 是界面开发行，类型应体现 ui_api_mapping 的 EI 映射口径")
+        if ("接口开发" in name or "后端调用" in name) and fpa_type != "ILF":
+            warnings.append(f"{name} 是接口/后端调用行，类型应体现 ui_api_mapping 的 ILF 映射口径")
+        if ("接口开发" in name or "后端调用" in name) and not any(hint in text for hint in ("ILF", "接口开发", "后端调用", "接口", "服务")):
+            warnings.append(f"{name} 计算依据说明未体现接口/后端调用行的 ILF 映射依据")
+    if profile_key == "strict_fpa" and fpa_type in {"ILF", "EIF"}:
+        if not any(hint in text for hint in ("数据组", "逻辑数据", "内部逻辑文件", "外部逻辑文件")):
+            warnings.append(f"{name} 数据功能计算依据说明未体现数据组或逻辑数据边界")
     return warnings
 
 

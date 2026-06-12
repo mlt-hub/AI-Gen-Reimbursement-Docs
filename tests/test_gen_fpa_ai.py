@@ -491,6 +491,92 @@ def test_structured_explanation_passes_quality_check():
     )
 
 
+def test_explanation_quality_warns_when_text_is_too_short():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=STRICT_FPA_PROFILE,
+        ai_rows=[{
+            "name": "添加垂直行业",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：短。"
+                "\n业务数据：数据。"
+                "\n业务规则：规则。"
+                "\n计算说明：按 EI。"
+            ),
+        }],
+    )
+
+    assert any("文本明显过短" in warning for warning in warnings)
+    quality_hit = next(hit for hit in rows[0]["_规则命中详情"] if hit["rule_id"] == "postprocess.explanation_quality")
+    assert any("文本明显过短" in warning for warning in quality_hit["warnings"])
+
+
+def test_unified_ui_explanation_quality_warns_when_ui_row_lacks_merge_evidence():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=CUSTOM_RULES_PROFILE,
+        ai_rows=[{
+            "name": "界面开发",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：来自“【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-界面开发”，"
+                "后台用户进入页面并提交信息。"
+                "\n业务数据：涉及垂直行业数据，字段包括行业名称、状态和添加时间。"
+                "\n业务规则：系统根据用户提交动作维护垂直行业数据并返回处理结果。"
+                "\n计算说明：该界面能力可支撑 FPA 功能点计量，并按 EI 识别。"
+            ),
+        }],
+    )
+
+    assert any("三级模块级界面能力覆盖" in warning for warning in warnings)
+    assert any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        and any("三级模块级界面能力覆盖" in warning for warning in hit["warnings"])
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
+def test_multi_uis_explanation_quality_warns_when_ui_row_lacks_split_evidence():
+    group = _group_rows_by_l3(_rows())[0]
+    rows, warnings = _normalize_ai_fpa_rows_for_l3(
+        group=group,
+        meta=_meta(),
+        judgement_rules=["规则一"],
+        start_seq=1,
+        profile=MULTI_UIS_PROFILE,
+        ai_rows=[{
+            "name": "行业新增界面开发",
+            "type": "EI",
+            "classification_basis_index": 1,
+            "explanation": (
+                "来源场景：来自“【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-行业新增界面开发”，"
+                "后台用户进入页面并提交新增信息。"
+                "\n业务数据：涉及垂直行业数据，字段包括行业名称、状态和添加时间。"
+                "\n业务规则：系统根据用户提交动作维护垂直行业数据并返回处理结果。"
+                "\n计算说明：该界面能力可支撑 FPA 功能点计量，并按 EI 识别。"
+            ),
+        }],
+    )
+
+    assert any("多界面拆分依据" in warning for warning in warnings)
+    assert any(
+        hit["rule_id"] == "postprocess.explanation_quality"
+        and any("多界面拆分依据" in warning for warning in hit["warnings"])
+        for hit in rows[0]["_规则命中详情"]
+    )
+
+
 def test_data_function_explanation_accepts_data_group_source_path():
     group = _group_rows_by_l3(_rows())[0]
     explanation = (

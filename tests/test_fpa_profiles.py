@@ -999,7 +999,10 @@ def test_default_prompt_fragment_is_rendered_without_placeholder(tmp_path):
     assert "来源场景" in prompt
     assert "业务数据" in prompt
     assert "系统元素" in prompt
+    assert "JSON 输出契约" in prompt
+    assert "不允许输出除 JSON 外的任何内容" in prompt
     assert "${calculation_explanation_rules}" not in prompt
+    assert "${json_output_contract}" not in prompt
     assert "${" not in prompt
 
 
@@ -1023,16 +1026,21 @@ def test_default_profiles_render_calculation_explanation_fragment(tmp_path):
 
     for name, prompt in prompts.items():
         assert "计算依据说明生成规则" in prompt, name
+        assert "JSON 输出契约" in prompt, name
+        assert "不允许输出除 JSON 外的任何内容" in prompt, name
+        assert "rows[].type_reason" in prompt, name
         if name == "ui_api_mapping":
             assert "ui_api_mapping 计算依据说明生成规则" in prompt
             assert "具体如下" in prompt
             assert "删除服务必须说明点击删除" in prompt
+            assert "rows[].type 只能使用 EI / ILF" in prompt
         else:
             assert "来源场景" in prompt, name
             assert "业务数据" in prompt, name
             assert "业务规则" in prompt, name
             assert "计算说明" in prompt, name
         assert "${calculation_explanation_rules}" not in prompt, name
+        assert "${json_output_contract}" not in prompt, name
         assert "${" not in prompt, name
 
 

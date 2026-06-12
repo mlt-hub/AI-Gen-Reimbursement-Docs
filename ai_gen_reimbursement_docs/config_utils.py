@@ -132,6 +132,9 @@ class FpaPromptDiagnostics:
     referenced: bool
     resolved: bool
     fragment_source: str
+    json_output_contract_referenced: bool
+    json_output_contract_resolved: bool
+    json_output_contract_source: str
     missing_required_placeholders: tuple[str, ...]
     unknown_placeholders: tuple[str, ...]
     unresolved_placeholders: tuple[str, ...]
@@ -152,6 +155,11 @@ class FpaPromptDiagnostics:
                 "referenced": self.referenced,
                 "resolved": self.resolved,
                 "source": self.fragment_source,
+            },
+            "json_output_contract": {
+                "referenced": self.json_output_contract_referenced,
+                "resolved": self.json_output_contract_resolved,
+                "source": self.json_output_contract_source,
             },
             "missing_required_placeholders": list(self.missing_required_placeholders),
             "unknown_placeholders": list(self.unknown_placeholders),
@@ -455,8 +463,12 @@ VALID_FPA_COMPLEXITY_SOURCES = {"ai", "default"}
 VALID_FPA_COMPLEXITIES = {"low", "medium", "high"}
 VALID_FPA_RULE_MERGE_MODES = {"append", "replace"}
 FPA_REQUIRED_USER_PROMPT_PLACEHOLDERS = frozenset({"core_rules", "judgement_rules", "payload_json"})
-FPA_OPTIONAL_USER_PROMPT_PLACEHOLDERS = frozenset({"calculation_explanation_rules"})
+FPA_OPTIONAL_USER_PROMPT_PLACEHOLDERS = frozenset({"calculation_explanation_rules", "json_output_contract"})
 FPA_USER_PROMPT_PLACEHOLDERS = FPA_REQUIRED_USER_PROMPT_PLACEHOLDERS | FPA_OPTIONAL_USER_PROMPT_PLACEHOLDERS
+FPA_USER_PROMPT_PLACEHOLDER_HINT = (
+    "${core_rules} / ${judgement_rules} / ${payload_json} / "
+    "${calculation_explanation_rules} / ${json_output_contract}"
+)
 
 
 def fpa_config_dir() -> Path:
@@ -876,7 +888,7 @@ def _validate_fpa_user_prompt_template(template_text: str, key_path: str) -> Non
     if not template.is_valid():
         raise FpaConfigError(
             f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 {key_path} 包含非法占位符，"
-            "请使用 ${core_rules} / ${judgement_rules} / ${payload_json} / ${calculation_explanation_rules}"
+            f"请使用 {FPA_USER_PROMPT_PLACEHOLDER_HINT}"
         )
     identifiers = set(template.get_identifiers())
     unknown = sorted(identifiers - FPA_USER_PROMPT_PLACEHOLDERS)
@@ -907,6 +919,24 @@ def _validate_fpa_calculation_explanation_rules(raw: object) -> dict[str, str]:
         normalized[rule_key] = _require_non_empty_string(
             value,
             f"calculation_explanation_rules.{rule_key}",
+        )
+    return normalized
+
+
+def _validate_fpa_json_output_contract(raw: object) -> dict[str, str]:
+    if raw is None:
+        return {}
+    contracts = _require_mapping(raw, "json_output_contract")
+    normalized: dict[str, str] = {}
+    for key, value in contracts.items():
+        contract_key = str(key).strip()
+        if not contract_key:
+            raise FpaConfigError(
+                f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 json_output_contract 包含空 key"
+            )
+        normalized[contract_key] = _require_non_empty_string(
+            value,
+            f"json_output_contract.{contract_key}",
         )
     return normalized
 
@@ -1036,6 +1066,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
     calculation_explanation_rules = _validate_fpa_calculation_explanation_rules(
         cfg.get("calculation_explanation_rules")
     )
+    json_output_contract = _validate_fpa_json_output_contract(cfg.get("json_output_contract"))
 
     profile = _require_non_empty_string(cfg.get("default-profile"), "default-profile")
     if profile not in profiles:
@@ -1050,13 +1081,14 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
         _require_non_empty_string(prompt_text, prompt_path)
 
     user_prompt_references_calculation_rules: dict[str, bool] = {}
+    user_prompt_references_json_contract: dict[str, bool] = {}
     for prompt_name, prompt_text in user_prompt_sets.items():
         prompt_path = _fpa_key_path("user_prompt_sets", prompt_name)
         user_template = _require_non_empty_string(prompt_text, prompt_path)
         _validate_fpa_user_prompt_template(user_template, prompt_path)
-        user_prompt_references_calculation_rules[str(prompt_name)] = (
-            "calculation_explanation_rules" in set(Template(user_template).get_identifiers())
-        )
+        identifiers = set(Template(user_template).get_identifiers())
+        user_prompt_references_calculation_rules[str(prompt_name)] = "calculation_explanation_rules" in identifiers
+        user_prompt_references_json_contract[str(prompt_name)] = "json_output_contract" in identifiers
 
     for rule_set_name, rule_set in rule_sets.items():
         rule_set_path = _fpa_key_path("rule_sets", rule_set_name)
@@ -1115,6 +1147,7 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
                 "system_prompt",
                 "user_prompt",
                 "calculation_explanation_rules",
+                "json_output_contract",
                 "adjustment_value_method",
             }
         )
@@ -1176,6 +1209,17 @@ def validate_fpa_config(cfg: dict[str, object]) -> None:
                     f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 "
                     f"{profile_path}.calculation_explanation_rules 指向不存在的 calculation_explanation_rules: "
                     f"{calculation_rule}"
+                )
+        if user_prompt_references_json_contract.get(user_prompt, False):
+            contract_key = _require_non_empty_string(
+                entry.get("json_output_contract"),
+                f"{profile_path}.json_output_contract",
+            )
+            if contract_key not in json_output_contract:
+                raise FpaConfigError(
+                    f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 "
+                    f"{profile_path}.json_output_contract 指向不存在的 json_output_contract: "
+                    f"{contract_key}"
                 )
 
 
@@ -1873,6 +1917,37 @@ def load_fpa_calculation_explanation_rules(profile_name: str) -> PromptConfig:
     )
 
 
+def load_fpa_json_output_contract(profile_name: str) -> PromptConfig:
+    """读取当前 profile 绑定的 JSON 输出契约。"""
+    profile_key = str(profile_name or "").strip()
+    entry = load_fpa_profile_entry(profile_key)
+    contract_key = str(entry.get("json_output_contract") or "").strip()
+    if not contract_key:
+        raise FpaPromptConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 "
+            f"profiles.{profile_key}.json_output_contract 必须是非空字符串"
+        )
+    cfg = load_fpa_config()
+    contracts = cfg.get("json_output_contract")
+    if not isinstance(contracts, dict):
+        raise FpaPromptConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 json_output_contract 必须是对象"
+        )
+    value = contracts.get(contract_key)
+    if not isinstance(value, str) or not value.strip():
+        raise FpaPromptConfigError(
+            f"FPA 配置无效：配置目录/{FPA_CONFIG_FILENAME} 中的 "
+            f"json_output_contract.{contract_key} 必须是非空字符串"
+        )
+    return PromptConfig(
+        text=value,
+        source_label=_user_config_key_source_label(
+            FPA_CONFIG_FILENAME,
+            f"json_output_contract.{contract_key}",
+        ),
+    )
+
+
 def _load_fpa_config_without_validation() -> dict[str, object]:
     yaml_path = fpa_config_dir() / FPA_CONFIG_FILENAME
     if not yaml_path.exists():
@@ -1890,8 +1965,7 @@ def _template_identifiers(template_text: str) -> tuple[set[str], str | None]:
     template = Template(template_text)
     if not template.is_valid():
         return set(), (
-            "包含非法占位符，请使用 "
-            "${core_rules} / ${judgement_rules} / ${payload_json} / ${calculation_explanation_rules}"
+            f"包含非法占位符，请使用 {FPA_USER_PROMPT_PLACEHOLDER_HINT}"
         )
     return set(template.get_identifiers()), None
 
@@ -1936,6 +2010,48 @@ def _diagnose_calculation_explanation_rules(
     errors.append(
         f"当前 user prompt 引用了 ${{calculation_explanation_rules}}，但 "
         f"calculation_explanation_rules.{rule_key} 不是非空字符串"
+    )
+    return "", "", warnings, errors
+
+
+def _diagnose_json_output_contract(
+    cfg: dict[str, object],
+    profile_name: str,
+    *,
+    referenced: bool,
+    profile_entry: dict[str, object] | None,
+) -> tuple[str, str, list[str], list[str]]:
+    warnings: list[str] = []
+    errors: list[str] = []
+    if not referenced:
+        return "", "", warnings, errors
+    contract_key = ""
+    if isinstance(profile_entry, dict):
+        contract_key = str(profile_entry.get("json_output_contract") or "").strip()
+    if not contract_key:
+        errors.append(
+            f"当前 user prompt 引用了 ${{json_output_contract}}，但缺少 "
+            f"profiles.{profile_name}.json_output_contract"
+        )
+        return "", "", warnings, errors
+    contracts = cfg.get("json_output_contract")
+    if not isinstance(contracts, dict):
+        errors.append("当前 user prompt 引用了 ${json_output_contract}，但 json_output_contract 不是对象")
+        return "", "", warnings, errors
+    value = contracts.get(contract_key)
+    if isinstance(value, str) and value.strip():
+        return (
+            value.strip(),
+            _user_config_key_source_label(
+                FPA_CONFIG_FILENAME,
+                f"json_output_contract.{contract_key}",
+            ),
+            warnings,
+            errors,
+        )
+    errors.append(
+        f"当前 user prompt 引用了 ${{json_output_contract}}，但 "
+        f"json_output_contract.{contract_key} 不是非空字符串"
     )
     return "", "", warnings, errors
 
@@ -2003,6 +2119,21 @@ def diagnose_fpa_prompt_config(
     warnings.extend(fragment_warnings)
     errors.extend(fragment_errors)
 
+    json_contract_referenced = "json_output_contract" in identifiers
+    if not json_contract_referenced and prompt_text:
+        warnings.append(
+            "当前 user prompt 未引用 json_output_contract（${json_output_contract}），"
+            "JSON-only 输出约束可能不受统一规则约束"
+        )
+    json_contract_text, json_contract_source, json_contract_warnings, json_contract_errors = _diagnose_json_output_contract(
+        cfg,
+        profile_key,
+        referenced=json_contract_referenced,
+        profile_entry=entry if isinstance(entry, dict) else None,
+    )
+    warnings.extend(json_contract_warnings)
+    errors.extend(json_contract_errors)
+
     values = {
         "core_rules": "[core_rules preview]",
         "judgement_rules": "1) [judgement_rules preview]",
@@ -2010,6 +2141,8 @@ def diagnose_fpa_prompt_config(
     }
     if referenced and fragment_text:
         values["calculation_explanation_rules"] = fragment_text
+    if json_contract_referenced and json_contract_text:
+        values["json_output_contract"] = json_contract_text
     final_prompt_preview = Template(prompt_text).safe_substitute(values) if prompt_text and not placeholder_error else ""
     unresolved: tuple[str, ...] = ()
     if final_prompt_preview:
@@ -2027,6 +2160,11 @@ def diagnose_fpa_prompt_config(
         referenced=referenced,
         resolved=bool(referenced and fragment_text and not fragment_errors),
         fragment_source=fragment_source,
+        json_output_contract_referenced=json_contract_referenced,
+        json_output_contract_resolved=bool(
+            json_contract_referenced and json_contract_text and not json_contract_errors
+        ),
+        json_output_contract_source=json_contract_source,
         missing_required_placeholders=missing,
         unknown_placeholders=unknown,
         unresolved_placeholders=unresolved,
@@ -2050,6 +2188,11 @@ def diagnose_fpa_user_prompt(profile_name: str) -> dict[str, object]:
                 "resolved": False,
                 "source": "",
             },
+            "json_output_contract": {
+                "referenced": False,
+                "resolved": False,
+                "source": "",
+            },
             "missing_required_placeholders": [],
             "unknown_placeholders": [],
             "unresolved_placeholders": [],
@@ -2058,10 +2201,16 @@ def diagnose_fpa_user_prompt(profile_name: str) -> dict[str, object]:
             "ok": False,
             "final_prompt_preview": "",
         }
-    diagnostics["fragments"] = [{
-        "name": "calculation_explanation_rules",
-        **diagnostics["calculation_explanation_rules"],
-    }]
+    diagnostics["fragments"] = [
+        {
+            "name": "calculation_explanation_rules",
+            **diagnostics["calculation_explanation_rules"],
+        },
+        {
+            "name": "json_output_contract",
+            **diagnostics["json_output_contract"],
+        },
+    ]
     diagnostics["rendered_prompt"] = diagnostics["final_prompt_preview"]
     return diagnostics
 

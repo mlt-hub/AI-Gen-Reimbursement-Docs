@@ -506,7 +506,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--fpa-stability-sample-suite', default='',
                         help='FPA 稳定性推荐样例集名称；当前支持 standard、real-model-recommended')
     parser.add_argument('--fpa-stability-sample-preset', default='',
-                        help='FPA 稳定性采样预设；当前支持 strict-real-model、strict-real-model-recommended、multi-profile-real-model')
+                        help='FPA 稳定性采样预设；当前支持 strict-real-model、strict-real-model-recommended、multi-uis-real-model-recommended、multi-profile-real-model')
     parser.add_argument('--fpa-stability-sample-profiles', default='',
                         help='稳定性采样 profile 列表，逗号分隔')
     parser.add_argument('--fpa-stability-sample-strategies', default='',

@@ -586,6 +586,7 @@ def _render_configured_fpa_prompt(
     from ai_gen_reimbursement_docs.config_utils import (
         load_fpa_calculation_explanation_rules,
         load_fpa_core_rules_config,
+        load_fpa_json_output_contract,
         load_fpa_user_prompt_template,
     )
 
@@ -603,6 +604,8 @@ def _render_configured_fpa_prompt(
     }
     if "calculation_explanation_rules" in set(prompt_template.get_identifiers()):
         values["calculation_explanation_rules"] = load_fpa_calculation_explanation_rules(profile_name).text
+    if "json_output_contract" in set(prompt_template.get_identifiers()):
+        values["json_output_contract"] = load_fpa_json_output_contract(profile_name).text
     return prompt_template.substitute(values)
 
 
@@ -621,6 +624,7 @@ def render_configured_fpa_prompt_by_keys(
     from ai_gen_reimbursement_docs.config_utils import (
         load_fpa_calculation_explanation_rules,
         load_fpa_core_rules_config_by_key,
+        load_fpa_json_output_contract,
         load_fpa_user_prompt_config_by_key,
     )
 
@@ -637,6 +641,8 @@ def render_configured_fpa_prompt_by_keys(
     }
     if "calculation_explanation_rules" in set(prompt_template.get_identifiers()):
         values["calculation_explanation_rules"] = load_fpa_calculation_explanation_rules(profile_name).text
+    if "json_output_contract" in set(prompt_template.get_identifiers()):
+        values["json_output_contract"] = load_fpa_json_output_contract(profile_name).text
     return prompt_template.substitute(values)
 
 

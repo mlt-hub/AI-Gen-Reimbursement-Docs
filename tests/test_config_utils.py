@@ -29,6 +29,7 @@ from ai_gen_reimbursement_docs.config_utils import (
     load_fpa_check_columns,
     load_fpa_core_rules_config,
     load_fpa_calculation_explanation_rules,
+    load_fpa_json_output_contract,
     load_fpa_judgement_rules_config,
     load_fpa_judgement_rules_source,
     load_fpa_rule_sets_config,
@@ -252,6 +253,19 @@ def _append_calculation_rules_fragment(tmp_path, *, strict_value: str | None = N
     (tmp_path / "fpa_config.yaml").write_text(content + "\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _append_json_output_contract_fragment(tmp_path, *, strict_value: str | None = None) -> None:
+    content = (tmp_path / "fpa_config.yaml").read_text(encoding="utf-8")
+    lines = [
+        "",
+        "json_output_contract:",
+        "  unified_ui_json: DEFAULT JSON CONTRACT",
+        "  strict_fpa_json: DEFAULT JSON CONTRACT",
+    ]
+    if strict_value is not None:
+        lines[-1] = f"  strict_fpa_json: {strict_value!r}"
+    (tmp_path / "fpa_config.yaml").write_text(content + "\n".join(lines) + "\n", encoding="utf-8")
+
+
 def test_default_fpa_prompt_diagnostics_resolve_calculation_rules(tmp_path):
     source = Path(__file__).resolve().parents[1] / "config"
     copy_default_config_files(tmp_path, source)
@@ -263,9 +277,12 @@ def test_default_fpa_prompt_diagnostics_resolve_calculation_rules(tmp_path):
             assert diagnostics.ok is True, profile
             assert diagnostics.referenced is True, profile
             assert diagnostics.resolved is True, profile
+            assert diagnostics.json_output_contract_referenced is True, profile
+            assert diagnostics.json_output_contract_resolved is True, profile
             assert diagnostics.errors == (), profile
             assert diagnostics.unresolved_placeholders == (), profile
             assert "calculation_explanation_rules." in diagnostics.fragment_source
+            assert "json_output_contract." in diagnostics.json_output_contract_source
             assert "${" not in diagnostics.final_prompt_preview
 
 
@@ -279,6 +296,7 @@ def test_prompt_diagnostics_warn_when_calculation_rules_not_referenced(tmp_path)
     assert diagnostics.referenced is False
     assert diagnostics.resolved is False
     assert any("未引用 calculation_explanation_rules" in item for item in diagnostics.warnings)
+    assert any("未引用 json_output_contract" in item for item in diagnostics.warnings)
 
 
 def test_prompt_diagnostics_error_when_referenced_fragment_is_missing(tmp_path):
@@ -325,6 +343,54 @@ def test_prompt_diagnostics_uses_profile_override_source(tmp_path):
     assert "calculation_explanation_rules.strict_fpa_ce" in diagnostics.fragment_source
     assert "STRICT EXPLANATION RULES" in diagnostics.final_prompt_preview
     assert "DEFAULT EXPLANATION RULES" not in diagnostics.final_prompt_preview
+
+
+def test_prompt_diagnostics_resolves_json_output_contract(tmp_path):
+    _write_fpa_config(tmp_path)
+    path = tmp_path / "fpa_config.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        .replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${json_output_contract}",
+        )
+        .replace(
+            "    calculation_explanation_rules: strict_fpa_ce\n",
+            "    calculation_explanation_rules: strict_fpa_ce\n    json_output_contract: strict_fpa_json\n",
+        ),
+        encoding="utf-8",
+    )
+    _append_json_output_contract_fragment(tmp_path, strict_value="STRICT JSON CONTRACT")
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        diagnostics = diagnose_fpa_prompt_config("strict_fpa")
+
+    assert diagnostics.ok is True
+    assert diagnostics.json_output_contract_referenced is True
+    assert diagnostics.json_output_contract_resolved is True
+    assert "json_output_contract.strict_fpa_json" in diagnostics.json_output_contract_source
+    assert "STRICT JSON CONTRACT" in diagnostics.final_prompt_preview
+
+
+def test_prompt_diagnostics_error_when_json_output_contract_missing(tmp_path):
+    _write_fpa_config(tmp_path)
+    path = tmp_path / "fpa_config.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json}",
+            "STRICT ${core_rules} ${judgement_rules} ${payload_json} ${json_output_contract}",
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
+        diagnostics = diagnose_fpa_prompt_config("strict_fpa")
+
+    assert diagnostics.ok is False
+    assert diagnostics.json_output_contract_referenced is True
+    assert diagnostics.json_output_contract_resolved is False
+    assert "${json_output_contract}" in diagnostics.unresolved_placeholders
+    assert any("profiles.strict_fpa.json_output_contract" in item for item in diagnostics.errors)
 
 
 def test_prompt_diagnostics_blank_bound_rule_reports_error(tmp_path):
@@ -1332,7 +1398,13 @@ class TestLoadFpaUserPromptTemplate:
                 "referenced": False,
                 "resolved": False,
                 "source": "",
-            }
+            },
+            {
+                "name": "json_output_contract",
+                "referenced": False,
+                "resolved": False,
+                "source": "",
+            },
         ]
         assert "未引用 calculation_explanation_rules" in diagnostics["warnings"][0]
         assert "[core_rules preview]" in diagnostics["rendered_prompt"]
@@ -1354,6 +1426,7 @@ class TestLoadFpaUserPromptTemplate:
         assert diagnostics["unresolved_placeholders"] == []
         assert diagnostics["fragments"][0]["referenced"] is True
         assert diagnostics["fragments"][0]["resolved"] is True
+        assert diagnostics["json_output_contract"]["referenced"] is False
         assert diagnostics["fragments"][0]["source"] == (
             "用户配置（配置目录/fpa_config.yaml: calculation_explanation_rules.strict_fpa_ce）"
         )
@@ -1372,7 +1445,8 @@ class TestLoadFpaUserPromptTemplate:
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             diagnostics = diagnose_fpa_user_prompt("strict_fpa")
 
-        assert diagnostics["warnings"] == []
+        assert not any("未引用 calculation_explanation_rules" in item for item in diagnostics["warnings"])
+        assert any("未引用 json_output_contract" in item for item in diagnostics["warnings"])
         assert diagnostics["fragments"][0]["source"] == (
             "用户配置（配置目录/fpa_config.yaml: calculation_explanation_rules.strict_fpa_ce）"
         )
@@ -1402,6 +1476,8 @@ class TestLoadFpaUserPromptTemplate:
             strict = load_fpa_user_prompt_template("strict_fpa")
             explanation_rules = load_fpa_calculation_explanation_rules("strict_fpa")
             mapping_explanation_rules = load_fpa_calculation_explanation_rules("ui_api_mapping")
+            strict_json_contract = load_fpa_json_output_contract("strict_fpa")
+            mapping_json_contract = load_fpa_json_output_contract("ui_api_mapping")
             unified_system = load_fpa_system_prompt_config("unified_ui").text
             multi_uis_system = load_fpa_system_prompt_config("multi_uis").text
             mapping_system = load_fpa_system_prompt_config("ui_api_mapping").text
@@ -1409,6 +1485,7 @@ class TestLoadFpaUserPromptTemplate:
 
         for template in (unified, strict, multi_uis, mapping):
             assert "${calculation_explanation_rules}" in template
+            assert "${json_output_contract}" in template
         assert "计算依据说明生成规则" in explanation_rules.text
         assert "来源场景" in explanation_rules.text
         assert "业务数据" in explanation_rules.text
@@ -1423,6 +1500,9 @@ class TestLoadFpaUserPromptTemplate:
         assert "数据组名称" in explanation_rules.text
         assert "ui_api_mapping 计算依据说明生成规则" in mapping_explanation_rules.text
         assert "具体如下" in mapping_explanation_rules.text
+        assert "JSON 输出契约" in strict_json_contract.text
+        assert "不允许输出除 JSON 外的任何内容" in strict_json_contract.text
+        assert "rows[].type 只能使用 EI / ILF" in mapping_json_contract.text
         assert explanation_rules.source_label == (
             "用户配置（配置目录/fpa_config.yaml: calculation_explanation_rules.strict_fpa_ce）"
         )
