@@ -22,6 +22,14 @@
           >
             重新运行
           </button>
+          <button
+            v-if="canRestore"
+            class="btn-secondary"
+            :disabled="actionLoading"
+            @click="restoreTask"
+          >
+            恢复任务
+          </button>
         </div>
       </div>
 
@@ -280,6 +288,7 @@ const progressSteps = computed(() => normalizeSteps(sessionStatus.value?.progres
 const hasProgress = computed(() => progressSteps.value.some(step => step.status !== 'pending' || step.artifacts.length > 0))
 const doneFiles = computed(() => sessionStatus.value?.done_files?.length ? sessionStatus.value.done_files : (historyItem.value?.done_files || []))
 const canRerun = computed(() => historyItem.value?.source === 'web' && ['done', 'error', 'cancelled'].includes(String(historyItem.value.run_state)))
+const canRestore = computed(() => historyItem.value?.source === 'web' && historyItem.value.run_state === 'closed')
 const canOpenFolder = computed(() => effectiveMode.value === 'local' && Boolean(historyItem.value?.open_folder_available || sessionStatus.value?.output_dir))
 const canDownload = computed(() => effectiveMode.value === 'remote' && Boolean(historyItem.value?.download_available || sessionStatus.value?.has_zip))
 const logText = computed(() => logEntries.value.map(entry => `[${entry.time || '--'}] ${entry.level} ${entry.msg}`).join('\n'))
@@ -460,6 +469,22 @@ async function rerun() {
   try {
     const data = await apiFetch<{ session_id: string }>(`/api/tasks/${historyItem.value.run_id}/rerun`, { method: 'POST' })
     await router.push(`/tasks/${data.session_id}`)
+  } catch (err) {
+    error.value = normalizeApiError(err)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function restoreTask() {
+  if (!historyItem.value || !canRestore.value) return
+  actionLoading.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    await apiFetch(`/api/tasks/${historyItem.value.run_id}/restore`, { method: 'POST' })
+    notice.value = '任务已恢复到任务列表'
+    await loadHistoryItem()
   } catch (err) {
     error.value = normalizeApiError(err)
   } finally {

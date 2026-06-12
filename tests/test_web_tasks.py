@@ -31,6 +31,15 @@ def _client(monkeypatch, user: str = "alice", *, local_mode: bool = False):
     return TestClient(server.app)
 
 
+def _configure_current_api_key(monkeypatch, tmp_path, key: str = "sk-current"):
+    monkeypatch.setattr(tasks, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(tasks, "read_config", lambda: {
+        "_env": {"ANTHROPIC_API_KEY": key},
+        "_system": {},
+    })
+    monkeypatch.setattr(tasks, "read_config_from_dir", lambda path: {"_env": {}, "_system": {}})
+
+
 def test_task_list_excludes_closed_items(monkeypatch, tmp_path):
     db = tmp_path / "history.sqlite3"
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
@@ -163,6 +172,7 @@ def test_mark_unrecoverable_running_task_rejects_recoverable_session(monkeypatch
 def test_mark_unrecoverable_task_can_be_rerun(monkeypatch, tmp_path):
     db = tmp_path / "history.sqlite3"
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    _configure_current_api_key(monkeypatch, tmp_path)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
     input_path.write_bytes(b"placeholder")
@@ -244,6 +254,38 @@ def test_close_done_task_keeps_it_in_history_as_closed(monkeypatch, tmp_path):
     history = client.get("/api/history?state=closed")
     assert history.status_code == 200
     assert [item["run_id"] for item in history.json()["items"]] == ["done1"]
+
+
+def test_restore_closed_task_returns_to_task_list(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="restore_done1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="restore_done1",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    assert client.post("/api/tasks/restore_done1/close").status_code == 200
+
+    resp = client.post("/api/tasks/restore_done1/restore")
+
+    assert resp.status_code == 200
+    assert resp.json()["item"]["run_state"] == "done"
+    ids = [item["run_id"] for item in client.get("/api/tasks").json()["items"]]
+    assert ids == ["restore_done1"]
 
 
 def test_task_list_remote_filters_by_owner(monkeypatch, tmp_path):
@@ -337,6 +379,7 @@ def test_rerun_closed_task_returns_400(monkeypatch, tmp_path):
 def test_rerun_done_local_task_creates_new_history(monkeypatch, tmp_path):
     db = tmp_path / "history.sqlite3"
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    _configure_current_api_key(monkeypatch, tmp_path)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
     input_path.write_bytes(b"placeholder")
@@ -383,6 +426,7 @@ def test_rerun_done_local_task_creates_new_history(monkeypatch, tmp_path):
 def test_rerun_uses_original_run_config_snapshot(monkeypatch, tmp_path):
     db = tmp_path / "history.sqlite3"
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    _configure_current_api_key(monkeypatch, tmp_path)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
     input_path.write_bytes(b"placeholder")
@@ -442,6 +486,38 @@ def test_rerun_uses_original_run_config_snapshot(monkeypatch, tmp_path):
     assert args[12] == "strict_fpa_rs"
     assert args[13] == "auto"
     assert args[19] is True
+
+
+def test_rerun_ai_task_requires_current_api_key(monkeypatch, tmp_path):
+    db = tmp_path / "history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
+    monkeypatch.setattr(tasks, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(tasks, "read_config", lambda: {"_env": {}, "_system": {}})
+    monkeypatch.setattr(tasks, "read_config_from_dir", lambda path: {"_env": {}, "_system": {}})
+    client = _client(monkeypatch, local_mode=True)
+    input_path = tmp_path / "功能清单.xlsx"
+    input_path.write_bytes(b"placeholder")
+    tasks.start_web_run(
+        base_dir=tmp_path,
+        session_id="missing_key_rerun",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+    tasks.finish_web_run(
+        base_dir=tmp_path,
+        session_id="missing_key_rerun",
+        mode="local",
+        task_mode="from-excel-gen-fpa",
+        input_path=str(input_path),
+        output_dir=str(tmp_path),
+    )
+
+    resp = client.post("/api/tasks/missing_key_rerun/rerun")
+
+    assert resp.status_code == 400
+    assert "API Key" in resp.json()["detail"]
 
 
 def test_finish_backfills_missing_project_name_into_history(monkeypatch, tmp_path):
@@ -1025,6 +1101,47 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
     assert calls[0]["args"][16] == "strict_fpa_up"
     assert calls[0]["args"][17] == "strict_fpa"
     server.session_manager.cleanup_download(data["session_id"])
+
+
+def test_run_upload_persists_rerun_assets_in_history(monkeypatch, tmp_path):
+    db = tmp_path / "service_history.sqlite3"
+    monkeypatch.setattr("web_app.services.run_history_service.service_history_path", lambda base_dir: db)
+    client = _client(monkeypatch, user="alice")
+
+    def fake_execute_in_session(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(tasks, "execute_in_session", fake_execute_in_session)
+    monkeypatch.setattr(tasks, "cleanup_expired_sessions", lambda *args, **kwargs: 0)
+
+    resp = client.post(
+        "/api/run-upload",
+        data={
+            "mode": "from-excel-gen-fpa",
+            "api_key": "sk-explicit",
+        },
+        files={
+            "file": ("功能清单.xlsx", b"input-content", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            "fpa_template": ("FPA工作量评估-输出模板.xlsx", b"template-content", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        },
+    )
+
+    assert resp.status_code == 200
+    session_id = resp.json()["session_id"]
+    item = run_history_service.get_history_item(
+        base_dir=tmp_path,
+        run_id=session_id,
+        local_mode=False,
+        owner_id="alice",
+    )
+    assert item is not None
+    history_input = Path(item["input_path"])
+    history_template_dir = Path(item["run_config"]["custom_templates_dir"])
+    assert "task_assets" in history_input.parts
+    assert history_input.read_bytes() == b"input-content"
+    assert "task_assets" in history_template_dir.parts
+    assert (history_template_dir / "FPA工作量评估-输出模板.xlsx").read_bytes() == b"template-content"
+    server.session_manager.cleanup_download(session_id)
 
 
 def test_run_upload_blocks_ai_task_without_personal_or_shared_api_key(monkeypatch):

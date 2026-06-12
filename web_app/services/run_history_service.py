@@ -406,7 +406,55 @@ def close_history_item(
         raise RuntimeError("运行中任务不能关闭，请先取消任务")
     if record.get("run_state") == "closed":
         return record
+    run_config = record.get("run_config")
+    if not isinstance(run_config, dict):
+        run_config = {}
+    else:
+        run_config = dict(run_config)
+    run_config["closed_from_state"] = str(record.get("run_state") or "")
+    update_run_config(
+        run_id,
+        path,
+        run_config=run_config,
+    )
     updated = update_run_state(run_id, path, run_state="closed")
+    if updated is None:
+        raise ValueError("历史记录不存在")
+    return updated
+
+
+def restore_closed_history_item(
+    *,
+    base_dir: Path,
+    run_id: str,
+    local_mode: bool,
+    owner_id: str,
+) -> dict[str, Any]:
+    path = user_history_path() if local_mode else service_history_path(base_dir)
+    record = get_run(run_id, path)
+    if record is None:
+        raise ValueError("历史记录不存在")
+    if not local_mode and record.get("owner_id") != owner_id:
+        raise PermissionError("历史记录不存在")
+    if record.get("source") != "web":
+        raise RuntimeError("仅支持恢复 Web 任务")
+    if record.get("run_state") != "closed":
+        raise RuntimeError("仅关闭任务可恢复")
+
+    run_config = record.get("run_config")
+    if not isinstance(run_config, dict):
+        run_config = {}
+    previous_state = str(run_config.get("closed_from_state") or "").strip()
+    if previous_state not in {"done", "error", "cancelled"}:
+        error = str(record.get("error") or "")
+        if error == "cancelled":
+            previous_state = "cancelled"
+        elif error:
+            previous_state = "error"
+        else:
+            previous_state = "done"
+
+    updated = update_run_state(run_id, path, run_state=previous_state)
     if updated is None:
         raise ValueError("历史记录不存在")
     return updated
