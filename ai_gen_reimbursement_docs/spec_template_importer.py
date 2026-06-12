@@ -452,7 +452,7 @@ def _pending_confirmations(
     if complex_structures:
         labels = sorted({item.label for item in complex_structures})
         confirmations.append(
-            f"检测到复杂 Word 结构：{'、'.join(labels)}；内容控件可在预览中替换字段，文本框仍需人工确认。"
+            f"检测到复杂 Word 结构：{'、'.join(labels)}；文本框和内容控件可在预览中替换字段，请人工确认结果。"
         )
     if toc_info.present:
         confirmations.append(toc_info.note)
@@ -462,7 +462,7 @@ def _pending_confirmations(
 def _import_warnings(complex_structures: list[ComplexWordStructure]) -> list[str]:
     warnings = ["暂不识别图片文字中的字段；如客户模板使用图片承载文字，需要人工确认。"]
     if complex_structures:
-        warnings.append("已检测文本框/内容控件的位置；内容控件可在线替换字段，文本框仍需人工确认。")
+        warnings.append("已检测文本框/内容控件的位置；可在线替换其中的可读文本字段，图片文字仍需人工确认。")
     else:
         warnings.append("未检测到文本框或内容控件；若客户模板使用图片文字，仍需人工确认。")
     return warnings
