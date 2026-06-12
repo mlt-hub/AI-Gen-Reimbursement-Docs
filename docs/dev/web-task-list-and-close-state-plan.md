@@ -38,7 +38,7 @@
 .\.venv\Scripts\python.exe -m pytest tests\test_run_history.py tests\test_web_history.py tests\test_web_tasks.py
 ```
 
-结果：`59 passed`。
+结果：`95 passed`。
 
 ```powershell
 npm run build
@@ -46,11 +46,13 @@ npm run build
 
 结果：前端类型检查和生产构建通过。
 
-后续关注：
+后续策略项：
 
-- 出于安全考虑，任务启动参数快照不保存 API Key 明文；重跑前会校验当前用户或系统配置中存在可用 API Key。
-- 远程重跑依赖服务侧 `products/task_assets` 中的输入和模板快照；如果该目录被外部清理，接口会返回明确错误。
-- 关闭任务支持恢复；旧关闭记录如缺少关闭前状态，会按错误信息回退推断为 `error` / `cancelled`，否则恢复为 `done`。
+- 明确 `products/task_assets` 生命周期：保留周期、清理触发条件、清理后的用户提示和审计记录。
+- 评估本机任务是否也需要可选输入快照，避免原始 Excel 被移动或删除后无法重跑。
+- 评估是否为旧历史补一次数据迁移，将缺少 `closed_from_state` 的关闭记录显式标记恢复目标状态。
+- 如需扩大前端回归覆盖，可补充任务列表、历史页和详情页的组件测试，覆盖恢复、关闭、重跑和会话不可恢复提示。
+- API Key 明文仍不得进入任务启动参数快照；重跑继续只使用当前可用配置。
 
 ## 背景
 
@@ -426,7 +428,7 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - 关闭任务在历史页和详情页展示恢复按钮。
 - 点击关闭有二次确认。
 
-## 风险与待确认
+## 残余风险与边界
 
 - “继续执行”依赖服务进程内存中的 `SessionManager`，服务重启后无法恢复实时后台线程。
 - 历史记录中的 `running` 不等价于当前还有可继续执行的 session；UI 需要区分“运行中且可继续”和“运行记录显示运行中但会话不可恢复”。
@@ -436,4 +438,4 @@ close_history_item(base_dir, run_id, local_mode, owner_id)
 - 本机任务仍依赖原始 `input_path` 重跑；远程任务依赖服务侧 `task_assets` 输入快照。
 - 自定义模板已保存服务侧快照；若 `task_assets` 被外部清理，重跑无法保证复现。
 - 如果远程交付物过期，重跑不应依赖旧交付物。
-- 关闭状态已允许恢复；恢复目标状态来自关闭时写入的 `closed_from_state`。
+- 旧关闭记录如果没有 `closed_from_state`，恢复目标状态会按错误信息回退推断。
