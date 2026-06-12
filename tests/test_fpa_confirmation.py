@@ -16,8 +16,8 @@ def _group():
     }
 
 
-def test_confirmation_mode_defaults_to_cautious_and_validates_values():
-    assert normalize_confirmation_mode("") == "cautious"
+def test_confirmation_mode_defaults_to_auto_and_validates_values():
+    assert normalize_confirmation_mode("") == "auto"
     assert normalize_confirmation_mode("auto") == "auto"
 
     try:

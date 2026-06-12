@@ -203,6 +203,10 @@ def test_build_web_config_view_uses_personal_overrides_for_remote_user():
         "value": "custom_rules",
         "source": "personal",
     }
+    assert view["run_defaults"]["fpa_confirmation_mode"] == {
+        "value": "auto",
+        "source": "default",
+    }
 
 
 def test_build_web_config_view_allows_shared_global_api_key_only_when_enabled():
@@ -269,6 +273,7 @@ def test_resolve_task_start_config_prefers_explicit_then_personal_then_global(mo
     assert resolved["base_url"] == "https://global.example.test"
     assert resolved["fpa_profile"] == "personal_profile"
     assert resolved["fpa_strategy"] == "rules_only"
+    assert resolved["fpa_confirmation_mode"] == "auto"
 
 
 def test_resolve_task_start_config_uses_shared_global_key_only_when_enabled(monkeypatch, tmp_path):

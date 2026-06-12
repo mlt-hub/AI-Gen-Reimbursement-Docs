@@ -91,7 +91,7 @@ export const useConfigStore = defineStore('config', () => {
   const fpaProfile = ref(normalizeFpaProfile(loadStr('fpaProfile', 'strict_fpa')))
   const fpaStrategy = ref(normalizeFpaStrategy(loadStr('fpaStrategy', '')))
   const fpaRuleSet = ref(loadStr('fpaRuleSet', ''))
-  const fpaConfirmationMode = ref<FpaConfirmationMode>(normalizeFpaConfirmationMode(loadStr('fpaConfirmationMode', 'cautious')))
+  const fpaConfirmationMode = ref<FpaConfirmationMode>(normalizeFpaConfirmationMode(loadStr('fpaConfirmationMode', 'auto')))
   const clean = ref(loadBool('clean', false))
   const selectedFile = ref<File | null>(null)
 
@@ -123,7 +123,7 @@ export const useConfigStore = defineStore('config', () => {
     fpaProfile.value = 'strict_fpa'
     fpaStrategy.value = ''
     fpaRuleSet.value = ''
-    fpaConfirmationMode.value = 'cautious'
+    fpaConfirmationMode.value = 'auto'
     clean.value = false
     selectedFile.value = null
   }
@@ -185,5 +185,5 @@ function normalizeFpaStrategy(value: string): string {
 
 function normalizeFpaConfirmationMode(value: string): FpaConfirmationMode {
   const v = value.trim()
-  return v === 'auto' || v === 'strict' ? v : 'cautious'
+  return v === 'cautious' || v === 'strict' ? v : 'auto'
 }

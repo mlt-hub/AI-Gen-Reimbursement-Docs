@@ -88,7 +88,7 @@ export const useLogStore = defineStore('log', () => {
             append({ level: 'INFO', msg: '⏸ 等待确认 FPA 计量口径...', time: data.time || '' })
             session.showFpaConfirmationPrompt({
               sessionId: targetSessionId,
-              confirmationMode: data.confirmation_mode || 'cautious',
+              confirmationMode: data.confirmation_mode || 'auto',
               module: data.module || {},
               questions: data.confirmation_questions || [],
             })

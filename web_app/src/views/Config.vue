@@ -1505,7 +1505,7 @@ const webRunForm = reactive({
   fpaProfile: '',
   fpaStrategy: '',
   fpaRuleSet: '',
-  fpaConfirmationMode: 'cautious',
+  fpaConfirmationMode: 'auto',
 })
 const webTemplateForm = reactive({
   outTemplatesJson: '{}',
@@ -2561,7 +2561,7 @@ function applyWebConfigToForm(data: WebConfigResponse) {
   webRunForm.fpaProfile = fieldValue(data.run_defaults.fpa_profile) || 'strict_fpa'
   webRunForm.fpaStrategy = fieldValue(data.run_defaults.fpa_strategy)
   webRunForm.fpaRuleSet = fieldValue(data.run_defaults.fpa_rule_set)
-  webRunForm.fpaConfirmationMode = fieldValue(data.run_defaults.fpa_confirmation_mode) || 'cautious'
+  webRunForm.fpaConfirmationMode = fieldValue(data.run_defaults.fpa_confirmation_mode) || 'auto'
   webTemplateForm.outTemplatesJson = JSON.stringify(data.templates.out_templates.value || {}, null, 2)
   webTemplateForm.activeProfile = String(data.templates.active_output_template_profile?.value || '')
   webRunSnapshot.value = webRunFormSnapshot.value
@@ -2718,7 +2718,7 @@ function applySavedWebConfig(data: WebConfigResponse) {
   configStore.fpaProfile = fieldValue(data.run_defaults.fpa_profile) || 'strict_fpa'
   configStore.fpaStrategy = fieldValue(data.run_defaults.fpa_strategy)
   configStore.fpaRuleSet = fieldValue(data.run_defaults.fpa_rule_set)
-  configStore.fpaConfirmationMode = (fieldValue(data.run_defaults.fpa_confirmation_mode) || 'cautious') as any
+  configStore.fpaConfirmationMode = (fieldValue(data.run_defaults.fpa_confirmation_mode) || 'auto') as any
   applyWebConfigToForm(data)
 }
 

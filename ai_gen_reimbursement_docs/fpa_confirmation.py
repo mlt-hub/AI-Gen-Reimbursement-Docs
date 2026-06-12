@@ -20,7 +20,7 @@ class FpaConfirmationDecision:
 def normalize_confirmation_mode(value: str = "") -> str:
     mode = str(value or "").strip()
     if not mode:
-        return "cautious"
+        return "auto"
     if mode not in VALID_FPA_CONFIRMATION_MODES:
         raise ValueError(f"未知 FPA confirmation mode: {value}")
     return mode

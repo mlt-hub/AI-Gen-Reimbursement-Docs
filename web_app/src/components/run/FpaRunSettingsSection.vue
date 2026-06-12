@@ -122,7 +122,7 @@ const selectedRuleSetLabel = computed(() => (
   config.fpaRuleSet || selectedProfile.value?.rule_set || '跟随方案默认'
 ))
 const selectedConfirmationLabel = computed(() => (
-  fpaOptions.value.confirmation_modes.find(mode => mode.name === config.fpaConfirmationMode)?.label || '审慎模式'
+  fpaOptions.value.confirmation_modes.find(mode => mode.name === config.fpaConfirmationMode)?.label || '自动模式'
 ))
 const settingsSummary = computed(() => [
   selectedProfile.value?.label || config.fpaProfile,
@@ -143,7 +143,7 @@ watch(
       config.fpaRuleSet = ''
     }
     if (!options.confirmation_modes.some(mode => mode.name === config.fpaConfirmationMode)) {
-      config.fpaConfirmationMode = 'cautious'
+      config.fpaConfirmationMode = 'auto'
     }
   },
   { immediate: true },

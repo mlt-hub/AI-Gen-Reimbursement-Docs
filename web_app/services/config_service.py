@@ -23,7 +23,7 @@ DEFAULT_WEB_CONFIG = {
     "fpa_profile": "strict_fpa",
     "fpa_strategy": "",
     "fpa_rule_set": "",
-    "fpa_confirmation_mode": "cautious",
+    "fpa_confirmation_mode": "auto",
 }
 
 OUTPUT_TEMPLATE_PROFILE_RUN_DEFAULT_KEYS = (
