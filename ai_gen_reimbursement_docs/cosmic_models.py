@@ -1,6 +1,7 @@
 """COSMIC 功能点度量数据模型。"""
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -13,6 +14,8 @@ class DataMovement:
     data_attrs: str
     reuse: str = "新增"
     move_type_flagged: bool = False
+    cfp_override: float | None = None
+    cfp_basis: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -55,6 +58,8 @@ class CosmicItem:
                 "data_attrs": "",
                 "reuse": "",
                 "cfp": "",
+                "cfp_override": None,
+                "cfp_basis": {},
                 "warnings": self.warnings,
                 "move_type_flagged": False,
             }]
@@ -74,6 +79,8 @@ class CosmicItem:
                 "data_attrs": m.data_attrs,
                 "reuse": m.reuse,
                 "cfp": "",
+                "cfp_override": m.cfp_override,
+                "cfp_basis": m.cfp_basis,
                 "warnings": self.warnings if i == 0 else [],
                 "move_type_flagged": m.move_type_flagged,
             })

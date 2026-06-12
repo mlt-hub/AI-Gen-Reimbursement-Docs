@@ -227,6 +227,42 @@ def _movement_action_matches(raw_movement: dict, action: dict, movement_index: i
     return False
 
 
+def _normalize_cfp_override(value: object) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number < 0:
+        return None
+    return number
+
+
+def _approval_status_for_action(action: dict) -> str:
+    status = str(action.get("approval_status") or "").strip()
+    if status:
+        return status
+    if str(action.get("source") or "") == "auto_governance":
+        return "auto_applied"
+    return "approved"
+
+
+def _rollback_action_for(action: dict, target: dict | None = None) -> dict:
+    action_type = str(action.get("action") or "")
+    rollback = {
+        "action": "rollback_review_action",
+        "target_action": action_type,
+        "item_index": action.get("item_index"),
+        "movement_order": action.get("movement_order"),
+        "review_id": action.get("review_id"),
+    }
+    if target and action_type == "apply_function_user":
+        rollback["restore_user"] = target.get("user")
+    if target and action_type == "set_movement_cfp":
+        rollback["restore_cfp_override"] = target.get("cfp_override")
+        rollback["restore_cfp_basis"] = target.get("cfp_basis")
+    return rollback
+
+
 def _apply_review_actions(payload: dict) -> dict:
     data = json.loads(json.dumps(payload, ensure_ascii=False))
     items = data.get("items")
@@ -242,6 +278,7 @@ def _apply_review_actions(payload: dict) -> dict:
         if not isinstance(item, dict):
             continue
         if action_type == "apply_function_user":
+            previous_user = item.get("user")
             suggested_user = str(
                 action.get("suggested_user")
                 or action.get("value")
@@ -250,6 +287,7 @@ def _apply_review_actions(payload: dict) -> dict:
             ).strip()
             if suggested_user:
                 item["user"] = suggested_user
+                action.setdefault("rollback_action", _rollback_action_for(action, {"user": previous_user}))
             continue
         if action_type == "exclude_process":
             item["excluded_from_cfp"] = True
@@ -261,7 +299,7 @@ def _apply_review_actions(payload: dict) -> dict:
                         raw_movement["excluded_from_cfp"] = True
                         raw_movement["review_action"] = action_type
             continue
-        if action_type not in {"exclude_movement", "merge_movement"}:
+        if action_type not in {"exclude_movement", "merge_movement", "set_movement_cfp"}:
             continue
         movements = item.get("movements")
         if not isinstance(movements, list):
@@ -270,6 +308,25 @@ def _apply_review_actions(payload: dict) -> dict:
             if not _movement_action_matches(raw_movement, action, movement_index):
                 continue
             if isinstance(raw_movement, dict):
+                if action_type == "set_movement_cfp":
+                    override = _normalize_cfp_override(
+                        action.get("cfp_override", action.get("value"))
+                    )
+                    if override is None:
+                        break
+                    previous = {
+                        "cfp_override": raw_movement.get("cfp_override"),
+                        "cfp_basis": raw_movement.get("cfp_basis"),
+                    }
+                    raw_movement["cfp_override"] = override
+                    raw_movement["cfp_basis"] = {
+                        "source": "review_action",
+                        "review_id": action.get("review_id"),
+                        "reason": str(action.get("reason") or "人工覆盖 CFP"),
+                    }
+                    raw_movement["review_action"] = action_type
+                    action.setdefault("rollback_action", _rollback_action_for(action, previous))
+                    break
                 raw_movement["excluded_from_cfp"] = True
                 raw_movement["review_action"] = action_type
                 if action_type == "merge_movement":
@@ -351,6 +408,8 @@ def _cosmic_items_from_payload(payload: dict, *, include_excluded: bool) -> list
                 data_group=str(raw_movement.get("data_group") or ""),
                 data_attrs=str(raw_movement.get("data_attrs") or ""),
                 reuse=str(raw_movement.get("reuse") or "新增"),
+                cfp_override=_normalize_cfp_override(raw_movement.get("cfp_override")),
+                cfp_basis=raw_movement.get("cfp_basis") if isinstance(raw_movement.get("cfp_basis"), dict) else {},
             ))
         cosmic_items.append(CosmicItem(
             project=str(raw_item.get("project") or payload.get("project") or ""),
@@ -438,6 +497,46 @@ def _audit_signature_secret(governance: dict[str, object]) -> tuple[str, str]:
     return env_name, os.environ.get(env_name, "")
 
 
+def _external_audit_ledger_path(governance: dict[str, object]) -> tuple[str, Path | None]:
+    env_name = str(
+        governance.get("audit_ledger_path_env")
+        or "COSMIC_REVIEW_AUDIT_LEDGER_PATH"
+    ).strip()
+    if not env_name:
+        env_name = "COSMIC_REVIEW_AUDIT_LEDGER_PATH"
+    raw_path = os.environ.get(env_name, "").strip()
+    return env_name, Path(raw_path) if raw_path else None
+
+
+def _append_external_audit_ledger(
+    path: Path,
+    *,
+    payload: dict,
+    records: list[dict],
+    final_audit_hash: str,
+) -> dict[str, object]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "project": str(payload.get("project") or ""),
+        "record_count": len(records),
+        "final_audit_hash": final_audit_hash,
+        "record_hashes": [
+            str(record.get("audit_hash") or "")
+            for record in records
+            if isinstance(record, dict) and record.get("audit_hash")
+        ],
+    }
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    return {
+        "enabled": True,
+        "path": str(path),
+        "recorded": True,
+        "record_count": len(records),
+    }
+
+
 def _verify_audit_hash_chain(records: list[dict], *, signing_secret: str = "") -> dict[str, object]:
     previous_hash = ""
     checked = 0
@@ -515,6 +614,7 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> list[CosmicIssu
         if not isinstance(raw_action, dict):
             continue
         record = dict(raw_action)
+        record["approval_status"] = _approval_status_for_action(record)
         if reviewer and not record.get("confirmed_by"):
             record["confirmed_by"] = reviewer
         if reviewer and not record.get("applied_by"):
@@ -565,6 +665,7 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> list[CosmicIssu
         }
         previous_hash = ""
         for record in records:
+            record["approval_status"] = _approval_status_for_action(record)
             record["previous_audit_hash"] = previous_hash
             record["audit_hash"] = _audit_hash(record, previous_hash)
             if signing_secret:
@@ -576,6 +677,24 @@ def _stamp_review_audit(payload: dict, *, reviewer: str = "") -> list[CosmicIssu
             "record_count": len(records),
             "final_audit_hash": previous_hash,
         })
+        ledger_env, ledger_path = _external_audit_ledger_path(governance)
+        payload["review_audit_hash_chain"]["external_audit_ledger_path_env"] = ledger_env
+        payload["review_audit_hash_chain"]["external_audit_recorded"] = False
+        if ledger_path is not None:
+            try:
+                ledger_status = _append_external_audit_ledger(
+                    ledger_path,
+                    payload=payload,
+                    records=records,
+                    final_audit_hash=previous_hash,
+                )
+            except OSError as exc:
+                payload["review_audit_hash_chain"]["external_audit_error"] = str(exc)
+            else:
+                payload["review_audit_hash_chain"].update({
+                    "external_audit_recorded": bool(ledger_status.get("recorded")),
+                    "external_audit_ledger_path": ledger_status.get("path"),
+                })
     payload["review_audit"] = records
     return issues
 
@@ -749,6 +868,7 @@ def _cfp_policy_formula_issues(cfp_formula: str, policy: dict[str, float]) -> li
 def _parse_cfp_policy_from_formula(formula: str, reuse_names) -> dict[str, float]:
     parsed: dict[str, float] = {}
     normalized_formula = str(formula or "").replace("，", ",")
+    parsed.update(_parse_lookup_array_policy(normalized_formula))
     parsed.update(_parse_choose_match_policy(normalized_formula))
     names = [str(reuse or "").strip() for reuse in reuse_names if str(reuse or "").strip()]
     for name in names:
@@ -761,6 +881,24 @@ def _parse_cfp_policy_from_formula(formula: str, reuse_names) -> dict[str, float
         fallback_value = _parse_nearby_formula_value(normalized_formula, name)
         if fallback_value is not None:
             parsed[name] = fallback_value
+    return parsed
+
+
+def _parse_lookup_array_policy(formula: str) -> dict[str, float]:
+    match = re.search(
+        r"(?:XLOOKUP|LOOKUP)\s*\([^,;]+[,;]\s*\{(?P<names>[^}]+)\}\s*[,;]\s*\{(?P<values>[^}]+)\}",
+        formula,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return {}
+    names = _split_formula_array(match.group("names"))
+    values = _split_formula_array(match.group("values"))
+    parsed: dict[str, float] = {}
+    for name, raw_value in zip(names, values):
+        value = _parse_formula_number(raw_value)
+        if value is not None:
+            parsed[name] = value
     return parsed
 
 
@@ -777,11 +915,7 @@ def _parse_choose_match_policy(formula: str) -> dict[str, float]:
     )
     if not match or not choose:
         return {}
-    names = [
-        item.strip().strip('"').strip("'")
-        for item in match.group("names").split(",")
-        if item.strip().strip('"').strip("'")
-    ]
+    names = _split_formula_array(match.group("names"))
     values = _split_formula_arguments(choose.group("values"))
     parsed: dict[str, float] = {}
     for name, raw_value in zip(names, values):
@@ -789,6 +923,14 @@ def _parse_choose_match_policy(formula: str) -> dict[str, float]:
         if value is not None:
             parsed[name] = value
     return parsed
+
+
+def _split_formula_array(text: str) -> list[str]:
+    return [
+        item.strip().strip('"').strip("'")
+        for item in re.split(r"[,;]", str(text or ""))
+        if item.strip().strip('"').strip("'")
+    ]
 
 
 def _split_formula_arguments(text: str) -> list[str]:
@@ -910,7 +1052,11 @@ def _calculate_review_cfp_total(payload: dict) -> float:
     total = 0.0
     for item in _cosmic_items_from_payload(_apply_review_actions(payload), include_excluded=False):
         for movement in item.movements:
-            total += policy.get(movement.reuse, 1.0)
+            total += (
+                movement.cfp_override
+                if movement.cfp_override is not None
+                else policy.get(movement.reuse, 1.0)
+            )
     return round(total, 6)
 
 

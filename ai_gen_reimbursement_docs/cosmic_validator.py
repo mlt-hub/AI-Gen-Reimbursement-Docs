@@ -824,7 +824,7 @@ def _issue_to_dict(issue: CosmicIssue) -> dict:
 
 
 def _movement_to_dict(movement) -> dict:
-    return {
+    data = {
         "order": movement.order,
         "sub_process": movement.sub_process,
         "move_type": movement.move_type,
@@ -832,6 +832,12 @@ def _movement_to_dict(movement) -> dict:
         "data_attrs": movement.data_attrs,
         "reuse": movement.reuse,
     }
+    if getattr(movement, "cfp_override", None) is not None:
+        data["cfp_override"] = movement.cfp_override
+    cfp_basis = getattr(movement, "cfp_basis", None)
+    if isinstance(cfp_basis, dict) and cfp_basis:
+        data["cfp_basis"] = cfp_basis
+    return data
 
 
 def cosmic_report_to_dict(report: CosmicValidationReport) -> dict:

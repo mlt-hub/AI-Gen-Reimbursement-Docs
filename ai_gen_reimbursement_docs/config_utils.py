@@ -1626,6 +1626,7 @@ def load_gen_cosmic_governance_config() -> dict[str, object]:
         "cfp_formula_consistency_check": False,
         "audit_hash_chain": True,
         "audit_signature_secret_env": "COSMIC_REVIEW_AUDIT_SIGNING_KEY",
+        "audit_ledger_path_env": "COSMIC_REVIEW_AUDIT_LEDGER_PATH",
         "boundary_context": {},
         "rule_matrix": [],
     }
@@ -1649,6 +1650,8 @@ def load_gen_cosmic_governance_config() -> dict[str, object]:
         values["audit_hash_chain"] = bool(raw.get("audit_hash_chain", True))
         secret_env = str(raw.get("audit_signature_secret_env") or "COSMIC_REVIEW_AUDIT_SIGNING_KEY").strip()
         values["audit_signature_secret_env"] = secret_env or "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+        ledger_env = str(raw.get("audit_ledger_path_env") or "COSMIC_REVIEW_AUDIT_LEDGER_PATH").strip()
+        values["audit_ledger_path_env"] = ledger_env or "COSMIC_REVIEW_AUDIT_LEDGER_PATH"
         raw_codes = raw.get("auto_apply_issue_codes")
         if isinstance(raw_codes, list):
             values["auto_apply_issue_codes"] = [

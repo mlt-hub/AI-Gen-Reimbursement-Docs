@@ -1569,6 +1569,10 @@ def build_cosmic_governance_view(*, target_dir: Path) -> dict:
                 governance.get("audit_signature_secret_env")
                 or "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
             ).strip(),
+            "audit_ledger_path_env": str(
+                governance.get("audit_ledger_path_env")
+                or "COSMIC_REVIEW_AUDIT_LEDGER_PATH"
+            ).strip(),
             "boundary_context": _normalize_boundary_context(governance.get("boundary_context")),
             "rule_matrix": _normalize_cosmic_rule_matrix(governance.get("rule_matrix")),
         },
@@ -1660,6 +1664,14 @@ def _validate_cosmic_governance_payload(payload: dict) -> dict:
         audit_env = "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
     if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", audit_env):
         raise AdvancedConfigError("audit_signature_secret_env 必须是合法环境变量名")
+    ledger_env = str(
+        governance.get("audit_ledger_path_env")
+        or "COSMIC_REVIEW_AUDIT_LEDGER_PATH"
+    ).strip()
+    if not ledger_env:
+        ledger_env = "COSMIC_REVIEW_AUDIT_LEDGER_PATH"
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", ledger_env):
+        raise AdvancedConfigError("audit_ledger_path_env 必须是合法环境变量名")
     return {
         "allow_draft_excel_output": bool(payload.get("allow_draft_excel_output", False)),
         "cfp_policy": _normalize_non_negative_number_mapping(payload.get("cfp_policy")),
@@ -1671,6 +1683,7 @@ def _validate_cosmic_governance_payload(payload: dict) -> dict:
             "cfp_formula_consistency_check": bool(governance.get("cfp_formula_consistency_check", False)),
             "audit_hash_chain": governance.get("audit_hash_chain") is not False,
             "audit_signature_secret_env": audit_env,
+            "audit_ledger_path_env": ledger_env,
             "boundary_context": _normalize_boundary_context(governance.get("boundary_context")),
             "rule_matrix": _normalize_cosmic_rule_matrix(governance.get("rule_matrix")),
         },

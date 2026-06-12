@@ -781,6 +781,44 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
     return result
 
 
+def _cosmic_failed_module_details(failed_modules: object) -> list[dict[str, str]]:
+    details: list[dict[str, str]] = []
+    if not isinstance(failed_modules, list):
+        return details
+    for raw in failed_modules:
+        if isinstance(raw, dict):
+            details.append({
+                "module_l1": str(raw.get("module_l1") or ""),
+                "module_l2": str(raw.get("module_l2") or ""),
+                "module_l3": str(raw.get("module_l3") or ""),
+                "error": str(raw.get("error") or raw.get("message") or ""),
+            })
+            continue
+        if isinstance(raw, tuple) and len(raw) >= 4:
+            details.append({
+                "module_l1": str(raw[0] or ""),
+                "module_l2": str(raw[1] or ""),
+                "module_l3": str(raw[2] or ""),
+                "error": str(raw[3] or ""),
+            })
+    return details
+
+
+def _cosmic_failure_kind(error: str) -> str:
+    text = str(error or "").lower()
+    if any(term in text for term in ("retry exhausted", "重试耗尽", "重试后仍失败")):
+        return "AI_RETRY_EXHAUSTED"
+    if any(term in text for term in ("parse", "json", "解析", "invalid response")):
+        return "AI_MODULE_PARSE_FAILED"
+    return "AI_MODULE_FAILED"
+
+
+def _cosmic_placeholder_count(items: object) -> int:
+    if not isinstance(items, list):
+        return 0
+    return sum(1 for item in items if not getattr(item, "movements", []))
+
+
 def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                 doc_dir, cosmic_xlsx, templates_dict, api_key, model, base_url,
                 project_name, result, fpa_reduced=None):
@@ -872,6 +910,20 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                         f"功能过程数量限制导致 {cosmic_diagnostics.skipped_by_process_limit} 个模块跳过",
                         "gen_cosmic_ai_limit",
                     ))
+                placeholder_count = _cosmic_placeholder_count(cosmic_items)
+                if skipped_total > 0 and placeholder_count > 0:
+                    issue = global_cosmic_issue(
+                        "warning", "AI_LIMIT_PARTIAL_PLACEHOLDER",
+                        f"配置限制导致 {placeholder_count} 个 COSMIC 空占位功能过程需要人工补齐",
+                        "items",
+                    )
+                    issue.details = {
+                        "placeholder_count": placeholder_count,
+                        "skipped_by_l3_limit": cosmic_diagnostics.skipped_by_l3_limit,
+                        "skipped_by_process_limit": cosmic_diagnostics.skipped_by_process_limit,
+                        "basis_description": "AI 限制跳过后会保留空功能过程骨架，避免需求静默丢失，但必须人工补齐后才能送审",
+                    }
+                    cosmic_global_issues.append(issue)
             if cosmic_diagnostics.aborted:
                 severity = "warning" if cosmic_items else "error"
                 cosmic_global_issues.append(global_cosmic_issue(
@@ -881,24 +933,37 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
                 ))
             if cosmic_diagnostics.failed_modules:
                 severity = "warning" if cosmic_items else "error"
+                failed_details = _cosmic_failed_module_details(cosmic_diagnostics.failed_modules)
                 issue = global_cosmic_issue(
                     severity, "PARTIAL_AI_FAILURE" if cosmic_items else "AI_GENERATION_FAILED",
                     f"COSMIC AI 有 {len(cosmic_diagnostics.failed_modules)} 个模块生成失败",
                     "ai_generation",
                 )
                 issue.details = {
-                    "failed_modules": [
-                        {
-                            "module_l1": l1,
-                            "module_l2": l2,
-                            "module_l3": l3,
-                            "error": error,
-                        }
-                        for l1, l2, l3, error in cosmic_diagnostics.failed_modules
-                    ],
+                    "failed_modules": failed_details,
                     "basis_description": "记录单个三级模块 AI 调用或响应解析失败明细，便于重试和回归排查",
                 }
                 cosmic_global_issues.append(issue)
+                failures_by_kind: dict[str, list[dict[str, str]]] = {}
+                for detail in failed_details:
+                    failures_by_kind.setdefault(
+                        _cosmic_failure_kind(detail.get("error", "")),
+                        [],
+                    ).append(detail)
+                for code, details in sorted(failures_by_kind.items()):
+                    if code == "AI_MODULE_FAILED":
+                        continue
+                    classified_issue = global_cosmic_issue(
+                        severity,
+                        code,
+                        f"COSMIC AI 有 {len(details)} 个模块{('响应解析失败' if code == 'AI_MODULE_PARSE_FAILED' else '重试后仍失败')}",
+                        "ai_generation",
+                    )
+                    classified_issue.details = {
+                        "failed_modules": details,
+                        "basis_description": "对单模块失败原因进行稳定分类，便于后续按解析失败或重试耗尽分别治理",
+                    }
+                    cosmic_global_issues.append(classified_issue)
             if not cosmic_items:
                 cosmic_global_issues.append(global_cosmic_issue(
                     "error", "AI_GENERATION_EMPTY",

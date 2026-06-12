@@ -128,6 +128,7 @@ def test_cosmic_governance_config_route_roundtrip(monkeypatch, tmp_path):
             "cfp_formula_consistency_check": True,
             "audit_hash_chain": True,
             "audit_signature_secret_env": "CUSTOM_COSMIC_AUDIT_KEY",
+            "audit_ledger_path_env": "CUSTOM_COSMIC_LEDGER_PATH",
             "boundary_context": {"external_systems": ["统一支付平台"]},
             "rule_matrix": [{
                 "code": "CUSTOM_BOUNDARY",
@@ -146,6 +147,7 @@ def test_cosmic_governance_config_route_roundtrip(monkeypatch, tmp_path):
     assert data["allow_draft_excel_output"] is True
     assert data["cfp_policy"] == {"复用": 0.5}
     assert data["governance"]["audit_signature_secret_env"] == "CUSTOM_COSMIC_AUDIT_KEY"
+    assert data["governance"]["audit_ledger_path_env"] == "CUSTOM_COSMIC_LEDGER_PATH"
     assert data["governance"]["boundary_context"] == {"external_systems": ["统一支付平台"]}
     assert data["governance"]["rule_matrix"][0]["code"] == "CUSTOM_BOUNDARY"
 

@@ -369,6 +369,17 @@ AI 调用限制：
 4. CFP 公式一致性解析继续增强，新增对 `CHOOSE(MATCH(...), ...)` 这类模板公式写法的复用度分支识别。
 5. 默认策略仍保持保守：结构化配置 API 不会自动启用治理动作；未配置签名密钥时仍只使用 JSON 级 hash 链。
 
+### 2026-06-12 继续推进剩余治理后端契约
+
+本次继续推进文档剩余项中可在后端闭环验证的部分，当前状态如下：
+
+1. AI 失败诊断进一步细分：限制跳过并保留空占位功能过程时会产生 `AI_LIMIT_PARTIAL_PLACEHOLDER`，单模块响应解析失败会产生 `AI_MODULE_PARSE_FAILED`，重试后仍失败会产生 `AI_RETRY_EXHAUSTED`；这些 code 与既有 `PARTIAL_AI_FAILURE` 并存，便于后续按失败类型重试或回归。
+2. 数据移动支持行级 `cfp_override` 和 `cfp_basis`。确认后 CFP 汇总优先采用行级人工覆盖值；覆盖值缺失、非法或为负数时回退到 `cfp_policy_effective`。
+3. 审阅动作新增 `set_movement_cfp`，用于对单条数据移动进行 CFP 人工覆盖；已应用动作会写入 `approval_status` 和 `rollback_action`，为后续正式审批流和回滚界面提供稳定 JSON 契约。
+4. CFP 公式一致性解析新增 `XLOOKUP/LOOKUP` 数组映射识别，覆盖 `XLOOKUP(L{row},{"新增","修改","复用","利旧"},{1,1,1/3,0},1)` 这类模板公式。
+5. 审计追踪新增可选外部 ledger 镜像：配置 `gen_cosmic.governance.audit_ledger_path_env` 指向服务端环境变量，且该环境变量提供 JSONL 路径时，保存确认会把审计摘要、记录 hash 和最终 hash 追加写入 ledger；hash 链仍保留在确认 JSON 内。
+6. 当前仍不声称已经具备真正 WORM 或第三方不可篡改存储；外部 ledger 是后续接独立审计服务前的追加式交接契约。
+
 ### 目标行为
 
 生成 COSMIC 结果后，系统必须为每个功能过程给出校验状态：
@@ -794,6 +805,8 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `items[].movements[].excluded_from_cfp` | `boolean` | 否 | 人工审阅动作是否将该数据移动排除出确认后 Excel 和 CFP 汇总。 |
 | `items[].movements[].review_action` | `string` | 否 | 触发排除的审阅动作，例如 `exclude_movement/merge_movement`。 |
 | `items[].movements[].merged_into_order` | `number` | 否 | `merge_movement` 时记录合并目标数据移动序号。 |
+| `items[].movements[].cfp_override` | `number` | 否 | 行级人工 CFP 覆盖值；确认后汇总优先采用该值。 |
+| `items[].movements[].cfp_basis` | `object` | 否 | 行级 CFP 覆盖来源、关联审阅项和原因。 |
 | `items[].status` | `string` | 是 | `passed/review_required/blocked`。 |
 | `items[].issues` | `array` | 是 | 当前功能过程的结构化问题列表。 |
 | `items[].basis` | `object` | 是 | 当前功能过程的结构化判定依据。 |
@@ -808,9 +821,11 @@ md/3.3.gen-cosmic-AI填充-COSMIC.json
 | `items[].issues[].details` | `object` | 是 | 结构化依据。语义 warning 当前包含 `matched_terms`、`basis_description` 和可选 `suggested_actions`；功能用户 warning 当前包含 `function_user_parts`、`match_source`、`matched_term`、`suggested_user` 和可选 `suggested_actions`。 |
 | `review_actions` | `array` | 否 | 待应用的人工审阅动作；保存会话审阅结果时后端会应用这些动作并重校验。 |
 | `review_audit` | `array` | 否 | 已应用审阅动作的 JSON 级审计记录。 |
+| `review_audit[].approval_status` | `string` | 否 | 动作审批状态，当前人工动作默认为 `approved`，自动治理动作为 `auto_applied`。 |
+| `review_audit[].rollback_action` | `object` | 否 | 可回滚动作契约，用于后续审阅界面或审批流恢复字段。 |
 | `review_audit[].previous_audit_hash` | `string` | 否 | 前一条审计记录的 SHA-256 hash；默认开启 hash 链时写入。 |
 | `review_audit[].audit_hash` | `string` | 否 | 当前审计记录的 SHA-256 hash；用于发现 JSON 级审计记录被改写。 |
-| `review_audit_hash_chain` | `object` | 否 | 保存审阅结果时写入的 hash 链校验元数据，包含 `algorithm`、`valid`、`checked_record_count`、`record_count` 和 `final_audit_hash`。 |
+| `review_audit_hash_chain` | `object` | 否 | 保存审阅结果时写入的 hash 链校验元数据，包含 `algorithm`、`valid`、`checked_record_count`、`record_count`、`final_audit_hash` 和可选外部 ledger 写入状态。 |
 | `cfp_policy` | `object` | 否 | 确认后 CFP 汇总口径，key 为复用度，value 为每条数据移动 CFP。 |
 | `cfp_policy_effective` | `object` | 否 | 后端规范化后的有效 CFP policy，非法值和负数会回退到默认值。 |
 | `function_user_role_map` | `object` | 否 | 功能用户角色映射，key 为模块名称，value 为 `发起者：...|接收者：...`。 |
@@ -1124,7 +1139,7 @@ md/3.4.gen-cosmic-校验报告.md
 
 1. 更复杂的边界规则治理，例如跨系统/内部技术交互的组织级判定和非功能事项的高精度自动分类；当前已有可配置规则矩阵、结构化配置 API、组织级 `boundary_context` 和自动治理入口，但默认关闭自动动作，且仍主要基于关键词、上下文词表和建议动作。
 2. 功能用户和三级模块的一对一强绑定治理中的正式审批流、权限和状态机；当前已有角色映射、人工/自动动作、`FUNCTION_USER_ROLE_CONFLICT` 诊断和建议动作，但不做无审批强制修复。
-3. CFP policy、Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前已有可解析简单数字、分数、常见 `IF`/`IFS`/`SWITCH` 和 `CHOOSE/MATCH` 分支的 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但尚未做完整 Excel 公式语义解析。
-4. 审计追踪的外部不可篡改记录；当前 `review_audit` 会注入服务端登录用户、写入 JSON 级 hash 链、可选 HMAC 签名并记录保存前校验状态，但仍未接入外部不可篡改审计存储。
+3. CFP policy、Excel 模板公式、元数据公式和 Python 确认后汇总之间更严格的一致性校验；当前已有行级 CFP 覆盖、可解析简单数字、分数、常见 `IF`/`IFS`/`SWITCH`、`CHOOSE/MATCH`、`XLOOKUP/LOOKUP` 分支的 `CFP_POLICY_FORMULA_MISMATCH` 诊断，但尚未做完整 Excel 公式语义解析和正式审批流。
+4. 审计追踪的外部不可篡改记录；当前 `review_audit` 会注入服务端登录用户、写入 JSON 级 hash 链、可选 HMAC 签名、记录保存前校验状态，并可把审计摘要镜像到追加式 JSONL ledger，但仍未接入真正 WORM 或第三方不可篡改审计存储。
 
 这些内容应在结构化草稿和校验器稳定后，再按 [`gen-cosmic-improvement-plan.md`](gen-cosmic-improvement-plan.md) 分阶段实施。

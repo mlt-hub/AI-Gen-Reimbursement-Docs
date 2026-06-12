@@ -104,6 +104,8 @@ gen_cosmic:
     audit_hash_chain: true
     # 如需给 review_audit 追加 HMAC 签名，在服务端环境变量中设置该 key；不配置密钥时只写 hash 链
     audit_signature_secret_env: COSMIC_REVIEW_AUDIT_SIGNING_KEY
+    # 如需把审计摘要镜像到外部追加式 JSONL ledger，在服务端环境变量中设置 ledger 文件路径
+    audit_ledger_path_env: COSMIC_REVIEW_AUDIT_LEDGER_PATH
     # 组织级边界上下文，会并入内置规则矩阵，辅助识别外部系统、内部组件和复杂非功能事项
     boundary_context:
       external_systems: []

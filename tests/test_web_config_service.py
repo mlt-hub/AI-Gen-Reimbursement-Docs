@@ -209,6 +209,7 @@ def test_save_cosmic_governance_settings_preserves_system_config_unknown_keys(tm
                 "cfp_formula_consistency_check": True,
                 "audit_hash_chain": True,
                 "audit_signature_secret_env": "CUSTOM_COSMIC_AUDIT_KEY",
+                "audit_ledger_path_env": "CUSTOM_COSMIC_LEDGER_PATH",
                 "boundary_context": {
                     "external_systems": ["统一支付平台", ""],
                     "internal_components": ["内部缓存"],
@@ -234,6 +235,7 @@ def test_save_cosmic_governance_settings_preserves_system_config_unknown_keys(tm
     assert result["allow_draft_excel_output"] is True
     assert result["cfp_policy"] == {"新增": 1.0, "复用": 0.5}
     assert result["governance"]["auto_apply_issue_codes"] == ["CONTROL_COMMAND_MOVEMENT"]
+    assert result["governance"]["audit_ledger_path_env"] == "CUSTOM_COSMIC_LEDGER_PATH"
     assert result["governance"]["boundary_context"] == {
         "external_systems": ["统一支付平台"],
         "internal_components": ["内部缓存"],
@@ -254,6 +256,21 @@ def test_save_cosmic_governance_rejects_invalid_signature_env(tmp_path):
         assert "环境变量名" in str(exc)
     else:
         raise AssertionError("invalid audit env should be rejected")
+
+
+def test_save_cosmic_governance_rejects_invalid_ledger_env(tmp_path):
+    try:
+        config_service.save_cosmic_governance_settings(
+            payload={"governance": {"audit_ledger_path_env": "bad-name"}},
+            target_dir=tmp_path,
+            actor="alice",
+            audit_root=tmp_path,
+            backup_root=tmp_path,
+        )
+    except config_service.AdvancedConfigError as exc:
+        assert "环境变量名" in str(exc)
+    else:
+        raise AssertionError("invalid ledger env should be rejected")
 
 
 def test_build_web_config_view_uses_personal_overrides_for_remote_user():

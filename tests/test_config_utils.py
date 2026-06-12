@@ -643,6 +643,7 @@ class TestBooleanLoaders:
         assert result["cfp_formula_consistency_check"] is False
         assert result["audit_hash_chain"] is True
         assert result["audit_signature_secret_env"] == "COSMIC_REVIEW_AUDIT_SIGNING_KEY"
+        assert result["audit_ledger_path_env"] == "COSMIC_REVIEW_AUDIT_LEDGER_PATH"
         assert result["boundary_context"] == {}
         assert result["rule_matrix"] == []
 
@@ -662,6 +663,7 @@ class TestBooleanLoaders:
                 "    cfp_formula_consistency_check: true",
                 "    audit_hash_chain: false",
                 "    audit_signature_secret_env: CUSTOM_COSMIC_AUDIT_KEY",
+                "    audit_ledger_path_env: CUSTOM_COSMIC_LEDGER_PATH",
                 "    boundary_context:",
                 "      external_systems: [统一支付平台, '']",
                 "      internal_components:",
@@ -695,6 +697,7 @@ class TestBooleanLoaders:
         assert result["cfp_formula_consistency_check"] is True
         assert result["audit_hash_chain"] is False
         assert result["audit_signature_secret_env"] == "CUSTOM_COSMIC_AUDIT_KEY"
+        assert result["audit_ledger_path_env"] == "CUSTOM_COSMIC_LEDGER_PATH"
         assert result["boundary_context"] == {
             "external_systems": ["统一支付平台"],
             "internal_components": ["内部缓存"],

@@ -2365,6 +2365,10 @@ def test_cosmic_cfp_formula_parser_handles_switch_and_ifs():
         'CHOOSE(MATCH(L{row},{"新增","修改","复用","利旧"},0),1,1,1/3,0)',
         names,
     )
+    xlookup_policy = _parse_cfp_policy_from_formula(
+        'XLOOKUP(L{row},{"新增","修改","复用","利旧"},{1,1,1/3,0},1)',
+        names,
+    )
 
     assert switch_policy == {
         "新增": 1.0,
@@ -2378,6 +2382,12 @@ def test_cosmic_cfp_formula_parser_handles_switch_and_ifs():
     assert ifs_policy["复用"] == 1.0 / 3.0
     assert ifs_policy["利旧"] == 0.0
     assert choose_policy == {
+        "新增": 1.0,
+        "修改": 1.0,
+        "复用": 1.0 / 3.0,
+        "利旧": 0.0,
+    }
+    assert xlookup_policy == {
         "新增": 1.0,
         "修改": 1.0,
         "复用": 1.0 / 3.0,
@@ -2471,6 +2481,50 @@ def test_cosmic_audit_signature_tamper_is_reported(monkeypatch, tmp_path):
     server.session_manager.cleanup_download(session_id)
 
 
+def test_cosmic_review_audit_can_mirror_to_external_ledger(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_audit_external_ledger"
+    payload = _cosmic_export_payload()
+    payload["review_actions"] = [{
+        "action": "exclude_movement",
+        "item_index": 0,
+        "movement_order": 2,
+        "review_id": "item::0::CONTROL_COMMAND_MOVEMENT::movements[1].sub_process::2",
+        "reason": "控制命令不单独计列",
+    }]
+    ledger_path = tmp_path / "audit" / "cosmic-ledger.jsonl"
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setenv("CUSTOM_COSMIC_LEDGER_PATH", str(ledger_path))
+    monkeypatch.setattr(
+        "web_app.routes.artifacts.load_gen_cosmic_governance_config",
+        lambda: {
+            "auto_apply_review_actions": False,
+            "auto_apply_issue_codes": [],
+            "function_user_role_map": {},
+            "require_unique_function_user": False,
+            "cfp_formula_consistency_check": False,
+            "audit_hash_chain": True,
+            "audit_ledger_path_env": "CUSTOM_COSMIC_LEDGER_PATH",
+        },
+    )
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    chain = saved_payload["review_audit_hash_chain"]
+    assert chain["external_audit_recorded"] is True
+    assert chain["external_audit_ledger_path"] == str(ledger_path)
+    ledger_entries = [
+        json.loads(line)
+        for line in ledger_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert ledger_entries[-1]["final_audit_hash"] == chain["final_audit_hash"]
+    assert ledger_entries[-1]["record_count"] == 1
+    server.session_manager.cleanup_download(session_id)
+
+
 def test_cosmic_unique_function_user_governance_revalidates_payload(monkeypatch, tmp_path):
     client = _client(monkeypatch, user="alice")
     session_id = "cosmic_unique_function_user_governance"
@@ -2541,6 +2595,52 @@ def test_cosmic_confirmed_export_uses_cfp_policy(monkeypatch, tmp_path):
 
     assert resp.status_code == 200
     assert resp.json()["cfp_total"] == 1.5
+    server.session_manager.cleanup_download(session_id)
+
+
+def test_cosmic_confirmed_export_uses_movement_cfp_override(monkeypatch, tmp_path):
+    client = _client(monkeypatch, user="alice")
+    session_id = "cosmic_export_cfp_override"
+    output_dir = tmp_path / "output"
+    draft_path = output_dir / "项目" / "md" / "3.3.gen-cosmic-AI填充-COSMIC.json"
+    draft_path.parent.mkdir(parents=True)
+    payload = _cosmic_export_payload()
+    payload["status"] = "passed"
+    payload["review_items"] = []
+    payload["items"][0]["status"] = "passed"
+    payload["items"][0]["movements"][1]["reuse"] = "复用"
+    payload["review_actions"] = [{
+        "action": "set_movement_cfp",
+        "item_index": 0,
+        "movement_order": 2,
+        "cfp_override": 0.75,
+        "review_id": "item::0::CFP_POLICY_FORMULA_MISMATCH::cfp_policy_effective::",
+        "reason": "人工确认该复用子过程按 0.75 CFP 计",
+    }]
+    draft_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    template_path = tmp_path / "项目功能点拆分表-输出模板.xlsx"
+    template_path.write_bytes(b"template")
+    server.session_manager.create(session_id, mode="remote", owner="alice", work_dir=tmp_path)
+    monkeypatch.setattr("web_app.routes.artifacts._cosmic_template_path", lambda *_: template_path)
+
+    def fake_write_cosmic_xlsx(template, output, report, **kwargs):
+        Path(output).write_bytes(b"xlsx")
+        return output
+
+    monkeypatch.setattr("web_app.routes.artifacts.write_cosmic_xlsx", fake_write_cosmic_xlsx)
+
+    save_resp = client.put(f"/api/sessions/{session_id}/cosmic/confirmation", json=payload)
+    export_resp = client.post(f"/api/sessions/{session_id}/cosmic/export-confirmed")
+
+    assert save_resp.status_code == 200
+    saved_payload = save_resp.json()["payload"]
+    movement = saved_payload["items"][0]["movements"][1]
+    assert movement["cfp_override"] == 0.75
+    assert movement["cfp_basis"]["source"] == "review_action"
+    assert saved_payload["review_audit"][0]["approval_status"] == "approved"
+    assert saved_payload["review_audit"][0]["rollback_action"]["target_action"] == "set_movement_cfp"
+    assert export_resp.status_code == 200
+    assert export_resp.json()["cfp_total"] == 1.75
     server.session_manager.cleanup_download(session_id)
 
 
