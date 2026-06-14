@@ -6,13 +6,13 @@
 $env:AI_REIMBURSEMENT_FPA_CONFIG_DIR=(Resolve-Path tmp_fpa_runtime_config_hardened).Path
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
   --preset multi-profile-real-model `
-  --output-dir tmp_fpa_stability_ci_multi_profile_review_fixed_20260609
+  --output-dir artifacts/fpa-stability-ci/tmp_fpa_stability_ci_multi_profile_review_fixed_20260609
 ```
 
 输出：
 
-- `tmp_fpa_stability_ci_multi_profile_review_fixed_20260609/fpa-stability-sampling-manifest.json`
-- `tmp_fpa_stability_ci_multi_profile_review_fixed_20260609/fpa-stability-sampling-report.md`
+- `artifacts/fpa-stability-ci/tmp_fpa_stability_ci_multi_profile_review_fixed_20260609/fpa-stability-sampling-manifest.json`
+- `artifacts/fpa-stability-ci/tmp_fpa_stability_ci_multi_profile_review_fixed_20260609/fpa-stability-sampling-report.md`
 
 ## 抽样范围
 

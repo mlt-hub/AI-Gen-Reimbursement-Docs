@@ -21,7 +21,7 @@ from ai_gen_reimbursement_docs.fpa_stability_sampler import (
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run FPA stability sampling and fail on quality gate regressions.")
-    parser.add_argument("--output-dir", default=str(ROOT / "tmp_fpa_stability_ci"))
+    parser.add_argument("--output-dir", default=str(ROOT / "artifacts" / "fpa-stability-ci" / "tmp_fpa_stability_ci"))
     parser.add_argument("--preset", default="")
     parser.add_argument("--suite", default="")
     parser.add_argument("--fixture", action="append", default=[])

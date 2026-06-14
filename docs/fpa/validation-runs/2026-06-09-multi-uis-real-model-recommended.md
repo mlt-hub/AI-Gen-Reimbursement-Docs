@@ -9,7 +9,7 @@
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
   --preset multi-uis-real-model-recommended `
-  --output-dir .\tmp_fpa_stability_ci_multi_uis_recommended
+  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci_multi_uis_recommended
 ```
 
 ## 验证范围
@@ -51,9 +51,9 @@ blocking_retry_count=0
 本轮在新 worktree 中执行三次真实模型批量验证，临时输出目录不纳入仓库提交：
 
 ```text
-tmp_fpa_stability_ci_multi_uis_recommended
-tmp_fpa_stability_ci_multi_uis_recommended_after_review_fix
-tmp_fpa_stability_ci_multi_uis_recommended_after_import_fix
+artifacts/fpa-stability-ci/tmp_fpa_stability_ci_multi_uis_recommended
+artifacts/fpa-stability-ci/tmp_fpa_stability_ci_multi_uis_recommended_after_review_fix
+artifacts/fpa-stability-ci/tmp_fpa_stability_ci_multi_uis_recommended_after_import_fix
 ```
 
 ### 首轮

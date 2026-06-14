@@ -59,6 +59,19 @@ def test_fpa_stability_ci_script_dry_run_defaults_to_rules_only(capsys, tmp_path
     assert payload["will_call_model"] is False
 
 
+def test_fpa_stability_ci_script_default_output_dir_is_under_artifacts(capsys):
+    script = _load_script()
+    exit_code = script.main([
+        "--dry-run",
+        "--suite",
+        "standard",
+    ])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["output_dir"].endswith("artifacts\\fpa-stability-ci\\tmp_fpa_stability_ci")
+
+
 def test_fpa_stability_ci_script_dry_run_shows_real_model_preset(capsys, tmp_path):
     script = _load_script()
     exit_code = script.main([

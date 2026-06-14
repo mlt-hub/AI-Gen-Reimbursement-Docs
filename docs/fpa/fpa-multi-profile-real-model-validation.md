@@ -69,7 +69,7 @@ ui_api_mapping
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
   --preset multi-profile-real-model `
-  --output-dir .\tmp_fpa_stability_ci_multi_profile
+  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci_multi_profile
 ```
 
 该 preset 会对 standard fixture suite 展开四个 profile 的真实模型采样：

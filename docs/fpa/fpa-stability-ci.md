@@ -15,7 +15,7 @@
   --max-retries 0 `
   --max-quality-issues 0 `
   --max-retryable-issues 0 `
-  --output-dir .\tmp_fpa_stability_ci
+  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci
 ```
 
 脚本默认不启用真实模型 preset；仅指定 `--suite standard` 时，默认使用 `profile=strict_fpa`、`strategy=rules_only`、`rule_set=strict_fpa_rs`。
@@ -35,7 +35,7 @@
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
   --preset strict-real-model `
-  --output-dir .\tmp_fpa_stability_ci
+  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci
 ```
 
 该 preset 使用：
@@ -52,7 +52,7 @@
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
   --preset strict-real-model-recommended `
-  --output-dir .\tmp_fpa_stability_ci_recommended
+  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci_recommended
 ```
 
 该 preset 使用：
@@ -69,7 +69,7 @@
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
   --preset multi-uis-real-model-recommended `
-  --output-dir .\tmp_fpa_stability_ci_multi_uis_recommended
+  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci_multi_uis_recommended
 ```
 
 该 preset 使用：
@@ -89,7 +89,7 @@
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
   --preset multi-profile-real-model `
-  --output-dir .\tmp_fpa_stability_ci_multi_profile
+  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci_multi_profile
 ```
 
 该 preset 使用 `suite=standard`，并显式展开为四条配置，避免 `profiles × strategies × rule_sets` 笛卡尔积产生无意义组合：
@@ -153,7 +153,7 @@
 ```json
 {
   "status": "pass",
-  "report_path": "tmp_fpa_stability_ci/fpa-stability-sampling-report.md",
+  "report_path": "artifacts/fpa-stability-ci/tmp_fpa_stability_ci/fpa-stability-sampling-report.md",
   "run_count": 5
 }
 ```
