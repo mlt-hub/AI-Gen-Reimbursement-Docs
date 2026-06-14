@@ -112,6 +112,38 @@ def test_pipeline_artifact_can_include_metadata():
     }]
 
 
+def test_pipeline_artifacts_emit_existing_files_once(tmp_path):
+    events = []
+    first = tmp_path / "1.1.gen-fpa-FPA-模板.md"
+    first.write_text("# FPA", encoding="utf-8")
+    missing = tmp_path / "missing.md"
+    callbacks = PipelineCallbacks(emit_event=events.append)
+    token = callbacks_var.set(callbacks)
+    try:
+        pipeline._artifacts(
+            "fpa",
+            [
+                (str(first), "FPA 模板 Markdown", True),
+                (str(first), "FPA 规划 Markdown", True),
+                (str(missing), "不存在的文件", True),
+            ],
+        )
+    finally:
+        callbacks_var.reset(token)
+
+    assert events == [{
+        "type": "artifact",
+        "step": "fpa",
+        "message": "已生成FPA 模板 Markdown",
+        "payload": {
+            "label": "FPA 模板 Markdown",
+            "name": "1.1.gen-fpa-FPA-模板.md",
+            "path": str(first),
+            "is_temp": True,
+        },
+    }]
+
+
 def test_spec_toc_status_reports_manual_required_and_updated(tmp_path):
     docx_path = tmp_path / "spec.docx"
     doc = Document()

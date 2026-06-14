@@ -163,6 +163,21 @@ def _artifact(
     )
 
 
+def _artifacts(
+    step: PipelineStep,
+    items: list[tuple[str, str, bool]],
+) -> None:
+    seen: set[str] = set()
+    for path, label, is_temp in items:
+        if not path or not os.path.exists(path):
+            continue
+        normalized = os.path.normcase(os.path.abspath(path))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        _artifact(step, path, label, is_temp=is_temp)
+
+
 def _step_done(step: PipelineStep, message: str = "") -> None:
     _emit_event("step_done", step, message)
     if _active_step_var.get() == step:
@@ -774,8 +789,14 @@ def _generate_fpa(file_path, output_dir, md_dir, tree_md, meta_md,
             logger.warning(warning)
     result.fpa_xlsx = fpa_xlsx
     result.fpa_check_xlsx = fpa_check_xlsx
-    _artifact("fpa", fpa_xlsx, "FPA 工作量评估")
-    _artifact("fpa", fpa_check_xlsx, "FPA 审核副本")
+    _artifacts("fpa", [
+        (fpa_md, "FPA 模板 Markdown", True),
+        (fpa_sum_md, "FPA 工作量汇总 Markdown", True),
+        (fpa_filled_md, "FPA 规划 Markdown", True),
+        (fpa_audit_trace, "FPA 审计 Trace", True),
+        (fpa_xlsx, "FPA 工作量评估", False),
+        (fpa_check_xlsx, "FPA 审核副本", False),
+    ])
     _step_done("fpa", "FPA 工作量评估已生成")
     logger.info(f"FPA工作量评估已生成: {fpa_xlsx}")
     return result
