@@ -7,12 +7,12 @@
 
 ## 背景
 
-运行详情页顶部当前提供 `返回任务列表`、`定位参数`、`重新运行` 等操作。
+运行详情页顶部此前提供 `返回任务列表`、`定位参数`、`重新运行` 等操作；本轮已将 `定位参数` 改为 `返回生成设置`。
 
 本轮讨论确认：
 
-- `定位参数` 的实际行为不是恢复、应用或修改历史任务参数，而是回到生成页，并通过 URL query 定位或高亮某个生成设置控件。
-- 顶部 `定位参数` 当前固定跳转到生成页的输入路径区域。
+- 原 `定位参数` 的实际行为不是恢复、应用或修改历史任务参数，而是回到生成页，并通过 URL query 定位或高亮某个生成设置控件。
+- 顶部 `返回生成设置` 固定跳转到生成页的输入路径区域。
 - 参数快照区域已有更细的跳转入口，可定位到操作模式、输入路径、高级参数、FPA 方案、FPA 策略、FPA 规则集、FPA 生成模式等设置项。
 - 与直接点击工作台下的 `生成` 不同，详情页入口会携带 `focus` 和 `fromSession` 上下文，用于滚动和高亮相关设置项。
 - 运行详情页已经有 `重新运行` 按钮，但运行中或排队中的任务缺少 `停止任务` 按钮；后端已有 `/api/cancel/{session_id}` 能力，生成页和任务列表也已使用该接口。
@@ -45,7 +45,7 @@
 
 ## 当前实现线索
 
-- 运行详情页顶部按钮在 `web_app/src/views/TaskDetail.vue`，当前文案为 `定位参数`，跳转目标为 `/?focus=input&fromSession=<sessionId>`。
+- 运行详情页顶部按钮在 `web_app/src/views/TaskDetail.vue`，当前文案为 `返回生成设置`，跳转目标为 `/?focus=input&fromSession=<sessionId>`。
 - 参数快照区域的细粒度入口同在 `TaskDetail.vue`，由 `focusTargets` 列表驱动。
 - 生成页通过 `web_app/src/views/Home.vue` 中的 `focusGenerationField()` 读取 `route.query.focus`，映射到对应 DOM 后滚动并短暂高亮。
 - 后端停止接口为 `POST /api/cancel/{session_id}`，位于 `web_app/routes/tasks.py`。
@@ -57,7 +57,7 @@
 ### 前端
 
 - `web_app/src/views/TaskDetail.vue`
-  - 将顶部 `定位参数` 按钮文案改为 `返回生成设置`。
+  - 顶部按钮文案为 `返回生成设置`。
   - 增加 `canCancel` 计算属性，覆盖 `queued` 和 `running` 状态。
   - 增加 `cancelTask()` 方法，调用 `/api/cancel/{sessionId}`。
   - 停止成功后关闭实时日志流，并刷新 session 状态、历史记录和日志。
