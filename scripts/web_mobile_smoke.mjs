@@ -29,7 +29,7 @@ const viewport = {
 }
 
 const routes = [
-  { name: 'home', path: '', expected: ['AI 报账文档生成', '生成任务', '执行监控'] },
+  { name: 'home', path: '', expected: ['AI 报账文档生成', '生成任务', '生成进度'] },
   { name: 'config', path: 'config', expected: ['环境诊断', '模型与凭据'] },
   { name: 'fpa-preview', path: 'preview/fpa', expected: ['FPA 预览', '输入设置', '选择功能清单'] },
   { name: 'cosmic-preview', path: 'preview/cosmic', expected: ['COSMIC 预览', '新增/修改功能过程'] },

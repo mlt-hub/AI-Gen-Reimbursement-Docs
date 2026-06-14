@@ -113,7 +113,7 @@ Write-Host "Web smoke test: $homeUrl"
 $homeDom = Get-Dom -Url $homeUrl -BrowserPath $edge
 Assert-Contains -Dom $homeDom -Text "AI 生成项目报账文档" -Url $homeUrl
 Assert-Contains -Dom $homeDom -Text "生成任务" -Url $homeUrl
-Assert-Contains -Dom $homeDom -Text "执行监控" -Url $homeUrl
+Assert-Contains -Dom $homeDom -Text "生成进度" -Url $homeUrl
 Assert-AnyContains -Dom $homeDom -Texts @("后端未连接", "后端已连接", "检查服务中") -Url $homeUrl
 
 Write-Host "Web smoke test: $configUrl"

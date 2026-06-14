@@ -17,7 +17,7 @@
       <div class="border-b border-[var(--color-rule)] px-5 py-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="min-w-0">
-            <p class="text-xs font-semibold text-[var(--color-ink-soft)]">执行监控</p>
+            <p class="text-xs font-semibold text-[var(--color-ink-soft)]">生成进度</p>
             <h2 class="mt-1 truncate text-lg font-bold text-[var(--color-ink)]">{{ runTitle }}</h2>
           </div>
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
