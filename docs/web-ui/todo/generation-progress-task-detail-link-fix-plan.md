@@ -8,6 +8,8 @@
 
 中间文件补充提交：`bb5de5af8ca5dfbdb4738f75a854a5122ef12a34`（`Show intermediate files in generation progress`）
 
+日志终态同步提交：`e2599b52a18e3de6327e76fdf0e30ea05d513acf`（`Backfill terminal task logs`）
+
 ## 实施记录
 
 本轮已完成同一轮“生成进度体验优化”的核心改造：
