@@ -2,7 +2,14 @@
 
 ## 状态
 
-- 状态：待实施
+- 状态：已实施
+- 实施提交：见本轮最终回复
+- 实施文件：
+  - `web_app/src/utils/taskStatusDisplay.ts`
+  - `web_app/src/views/Home.vue`
+  - `web_app/src/views/TaskDetail.vue`
+- 验证命令：`cd web_app && npm run build`
+- 验证结果：通过，`vue-tsc -b && vite build` 成功完成。
 - 来源：任务详情页状态展示与生成页不一致
 - 目标页面：
   - 生成页：`web_app/src/views/Home.vue`
@@ -187,6 +194,14 @@ function stateLabel(state: string) {
 - 任务执行流程
 - 交付物下载、打开目录、重新运行等操作逻辑
 
+## 实际修改范围
+
+- 新增 `web_app/src/utils/taskStatusDisplay.ts`，集中维护任务状态文案、状态色、圆点色和当前/最后相关步骤选择规则。
+- `Home.vue` 顶部生成进度状态改为使用共享展示模型，保留原有状态后缀和辅助说明能力。
+- `TaskDetail.vue` 状态卡片改为使用共享展示模型，移除本地 `完成`、`已取消` 等旧映射。
+- 详情页状态卡片新增与生成页一致的步骤 `current_action` 辅助说明展示。
+- 未修改后端接口、任务执行流程、交付物操作、任务列表和历史列表。
+
 ## 实施步骤
 
 1. 梳理 `Home.vue` 当前 `runStateLabels`、`runStateText`、`runStateDetail`、`currentStepSummary` 的实现。
@@ -200,13 +215,13 @@ function stateLabel(state: string) {
 
 ## 验收标准
 
-- [ ] 同一个 FPA 任务在生成页显示 `已完成 · 生成 FPA` 时，详情页也显示 `已完成 · 生成 FPA`。
-- [ ] 详情页不再显示旧文案 `完成`。
-- [ ] `cancelled` 状态在详情页与生成页统一为 `已停止`。
-- [ ] `queued`、`running`、`done`、`error`、`cancelled` 状态均可显示对应步骤后缀。
-- [ ] 无步骤信息时，详情页能退化显示单独状态，不出现 `undefined`、空点号或多余分隔符。
-- [ ] FPA、COSMIC、需求说明书、需求清单等任务的步骤后缀按实际步骤动态显示，不写死为 `生成 FPA`。
-- [ ] 生成页原有状态展示不发生回退。
+- [x] 同一个 FPA 任务在生成页显示 `已完成 · 生成 FPA` 时，详情页也显示 `已完成 · 生成 FPA`。
+- [x] 详情页不再显示旧文案 `完成`。
+- [x] `cancelled` 状态在详情页与生成页统一为 `已停止`。
+- [x] `queued`、`running`、`done`、`error`、`cancelled` 状态均可显示对应步骤后缀。
+- [x] 无步骤信息时，详情页能退化显示单独状态，不出现 `undefined`、空点号或多余分隔符。
+- [x] FPA、COSMIC、需求说明书、需求清单等任务的步骤后缀按实际步骤动态显示，不写死为 `生成 FPA`。
+- [x] 生成页原有状态展示不发生回退。
 - [ ] 详情页状态卡片在窄屏下不与“来源”“输入”“更新时间”等卡片内容重叠。
 
 ## 验证建议
@@ -228,6 +243,25 @@ npm run build
 - 已完成 FPA 任务详情页
 - 失败任务详情页
 - 已停止任务详情页
+
+## 验证记录
+
+已执行：
+
+```powershell
+cd web_app
+npm run build
+```
+
+结果：
+
+- `vue-tsc -b` 通过。
+- `vite build` 通过。
+
+未完成：
+
+- in-app browser 当前不可用，未完成浏览器截图验证。
+- 未验证真实运行任务在窄屏下的视觉表现。
 
 ## 风险与注意事项
 

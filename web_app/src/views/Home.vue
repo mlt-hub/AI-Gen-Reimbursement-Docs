@@ -266,6 +266,7 @@ import LogViewer from '@/components/LogViewer.vue'
 import ActionBar from '@/components/ActionBar.vue'
 import FpaRunSettingsSection from '@/components/run/FpaRunSettingsSection.vue'
 import type { StepProgress } from '@/stores/steps.ts'
+import { getTaskStatusDisplay, TASK_STATUS_BADGE_CLASSES, TASK_STATUS_DOT_CLASSES } from '@/utils/taskStatusDisplay.ts'
 
 interface RunTaskResponse {
   session_id: string
@@ -355,54 +356,20 @@ const FOCUS_HIGHLIGHT_CLASSES = [
   'rounded-lg',
 ]
 
-const runStateLabels: Record<RunState, string> = {
-  idle: '就绪',
-  queued: '排队中',
-  running: '运行中',
-  done: '已完成',
-  error: '出错',
-  cancelled: '已停止',
-}
 const runTitle = computed(() => {
   if (session.outputDir) return session.outputDir
   if (!session.sessionId) return '等待任务启动'
   const taskLabel = config.workMode === 'local' ? '本机任务' : '远程任务'
   return `${taskLabel} ${session.sessionId}`
 })
-const runStateText = computed(() => {
-  const step = currentStepSummary.value
-  const label = runStateLabels[session.runState]
-  return step ? `${label} · ${step.label}` : label
-})
-const runStateDetail = computed(() => currentStepSummary.value?.current_action || '')
-const currentStepSummary = computed(() => {
-  const active = steps.steps.find(step => step.status === 'running' || step.status === 'waiting_input')
-  if (active) return active
-  return [...steps.steps]
-    .reverse()
-    .find(step => step.status !== 'pending' || step.artifacts.length > 0 || Boolean(step.current_action)) || null
-})
+const runStatusDisplay = computed(() => getTaskStatusDisplay(session.runState, steps.steps))
+const runStateText = computed(() => runStatusDisplay.value.label)
+const runStateDetail = computed(() => runStatusDisplay.value.detail)
 const runStateClass = computed(() => {
-  const map = {
-    idle: 'border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]',
-    queued: 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-    running: 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]',
-    done: 'border-[var(--color-success)] bg-[var(--color-success-soft)] text-[var(--color-success)]',
-    error: 'border-[var(--color-danger)] bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
-    cancelled: 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-  }
-  return map[session.runState]
+  return TASK_STATUS_BADGE_CLASSES[runStatusDisplay.value.tone]
 })
 const runDotClass = computed(() => {
-  const map = {
-    idle: 'bg-[var(--color-ink-soft)]',
-    queued: 'bg-[var(--color-warning)]',
-    running: 'bg-[var(--color-accent)]',
-    done: 'bg-[var(--color-success)]',
-    error: 'bg-[var(--color-danger)]',
-    cancelled: 'bg-[var(--color-warning)]',
-  }
-  return map[session.runState]
+  return TASK_STATUS_DOT_CLASSES[runStatusDisplay.value.tone]
 })
 
 // ── 送审工作量输入 ──

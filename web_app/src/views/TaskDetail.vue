@@ -45,7 +45,10 @@
           <div class="text-xs font-semibold text-[var(--color-ink-soft)]">状态</div>
           <div :class="['mt-2 inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
             <span class="h-2 w-2 rounded-full" :class="runDotClass" />
-            {{ stateLabel(effectiveRunState) }}
+            {{ runStatusDisplay.label }}
+          </div>
+          <div v-if="runStatusDisplay.detail" class="mt-2 truncate text-xs text-[var(--color-ink-muted)]" :title="runStatusDisplay.detail">
+            {{ runStatusDisplay.detail }}
           </div>
           <div v-if="effectiveRunState === 'queued'" class="mt-2 text-xs text-[var(--color-ink-muted)]">
             {{ queuePositionText }}
@@ -180,6 +183,7 @@ import GenerationProgress from '@/components/GenerationProgress.vue'
 import { ApiError, apiFetch, normalizeApiError } from '@/lib/api.ts'
 import type { StepProgress } from '@/stores/steps.ts'
 import type { RunState } from '@/stores/session.ts'
+import { getTaskStatusDisplay, TASK_STATUS_BADGE_CLASSES, TASK_STATUS_DOT_CLASSES } from '@/utils/taskStatusDisplay.ts'
 
 interface DetailDoneFile {
   name?: string
@@ -295,6 +299,7 @@ const title = computed(() => {
 const effectiveError = computed(() => sessionStatus.value?.last_error || historyItem.value?.error || '')
 const progressSteps = computed(() => normalizeSteps(sessionStatus.value?.progress_steps))
 const hasProgress = computed(() => progressSteps.value.some(step => step.status !== 'pending' || step.artifacts.length > 0))
+const runStatusDisplay = computed(() => getTaskStatusDisplay(effectiveRunState.value, progressSteps.value))
 const doneFiles = computed(() => sessionStatus.value?.done_files?.length ? sessionStatus.value.done_files : (historyItem.value?.done_files || []))
 const canRerun = computed(() => historyItem.value?.source === 'web' && ['done', 'error', 'cancelled'].includes(String(historyItem.value.run_state)))
 const canRestore = computed(() => historyItem.value?.source === 'web' && historyItem.value.run_state === 'closed')
@@ -328,27 +333,11 @@ const runConfigItems = computed(() => {
 })
 
 const runStateClass = computed(() => {
-  const map: Record<string, string> = {
-    queued: 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-    running: 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]',
-    done: 'border-[var(--color-success)] bg-[var(--color-success-soft)] text-[var(--color-success)]',
-    error: 'border-[var(--color-danger)] bg-[var(--color-danger-soft)] text-[var(--color-danger)]',
-    cancelled: 'border-[var(--color-warning)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-    closed: 'border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]',
-  }
-  return map[String(effectiveRunState.value)] || 'border-[var(--color-rule)] bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]'
+  return TASK_STATUS_BADGE_CLASSES[runStatusDisplay.value.tone]
 })
 
 const runDotClass = computed(() => {
-  const map: Record<string, string> = {
-    queued: 'bg-[var(--color-warning)]',
-    running: 'bg-[var(--color-accent)]',
-    done: 'bg-[var(--color-success)]',
-    error: 'bg-[var(--color-danger)]',
-    cancelled: 'bg-[var(--color-warning)]',
-    closed: 'bg-[var(--color-ink-soft)]',
-  }
-  return map[String(effectiveRunState.value)] || 'bg-[var(--color-ink-soft)]'
+  return TASK_STATUS_DOT_CLASSES[runStatusDisplay.value.tone]
 })
 
 async function loadDetail() {
@@ -532,18 +521,6 @@ function download() {
     return
   }
   window.location.href = `/api/download/${sessionId.value}`
-}
-
-function stateLabel(state: string) {
-  const map: Record<string, string> = {
-    queued: '排队中',
-    running: '运行中',
-    done: '完成',
-    error: '失败',
-    cancelled: '已取消',
-    closed: '关闭',
-  }
-  return map[state] || state
 }
 
 function levelColor(level: string) {
