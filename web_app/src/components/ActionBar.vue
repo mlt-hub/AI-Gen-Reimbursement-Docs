@@ -103,7 +103,6 @@ async function cancelTask() {
   if (!session.sessionId || isStopping.value) return
   isStopping.value = true
   emit('stopping')
-  toast.show('info', '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止', 6000)
   try {
     await apiFetch('/api/cancel/' + session.sessionId, { method: 'POST' })
   } catch (e) {
