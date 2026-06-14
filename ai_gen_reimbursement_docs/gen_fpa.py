@@ -329,7 +329,7 @@ def _profile_specific_explanation_quality_warnings(
             warnings.append(
                 f"{name} 计算依据说明未体现三级模块级界面能力覆盖，需说明同一页面内列表、查询条件、按钮、弹窗或状态组件等合并依据"
             )
-    if profile_key == "multi_uis" and "界面开发" in name:
+    if profile_key == "multi_ui" and "界面开发" in name:
         if not any(hint in text for hint in ("独立页面", "独立业务对象", "独立业务流程", "独立用户端", "三级模块", "拆分", "合并")):
             warnings.append(
                 f"{name} 计算依据说明未呼应多界面拆分依据，需说明独立页面、独立业务对象、独立业务流程、独立用户端或三级模块合并原因"
@@ -930,7 +930,7 @@ def _attach_profile_rule_hits(
         rule_id = "profile.fallback"
         if row_generation == "rules_fallback":
             rule_id = "coverage.rules_fallback"
-        elif profile.name in {"unified_ui", "multi_uis"} and "界面开发" in name:
+        elif profile.name in {"unified_ui", "multi_ui"} and "界面开发" in name:
             rule_id = f"{profile.name}.ui_merge"
         elif profile.name == "strict_fpa" and fpa_type == "EIF":
             rule_id = "strict_fpa.external_data_group"
@@ -1421,27 +1421,27 @@ def _normalize_ai_fpa_rows_for_l3(
                 "warnings": [warning],
             })
 
-        if profile.name == "multi_uis" and "界面开发" in output_name:
+        if profile.name == "multi_ui" and "界面开发" in output_name:
             split_reason = str(raw.get("split_reason", "") or "").strip()
             if split_reason:
-                reason_warning = f"{output_name} multi_uis 拆分理由: {split_reason}"
+                reason_warning = f"{output_name} multi_ui 拆分理由: {split_reason}"
                 row_warnings.append(reason_warning)
                 row_hits.append({
                     "hit_object": output_name,
-                    "rule_id": "multi_uis.split_reason",
-                    "rule_desc": "multi_uis 多界面开发行的拆分理由记录到 check/review 元数据。",
+                    "rule_id": "multi_ui.split_reason",
+                    "rule_desc": "multi_ui 多界面开发行的拆分理由记录到 check/review 元数据。",
                     "suggested_type": fpa_type,
                     "adopted": "是",
                     "warnings": [reason_warning],
                 })
             if output_name in multi_ui_names:
-                duplicate_warning = f"{output_name} multi_uis 存在同名多界面开发行，已保留并提示人工审阅。"
+                duplicate_warning = f"{output_name} multi_ui 存在同名多界面开发行，已保留并提示人工审阅。"
                 warnings.append(duplicate_warning)
                 row_warnings.append(duplicate_warning)
                 row_hits.append({
                     "hit_object": output_name,
-                    "rule_id": "multi_uis.duplicate_ui_name",
-                    "rule_desc": "multi_uis 同名多界面开发行不自动合并，保留冲突行并进入 check/review。",
+                    "rule_id": "multi_ui.duplicate_ui_name",
+                    "rule_desc": "multi_ui 同名多界面开发行不自动合并，保留冲突行并进入 check/review。",
                     "suggested_type": fpa_type,
                     "adopted": "是",
                     "warnings": [duplicate_warning],
@@ -1763,7 +1763,7 @@ def _supplement_ai_rows_with_rules(
     coverage_rules = rule_set_config.coverage_rules if isinstance(rule_set_config, FpaRuleSetConfig) else None
     require_process_coverage = True if coverage_rules is None or coverage_rules.require_process_coverage is None else coverage_rules.require_process_coverage
     require_data_function = True if coverage_rules is None or coverage_rules.require_data_function is None else coverage_rules.require_data_function
-    require_profile_exact_rows = profile.agent_review_profile_kind() in {"unified_ui", "multi_uis", "ui_api_mapping"}
+    require_profile_exact_rows = profile.agent_review_profile_kind() in {"unified_ui", "multi_ui", "ui_api_mapping"}
     if not require_process_coverage and not require_data_function and not require_profile_exact_rows:
         return ai_rows, []
 

@@ -35,8 +35,8 @@ profiles:
     core_rules: ui_api_mapping_cr
     system_prompt: ui_api_mapping_sp
     user_prompt: ui_api_mapping_up
-  multi_uis:
-    kind: multi_uis
+  multi_ui:
+    kind: multi_ui
     strategy: rules_first
     rule_set: unified_ui_rs
     adjustment_value_method: legacy_workload
@@ -180,7 +180,7 @@ def test_custom_unified_ui_profile_prompt_payload_inherits_kind_contract(tmp_pat
     assert review["workload_judgement"]["judgements"][0]["recommended_categories"] == ["界面开发", "逻辑接口开发"]
 
 
-def test_multi_uis_prompt_payload_uses_multi_uis_contract_variant(tmp_path):
+def test_multi_ui_prompt_payload_uses_multi_ui_contract_variant(tmp_path):
     _write_config(tmp_path)
     group = {
         "client_type": "地市后台",
@@ -198,13 +198,13 @@ def test_multi_uis_prompt_payload_uses_multi_uis_contract_variant(tmp_path):
     }
 
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        config = resolve_fpa_execution_config("multi_uis")
+        config = resolve_fpa_execution_config("multi_ui")
         payload = _payload_from_prompt(config.profile.build_prompt(group, ["规则一"]))
 
     review = payload["agent_review"]
-    assert review["profile"] == "multi_uis"
-    assert review["profile_kind"] == "multi_uis"
-    assert review["contract"] == "multi_uis_contract"
+    assert review["profile"] == "multi_ui"
+    assert review["profile_kind"] == "multi_ui"
+    assert review["contract"] == "multi_ui_contract"
     assert review["categories"][0] == "多界面开发"
     assert review["contract_outputs"]["quality_review"] == "unified_quality_review"
 

@@ -184,7 +184,7 @@ profiles:
 你是一个严谨的 FPA 功能点评估助手。
 ```
 
-其他 profile，例如 `unified_ui`、`multi_uis`、`ui_api_mapping`，是“FPA 结果表格式 + 项目自定义工作量拆分规则”，不等同于标准 FPA 计量。它们的系统提示词应强调当前 profile 的自定义规则优先，例如：
+其他 profile，例如 `unified_ui`、`multi_ui`、`ui_api_mapping`，是“FPA 结果表格式 + 项目自定义工作量拆分规则”，不等同于标准 FPA 计量。它们的系统提示词应强调当前 profile 的自定义规则优先，例如：
 
 ```text
 你是一个严谨的项目工作量评估助手。你的任务是按当前 profile 的自定义口径生成 FPA 结果表行。
@@ -202,7 +202,7 @@ profiles:
 |---|---|---|
 | `strict_fpa` | FPA 功能点评估助手 | 标准 FPA 口径，禁止开发工作项拆分。 |
 | `unified_ui` | 项目工作量评估助手 | 按统一界面口径生成 FPA 结果表行，不按标准 FPA 自动合并。 |
-| `multi_uis` | 项目工作量评估助手 | 按多界面拆分口径规划结果行，并保留拆分理由。 |
+| `multi_ui` | 项目工作量评估助手 | 按多界面拆分口径规划结果行，并保留拆分理由。 |
 | `ui_api_mapping` | 项目工作量评估助手 | 按界面接口映射口径生成界面开发、接口开发和明确后端交互行。 |
 
 如果配置中新增自定义 profile，应先判断它是否真的采用标准 FPA 计量；只有标准 FPA profile 才使用“FPA 专家 / FPA 功能点评估助手”身份。其他自定义 profile 应使用“项目工作量评估助手”或更贴近业务口径的身份表述。
@@ -212,7 +212,7 @@ profiles:
 - 实施状态：已实施。
 - 本轮提交：`078aeb3 Align custom FPA profile prompt identities`。
 - 实际修改文件：`config/fpa_config.yaml.example`、`tests/test_config_utils.py`。
-- 行为变化：`strict_fpa_sp` 继续使用“FPA 功能点评估助手”；`unified_ui_sp`、`multi_uis_sp`、`ui_api_mapping_sp` 已改为“项目工作量评估助手”，并明确这些 profile 是项目自定义工作量拆分规则，不按标准 FPA 自动合并或改写行规划。
+- 行为变化：`strict_fpa_sp` 继续使用“FPA 功能点评估助手”；`unified_ui_sp`、`multi_ui_sp`、`ui_api_mapping_sp` 已改为“项目工作量评估助手”，并明确这些 profile 是项目自定义工作量拆分规则，不按标准 FPA 自动合并或改写行规划。
 - 实际测试命令：`.\.venv\Scripts\python.exe -m pytest tests/test_config_utils.py tests/test_fpa_profiles.py`。
 
 ## 模板变量

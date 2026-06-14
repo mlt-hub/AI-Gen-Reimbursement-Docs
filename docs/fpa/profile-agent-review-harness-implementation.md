@@ -4,7 +4,7 @@
 
 ## 背景
 
-当前 `strict_fpa` 已经具备较完整的 Agent Review 契约、规则 harness 和真实模型复测记录。`unified_ui`、`multi_uis`、`ui_api_mapping` 也已经支持配置、fallback 和部分验收行为，但测试成熟度低于 `strict_fpa`，且当前 `agent_review` 中的 `type_judgement`、`merge_review`、`quality_review` 仍明显偏向严格 FPA 语义。
+当前 `strict_fpa` 已经具备较完整的 Agent Review 契约、规则 harness 和真实模型复测记录。`unified_ui`、`multi_ui`、`ui_api_mapping` 也已经支持配置、fallback 和部分验收行为，但测试成熟度低于 `strict_fpa`，且当前 `agent_review` 中的 `type_judgement`、`merge_review`、`quality_review` 仍明显偏向严格 FPA 语义。
 
 本实施方案的目标是补齐其他 profile 的 harness，并把 Agent Review 从 `strict_fpa` 专属骨架逐步演进为 profile contract 驱动的审阅框架。
 
@@ -15,18 +15,18 @@
 | 提交 | 内容 |
 |---|---|
 | `1c716ed` | 增加 profile-aware Agent Review contract，标注 `primary` / `debug_only`。 |
-| `f3e868f` | 新增 `unified_ui`、`multi_uis`、`ui_api_mapping` 分层 harness。 |
+| `f3e868f` | 新增 `unified_ui`、`multi_ui`、`ui_api_mapping` 分层 harness。 |
 | `fdd4e12` | 为 `unified_ui` 增加只读 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。 |
 | `9d03d7d` | 为 `ui_api_mapping` 增加只读 `mapping_judgement`、`mapping_merge_review`、`mapping_quality_review`。 |
 | `43dc38d` | 稳定性报告汇总 profile 专属 quality issue。 |
 | `a96cfc7` | 补充非 strict profile 的 prompt payload contract 覆盖。 |
 | `12c6abd` | 覆盖自定义 `unified_ui` / `ui_api_mapping` profile 的 prompt contract 继承。 |
-| `96687da` | 为 `multi_uis` 增加独立 contract 变体。 |
+| `96687da` | 为 `multi_ui` 增加独立 contract 变体。 |
 | `854cdc2` | 真实模型验证模板补齐 profile 专属质量指标。 |
 | `ae27e47` | 增加自定义 profile 继承式 harness 示例，并对齐 `ui_api_mapping` 显式后端行提取与审阅口径。 |
 | `docs/fpa/validation-runs/2026-06-09-multi-profile-real-model-hardened.md` | 收敛 prompt 和确定性补齐/审阅，`profile_quality_issue_count=0`。 |
-| `0e64714` | 将 `multi_uis` 提升为独立 `kind: multi_uis`，保持生成规则复用统一界面能力，并同步 contract / harness / 文档。 |
-| `6f98bfc` | 新增 profile 级 golden fixture contract suite，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的当前质量门。 |
+| `0e64714` | 将 `multi_ui` 提升为独立 `kind: multi_ui`，保持生成规则复用统一界面能力，并同步 contract / harness / 文档。 |
+| `6f98bfc` | 新增 profile 级 golden fixture contract suite，覆盖 `unified_ui`、`multi_ui`、`ui_api_mapping` 的当前质量门。 |
 
 当前实现约束：
 
@@ -34,8 +34,8 @@
 - profile 专属 warning 不阻断、不自动重试、不改写 rows。
 - `strict_fpa` 的 `type_judgement`、`merge_review`、`quality_review` 语义保持不变。
 - 已执行首轮多 profile 真实模型基线和 hardening 后复测：20 次调用均走 AI 路径，基础 strict 质量门为 0，hardening 后 `profile_quality_issue_count=0`。
-- `multi_uis` 已具备独立 `kind: multi_uis` 和 `multi_uis_contract`，内部继续复用统一界面 workload / quality review 能力。
-- profile 级 golden fixture 已覆盖 `unified_ui` 复合业务动作、`multi_uis` 多界面拆分、`ui_api_mapping` 默认 UI/API 行和显式后端行，并要求 profile quality issue 归零。
+- `multi_ui` 已具备独立 `kind: multi_ui` 和 `multi_ui_contract`，内部继续复用统一界面 workload / quality review 能力。
+- profile 级 golden fixture 已覆盖 `unified_ui` 复合业务动作、`multi_ui` 多界面拆分、`ui_api_mapping` 默认 UI/API 行和显式后端行，并要求 profile quality issue 归零。
 
 ## 目标行为
 
@@ -136,7 +136,7 @@ tests/fpa_profiles/
   test_strict_fpa_harness.py
   test_custom_profile_harness.py
   test_unified_ui_harness.py
-  test_multi_uis_harness.py
+  test_multi_ui_harness.py
   test_ui_api_mapping_harness.py
   test_profile_agent_review_contract.py
   test_profile_prompt_payload_contract.py
@@ -160,7 +160,7 @@ unified_ui:
   - 同名非界面过程行合并来源
   - 禁止按按钮、查询条件、字段过度拆分
 
-multi_uis:
+multi_ui:
   - 多界面行允许保留多条
   - 拆分理由进入 check/review 元数据
   - 同名多界面开发行不合并但提示
@@ -262,7 +262,7 @@ warning count
 - check 工作簿存在并包含 profile/kind/strategy/rule_set。
 - `strict_fpa` 不输出界面开发、接口开发、逻辑处理开发等开发工作项。
 - `unified_ui` 不过度拆分界面。
-- `multi_uis` 拆分理由可审阅。
+- `multi_ui` 拆分理由可审阅。
 - `ui_api_mapping` 固定 EI / ILF 类型规则稳定。
 
 首轮结果：
@@ -271,7 +271,7 @@ warning count
 - 运行范围：5 个 standard fixture × 4 个 profile，共 20 次真实模型调用。
 - 基础质量门：`quality_issue_count=0`、`retryable_quality_issue_count=0`、`blocking_retry_count=0`。
 - profile 专属质量门：`profile_quality_issue_count=49`，未通过。
-- 当时结论：优先收敛 `unified_ui` / `multi_uis` 的界面与处理开发行 prompt，以及 `ui_api_mapping` 的默认 UI/API 行和显式后端行 prompt。
+- 当时结论：优先收敛 `unified_ui` / `multi_ui` 的界面与处理开发行 prompt，以及 `ui_api_mapping` 的默认 UI/API 行和显式后端行 prompt。
 
 hardening 后结果：
 

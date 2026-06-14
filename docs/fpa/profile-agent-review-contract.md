@@ -2,15 +2,15 @@
 
 ## 当前实施状态
 
-截至 2026-06-12，本文中的最小落地路线已推进到 profile-aware Agent Review 和 `multi_uis` 独立 kind 阶段：
+截至 2026-06-12，本文中的最小落地路线已推进到 profile-aware Agent Review 和 `multi_ui` 独立 kind 阶段：
 
 - `agent_review` 已增加 `profile`、`profile_kind`、`contract`、`applicability`、`contract_outputs` 和 `categories`。
 - `strict_fpa` 使用 `strict_fpa_contract`，`applicability: primary`，继续以 `type_judgement`、`merge_review`、`quality_review` 作为主审计契约。
 - `unified_ui` 使用 `unified_ui_contract`，`applicability: debug_only`，已输出只读的 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。
-- `multi_uis` 使用独立 `kind: multi_uis` 和 `multi_uis_contract`，生成规则仍复用统一界面兜底能力，继续输出只读的 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。
+- `multi_ui` 使用独立 `kind: multi_ui` 和 `multi_ui_contract`，生成规则仍复用统一界面兜底能力，继续输出只读的 `workload_judgement`、`unified_merge_review`、`unified_quality_review`。
 - `ui_api_mapping` 使用 `ui_api_mapping_contract`，`applicability: debug_only`，已输出只读的 `mapping_judgement`、`mapping_merge_review`、`mapping_quality_review`。
 - profile 专属 quality review 进入 `agent_review` 和稳定性报告；prompt 已明确读取 profile 专属 judgement，但 warning 仍不阻断、不自动重试、不直接改写 rows。
-- `tests/fpa_profiles/` 已补充 `unified_ui`、`multi_uis`、`ui_api_mapping` 的分层 harness、自定义 profile 继承式 harness、prompt payload contract 覆盖，以及 profile 级 golden fixture contract 覆盖。
+- `tests/fpa_profiles/` 已补充 `unified_ui`、`multi_ui`、`ui_api_mapping` 的分层 harness、自定义 profile 继承式 harness、prompt payload contract 覆盖，以及 profile 级 golden fixture contract 覆盖。
 - 稳定性报告已新增独立指标 `profile_quality_issue_count` 和 `profile_issue_code_counts`，不混入原 `quality_issue_count`。
 - 真实模型抽样记录模板已新增到 `docs/fpa/validation-runs/multi-profile-run-template.md`，首轮多 profile 基线与 hardening 后归零记录已归档。
 
@@ -24,7 +24,7 @@
 当前推进结论：
 
 - 本文档范围内没有需要继续推进的必做项。
-- `unified_ui`、`multi_uis`、`ui_api_mapping` 当前按 supported 组合使用；它们的基础 contract、harness、profile golden fixture 和真实模型归零记录已具备。
+- `unified_ui`、`multi_ui`、`ui_api_mapping` 当前按 supported 组合使用；它们的基础 contract、harness、profile golden fixture 和真实模型归零记录已具备。
 - 后续工作不再按本文档常驻待办推进，只在出现新真实项目样本、新 profile/rule_set、profile 口径变化或 warning 质量门升级决策时开启专项切片。
 
 ## 背景
@@ -156,13 +156,13 @@ EI / EQ / EO / ILF / EIF
 | profile | 当前 harness | 当前成熟度 |
 |---|---|---|
 | `unified_ui` | 配置校验、prompt 渲染、三级模块界面行、非界面过程行、同名非界面行合并、prompt payload contract、profile golden fixture、`workload_judgement` / `unified_quality_review` 只读审计。 | supported，已有真实模型归零记录；更多项目样本属于持续治理。 |
-| `multi_uis` | 独立 `kind: multi_uis`、独立 `multi_uis_contract`、多界面同名行保留、拆分理由进入 review/check 元数据、profile golden fixture、非界面业务动作沿用 `unified_ui` harness。 | supported，已有真实模型归零记录；更多项目样本属于持续治理。 |
+| `multi_ui` | 独立 `kind: multi_ui`、独立 `multi_ui_contract`、多界面同名行保留、拆分理由进入 review/check 元数据、profile golden fixture、非界面业务动作沿用 `unified_ui` harness。 | supported，已有真实模型归零记录；更多项目样本属于持续治理。 |
 | `ui_api_mapping` | 默认界面 EI、默认接口 ILF、明确后端调用 ILF、多接口行、重复默认行、prompt payload contract、profile golden fixture、`mapping_judgement` / `mapping_quality_review` 只读审计。 | supported，已有真实模型归零记录；更多项目样本属于持续治理。 |
 | 自定义 profile | 主要依赖所复用 kind 和 rule_set 的配置校验与基础规则。 | 需要自行补 profile 级 fixture。 |
 
 这些 profile 目前仍没有达到 `strict_fpa` 的 harness 水平：
 
-- profile 专属 golden fixture 已覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的核心 contract；真实项目出现新边界时再增量扩展。
+- profile 专属 golden fixture 已覆盖 `unified_ui`、`multi_ui`、`ui_api_mapping` 的核心 contract；真实项目出现新边界时再增量扩展。
 - 已有真实模型 preset 和归零记录；后续真实模型复跑继续按日期归档。
 - 已有 `profile_quality_issue_count` 质量门；是否升级为阻断或自动重试仍未决定。
 - profile 专属 review 仍是只读 warning，prompt 会读取 judgement，但 warning 本身不直接阻断或改写 rows。
@@ -195,7 +195,7 @@ profile × kind × strategy × rule_set × prompt × model
 |---|---|---|
 | `strict_fpa + ai_first + strict_fpa_rs` | `certified` | 当前最成熟，已完成真实模型 recommended 连续复测归零。 |
 | `unified_ui + rules_first + unified_ui_rs` | `supported` | 规则和配置路径可用，已有 profile review 与真实模型归零记录；扩大样本属于持续治理。 |
-| `multi_uis + rules_first + multi_uis_rs` | `supported` | 已提升为独立 kind，已有多界面同名/拆分理由 harness 和真实模型归零记录。 |
+| `multi_ui + rules_first + multi_ui_rs` | `supported` | 已提升为独立 kind，已有多界面同名/拆分理由 harness 和真实模型归零记录。 |
 | `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 默认映射规则清楚，已有 profile review 与真实模型归零记录；扩大样本属于持续治理。 |
 | `strict_fpa + rules_first + unified_ui_rs` 等跨口径混搭 | `experimental / invalid` | 只保证可追踪或明确报错，不承诺业务正确。 |
 
@@ -489,13 +489,13 @@ source_process_ids 越界
 
 ### 第五步：补 profile harness / fixture（已完成基础分层、自定义 profile 继承示例、profile golden fixtures 和真实模型归零记录）
 
-已补充 `tests/fpa_profiles/` 分层 harness，覆盖 `unified_ui`、`multi_uis`、`ui_api_mapping` 的基础行为，并通过配置解析路径覆盖自定义 `kind: unified_ui` / `kind: ui_api_mapping` profile 的继承式 harness。`multi_uis` 已提升为独立 `kind: multi_uis`，profile 级 golden fixture 已覆盖 `unified_ui` 复合业务动作、`multi_uis` 多界面拆分和 `ui_api_mapping` 默认 UI/API + 显式后端行，真实模型抽样基线和 hardening 后归零记录已归档到 `docs/fpa/validation-runs/`。
+已补充 `tests/fpa_profiles/` 分层 harness，覆盖 `unified_ui`、`multi_ui`、`ui_api_mapping` 的基础行为，并通过配置解析路径覆盖自定义 `kind: unified_ui` / `kind: ui_api_mapping` profile 的继承式 harness。`multi_ui` 已提升为独立 `kind: multi_ui`，profile 级 golden fixture 已覆盖 `unified_ui` 复合业务动作、`multi_ui` 多界面拆分和 `ui_api_mapping` 默认 UI/API + 显式后端行，真实模型抽样基线和 hardening 后归零记录已归档到 `docs/fpa/validation-runs/`。
 
 后续 fixture 扩展应跟随真实项目样本增量补充，而不是在当前样例集上复制相近场景；当前最小 contract 覆盖不再有必须补齐的基础缺口。
 
 ### 第六步：prompt 硬约束与只读 warning 分层（已完成 prompt 消费，warning 仍只读）
 
-`unified_ui` / `multi_uis` prompt 已明确消费 `workload_judgement`，`ui_api_mapping` prompt 已明确消费 `mapping_judgement`。profile 专属 warning 仍保持只读质量门，不直接阻断生成、不自动重试、不改写 rows；只有在更大样本证明误报可控后，才考虑升级为阻断或自动重试。
+`unified_ui` / `multi_ui` prompt 已明确消费 `workload_judgement`，`ui_api_mapping` prompt 已明确消费 `mapping_judgement`。profile 专属 warning 仍保持只读质量门，不直接阻断生成、不自动重试、不改写 rows；只有在更大样本证明误报可控后，才考虑升级为阻断或自动重试。
 
 ## 判断原则
 

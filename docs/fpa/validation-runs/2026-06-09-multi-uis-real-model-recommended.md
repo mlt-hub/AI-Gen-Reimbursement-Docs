@@ -1,5 +1,7 @@
 # 2026-06-09 multi_uis 推荐样本真实模型验证
 
+> 历史记录：本文保留当时真实运行名 `multi_uis` / `multi-uis-real-model-recommended`。当前现行 profile 和 preset 已改为 `multi_ui` / `multi-ui-real-model-recommended`。
+
 ## 目标
 
 承接 `calculation-basis-explanation-rules.md` 中的剩余推进项，把 `multi_uis` 从单样例试运行扩展到推荐样本集验证。

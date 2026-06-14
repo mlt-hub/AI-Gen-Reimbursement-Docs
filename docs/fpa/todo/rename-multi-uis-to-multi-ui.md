@@ -2,7 +2,9 @@
 
 日期：2026-06-14
 
-状态：待实施
+状态：已实施
+
+完成日期：2026-06-15
 
 ## 背景
 
@@ -265,3 +267,24 @@ Rename multi_uis FPA profile to multi_ui
 2. `Update multi_ui FPA documentation`
 
 本仓库要求每轮修改结束后创建提交；如果按本清单实施，提交前必须检查 `git status`，只纳入本次相关文件。
+
+## 实施记录
+
+本轮已完成 `multi_uis` 到 `multi_ui` 的现行命名切换，不保留旧名兼容路径。
+
+- 代码与配置：`config_utils.py` 的有效 kind、`fpa_profiles.py` 的 profile 类/常量/默认 name/kind、`fpa_agent_review.py` 的 contract、`gen_fpa.py` 的多界面分支、`fpa_stability_sampler.py` 的 preset 和配置示例均已切到 `multi_ui`。
+- Web/API：`/api/fpa/options` label 映射、前端 fallback options、profile kind 列表均使用 `multi_ui`，显示名仍为“多界面口径”。
+- 测试与 fixture：profile contract、prompt payload、agent review、稳定性脚本和多界面 harness 断言均已切到 `multi_ui`；`test_multi_uis_harness.py` 已重命名为 `test_multi_ui_harness.py`。
+- 文档：当前配置、profile、稳定性 CI、计算依据说明、系统概览、Web 配置说明等现行文档已改为 `multi_ui`。
+
+历史验证记录处理原则：
+
+- 真实历史运行文件名不强行改名。
+- 历史正文中的旧运行名如果是当时真实命令、输出目录或归档路径，可作为历史事实保留；文档应明确当前 profile 名称已改为 `multi_ui`。
+
+本轮验收重点：
+
+- `--fpa-profile multi_ui` 作为现行 profile 通过配置解析。
+- `multi_uis` 不再作为有效 profile kind、内置 profile、Web/API option 或测试期望值出现。
+- agent review / prompt payload / golden fixture contract 输出 `profile: multi_ui`、`profile_kind: multi_ui`、`contract: multi_ui_contract`。
+- 多界面口径的原行为保持不变：多界面拆分、界面开发行 EI、拆分理由进入 check/review 元数据、非界面业务动作沿用统一界面口径。

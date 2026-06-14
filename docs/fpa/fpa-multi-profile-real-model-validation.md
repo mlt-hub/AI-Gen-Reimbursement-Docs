@@ -4,7 +4,7 @@
 
 ## 目标
 
-验证 `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping` 四个 profile 在真实模型调用下的输出稳定性。
+验证 `strict_fpa`、`unified_ui`、`multi_ui`、`ui_api_mapping` 四个 profile 在真实模型调用下的输出稳定性。
 
 本验证不替代自动化测试。自动化测试负责固定规则、配置校验、fallback、Web/API 和 check 工作簿链路；真实模型抽样验证负责观察 prompt 是否稳定约束模型输出。
 
@@ -21,7 +21,7 @@
 ```text
 strict_fpa
 unified_ui
-multi_uis
+multi_ui
 ui_api_mapping
 ```
 
@@ -39,7 +39,7 @@ ui_api_mapping
 - 是否保留模板友好的“界面开发 / 查询处理开发 / 导出处理开发 / 逻辑处理开发”等表达。
 - 是否避免按查询条件、按钮、弹窗或字段过度拆分。
 
-`multi_uis`：
+`multi_ui`：
 
 - 多界面拆分是否有明确 `split_reason`。
 - 拆分理由是否属于独立页面、独立业务对象、独立业务流程或独立用户端。
@@ -77,7 +77,7 @@ ui_api_mapping
 ```text
 strict_fpa + ai_first + strict_fpa_rs
 unified_ui + ai_first + unified_ui_rs
-multi_uis + ai_first + multi_uis_rs
+multi_ui + ai_first + multi_ui_rs
 ui_api_mapping + ai_first + ui_api_mapping_rs
 ```
 
@@ -86,7 +86,7 @@ ui_api_mapping + ai_first + ui_api_mapping_rs
 ```powershell
 ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile strict_fpa
 ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile unified_ui
-ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile multi_uis
+ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile multi_ui
 ard --from-excel 功能清单.xlsx --gen-fpa --fpa-profile ui_api_mapping
 ```
 
@@ -145,7 +145,7 @@ rule_set：
 - audit trace 中记录 `agent_review.contract`、`agent_review.applicability` 和 profile 专属 quality issue 汇总。
 - 非 strict profile 的 `applicability=debug_only` 基础 `quality_review` 不作为门禁硬约束；profile 专属问题以 `profile_quality_issue_count` 为准。
 - `strict_fpa` 不回退到开发工作项口径。
-- `multi_uis` 的多界面拆分理由可审阅。
+- `multi_ui` 的多界面拆分理由可审阅。
 - `ui_api_mapping` 的 EI / ILF 固定类型规则稳定。
 - 明显偏离 profile 语义的问题已记录，并能归因到 prompt、输入质量或模型波动。
 

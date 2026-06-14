@@ -70,10 +70,10 @@ check.xlsx:
 - 来源追溯是否完整：
 - 是否需要调整 prompt：
 
-### multi_uis
+### multi_ui
 
 ```text
-profile: multi_uis
+profile: multi_ui
 kind:
 contract:
 applicability:

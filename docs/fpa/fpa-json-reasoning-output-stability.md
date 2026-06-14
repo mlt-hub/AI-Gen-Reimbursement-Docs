@@ -423,7 +423,7 @@ max_tokens: 32K
 
 ### P1：压制 FPA 主响应外显 reasoning
 
-更新 strict_fpa / unified_ui / multi_uis / ui_api_mapping 的 system prompt 或 user prompt：
+更新 strict_fpa / unified_ui / multi_ui / ui_api_mapping 的 system prompt 或 user prompt：
 
 ```text
 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本。

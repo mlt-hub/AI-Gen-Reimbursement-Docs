@@ -18,7 +18,7 @@
 
 2. `custom_rules`
 
-   `custom_rules` 不再作为当前可用 profile，也不再保留专门迁移错误提示。相关 legacy 处理和测试已删除。README 已同步改为当前 profile：`strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping`。
+   `custom_rules` 不再作为当前可用 profile，也不再保留专门迁移错误提示。相关 legacy 处理和测试已删除。README 已同步改为当前 profile：`strict_fpa`、`unified_ui`、`multi_ui`、`ui_api_mapping`。
 
 3. `keyword_rules` 与 `type_mapping_rules`
 

@@ -16,7 +16,7 @@
 截至 2026-06-12，配置结构、`unified_ui` 类型口径、fallback 命名、配置诊断、核心测试和 profile 文档已经完成落地：
 
 1. `calculation_explanation_rules` 已提升为顶层配置段，默认 profile 已通过 `profiles.<profile>.calculation_explanation_rules` 显式绑定。
-2. `unified_ui` 与 `multi_uis` 已使用统一界面口径的说明规则，`strict_fpa` 保留标准 FPA 结构化证据说明。
+2. `unified_ui` 与 `multi_ui` 已使用统一界面口径的说明规则，`strict_fpa` 保留标准 FPA 结构化证据说明。
 3. `unified_ui_rs` 已将查询/查看类能力按 `ILF` 输出为“逻辑接口开发”，导入按 `EQ` 输出为“导入处理开发”，导出按 `EO` 输出为“导出处理开发”，明确外部边界按 `EIF` 输出为“外部接口联调调用”。
 4. fallback 行命名已从单纯按类型推后缀调整为优先按关键词/业务动作命中规则，再使用对应类型后缀。
 5. 垂直行业管理 golden case 已收敛为单一“查询垂直行业-逻辑接口开发”能力行，避免继续按列表查询和条件查询拆成两条非界面行。
@@ -113,14 +113,14 @@ profiles:
     user_prompt: unified_ui_up
     calculation_explanation_rules: unified_ui_ce
 
-  multi_uis:
-    kind: multi_uis
+  multi_ui:
+    kind: multi_ui
     strategy: rules_first
-    rule_set: multi_uis_rs
-    core_rules: multi_uis_cr
-    system_prompt: multi_uis_sp
-    user_prompt: multi_uis_up
-    calculation_explanation_rules: multi_uis_ce
+    rule_set: multi_ui_rs
+    core_rules: multi_ui_cr
+    system_prompt: multi_ui_sp
+    user_prompt: multi_ui_up
+    calculation_explanation_rules: multi_ui_ce
 
   ui_api_mapping:
     kind: ui_api_mapping
@@ -138,7 +138,7 @@ calculation_explanation_rules:
   unified_ui_ce: |-
     统一界面口径计算依据说明生成规则：
     1. explanation 应描述本次功能建设做了什么...
-  multi_uis_ce: |-
+  multi_ui_ce: |-
     # 内容同 unified_ui_ce
   ui_api_mapping_ce: |-
     # 内容同 unified_ui_ce
@@ -150,7 +150,7 @@ calculation_explanation_rules:
 
 原 `default` calculation_explanation_rules 改名为 `strict_fpa_ce`，并绑定到 `strict_fpa` profile。`unified_ui` profile 新增并绑定 `unified_ui_ce`，用于承载统一界面口径下“按建设内容描述、界面合并、逻辑接口/表按能力拆分”的计算依据说明规则。
 
-`multi_uis` profile 绑定 `multi_uis_ce`，规则内容与 `unified_ui_ce` 保持一致。`ui_api_mapping` 曾规划绑定 `ui_api_mapping_ce`，但后续已根据界面接口映射说明质量要求升级为绑定 `ui_api_mapping_workload_eval_ce`；`ui_api_mapping_ce` 仍作为通用规则 key 保留，便于自定义 profile 复用统一界面说明口径。
+`multi_ui` profile 绑定 `multi_ui_ce`，规则内容与 `unified_ui_ce` 保持一致。`ui_api_mapping` 曾规划绑定 `ui_api_mapping_ce`，但后续已根据界面接口映射说明质量要求升级为绑定 `ui_api_mapping_workload_eval_ce`；`ui_api_mapping_ce` 仍作为通用规则 key 保留，便于自定义 profile 复用统一界面说明口径。
 
 `unified_ui_ce` 不应只是 `strict_fpa_ce` 的改名复用。`strict_fpa_ce` 保留标准 FPA 结构化证据说明，重点解释来源路径、业务数据、系统元素和当前 FPA 类型；`unified_ui_ce` 必须体现统一界面交付口径，`计算依据说明` 要按系统建设内容描述，不按用户点击路径或页面跳转顺序叙述。界面开发行应概括同一三级模块内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；逻辑接口/表能力行应说明添加、编辑、查询、删除、状态更新或数据结构调整归属的业务动作；导入、导出和外部接口联调调用行只描述输入中有证据的建设内容，不补写表名、接口名、外部系统、权限或审批流程。
 
@@ -174,12 +174,12 @@ calculation_explanation_rules:
 
 实际落地顺序如下：
 
-1. 调整 `config/fpa_config.yaml.example` 的配置结构：新增顶层 `calculation_explanation_rules`，将原 default 规则文本改名为 `strict_fpa_ce`，新增 `unified_ui_ce`、`multi_uis_ce`、`ui_api_mapping_ce` 和 `ui_api_mapping_workload_eval_ce`，并在四个 profile 下显式绑定。
+1. 调整 `config/fpa_config.yaml.example` 的配置结构：新增顶层 `calculation_explanation_rules`，将原 default 规则文本改名为 `strict_fpa_ce`，新增 `unified_ui_ce`、`multi_ui_ce`、`ui_api_mapping_ce` 和 `ui_api_mapping_workload_eval_ce`，并在四个 profile 下显式绑定。
 2. 调整 `ai_gen_reimbursement_docs/config_utils.py`：允许 `profiles.<profile>.calculation_explanation_rules` 字段，校验绑定 key 存在，移除旧 `prompt_fragments.calculation_explanation_rules` 读取路径，并更新 diagnostics 的 source path。
 3. 先更新配置结构相关测试：覆盖默认配置可加载、profile 绑定 key 可解析、缺失绑定报错、绑定不存在 key 报错、未引用占位符只 warning。
 4. 调整 `unified_ui` profile 口径：更新 `unified_ui_cr`、`unified_ui_sp`、`unified_ui_up`、`unified_ui_rs`，落实界面合并、逻辑接口/表、导入、导出、外部接口联调调用的类型规则。
 5. 调整 `ai_gen_reimbursement_docs/fpa_profiles.py` 的 fallback/规则兜底命名逻辑：从“按类型推后缀”改为“按业务动作或关键词优先推后缀”，确保查询为 `ILF` 时仍输出“逻辑接口开发”，导入为 `EQ` 时仍输出导入类行。
-6. 更新 `unified_ui` 相关测试和 golden case：重点覆盖垂直行业管理、查询逻辑接口、导入、导出、外部接口联调调用，以及 `multi_uis`、`ui_api_mapping` 是否保持预期行为。
+6. 更新 `unified_ui` 相关测试和 golden case：重点覆盖垂直行业管理、查询逻辑接口、导入、导出、外部接口联调调用，以及 `multi_ui`、`ui_api_mapping` 是否保持预期行为。
 7. 同步文档：更新 `docs/fpa/fpa-profiles.md`、`docs/fpa/calculation-basis-explanation-rules.md` 和本记录中的配置路径、profile 绑定和新口径说明。
 8. 运行完整验证命令，确认配置加载、prompt 渲染、fallback、AI 后处理和验收样例均通过。
 
@@ -207,13 +207,13 @@ calculation_explanation_rules:
 实施完成后，以下验收项已作为文档和测试口径固定：
 
 - 默认 `config/fpa_config.yaml.example` 不再包含 `prompt_fragments.calculation_explanation_rules`。
-- 顶层存在 `calculation_explanation_rules.strict_fpa_ce`、`calculation_explanation_rules.unified_ui_ce`、`calculation_explanation_rules.multi_uis_ce`、`calculation_explanation_rules.ui_api_mapping_ce`、`calculation_explanation_rules.ui_api_mapping_workload_eval_ce`。
+- 顶层存在 `calculation_explanation_rules.strict_fpa_ce`、`calculation_explanation_rules.unified_ui_ce`、`calculation_explanation_rules.multi_ui_ce`、`calculation_explanation_rules.ui_api_mapping_ce`、`calculation_explanation_rules.ui_api_mapping_workload_eval_ce`。
 - 原 `default` calculation_explanation_rules 文本迁移为 `strict_fpa_ce`。
 - `profiles.strict_fpa.calculation_explanation_rules` 绑定 `strict_fpa_ce`。
 - `profiles.unified_ui.calculation_explanation_rules` 绑定 `unified_ui_ce`。
-- `profiles.multi_uis.calculation_explanation_rules` 绑定 `multi_uis_ce`。
+- `profiles.multi_ui.calculation_explanation_rules` 绑定 `multi_ui_ce`。
 - `profiles.ui_api_mapping.calculation_explanation_rules` 绑定 `ui_api_mapping_workload_eval_ce`。
-- `multi_uis_ce` 的规则内容与 `unified_ui_ce` 保持一致；`ui_api_mapping_ce` 作为通用 key 保留，`ui_api_mapping_workload_eval_ce` 承载界面接口映射专属说明规则。
+- `multi_ui_ce` 的规则内容与 `unified_ui_ce` 保持一致；`ui_api_mapping_ce` 作为通用 key 保留，`ui_api_mapping_workload_eval_ce` 承载界面接口映射专属说明规则。
 - 默认四个官方 profile 的 user prompt 均能成功渲染 `${calculation_explanation_rules}`，最终 prompt 中不残留 `${...}`。
 - 缺失 `profiles.<profile>.calculation_explanation_rules` 或绑定不存在 key 时，配置校验给出明确错误。
 - `unified_ui` 界面类输出合并为三级模块级 `EI` 行，不按按钮、弹窗、列表、状态组件拆成多行。
@@ -230,6 +230,6 @@ calculation_explanation_rules:
 
 主要风险曾是 `unified_ui` 现有规则使用类型反推行后缀，例如 `EQ -> 查询处理开发`、`EI -> 导入处理开发`。新口径中“查询 = ILF”“导入 = EQ”，同一类型无法再唯一决定行名称后缀，因此已改为关键词或业务动作优先的后缀选择策略。
 
-另一个风险曾是 `multi_uis` 复用 `unified_ui` kind。当前 `multi_uis` 已提升为独立 `kind: multi_uis`，继续复用统一界面的非界面业务动作规则和审阅能力，但以独立 contract 暴露审计身份。
+另一个风险曾是 `multi_ui` 复用 `unified_ui` kind。当前 `multi_ui` 已提升为独立 `kind: multi_ui`，继续复用统一界面的非界面业务动作规则和审阅能力，但以独立 contract 暴露审计身份。
 
 配置结构调整的风险是 Web 配置诊断页、测试和文档中仍可能显示旧 source path。当前 diagnostics 输出、测试和常规 profile 文档已同步到 profile 级 `calculation_explanation_rules` 绑定；旧路径只应出现在历史迁移说明或错误提示测试中。

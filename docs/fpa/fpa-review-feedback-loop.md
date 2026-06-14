@@ -210,7 +210,7 @@ AI原始返回：包含传入 AI 的人工审阅反馈摘要
 
 ```text
 只有 strict_fpa profile 的 fallback 行需要走四段式“计算依据说明”harness。
-unified_ui / multi_uis / ui_api_mapping 等非 strict_fpa profile 的 fallback 行不走四段式包装。
+unified_ui / multi_ui / ui_api_mapping 等非 strict_fpa profile 的 fallback 行不走四段式包装。
 非 strict_fpa profile 的 fallback 说明直接使用 rule_set 中 row_planning_rules 的 explanation_template。
 ```
 
@@ -228,7 +228,7 @@ unified_ui 的界面开发行、逻辑接口开发 ILF 行、导入 EQ 行、导
 ```text
 ai_gen_reimbursement_docs/fpa_profiles.py
   将 _structure_fallback_explanations 调整为只对 strict_fpa 生效，或只在 StrictFpaProfile.fallback_rows_for_l3 中调用。
-  CustomRulesProfile / MultiUisProfile / UiApiMappingProfile 的 fallback rows 直接返回配置模板生成的说明。
+  CustomRulesProfile / MultiUiProfile / UiApiMappingProfile 的 fallback rows 直接返回配置模板生成的说明。
 
 ai_gen_reimbursement_docs/gen_fpa.py
   若存在正式说明质量 warning 强制要求四段式，应同步收敛为仅 strict_fpa 强制。
@@ -245,7 +245,7 @@ tests/test_fpa_profiles.py / tests/test_gen_fpa_ai.py
 strict_fpa fallback 行仍包含“来源场景、业务数据、业务规则、计算说明”四段式标签。
 unified_ui + rules_first 不调用 AI 时，界面开发行的计算依据说明保留 ui_row.explanation_template 输出。
 unified_ui + rules_first 不调用 AI 时，ILF 逻辑接口开发行的计算依据说明保留 process_rows.explanation_template 输出。
-multi_uis / ui_api_mapping fallback 行不被 strict_fpa 四段式 harness 改写。
+multi_ui / ui_api_mapping fallback 行不被 strict_fpa 四段式 harness 改写。
 非 strict_fpa fallback 行不出现由 _structured_fallback_explanation 生成的固定“来源场景：来自...”包装。
 ```
 

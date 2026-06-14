@@ -18,20 +18,20 @@ rule_set = 具体规则集
 ```text
 strict_fpa     严格 FPA 口径，kind: strict_fpa，默认 ai_first + strict_fpa_rs
 unified_ui     统一界面口径，kind: unified_ui，默认 rules_first + unified_ui_rs
-multi_uis      多界面口径，kind: multi_uis，默认 rules_first + multi_uis_rs
+multi_ui      多界面口径，kind: multi_ui，默认 rules_first + multi_ui_rs
 ui_api_mapping 界面接口映射口径，kind: ui_api_mapping，默认 rules_first + ui_api_mapping_rs
 ```
 
-也就是说，当前输出结果口径有 4 套 profile，底层代码行为类型也有 4 类；其中 `multi_uis` 是独立 kind，但内部复用统一界面的兜底生成和审阅能力：
+也就是说，当前输出结果口径有 4 套 profile，底层代码行为类型也有 4 类；其中 `multi_ui` 是独立 kind，但内部复用统一界面的兜底生成和审阅能力：
 
 ```text
 strict_fpa      -> kind: strict_fpa
 unified_ui      -> kind: unified_ui
-multi_uis       -> kind: multi_uis
+multi_ui       -> kind: multi_ui
 ui_api_mapping  -> kind: ui_api_mapping
 ```
 
-`multi_uis` 使用独立 `kind: multi_uis` 和 `multi_uis_contract` 暴露审计身份；非界面业务动作仍沿用统一界面口径，避免为多界面 profile 复制整套 Python 流程。
+`multi_ui` 使用独立 `kind: multi_ui` 和 `multi_ui_contract` 暴露审计身份；非界面业务动作仍沿用统一界面口径，避免为多界面 profile 复制整套 Python 流程。
 
 用户配置可以只保留实际需要的 profile，也可以新增自定义 profile。自定义 profile 只要绑定支持的 `kind`，并引用存在的 `rule_set/core_rules/system_prompt/user_prompt` 即可；如果 user prompt 引用了 `${calculation_explanation_rules}`，还必须显式绑定 `profiles.<profile>.calculation_explanation_rules` 到顶层 `calculation_explanation_rules` 中存在的 key。
 
@@ -41,7 +41,7 @@ ui_api_mapping  -> kind: ui_api_mapping
 
 `unified_ui` 适合报账模板友好口径：同一三级模块默认合并一条界面开发行；添加、编辑、查询、删除、状态更新、数据表新增修改等非界面能力按“逻辑接口开发 / ILF”补充；导入按“导入处理开发 / EQ”补充；导出、下载、报表输出和生成文件按“导出处理开发 / EO”补充；有明确外部边界证据时按“外部接口联调调用 / EIF”补充。
 
-`multi_uis` 适合确有多个独立界面时使用：可按独立页面、独立业务对象、独立业务流程或独立用户端拆分多条界面开发行，拆分理由进入 check/review 元数据。
+`multi_ui` 适合确有多个独立界面时使用：可按独立页面、独立业务对象、独立业务流程或独立用户端拆分多条界面开发行，拆分理由进入 check/review 元数据。
 
 `ui_api_mapping` 适合需要展示“功能过程 -> 界面开发 + 接口开发”映射时使用：每个功能过程默认生成一条界面开发 EI 和一条接口开发 ILF；输入中明确出现的接口、服务、调用、请求、对接、同步、外部系统、第三方或 API 单独生成明确接口/后端调用 ILF。
 
@@ -68,12 +68,12 @@ profile × kind × strategy × rule_set × prompt × model
 |---|---|---|
 | `strict_fpa + ai_first + strict_fpa_rs` | `certified` | 已有 golden、validator、确认流、稳定性报告和真实模型 recommended 连续复测。 |
 | `unified_ui + rules_first + unified_ui_rs` | `supported` | 有配置、规则兜底、分层 harness、profile golden fixture、只读 profile review 和真实模型归零记录。 |
-| `multi_uis + rules_first + multi_uis_rs` | `supported` | 独立 kind、独立 contract、多界面同名行和拆分理由已有分层 harness、profile golden fixture，并有真实模型归零记录。 |
+| `multi_ui + rules_first + multi_ui_rs` | `supported` | 独立 kind、独立 contract、多界面同名行和拆分理由已有分层 harness、profile golden fixture，并有真实模型归零记录。 |
 | `ui_api_mapping + rules_first + ui_api_mapping_rs` | `supported` | 规则兜底、固定 EI/ILF harness、profile golden fixture、只读 mapping review 和真实模型归零记录较清楚。 |
 | 任意 profile + 自定义 rule_set | 视继承关系而定 | 继承推荐 rule_set 时复用 base harness，再补扩展断言。 |
 | 任意 profile + 明显不匹配 rule_set | `experimental / invalid` | 只保证配置错误可见或输出可审计，不承诺业务正确。 |
 
-`unified_ui`、`multi_uis`、`ui_api_mapping` 当前达到 supported：具备配置校验、规则兜底、prompt payload contract、profile 级 golden fixture、只读 profile review 和真实模型归零记录。继续提升到 certified 需要更多真实项目样本和更稳定的 warning 误报率评估。
+`unified_ui`、`multi_ui`、`ui_api_mapping` 当前达到 supported：具备配置校验、规则兜底、prompt payload contract、profile 级 golden fixture、只读 profile review 和真实模型归零记录。继续提升到 certified 需要更多真实项目样本和更稳定的 warning 误报率评估。
 
 规则集扩展不需要重写整套 harness。推荐采用：
 
@@ -136,15 +136,15 @@ profiles:
     system_prompt: unified_ui_sp
     user_prompt: unified_ui_up
     calculation_explanation_rules: unified_ui_ce
-  multi_uis:
-    kind: multi_uis
+  multi_ui:
+    kind: multi_ui
     strategy: rules_first
-    rule_set: multi_uis_rs
+    rule_set: multi_ui_rs
     adjustment_value_method: legacy_workload
-    core_rules: multi_uis_cr
-    system_prompt: multi_uis_sp
-    user_prompt: multi_uis_up
-    calculation_explanation_rules: multi_uis_ce
+    core_rules: multi_ui_cr
+    system_prompt: multi_ui_sp
+    user_prompt: multi_ui_up
+    calculation_explanation_rules: multi_ui_ce
   ui_api_mapping:
     kind: ui_api_mapping
     strategy: rules_first
@@ -160,7 +160,7 @@ calculation_explanation_rules:
     计算依据说明生成规则...
   unified_ui_ce: |-
     统一界面口径计算依据说明生成规则...
-  multi_uis_ce: |-
+  multi_ui_ce: |-
     统一界面口径计算依据说明生成规则...
   ui_api_mapping_ce: |-
     统一界面口径计算依据说明生成规则...
@@ -168,7 +168,7 @@ calculation_explanation_rules:
     ui_api_mapping 计算依据说明生成规则...
 ```
 
-`unified_ui` 绑定的 `unified_ui_ce` 不是 `strict_fpa_ce` 的同文复用。它用于约束 `计算依据说明` 按统一界面建设内容叙述：界面行合并同一三级模块内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；逻辑接口/表能力行描述添加、编辑、查询、删除、状态更新或数据结构调整归属；导入、导出和外部接口联调调用行只写输入中有证据的系统建设内容。`multi_uis_ce` 当前与 `unified_ui_ce` 内容保持一致；`ui_api_mapping` 默认绑定 `ui_api_mapping_workload_eval_ce`，用于表达“每个功能过程默认界面开发和接口开发、显式接口/后端调用单独补充”的编号清单式说明规则。`ui_api_mapping_ce` 仍作为通用规则 key 保留，便于自定义 profile 复用统一界面说明口径。
+`unified_ui` 绑定的 `unified_ui_ce` 不是 `strict_fpa_ce` 的同文复用。它用于约束 `计算依据说明` 按统一界面建设内容叙述：界面行合并同一三级模块内的列表、条件查询组件、按钮、弹窗、状态组件和关联管理界面；逻辑接口/表能力行描述添加、编辑、查询、删除、状态更新或数据结构调整归属；导入、导出和外部接口联调调用行只写输入中有证据的系统建设内容。`multi_ui_ce` 当前与 `unified_ui_ce` 内容保持一致；`ui_api_mapping` 默认绑定 `ui_api_mapping_workload_eval_ce`，用于表达“每个功能过程默认界面开发和接口开发、显式接口/后端调用单独补充”的编号清单式说明规则。`ui_api_mapping_ce` 仍作为通用规则 key 保留，便于自定义 profile 复用统一界面说明口径。
 
 命名约定：
 
@@ -181,7 +181,7 @@ user_prompt: <profile>_up
 calculation_explanation_rules: <profile>_ce
 ```
 
-`default-profile` 必须是非空字符串并存在于 `profiles`。profile entry 必须显式配置 `kind`，且只允许 `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping`。
+`default-profile` 必须是非空字符串并存在于 `profiles`。profile entry 必须显式配置 `kind`，且只允许 `strict_fpa`、`unified_ui`、`multi_ui`、`ui_api_mapping`。
 
 ## Domain Context
 
@@ -212,7 +212,7 @@ ai_only      仅 AI，不用规则兜底补行
 
 即使选择 `ai_only`，profile 仍必须绑定有效 `rule_set`。该规则集仍用于配置校验、AI 结果后处理、非法类型兜底、明显类型冲突 warning、审核追踪和 AI cache key。合法 AI type 与规则建议冲突时，`ai_only` 保留 AI type，只记录 warning；AI 返回非法 type 时仍会用 profile/rule_set 推断出的类型兜底。
 
-`ui_api_mapping` 和 `multi_uis` 支持 `ai_only`；此时不会强制规则兜底生成默认行。
+`ui_api_mapping` 和 `multi_ui` 支持 `ai_only`；此时不会强制规则兜底生成默认行。
 
 ## Web 与 CLI
 

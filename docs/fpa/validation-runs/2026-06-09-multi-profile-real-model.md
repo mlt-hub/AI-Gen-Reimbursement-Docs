@@ -1,5 +1,7 @@
 # 2026-06-09 FPA 多 profile 真实模型抽样
 
+> 历史记录：本文保留当时真实运行名 `multi_uis`。当前现行 profile 已改为 `multi_ui`。
+
 ## 执行信息
 
 ```powershell

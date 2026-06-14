@@ -15,7 +15,7 @@ F:\mlt\mlt-docs\AI-Gen-Reimbursement-Docs\05.FPA汇总\2、闽市移需【202501
 - 导出、报表、文件输出通常为 `EO`。
 - `计算依据说明` 使用“功能点名称 + 具体如下 + 编号清单”的格式，清单中说明事件流、页面要素、业务规则、业务数据、表、服务、接口等内容。
 
-这些规则与 `ui_api_mapping` profile 的“每个功能过程默认生成界面开发和接口开发行，显式接口/后端调用单独补充”的口径一致，但不适合直接应用到 `strict_fpa`、`unified_ui` 或 `multi_uis`。
+这些规则与 `ui_api_mapping` profile 的“每个功能过程默认生成界面开发和接口开发行，显式接口/后端调用单独补充”的口径一致，但不适合直接应用到 `strict_fpa`、`unified_ui` 或 `multi_ui`。
 
 ## 适用范围
 
@@ -31,7 +31,7 @@ rule_sets.ui_api_mapping_rs
 ```text
 strict_fpa
 unified_ui
-multi_uis
+multi_ui
 ```
 
 ## 目标行为
@@ -635,7 +635,7 @@ docs/fpa/ui-api-mapping-explanation-rules.md
    计算说明
    ```
 
-8. `unified_ui` 和 `multi_uis` 仍使用各自现有 `explanation_template`，不自动套用 `ui_api_mapping` 的编号清单模板。
+8. `unified_ui` 和 `multi_ui` 仍使用各自现有 `explanation_template`，不自动套用 `ui_api_mapping` 的编号清单模板。
 9. `export_service` pattern 只作为 prompt 和后续扩展预留；本轮不要求 fallback 自动生成 `EO` 导出行。
 
 ## 推荐测试

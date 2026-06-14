@@ -106,7 +106,7 @@
 ### FPA Profile 参数联动
 
 - `FPA 方案` 是 FPA 运行参数的主控项。
-- 官方 profile 包括当前内置 profile，例如 `strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping`。
+- 官方 profile 包括当前内置 profile，例如 `strict_fpa`、`unified_ui`、`multi_ui`、`ui_api_mapping`。
 - 新增一个自定义 profile，名称固定为 `custom_profile`，不要复用旧语义中的 `custom_rules`。
 - 每个 profile 都应能展示其绑定的：
   - `strategy`

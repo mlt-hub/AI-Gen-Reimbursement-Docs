@@ -106,16 +106,16 @@ profiles:
     calculation_explanation_rules: unified_ui_ce
     json_output_contract: unified_ui_json
 
-  multi_uis:
-    kind: multi_uis
+  multi_ui:
+    kind: multi_ui
     strategy: rules_first
-    rule_set: multi_uis_rs
+    rule_set: multi_ui_rs
     adjustment_value_method: legacy_workload
-    core_rules: multi_uis_cr
-    system_prompt: multi_uis_sp
-    user_prompt: multi_uis_up
-    calculation_explanation_rules: multi_uis_ce
-    json_output_contract: multi_uis_json
+    core_rules: multi_ui_cr
+    system_prompt: multi_ui_sp
+    user_prompt: multi_ui_up
+    calculation_explanation_rules: multi_ui_ce
+    json_output_contract: multi_ui_json
 
   ui_api_mapping:
     kind: ui_api_mapping
@@ -156,7 +156,7 @@ core_rules:
     8. 类型可使用 EI、ILF、EQ、EO、EIF：界面类为 EI；逻辑接口/表为 ILF；导入为 EQ；导出/报表输出为 EO；EIF 仅用于明确外部边界能力。
     9. 计算依据归类只能从给定判定原则列表中选择，不要自造分类。
 
-  multi_uis_cr: |-
+  multi_ui_cr: |-
     多界面 FPA 核心口径：
     1. 同一三级模块允许按独立页面、独立业务对象、独立业务流程或独立用户端拆分多条界面开发行。
     2. 每条多界面拆分行必须给出可审阅的拆分理由，拆分理由进入 check/review 元数据。
@@ -201,8 +201,8 @@ system_prompt_sets:
     9. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。
     10. 如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略，且不得影响 rows 完整输出。
 
-  multi_uis_sp: |-
-    你是一个严谨的项目工作量评估助手。你的任务是根据 multi_uis 自定义口径规划多界面 FPA 结果表行，并把拆分理由放入 split_reason 供 check/review 元数据记录。
+  multi_ui_sp: |-
+    你是一个严谨的项目工作量评估助手。你的任务是根据 multi_ui 自定义口径规划多界面 FPA 结果表行，并把拆分理由放入 split_reason 供 check/review 元数据记录。
     必须遵守用户提示词中的多界面拆分口径；这是项目自定义工作量拆分规则，不按标准 FPA 自动合并。
     必须读取 payload_json.agent_review.workload_judgement.judgements；其中 recommended_categories 是当前 profile 的行覆盖建议。除非有独立页面、独立业务对象、独立业务流程或独立用户端的明确拆分证据，否则至少输出 1 条三级模块级「界面开发」行；当 recommended_categories 包含「逻辑接口开发」「导出处理开发」「导入处理开发」「外部接口联调调用」时，必须为对应功能过程输出能力行。
     不要输出 reasoning、分析过程、Markdown 或 JSON 外文本；只输出 JSON。所有判断理由必须写入 rows[].type_reason、rows[].explanation、rows[].split_reason、rows[].complexity_reason。如需额外调试摘要，可输出 debug_summary，最多 5 条，每条不超过 40 字；没有必要时省略。
@@ -232,7 +232,7 @@ calculation_explanation_rules:
     5. 导入、导出和外部接口联调调用行应描述系统建设内容，不编造输入中没有的表名、接口名、外部系统、权限规则或审批流程。
     6. 计算说明必须说明为什么纳入 FPA 功能点计量，并明确当前类型 EI / EO / EQ / ILF / EIF。
     7. 每项 1 句，总体建议 80-180 字；不要为凑字数补充输入中没有的权限、审批、状态流、表名、服务名或接口名。
-  multi_uis_ce: *unified_ui_ce
+  multi_ui_ce: *unified_ui_ce
   ui_api_mapping_ce: *unified_ui_ce
   ui_api_mapping_workload_eval_ce: |-
     ui_api_mapping 计算依据说明生成规则：
@@ -267,7 +267,7 @@ json_output_contract:
     6. 请直接输出 JSON，格式如下：
     {"rows":[{"name":"<功能点名称>","type":"EI/ILF/EQ/EO/EIF","type_reason":"<类型理由>","classification_basis_index":1,"explanation":"来源场景：...\n业务数据：...\n业务规则：...\n系统元素：...\n计算说明：...","source_process_ids":["<process_id>"],"source_processes":["<process_name>"],"split_reason":"<合并或拆分原因，可空>","complexity":"low/medium/high","det_count":8,"ret_count":null,"ftr_count":2,"complexity_reason":"说明 DET、RET/FTR 的识别依据和配置矩阵命中原因。"}]}
 
-  multi_uis_json: |-
+  multi_ui_json: |-
     JSON 输出契约：
     1. 不允许输出除 JSON 外的任何内容。
     2. 不要输出 reasoning、分析过程、Markdown 或 JSON 外文本。
@@ -354,7 +354,7 @@ user_prompt_sets:
 
     ${json_output_contract}
 
-  multi_uis_up: |-
+  multi_ui_up: |-
     ${core_rules}
 
     计算依据归类判定原则列表（只能返回最匹配的序号，序号从1开始）：
@@ -458,7 +458,7 @@ rule_sets:
       require_process_coverage: true
       require_data_function: true
 
-  multi_uis_rs:
+  multi_ui_rs:
     row_planning_rules:
       ui_row:
         enabled: false

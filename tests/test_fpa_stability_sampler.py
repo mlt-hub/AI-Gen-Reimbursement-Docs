@@ -87,13 +87,13 @@ def test_resolve_strict_real_model_recommended_preset():
     }
 
 
-def test_resolve_multi_uis_real_model_recommended_preset():
-    preset = resolve_fpa_stability_sample_preset("multi-uis-real-model-recommended")
+def test_resolve_multi_ui_real_model_recommended_preset():
+    preset = resolve_fpa_stability_sample_preset("multi-ui-real-model-recommended")
 
     assert preset["suite"] == "real-model-recommended"
-    assert preset["profiles"] == "multi_uis"
+    assert preset["profiles"] == "multi_ui"
     assert preset["strategies"] == "ai_first"
-    assert preset["rule_sets"] == "multi_uis_rs"
+    assert preset["rule_sets"] == "multi_ui_rs"
     assert preset["thresholds"] == {
         "profile_quality_issue_count": 0,
         "retryable_quality_issue_count": 0,
@@ -109,7 +109,7 @@ def test_resolve_multi_profile_real_model_preset_uses_explicit_configs():
     assert [(config.profile, config.strategy, config.rule_set) for config in configs] == [
         ("strict_fpa", "ai_first", "strict_fpa_rs"),
         ("unified_ui", "ai_first", "unified_ui_rs"),
-        ("multi_uis", "ai_first", "multi_uis_rs"),
+        ("multi_ui", "ai_first", "multi_ui_rs"),
         ("ui_api_mapping", "ai_first", "ui_api_mapping_rs"),
     ]
     assert preset["thresholds"] == {

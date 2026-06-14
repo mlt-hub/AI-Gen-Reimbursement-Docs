@@ -271,7 +271,7 @@ def test_default_fpa_prompt_diagnostics_resolve_calculation_rules(tmp_path):
     copy_default_config_files(tmp_path, source)
 
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
-        for profile in ("strict_fpa", "unified_ui", "multi_uis", "ui_api_mapping"):
+        for profile in ("strict_fpa", "unified_ui", "multi_ui", "ui_api_mapping"):
             diagnostics = diagnose_fpa_prompt_config(profile)
 
             assert diagnostics.ok is True, profile
@@ -1474,7 +1474,7 @@ class TestLoadFpaUserPromptTemplate:
 
         with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
             unified = load_fpa_user_prompt_template("unified_ui")
-            multi_uis = load_fpa_user_prompt_template("multi_uis")
+            multi_ui = load_fpa_user_prompt_template("multi_ui")
             mapping = load_fpa_user_prompt_template("ui_api_mapping")
             strict = load_fpa_user_prompt_template("strict_fpa")
             explanation_rules = load_fpa_calculation_explanation_rules("strict_fpa")
@@ -1482,11 +1482,11 @@ class TestLoadFpaUserPromptTemplate:
             strict_json_contract = load_fpa_json_output_contract("strict_fpa")
             mapping_json_contract = load_fpa_json_output_contract("ui_api_mapping")
             unified_system = load_fpa_system_prompt_config("unified_ui").text
-            multi_uis_system = load_fpa_system_prompt_config("multi_uis").text
+            multi_ui_system = load_fpa_system_prompt_config("multi_ui").text
             mapping_system = load_fpa_system_prompt_config("ui_api_mapping").text
             strict_system = load_fpa_system_prompt_config("strict_fpa").text
 
-        for template in (unified, strict, multi_uis, mapping):
+        for template in (unified, strict, multi_ui, mapping):
             assert "${calculation_explanation_rules}" in template
             assert "${json_output_contract}" in template
         assert "计算依据说明生成规则" in explanation_rules.text
@@ -1527,20 +1527,20 @@ class TestLoadFpaUserPromptTemplate:
         assert "agent_review.type_judgement" in strict_system
         assert "不得用 EI 替代 EIF" in strict_system
         assert "FPA 功能点评估助手" in strict_system
-        for prompt in (unified_system, multi_uis_system, mapping_system):
+        for prompt in (unified_system, multi_ui_system, mapping_system):
             assert "项目工作量评估助手" in prompt
             assert "项目自定义工作量拆分规则" in prompt
             assert "FPA 功能点评估助手" not in prompt
-        for prompt in (unified_system, multi_uis_system, unified, multi_uis):
+        for prompt in (unified_system, multi_ui_system, unified, multi_ui):
             assert "payload_json.agent_review.workload_judgement.judgements" in prompt
             assert "recommended_categories" in prompt
         assert "不要因为已有逻辑接口开发行就省略界面开发行" in unified
         assert "不要只输出界面开发行替代这些能力行" in unified
-        assert "独立页面、独立业务对象、独立业务流程或独立用户端" in multi_uis
-        assert "不要只输出界面开发行替代这些能力行" in multi_uis
-        assert "按 EI 识别" in multi_uis
-        assert "按 EI 计量" in multi_uis
-        assert "不要只写“界面开发行”" in multi_uis
+        assert "独立页面、独立业务对象、独立业务流程或独立用户端" in multi_ui
+        assert "不要只输出界面开发行替代这些能力行" in multi_ui
+        assert "按 EI 识别" in multi_ui
+        assert "按 EI 计量" in multi_ui
+        assert "不要只写“界面开发行”" in multi_ui
         assert "payload_json.agent_review.mapping_judgement.judgements" in mapping_system
         assert "expected_default_rows" in mapping_system
         assert "explicit_backend_rows" in mapping_system

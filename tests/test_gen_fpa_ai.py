@@ -24,7 +24,7 @@ from ai_gen_reimbursement_docs.gen_fpa import (
 )
 from ai_gen_reimbursement_docs.fpa_profiles import (
     CUSTOM_RULES_PROFILE,
-    MULTI_UIS_PROFILE,
+    MULTI_UI_PROFILE,
     STRICT_FPA_PROFILE,
     UI_API_MAPPING_PROFILE,
     CustomRulesProfile,
@@ -547,14 +547,14 @@ def test_unified_ui_explanation_quality_warns_when_ui_row_lacks_merge_evidence()
     )
 
 
-def test_multi_uis_explanation_quality_warns_when_ui_row_lacks_split_evidence():
+def test_multi_ui_explanation_quality_warns_when_ui_row_lacks_split_evidence():
     group = _group_rows_by_l3(_rows())[0]
     rows, warnings = _normalize_ai_fpa_rows_for_l3(
         group=group,
         meta=_meta(),
         judgement_rules=["规则一"],
         start_seq=1,
-        profile=MULTI_UIS_PROFILE,
+        profile=MULTI_UI_PROFILE,
         ai_rows=[{
             "name": "行业新增界面开发",
             "type": "EI",
@@ -1713,7 +1713,7 @@ def test_multiple_ui_rows_without_split_reason_are_merged():
     assert any("split_reason" in w for w in warnings)
 
 
-def test_multi_uis_duplicate_ui_rows_are_kept_with_review_metadata():
+def test_multi_ui_duplicate_ui_rows_are_kept_with_review_metadata():
     group = {
         "client_type": "地市后台",
         "l1": "客户管理",
@@ -1747,7 +1747,7 @@ def test_multi_uis_duplicate_ui_rows_are_kept_with_review_metadata():
         meta=_meta(),
         ai_rows=ai_rows,
         judgement_rules=["规则一"],
-        profile=MULTI_UIS_PROFILE,
+        profile=MULTI_UI_PROFILE,
     )
 
     ui_rows = [row for row in rows if "界面开发" in str(row["新增/修改功能点"])]

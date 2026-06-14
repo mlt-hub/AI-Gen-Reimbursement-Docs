@@ -59,8 +59,8 @@
     ]
   },
   {
-    "case_id": "multi_uis_customer_subviews",
-    "profile": "multi_uis",
+    "case_id": "multi_ui_customer_subviews",
+    "profile": "multi_ui",
     "mode": "ai_normalized",
     "meta": {
       "子系统（模块）": "客户运营",

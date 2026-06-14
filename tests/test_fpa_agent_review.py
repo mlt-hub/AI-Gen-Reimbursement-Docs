@@ -69,7 +69,7 @@ def test_agent_review_runs_quality_role_after_rows_exist():
     assert review["summary"]["quality_issue_count"] >= 1
 
 
-def test_multi_uis_quality_accepts_ui_row_name_without_development_suffix():
+def test_multi_ui_quality_accepts_ui_row_name_without_development_suffix():
     rows = [
         {
             "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业管理界面",
@@ -91,13 +91,13 @@ def test_multi_uis_quality_accepts_ui_row_name_without_development_suffix():
         },
     ]
 
-    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="multi_uis")
+    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_ui", profile_kind="multi_ui")
 
     codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
     assert "unified_ui.missing_ui_row" not in codes
 
 
-def test_multi_uis_quality_accepts_ai_split_ei_rows_as_multi_ui_evidence():
+def test_multi_ui_quality_accepts_ai_split_ei_rows_as_multi_ui_evidence():
     rows = [
         {
             "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业维护",
@@ -115,13 +115,13 @@ def test_multi_uis_quality_accepts_ai_split_ei_rows_as_multi_ui_evidence():
         },
     ]
 
-    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="multi_uis")
+    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_ui", profile_kind="multi_ui")
 
     codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
     assert "unified_ui.missing_ui_row" not in codes
 
 
-def test_multi_uis_quality_accepts_ai_ei_row_with_source_process_as_ui_evidence():
+def test_multi_ui_quality_accepts_ai_ei_row_with_source_process_as_ui_evidence():
     rows = [
         {
             "新增/修改功能点": "【地市后台】垂直行业营销-垂直行业管理-垂直行业管理-垂直行业维护",
@@ -146,7 +146,7 @@ def test_multi_uis_quality_accepts_ai_ei_row_with_source_process_as_ui_evidence(
         },
     ]
 
-    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_uis", profile_kind="multi_uis")
+    review = build_fpa_agent_review(group=_group(), rows=rows, profile_name="multi_ui", profile_kind="multi_ui")
 
     codes = {issue["code"] for issue in review["unified_quality_review"]["issues"]}
     assert "unified_ui.missing_ui_row" not in codes
@@ -183,7 +183,7 @@ def test_unified_workload_judgement_recommends_import_process_row():
         },
     ]
 
-    review = build_fpa_agent_review(group=group, rows=rows, profile_name="multi_uis", profile_kind="multi_uis")
+    review = build_fpa_agent_review(group=group, rows=rows, profile_name="multi_ui", profile_kind="multi_ui")
 
     judgement = review["workload_judgement"]["judgements"][0]
     assert "导入处理开发" in judgement["recommended_categories"]

@@ -99,7 +99,7 @@ def _session_status_payload(session_id: str, state) -> dict:
 FPA_PROFILE_LABELS = {
     "strict_fpa": "严格 FPA 口径",
     "unified_ui": "统一界面口径",
-    "multi_uis": "多界面口径",
+    "multi_ui": "多界面口径",
     "ui_api_mapping": "界面接口映射口径",
 }
 

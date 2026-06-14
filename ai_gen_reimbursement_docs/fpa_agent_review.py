@@ -48,9 +48,9 @@ UNIFIED_UI_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
     applicability="debug_only",
 )
 
-MULTI_UIS_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
-    name="multi_uis_contract",
-    profile_kind="multi_uis",
+MULTI_UI_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
+    name="multi_ui_contract",
+    profile_kind="multi_ui",
     categories=("多界面开发", "逻辑接口开发", "导入处理开发", "导出处理开发", "外部接口联调调用"),
     judgement_output_key="workload_judgement",
     merge_review_output_key="unified_merge_review",
@@ -69,7 +69,7 @@ UI_API_MAPPING_AGENT_REVIEW_CONTRACT = FpaAgentReviewContract(
 )
 
 
-UNIFIED_REVIEW_PROFILE_KINDS = {"unified_ui", "multi_uis"}
+UNIFIED_REVIEW_PROFILE_KINDS = {"unified_ui", "multi_ui"}
 
 
 def build_fpa_agent_review(
@@ -260,8 +260,8 @@ def resolve_fpa_agent_review_contract(
     kind = (profile_kind or profile_name or "strict_fpa").strip()
     if kind == "strict_fpa":
         return STRICT_FPA_AGENT_REVIEW_CONTRACT
-    if kind == "multi_uis" or name == "multi_uis":
-        return MULTI_UIS_AGENT_REVIEW_CONTRACT
+    if kind == "multi_ui" or name == "multi_ui":
+        return MULTI_UI_AGENT_REVIEW_CONTRACT
     if kind == "ui_api_mapping":
         return UI_API_MAPPING_AGENT_REVIEW_CONTRACT
     return UNIFIED_UI_AGENT_REVIEW_CONTRACT
@@ -523,12 +523,12 @@ def _has_unified_ui_evidence(rows: list[dict[str, object]], *, contract_name: st
         name = str(row.get("新增/修改功能点", "") or row.get("name", "") or "")
         if "界面" in name:
             return True
-        if contract_name == "multi_uis_contract" and _is_multi_uis_ui_row(row):
+        if contract_name == "multi_ui_contract" and _is_multi_ui_ui_row(row):
             return True
     return False
 
 
-def _is_multi_uis_ui_row(row: dict[str, object]) -> bool:
+def _is_multi_ui_ui_row(row: dict[str, object]) -> bool:
     row_type = str(row.get("类型", "") or row.get("type", "") or "").strip().upper()
     if row_type not in {"EI", "EQ", "EO"}:
         return False

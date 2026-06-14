@@ -444,11 +444,11 @@
         <div class="hero-grid">
           <div class="metric">
             <b>4</b>
-            <span>初始化配置提供的 profile：strict_fpa、unified_ui、multi_uis、ui_api_mapping。</span>
+            <span>初始化配置提供的 profile：strict_fpa、unified_ui、multi_ui、ui_api_mapping。</span>
           </div>
           <div class="metric">
             <b>3</b>
-            <span>底层 kind：strict_fpa、unified_ui、ui_api_mapping；multi_uis 复用 unified_ui kind。</span>
+            <span>底层 kind：strict_fpa、unified_ui、ui_api_mapping；multi_ui 复用 unified_ui kind。</span>
           </div>
           <div class="metric">
             <b>4</b>
@@ -525,7 +525,7 @@
               <td>报账模板友好的开发工作量表达，需要“一页 + 业务动作”口径。</td>
             </tr>
             <tr>
-              <td><strong>multi_uis</strong></td>
+              <td><strong>multi_ui</strong></td>
               <td><span class="pill indigo">unified_ui</span></td>
               <td>rules_first</td>
               <td>允许同一三级模块拆成多条界面开发行，每条保留拆分理由。</td>
@@ -552,7 +552,7 @@
                 <tr><th>策略</th><th>含义</th><th>典型用途</th></tr>
               </thead>
               <tbody>
-                <tr><td>rules_first</td><td>规则优先，AI 只补充或复核。</td><td>unified_ui / multi_uis / ui_api_mapping 默认。</td></tr>
+                <tr><td>rules_first</td><td>规则优先，AI 只补充或复核。</td><td>unified_ui / multi_ui / ui_api_mapping 默认。</td></tr>
                 <tr><td>ai_first</td><td>AI 优先，规则补齐 AI 未覆盖的行。</td><td>strict_fpa 默认。</td></tr>
                 <tr><td>rules_only</td><td>仅规则生成，不调用 AI。</td><td>本地烟测、无 API、稳定性基线。</td></tr>
                 <tr><td>ai_only</td><td>仅 AI 生成，不做规则补行；仍做校验、后处理和 warning。</td><td>测试模型独立表现。</td></tr>
@@ -768,7 +768,7 @@
               <td>补 2-3 个 profile golden fixtures，定义漏界面、漏接口、重复计数等行为断言。</td>
             </tr>
             <tr>
-              <td><strong>multi_uis</strong></td>
+              <td><strong>multi_ui</strong></td>
               <td>多界面同名行保留、review 元数据测试；主要依赖 prompt/rule_set。</td>
               <td><span class="pill gold">偏薄</span></td>
               <td>补拆分理由、独立页面/对象/流程/用户端的 fixture 和真实模型 smoke。</td>
@@ -902,7 +902,7 @@
             <time>可用但偏薄</time>
             <div>
               <strong>非 strict profile harness</strong>
-              <p class="small">unified_ui、multi_uis、ui_api_mapping 有基础规则和测试，但缺 profile 级 golden、真实模型 recommended preset 和独立质量门。</p>
+              <p class="small">unified_ui、multi_ui、ui_api_mapping 有基础规则和测试，但缺 profile 级 golden、真实模型 recommended preset 和独立质量门。</p>
             </div>
           </div>
           <div class="timeline-item">

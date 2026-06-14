@@ -1021,7 +1021,7 @@ def test_default_profiles_render_calculation_explanation_fragment(tmp_path):
     with patch("ai_gen_reimbursement_docs.config_utils.config_dir", return_value=tmp_path):
         prompts = {
             name: get_fpa_profile(name).build_prompt(group, ["规则一"])
-            for name in ("strict_fpa", "unified_ui", "multi_uis", "ui_api_mapping")
+            for name in ("strict_fpa", "unified_ui", "multi_ui", "ui_api_mapping")
         }
 
     for name, prompt in prompts.items():

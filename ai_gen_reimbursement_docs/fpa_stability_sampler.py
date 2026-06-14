@@ -54,11 +54,11 @@ FPA_STABILITY_SAMPLE_PRESETS = {
             "blocking_retry_count": 0,
         },
     },
-    "multi-uis-real-model-recommended": {
+    "multi-ui-real-model-recommended": {
         "suite": "real-model-recommended",
-        "profiles": "multi_uis",
+        "profiles": "multi_ui",
         "strategies": "ai_first",
-        "rule_sets": "multi_uis_rs",
+        "rule_sets": "multi_ui_rs",
         "thresholds": {
             "profile_quality_issue_count": 0,
             "retryable_quality_issue_count": 0,
@@ -70,7 +70,7 @@ FPA_STABILITY_SAMPLE_PRESETS = {
         "configs": (
             {"profile": "strict_fpa", "strategy": "ai_first", "rule_set": "strict_fpa_rs"},
             {"profile": "unified_ui", "strategy": "ai_first", "rule_set": "unified_ui_rs"},
-            {"profile": "multi_uis", "strategy": "ai_first", "rule_set": "multi_uis_rs"},
+            {"profile": "multi_ui", "strategy": "ai_first", "rule_set": "multi_ui_rs"},
             {"profile": "ui_api_mapping", "strategy": "ai_first", "rule_set": "ui_api_mapping_rs"},
         ),
         "thresholds": {

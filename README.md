@@ -82,7 +82,7 @@ FPA 生成支持多套口径，并可单独选择 AI / rules 执行策略：
 | 方案 | 适用场景 |
 |------|----------|
 | `unified_ui` | 统一界面口径，默认 `rules_first`，保留界面开发/逻辑处理开发等模板友好表达 |
-| `multi_uis` | 多界面口径，可按独立页面、业务对象、业务流程或用户端拆分多条界面开发行 |
+| `multi_ui` | 多界面口径，可按独立页面、业务对象、业务流程或用户端拆分多条界面开发行 |
 | `ui_api_mapping` | 界面接口映射口径，展示功能过程到界面开发和接口开发的映射 |
 | `strict_fpa` | 严格 FPA 口径，按数据功能和事务功能拆分，不生成界面开发/接口开发行 |
 
@@ -182,7 +182,7 @@ set ANTHROPIC_API_KEY=sk-xxx
 | `--api-key`, `-k` | API Key |
 | `--model`, `-m` | 模型名称（默认 deepseek-v4-flash） |
 | `--max-tokens` | 覆盖 AI max_tokens |
-| `--fpa-profile` | FPA 方案：`strict_fpa`、`unified_ui`、`multi_uis`、`ui_api_mapping` |
+| `--fpa-profile` | FPA 方案：`strict_fpa`、`unified_ui`、`multi_ui`、`ui_api_mapping` |
 | `--fpa-strategy` | FPA 执行策略：`rules_first`、`ai_first`、`rules_only`、`ai_only` |
 | `--fpa-rule-set` | FPA 规则集名称，留空使用 profile 默认规则集 |
 | `--init-config` | 初始化配置文件 |

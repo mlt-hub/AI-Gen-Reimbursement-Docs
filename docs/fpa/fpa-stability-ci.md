@@ -64,25 +64,25 @@
 - `max_retryable_issues=0`
 - `max_retries=0`
 
-`multi_uis` 专项推荐样本抽样使用 `multi-uis-real-model-recommended` preset：
+`multi_ui` 专项推荐样本抽样使用 `multi-ui-real-model-recommended` preset：
 
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\run_fpa_stability_ci.py `
-  --preset multi-uis-real-model-recommended `
-  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci_multi_uis_recommended
+  --preset multi-ui-real-model-recommended `
+  --output-dir .\artifacts\fpa-stability-ci\tmp_fpa_stability_ci_multi_ui_recommended
 ```
 
 该 preset 使用：
 
 - `suite=real-model-recommended`
-- `profile=multi_uis`
+- `profile=multi_ui`
 - `strategy=ai_first`
-- `rule_set=multi_uis_rs`
+- `rule_set=multi_ui_rs`
 - `profile_quality_issue_count=0`
 - `retryable_quality_issue_count=0`
 - `blocking_retry_count=0`
 
-它用于扩大 `multi_uis` 真实模型样本，重点观察界面开发行固定 `EI`、查询/导出/逻辑处理行按实际类型输出，以及`计算依据说明`质量 warning 的稳定性。
+它用于扩大 `multi_ui` 真实模型样本，重点观察界面开发行固定 `EI`、查询/导出/逻辑处理行按实际类型输出，以及`计算依据说明`质量 warning 的稳定性。
 
 多 profile 真实模型抽样使用 `multi-profile-real-model` preset：
 
@@ -98,7 +98,7 @@
 |---|---|---|
 | `strict_fpa` | `ai_first` | `strict_fpa_rs` |
 | `unified_ui` | `ai_first` | `unified_ui_rs` |
-| `multi_uis` | `ai_first` | `multi_uis_rs` |
+| `multi_ui` | `ai_first` | `multi_ui_rs` |
 | `ui_api_mapping` | `ai_first` | `ui_api_mapping_rs` |
 
 多 profile preset 的质量门检查：

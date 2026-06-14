@@ -1028,7 +1028,7 @@ rule_sets:
     assert data["profiles"][0]["label"] == "client_api"
     assert data["profiles"][0]["kind"] == "ui_api_mapping"
     assert data["profiles"][-1]["editable"] is True
-    assert {kind["name"] for kind in data["kinds"]} == {"strict_fpa", "unified_ui", "multi_uis", "ui_api_mapping"}
+    assert {kind["name"] for kind in data["kinds"]} == {"strict_fpa", "unified_ui", "multi_ui", "ui_api_mapping"}
     assert {item["name"] for item in data["core_rules"]} == {"shared_cr"}
     assert {item["name"] for item in data["system_prompt_sets"]} == {"shared_sp"}
     assert {item["name"] for item in data["user_prompt_sets"]} == {"shared_up"}

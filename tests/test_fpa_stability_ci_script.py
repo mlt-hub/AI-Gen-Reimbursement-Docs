@@ -119,12 +119,12 @@ def test_fpa_stability_ci_script_dry_run_shows_recommended_real_model_preset(cap
     assert payload["will_call_model"] is True
 
 
-def test_fpa_stability_ci_script_dry_run_shows_multi_uis_recommended_real_model_preset(capsys, tmp_path):
+def test_fpa_stability_ci_script_dry_run_shows_multi_ui_recommended_real_model_preset(capsys, tmp_path):
     script = _load_script()
     exit_code = script.main([
         "--dry-run",
         "--preset",
-        "multi-uis-real-model-recommended",
+        "multi-ui-real-model-recommended",
         "--output-dir",
         str(tmp_path),
     ])
@@ -134,9 +134,9 @@ def test_fpa_stability_ci_script_dry_run_shows_multi_uis_recommended_real_model_
     assert payload["suite"] == "real-model-recommended"
     assert len(payload["fixture_paths"]) == 10
     assert payload["configs"] == [{
-        "profile": "multi_uis",
+        "profile": "multi_ui",
         "strategy": "ai_first",
-        "rule_set": "multi_uis_rs",
+        "rule_set": "multi_ui_rs",
     }]
     assert payload["thresholds"] == {
         "profile_quality_issue_count": 0,
@@ -162,7 +162,7 @@ def test_fpa_stability_ci_script_dry_run_shows_multi_profile_real_model_preset(c
     assert payload["configs"] == [
         {"profile": "strict_fpa", "strategy": "ai_first", "rule_set": "strict_fpa_rs"},
         {"profile": "unified_ui", "strategy": "ai_first", "rule_set": "unified_ui_rs"},
-        {"profile": "multi_uis", "strategy": "ai_first", "rule_set": "multi_uis_rs"},
+        {"profile": "multi_ui", "strategy": "ai_first", "rule_set": "multi_ui_rs"},
         {"profile": "ui_api_mapping", "strategy": "ai_first", "rule_set": "ui_api_mapping_rs"},
     ]
     assert payload["thresholds"] == {

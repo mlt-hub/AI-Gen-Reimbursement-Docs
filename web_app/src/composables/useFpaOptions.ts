@@ -40,7 +40,7 @@ const fallbackOptions: FpaOptions = {
   profiles: [
     { name: 'strict_fpa', label: '严格 FPA 口径', kind: 'strict_fpa', strategy: 'ai_first', rule_set: 'strict_fpa_rs', core_rules: 'strict_fpa_cr', system_prompt: 'strict_fpa_sp', user_prompt: 'strict_fpa_up', confirmation_mode: 'auto', editable: false },
     { name: 'unified_ui', label: '统一界面口径', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'unified_ui_rs', core_rules: 'unified_ui_cr', system_prompt: 'unified_ui_sp', user_prompt: 'unified_ui_up', confirmation_mode: 'auto', editable: false },
-    { name: 'multi_uis', label: '多界面口径', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'multi_uis_rs', core_rules: 'multi_uis_cr', system_prompt: 'multi_uis_sp', user_prompt: 'multi_uis_up', confirmation_mode: 'auto', editable: false },
+    { name: 'multi_ui', label: '多界面口径', kind: 'multi_ui', strategy: 'rules_first', rule_set: 'multi_ui_rs', core_rules: 'multi_ui_cr', system_prompt: 'multi_ui_sp', user_prompt: 'multi_ui_up', confirmation_mode: 'auto', editable: false },
     { name: 'ui_api_mapping', label: '界面接口映射口径', kind: 'ui_api_mapping', strategy: 'rules_first', rule_set: 'ui_api_mapping_rs', core_rules: 'ui_api_mapping_cr', system_prompt: 'ui_api_mapping_sp', user_prompt: 'ui_api_mapping_up', confirmation_mode: 'auto', editable: false },
     { name: 'custom_profile', label: '自定义 FPA 方案', kind: 'unified_ui', strategy: 'rules_first', rule_set: 'unified_ui_rs', core_rules: 'unified_ui_cr', system_prompt: 'unified_ui_sp', user_prompt: 'unified_ui_up', confirmation_mode: 'auto', editable: true },
   ],
@@ -58,6 +58,7 @@ const fallbackOptions: FpaOptions = {
   kinds: [
     { name: 'strict_fpa', label: 'strict_fpa' },
     { name: 'unified_ui', label: 'unified_ui' },
+    { name: 'multi_ui', label: 'multi_ui' },
     { name: 'ui_api_mapping', label: 'ui_api_mapping' },
   ],
   rule_sets: [],
