@@ -3,7 +3,7 @@
 ## 状态
 
 - 状态：已实施
-- 实施提交：见本轮最终回复
+- 实施提交：`1fd36f9 fix: unify task status display`
 - 实施文件：
   - `web_app/src/utils/taskStatusDisplay.ts`
   - `web_app/src/views/Home.vue`
