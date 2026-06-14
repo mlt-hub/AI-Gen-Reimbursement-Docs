@@ -1555,12 +1555,14 @@ def test_fpa_preview_appends_debug_to_accessible_session(monkeypatch, tmp_path):
 
     assert resp.status_code == 200
     log_dir = work_dir / "output" / "日志"
-    prompt_text = next((log_dir / "ai_prompts").glob("fpa_preview_*_prompt.txt")).read_text(encoding="utf-8")
-    response_text = next((log_dir / "ai_responses").glob("fpa_preview_*_response.txt")).read_text(encoding="utf-8")
+    prompt_text = next((log_dir / "ai_prompts").glob("fpa_preview_*_prompt.md")).read_text(encoding="utf-8")
+    response_text = next((log_dir / "ai_responses").glob("fpa_preview_*_response.md")).read_text(encoding="utf-8")
+    thinking_text = next((log_dir / "ai_thinking").glob("fpa_preview_*_thinking.md")).read_text(encoding="utf-8")
     combined_text = (log_dir / "ai_对话日志.md").read_text(encoding="utf-8")
     assert "SYSTEM PROMPT" in prompt_text
     assert "USER PROMPT" in prompt_text
     assert "RAW RESPONSE" in response_text
+    assert "THINKING" in thinking_text
     assert "垂直行业管理" in combined_text
     server.session_manager.cleanup_download(session_id)
 

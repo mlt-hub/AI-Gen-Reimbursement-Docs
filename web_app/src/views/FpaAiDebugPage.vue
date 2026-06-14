@@ -92,8 +92,8 @@
                   @click="item.expanded = !item.expanded"
                 >
                   <span class="flex min-w-0 items-center gap-2 text-sm">
-                    <span :class="['rounded px-1.5 py-0.5 text-xs font-bold', item.type === 'prompt' ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]' : 'bg-[var(--color-success-soft)] text-[var(--color-success)]']">
-                      {{ item.type === 'prompt' ? 'P' : 'R' }}
+                    <span :class="['rounded px-1.5 py-0.5 text-xs font-bold', aiInteractionBadgeClass(item.type)]">
+                      {{ aiInteractionBadgeLabel(item.type) }}
                     </span>
                     <span class="truncate">{{ item.name }}</span>
                   </span>
@@ -179,7 +179,7 @@
                     <span class="shrink-0 text-xs text-[var(--color-ink-soft)]">{{ record.expanded ? '收起' : '展开' }}</span>
                   </button>
                   <div v-show="record.expanded" class="space-y-3 border-t border-[var(--color-rule)] p-4">
-                    <div class="grid gap-3 md:grid-cols-2">
+                    <div class="grid gap-3 md:grid-cols-3">
                       <div>
                         <div class="text-xs font-semibold text-[var(--color-ink-soft)]">Prompt 文件</div>
                         <pre class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-3 text-xs text-slate-300">{{ record.prompt || '（空）' }}</pre>
@@ -187,6 +187,10 @@
                       <div>
                         <div class="text-xs font-semibold text-[var(--color-ink-soft)]">Response 文件</div>
                         <pre class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-3 text-xs text-slate-300">{{ record.response || '（空）' }}</pre>
+                      </div>
+                      <div>
+                        <div class="text-xs font-semibold text-[var(--color-ink-soft)]">Thinking 文件</div>
+                        <pre class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-console)] p-3 text-xs text-slate-300">{{ record.thinking || '（空）' }}</pre>
                       </div>
                     </div>
                     <div class="grid gap-3 md:grid-cols-2">
@@ -234,7 +238,7 @@ interface SessionStatusResponse {
 
 interface AiInteraction {
   name: string
-  type: 'prompt' | 'response'
+  type: 'prompt' | 'response' | 'thinking'
   content: string
   expanded?: boolean
 }
@@ -252,8 +256,10 @@ interface StructuredFpaDebugRecord {
   ai_called: boolean
   prompt_file: string
   response_file: string
+  thinking_file: string
   prompt: string
   response: string
+  thinking: string
   parsed_rows: unknown[]
   final_rows: unknown[]
   quality_review: Record<string, unknown>
@@ -316,6 +322,18 @@ function tabClass(tab: 'list' | 'structured' | 'combined') {
       ? 'border-[var(--color-accent)] font-semibold text-[var(--color-accent-strong)]'
       : 'border-transparent text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
   ]
+}
+
+function aiInteractionBadgeClass(type: AiInteraction['type']) {
+  if (type === 'prompt') return 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]'
+  if (type === 'thinking') return 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]'
+  return 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
+}
+
+function aiInteractionBadgeLabel(type: AiInteraction['type']) {
+  if (type === 'prompt') return 'P'
+  if (type === 'thinking') return 'T'
+  return 'R'
 }
 
 async function loadDebug() {

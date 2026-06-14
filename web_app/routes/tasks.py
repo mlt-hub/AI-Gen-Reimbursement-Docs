@@ -384,8 +384,10 @@ def create_router(
         base_name = f"fpa_preview_{stamp}_{safe_module}"
         prompts_dir = log_dir / "ai_prompts"
         responses_dir = log_dir / "ai_responses"
+        thinking_dir = log_dir / "ai_thinking"
         prompts_dir.mkdir(parents=True, exist_ok=True)
         responses_dir.mkdir(parents=True, exist_ok=True)
+        thinking_dir.mkdir(parents=True, exist_ok=True)
 
         prompt_text = "\n".join([
             f"# FPA 预览调试: {module_label}",
@@ -405,18 +407,21 @@ def create_router(
             "## Raw Response",
             str(debug.get("raw_response") or ""),
             "",
-            "## Thinking",
-            str(debug.get("thinking") or ""),
-            "",
             "## Parsed Rows",
             json.dumps(debug.get("parsed_rows") or [], ensure_ascii=False, indent=2),
             "",
             "## Quality Review",
             json.dumps(debug.get("quality_review") or {}, ensure_ascii=False, indent=2),
         ]).strip() + "\n"
+        thinking_text = "\n".join([
+            f"# FPA 预览 Thinking: {module_label}",
+            "",
+            str(debug.get("thinking") or ""),
+        ]).strip() + "\n"
 
-        (prompts_dir / f"{base_name}_prompt.txt").write_text(prompt_text, encoding="utf-8")
-        (responses_dir / f"{base_name}_response.txt").write_text(response_text, encoding="utf-8")
+        (prompts_dir / f"{base_name}_prompt.md").write_text(prompt_text, encoding="utf-8")
+        (responses_dir / f"{base_name}_response.md").write_text(response_text, encoding="utf-8")
+        (thinking_dir / f"{base_name}_thinking.md").write_text(thinking_text, encoding="utf-8")
         records_dir = log_dir / "debug_records"
         records_dir.mkdir(parents=True, exist_ok=True)
         record = {
@@ -426,8 +431,9 @@ def create_router(
             "model": str(debug.get("model") or ""),
             "reason": str(debug.get("reason") or ""),
             "ai_called": bool(debug.get("ai_called")),
-            "prompt_file": f"{base_name}_prompt.txt",
-            "response_file": f"{base_name}_response.txt",
+            "prompt_file": f"{base_name}_prompt.md",
+            "response_file": f"{base_name}_response.md",
+            "thinking_file": f"{base_name}_thinking.md",
             "parsed_rows": debug.get("parsed_rows") or [],
             "final_rows": debug.get("final_rows") or [],
             "quality_review": debug.get("quality_review") or {},

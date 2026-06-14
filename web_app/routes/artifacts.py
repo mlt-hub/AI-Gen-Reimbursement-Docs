@@ -1158,6 +1158,7 @@ def _record_function_points(record: dict) -> list[str]:
 def _build_structured_fpa_debug_records(log_dir: Path) -> list[dict]:
     prompts_dir = log_dir / "ai_prompts"
     responses_dir = log_dir / "ai_responses"
+    thinking_dir = log_dir / "ai_thinking"
     records_dir = log_dir / "debug_records"
     records: list[dict] = []
     seen_ids: set[str] = set()
@@ -1171,10 +1172,12 @@ def _build_structured_fpa_debug_records(log_dir: Path) -> list[dict]:
             if not isinstance(record, dict):
                 continue
             record_id = str(record.get("id") or path.stem)
-            prompt_file = str(record.get("prompt_file") or f"{record_id}_prompt.txt")
-            response_file = str(record.get("response_file") or f"{record_id}_response.txt")
+            prompt_file = str(record.get("prompt_file") or f"{record_id}_prompt.md")
+            response_file = str(record.get("response_file") or f"{record_id}_response.md")
+            thinking_file = str(record.get("thinking_file") or f"{record_id}_thinking.md")
             prompt_content = _read_text(prompts_dir / prompt_file)
             response_content = _read_text(responses_dir / response_file)
+            thinking_content = _read_text(thinking_dir / thinking_file)
             item = {
                 "id": record_id,
                 "source": str(record.get("source") or "fpa_preview"),
@@ -1184,8 +1187,10 @@ def _build_structured_fpa_debug_records(log_dir: Path) -> list[dict]:
                 "ai_called": bool(record.get("ai_called")),
                 "prompt_file": prompt_file,
                 "response_file": response_file,
+                "thinking_file": thinking_file,
                 "prompt": prompt_content,
                 "response": response_content,
+                "thinking": thinking_content,
                 "parsed_rows": record.get("parsed_rows") if isinstance(record.get("parsed_rows"), list) else [],
                 "final_rows": record.get("final_rows") if isinstance(record.get("final_rows"), list) else [],
                 "quality_review": record.get("quality_review") if isinstance(record.get("quality_review"), dict) else {},
@@ -1196,13 +1201,15 @@ def _build_structured_fpa_debug_records(log_dir: Path) -> list[dict]:
             seen_ids.add(record_id)
 
     if prompts_dir.is_dir():
-        for prompt_path in sorted(prompts_dir.glob("*_prompt.txt")):
-            record_id = _strip_suffix(prompt_path.name, "_prompt.txt")
+        for prompt_path in sorted(prompts_dir.glob("*_prompt.md")):
+            record_id = _strip_suffix(prompt_path.name, "_prompt.md")
             if record_id in seen_ids:
                 continue
-            response_path = responses_dir / f"{record_id}_response.txt"
+            response_path = responses_dir / f"{record_id}_response.md"
+            thinking_path = thinking_dir / f"{record_id}_thinking.md"
             prompt_content = _read_text(prompt_path)
             response_content = _read_text(response_path)
+            thinking_content = _read_text(thinking_path)
             item = {
                 "id": record_id,
                 "source": "fpa_preview" if record_id.startswith("fpa_preview_") else "ai_log",
@@ -1212,8 +1219,10 @@ def _build_structured_fpa_debug_records(log_dir: Path) -> list[dict]:
                 "ai_called": bool(response_content),
                 "prompt_file": prompt_path.name,
                 "response_file": response_path.name if response_path.exists() else "",
+                "thinking_file": thinking_path.name if thinking_path.exists() else "",
                 "prompt": prompt_content,
                 "response": response_content,
+                "thinking": thinking_content,
                 "parsed_rows": _safe_json(_section(response_content, "Parsed Rows"), []),
                 "final_rows": [],
                 "quality_review": _safe_json(_section(response_content, "Quality Review"), {}),
@@ -1288,7 +1297,7 @@ def create_router(session_manager: SessionManager, *, base_dir: Path | None = No
         request: Request,
         user: str = Depends(require_auth),
     ):
-        """列出 AI prompts 和 responses 文件清单及内容。"""
+        """列出 AI prompt、response 和 thinking Markdown 文件清单及内容。"""
         require_session_access(session_manager, session_id, request, user)
         log_dir = find_log_dir(session_manager, session_id)
         if log_dir is None:
@@ -1296,28 +1305,23 @@ def create_router(session_manager: SessionManager, *, base_dir: Path | None = No
 
         prompts_dir = log_dir / "ai_prompts"
         responses_dir = log_dir / "ai_responses"
+        thinking_dir = log_dir / "ai_thinking"
 
         files: list[dict] = []
 
-        if prompts_dir.is_dir():
-            for fname in sorted(os.listdir(prompts_dir)):
-                if fname.endswith(".txt"):
-                    path = prompts_dir / fname
-                    files.append({
-                        "name": fname,
-                        "type": "prompt",
-                        "content": path.read_text(encoding="utf-8"),
-                    })
-
-        if responses_dir.is_dir():
-            for fname in sorted(os.listdir(responses_dir)):
-                if fname.endswith(".txt"):
-                    path = responses_dir / fname
-                    files.append({
-                        "name": fname,
-                        "type": "response",
-                        "content": path.read_text(encoding="utf-8"),
-                    })
+        for dir_path, log_type in (
+            (prompts_dir, "prompt"),
+            (responses_dir, "response"),
+            (thinking_dir, "thinking"),
+        ):
+            if not dir_path.is_dir():
+                continue
+            for path in sorted(dir_path.glob("*.md")):
+                files.append({
+                    "name": path.name,
+                    "type": log_type,
+                    "content": path.read_text(encoding="utf-8"),
+                })
 
         return {"interactions": files, "count": len(files)}
 

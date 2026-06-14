@@ -225,8 +225,8 @@
                 <div @click="item.expanded = !item.expanded"
                   class="flex cursor-pointer select-none items-center justify-between bg-[var(--color-surface)] px-4 py-2 hover:bg-[var(--color-surface-muted)]">
                   <span class="flex items-center gap-2 text-sm">
-                    <span :class="['rounded px-1.5 py-0.5 text-xs font-bold', item.type === 'prompt' ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]' : 'bg-[var(--color-success-soft)] text-[var(--color-success)]']">
-                      {{ item.type === 'prompt' ? 'P' : 'R' }}
+                    <span :class="['rounded px-1.5 py-0.5 text-xs font-bold', aiInteractionBadgeClass(item.type)]">
+                      {{ aiInteractionBadgeLabel(item.type) }}
                     </span>
                     {{ item.name }}
                   </span>
@@ -311,7 +311,7 @@ interface SessionLogsResponse {
 
 interface AiInteraction {
   name: string
-  type: 'prompt' | 'response'
+  type: 'prompt' | 'response' | 'thinking'
   content: string
   expanded?: boolean
 }
@@ -733,6 +733,18 @@ const aiTab = ref('list')
 const aiLoading = ref(false)
 const aiInteractions = ref<AiInteraction[]>([])
 const aiCombinedLog = ref('')
+
+function aiInteractionBadgeClass(type: AiInteraction['type']) {
+  if (type === 'prompt') return 'bg-[var(--color-accent-soft)] text-[var(--color-accent-strong)]'
+  if (type === 'thinking') return 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]'
+  return 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
+}
+
+function aiInteractionBadgeLabel(type: AiInteraction['type']) {
+  if (type === 'prompt') return 'P'
+  if (type === 'thinking') return 'T'
+  return 'R'
+}
 
 async function openAIModal() {
   if (!session.sessionId) return

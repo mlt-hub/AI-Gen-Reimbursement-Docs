@@ -25,12 +25,15 @@ def _create_debug_session(tmp_path, *, session_id: str = "fpa_debug_session", ow
     log_dir = work_dir / "output" / "日志"
     prompts_dir = log_dir / "ai_prompts"
     responses_dir = log_dir / "ai_responses"
+    thinking_dir = log_dir / "ai_thinking"
     records_dir = log_dir / "debug_records"
     prompts_dir.mkdir(parents=True)
     responses_dir.mkdir(parents=True)
+    thinking_dir.mkdir(parents=True)
     records_dir.mkdir(parents=True)
-    (prompts_dir / "fpa_preview_prompt.txt").write_text("SYSTEM\nUSER", encoding="utf-8")
-    (responses_dir / "fpa_preview_response.txt").write_text("RAW RESPONSE", encoding="utf-8")
+    (prompts_dir / "fpa_preview_prompt.md").write_text("SYSTEM\nUSER", encoding="utf-8")
+    (responses_dir / "fpa_preview_response.md").write_text("RAW RESPONSE", encoding="utf-8")
+    (thinking_dir / "fpa_preview_thinking.md").write_text("AI THINKING", encoding="utf-8")
     (records_dir / "fpa_preview.json").write_text(
         json.dumps({
             "id": "fpa_preview",
@@ -39,8 +42,9 @@ def _create_debug_session(tmp_path, *, session_id: str = "fpa_debug_session", ow
             "model": "test-model",
             "reason": "rules_first_needs_ai",
             "ai_called": True,
-            "prompt_file": "fpa_preview_prompt.txt",
-            "response_file": "fpa_preview_response.txt",
+            "prompt_file": "fpa_preview_prompt.md",
+            "response_file": "fpa_preview_response.md",
+            "thinking_file": "fpa_preview_thinking.md",
             "parsed_rows": [{"name": "新增/修改功能点A", "type": "EI"}],
             "final_rows": [{"name": "新增/修改功能点A", "type": "EI"}],
             "quality_review": {"summary": {"issue_count": 0}},
@@ -72,14 +76,19 @@ def test_fpa_debug_page_data_endpoints_return_session_and_ai_logs(monkeypatch, t
     interactions = interactions_resp.json()["interactions"]
     assert interactions == [
         {
-            "name": "fpa_preview_prompt.txt",
+            "name": "fpa_preview_prompt.md",
             "type": "prompt",
             "content": "SYSTEM\nUSER",
         },
         {
-            "name": "fpa_preview_response.txt",
+            "name": "fpa_preview_response.md",
             "type": "response",
             "content": "RAW RESPONSE",
+        },
+        {
+            "name": "fpa_preview_thinking.md",
+            "type": "thinking",
+            "content": "AI THINKING",
         },
     ]
 
@@ -95,6 +104,7 @@ def test_fpa_debug_page_data_endpoints_return_session_and_ai_logs(monkeypatch, t
     assert record["model"] == "test-model"
     assert record["prompt"] == "SYSTEM\nUSER"
     assert record["response"] == "RAW RESPONSE"
+    assert record["thinking"] == "AI THINKING"
     assert record["parsed_rows"][0]["name"] == "新增/修改功能点A"
 
     assert log_resp.status_code == 200

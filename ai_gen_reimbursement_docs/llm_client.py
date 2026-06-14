@@ -175,7 +175,7 @@ def _save_prompt_log(
         dir_path = _resolve_log_dir("ai_prompts", log_dir)
         os.makedirs(dir_path, exist_ok=True)
         tag_str = f"_{tag}" if tag else ""
-        filename = f"{timestamp}{tag_str}_prompt.txt"
+        filename = f"{timestamp}{tag_str}_prompt.md"
         filepath = os.path.join(dir_path, filename)
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(f"# AI Prompt: {tag}\n")
@@ -226,7 +226,7 @@ def _save_thinking_log(
         dir_path = _resolve_log_dir("ai_thinking", log_dir)
         os.makedirs(dir_path, exist_ok=True)
         tag_str = f"_{tag}" if tag else ""
-        filename = f"{timestamp}{tag_str}_thinking.txt"
+        filename = f"{timestamp}{tag_str}_thinking.md"
         filepath = os.path.join(dir_path, filename)
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(f"# AI Thinking: {tag}\n")

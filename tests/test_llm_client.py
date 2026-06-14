@@ -1,5 +1,6 @@
 """LLM 公共客户端单元测试 —— 使用 mock 验证 API 调用和重试逻辑。"""
 import pytest
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 from ai_gen_reimbursement_docs.llm_client import call_llm, _extract_text, _extract_thinking
@@ -130,6 +131,35 @@ class TestCallLLM:
         call_llm(prompt="test", api_key="k", save_logs=False)
         call_kwargs = mock_client.messages.create.call_args[1]
         assert "temperature" not in call_kwargs
+
+    @patch("anthropic.Anthropic")
+    def test_writes_prompt_response_and_thinking_as_markdown(self, mock_client_class, tmp_path):
+        """日志写入统一使用 Markdown 扩展名。"""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.content = [
+            SimpleNamespace(type="thinking", thinking="推理过程"),
+            SimpleNamespace(text="最终响应"),
+        ]
+        mock_client.messages.create.return_value = mock_response
+
+        result = call_llm(
+            prompt="测试 prompt",
+            system="测试 system",
+            api_key="test-key",
+            tag="markdown-log",
+            log_dir=str(tmp_path),
+        )
+
+        assert result == "最终响应"
+        assert list(tmp_path.glob("*_prompt.txt")) == []
+        assert list(tmp_path.glob("*_response.txt")) == []
+        assert list(tmp_path.glob("*_thinking.txt")) == []
+        assert len(list(tmp_path.glob("*_prompt.md"))) == 1
+        assert len(list(tmp_path.glob("*_response.md"))) == 1
+        assert len(list(tmp_path.glob("*_thinking.md"))) == 1
 
     @patch("anthropic.Anthropic")
     def test_raises_ai_error_without_api_key(self, mock_client_class):
