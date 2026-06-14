@@ -22,12 +22,14 @@
 - `gen-fpa` 已补充阶段中间文件事件，当前会在 `生成 FPA` 卡片的 `中间文件` 区域列出 FPA 模板 Markdown、FPA 工作量汇总 Markdown、FPA 规划 Markdown、FPA 审计 Trace。
 - `gen-spec`、`gen-cosmic`、`gen-list` 的中间文件已补齐到各自阶段卡片：SPEC 展示功能章节 Markdown，COSMIC 展示核减汇总、模板、AI 填充和校验材料，LIST 展示送审参数快照。
 - 输出模板 manifest 预检事件按模板类型归属到对应阶段：FPA、需求说明书、COSMIC、需求清单分别展示在自身阶段卡片中。
+- 日志终态同步已补强：页内日志面板持续打开时会监听 session 变化和终态变化，任务详情页也会在实时流结束或轮询发现终态后重新合并 session 历史日志，并对重复事件去重、自动滚动到最新日志。
 
 已验证：
 
 - `.\.venv\Scripts\python.exe -m pytest tests/test_pipeline_callbacks.py tests/test_session_manager.py`
 - `.\.venv\Scripts\python.exe -m pytest tests/test_pipeline_callbacks.py`
 - `.\.venv\Scripts\python.exe -m pytest tests/test_pipeline_callbacks.py tests/test_pipeline.py::TestGenCosmic::test_generates_cosmic_xlsx tests/test_pipeline.py::TestGenSpec::test_generates_docx tests/test_pipeline.py::TestGenList::test_generates_xlsx`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_session_manager.py`
 - `npm run build`
 - `git diff --check`
 
@@ -40,6 +42,8 @@
 生成页框内和框外都在表达“运行详情 / 排错信息”时会产生重复，容易让用户误以为是同一个动作。需要把“跳转到任务详情”和“留在本页看日志”分开命名。
 
 页内 `运行日志 / 排错信息` 曾经打开后日志有时不全、也不够同步。原面板主要依赖实时事件流，缺少打开时的 session 历史日志回填，默认级别过滤也会把一部分调试信息藏起来；该问题已通过展开时合并历史快照、阶段事件同步追加到日志面板、默认显示 `DEBUG` 级别修正。
+
+最新复现显示：交付物已经出现，但日志面板仍可能停在 `basedata` 早期片段。这说明上一轮只解决了“打开时补拉”和“默认过滤”的问题，还缺少日志面板持续打开时的 session 变化监听、任务进入终态后的最终历史补拉，以及任务详情页独立日志区的同口径回填、去重和滚动行为。
 
 从任务列表点击 `继续` 回到生成页时，当前只恢复 session 运行状态和进度，不会回填主操作区的 `功能清单 .xlsx 路径（或项目目录）`。用户无法确认当前继续的是哪份输入，也不方便基于原参数再次启动或定位问题。
 
@@ -101,15 +105,17 @@
 7. 当前页内折叠区与跳转入口使用了相近的“运行详情 / 排错信息”语义，存在命名重叠。
 8. 页内日志面板打开时会调用 `/api/sessions/{sessionId}/logs` 合并历史快照；实时 `EventSource` 仍负责后续增量追加。
 9. `LogViewer` 默认显示级别为 `DEBUG`，用户手动调整的过滤级别会保存在浏览器本地。
-10. `Tasks.vue` 的 `继续` 操作只检查 `/api/sessions/{sessionId}` 后跳回 `/?session={sessionId}`。
-11. `Home.vue` 的 `restoreSessionById` 只读取 session 状态，不读取 `/api/history/{sessionId}`，因此拿不到历史记录中的 `input_path`、`output_dir` 和 `run_config`。
-12. 本机目录输入在后端会被解析为具体 `.xlsx`。当前历史记录稳定保存的是解析后的 `input_path`，不一定保存用户最初输入的目录文本。
-13. `GenerationProgress.vue` 已按 `artifact.is_temp` 将材料拆成同级 `中间文件` 和 `阶段产物` 区块，不再把中间文件混在阶段产物中只靠标签区分。
-14. `gen-fpa` 已在后端补发中间文件 artifact：`1.1.gen-fpa-FPA-模板.md`、`1.2.gen-fpa-FPA工作量-总和.md`、`1.3.gen-fpa-AI填充-FPA.md`、`1.5.gen-fpa-audit-trace.json`；`rules_only` 场景会按路径去重，避免同一 MD 重复展示。
-15. `gen-cosmic` 已展示 `3.1.gen-cosmic-FPA核减后的工作量-总和.md`、`3.2.gen-cosmic-COSMIC-模板.md`、`3.3.gen-cosmic-AI填充-COSMIC.md`、`COSMIC JSON 草稿` 和 `COSMIC 校验报告`。
-16. `gen-spec` 已展示 `2.1.gen-spec-SPEC-功能需求章节-模板.md` 和 `2.2.gen-spec-AI填充-SPEC-功能需求章节.md`。
-17. `gen-list` 已新增送审参数快照 Markdown，记录本次 `cfp_total`、`fpa_reduced`、模板路径和任务模式，并作为中间文件展示。
-18. 输出模板 manifest 目前作为步骤卡片中的“输出模板”摘要展示，并已按阶段归属：FPA manifest 属于 `生成 FPA`，spec manifest 属于 `生成需求说明书`，cosmic manifest 属于 `生成 COSMIC`，list manifest 属于 `生成需求清单`。
+10. 当前页内日志只在 details toggle 打开时主动回填；如果面板已经打开，session 后续变化或任务进入完成态，不会自动再次补拉完整历史。
+11. `TaskDetail.vue` 使用独立日志数组，不复用 `LogViewer` store 的历史合并和去重逻辑；实时流结束时也需要再拉一次 `/api/sessions/{sessionId}/logs`。
+12. `Tasks.vue` 的 `继续` 操作只检查 `/api/sessions/{sessionId}` 后跳回 `/?session={sessionId}`。
+13. `Home.vue` 的 `restoreSessionById` 只读取 session 状态，不读取 `/api/history/{sessionId}`，因此拿不到历史记录中的 `input_path`、`output_dir` 和 `run_config`。
+14. 本机目录输入在后端会被解析为具体 `.xlsx`。当前历史记录稳定保存的是解析后的 `input_path`，不一定保存用户最初输入的目录文本。
+15. `GenerationProgress.vue` 已按 `artifact.is_temp` 将材料拆成同级 `中间文件` 和 `阶段产物` 区块，不再把中间文件混在阶段产物中只靠标签区分。
+16. `gen-fpa` 已在后端补发中间文件 artifact：`1.1.gen-fpa-FPA-模板.md`、`1.2.gen-fpa-FPA工作量-总和.md`、`1.3.gen-fpa-AI填充-FPA.md`、`1.5.gen-fpa-audit-trace.json`；`rules_only` 场景会按路径去重，避免同一 MD 重复展示。
+17. `gen-cosmic` 已展示 `3.1.gen-cosmic-FPA核减后的工作量-总和.md`、`3.2.gen-cosmic-COSMIC-模板.md`、`3.3.gen-cosmic-AI填充-COSMIC.md`、`COSMIC JSON 草稿` 和 `COSMIC 校验报告`。
+18. `gen-spec` 已展示 `2.1.gen-spec-SPEC-功能需求章节-模板.md` 和 `2.2.gen-spec-AI填充-SPEC-功能需求章节.md`。
+19. `gen-list` 已新增送审参数快照 Markdown，记录本次 `cfp_total`、`fpa_reduced`、模板路径和任务模式，并作为中间文件展示。
+20. 输出模板 manifest 目前作为步骤卡片中的“输出模板”摘要展示，并已按阶段归属：FPA manifest 属于 `生成 FPA`，spec manifest 属于 `生成需求说明书`，cosmic manifest 属于 `生成 COSMIC`，list manifest 属于 `生成需求清单`。
 
 ## 诊断假设
 
@@ -151,10 +157,13 @@
 
 - 在生成页打开页内日志面板时，先请求 `/api/sessions/{sessionId}/logs` 做历史回填，再继续监听实时 `EventSource`。
 - 当 session 已完成、重新恢复、或页面首次进入时，都应确保已有日志能先展示出来。
+- 当日志面板已经打开且 session 进入 `done`、`error`、`cancelled` 等终态时，应再次请求 `/api/sessions/{sessionId}/logs`，把实时流可能漏掉的尾部日志补齐。
+- 当日志面板已经打开且 sessionId 变化时，应自动合并新 session 的历史日志，不依赖用户再次折叠/展开。
+- `TaskDetail.vue` 的日志区需要和首页保持同样口径：初次加载、实时流结束、轮询发现终态时都要补拉历史日志，并避免重复展示同一事件。
 - 需要把 `step_started`、`activity`、`artifact`、`step_done` 等阶段事件同步追加到日志面板，避免进度区和日志区出现内容断层。
 - 保持实时流增量追加不变，但不要只依赖流。
 - 如果默认级别仍是 `INFO`，需要在面板中明确告诉用户 `DEBUG` 被隐藏，或者把默认级别调整为更适合排错的值。
-- 面板打开后应自动滚动到末尾，避免用户只看到旧日志开头。
+- 面板打开、历史批量合并和终态补拉后应自动滚动到末尾，避免用户只看到旧日志开头。
 
 ### 3.2 继续任务时回填主操作区表单
 

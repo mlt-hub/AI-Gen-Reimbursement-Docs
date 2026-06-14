@@ -353,6 +353,7 @@ const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无�
 const startupError = ref<StartupErrorMessage | null>(null)
 const isStopping = ref(false)
 const stopNotice = ref('')
+const logPanelOpen = ref(false)
 const FOCUS_HIGHLIGHT_CLASSES = [
   'outline',
   'outline-2',
@@ -428,6 +429,14 @@ watch(() => session.runState, (state) => {
       stopNotice.value = '任务已进入停止状态'
     }
   }
+  if (logPanelOpen.value && session.sessionId && ['done', 'error', 'cancelled'].includes(state)) {
+    void restoreSessionLogs(session.sessionId)
+  }
+})
+
+watch(() => session.sessionId, (sid) => {
+  if (!logPanelOpen.value || !sid) return
+  void restoreSessionLogs(sid)
 })
 
 function optionLabel(question: FpaConfirmationQuestion, value: string) {
@@ -707,8 +716,10 @@ async function restoreSessionLogs(sid: string, options: { replace?: boolean } = 
 
 async function handleLogPanelToggle(event: Event) {
   const target = event.currentTarget as HTMLDetailsElement | null
-  if (!target?.open || !session.sessionId) return
+  logPanelOpen.value = Boolean(target?.open)
+  if (!logPanelOpen.value || !session.sessionId) return
   await restoreSessionLogs(session.sessionId)
+  log.scrollToBottom()
   if (session.runState === 'running' && log.activeSessionId !== session.sessionId) {
     log.connect(session.sessionId)
   }

@@ -40,6 +40,17 @@ export const useLogStore = defineStore('log', () => {
   let _wasConnected = false
   let entryKeys = new Set<string>()
 
+  function scrollToBottom() {
+    nextTick(() => {
+      const element = logPanelEl.value
+      if (!element) return
+      element.scrollTop = element.scrollHeight
+      requestAnimationFrame(() => {
+        element.scrollTop = element.scrollHeight
+      })
+    })
+  }
+
   function entrySignature(entry: LogEntry) {
     return [entry.level, entry.time, entry.msg].join('\u001f')
   }
@@ -74,11 +85,7 @@ export const useLogStore = defineStore('log', () => {
     entry.isStep = /^第\d/.test(entry.msg)
     entryKeys.add(key)
     entries.value.push(entry)
-    nextTick(() => {
-      if (logPanelEl.value) {
-        logPanelEl.value.scrollTop = logPanelEl.value.scrollHeight
-      }
-    })
+    scrollToBottom()
   }
 
   function append(entry: LogEntry) {
@@ -118,11 +125,7 @@ export const useLogStore = defineStore('log', () => {
       const entry = formatEvent(event)
       pushEntry(entry, rawEventSignature(event, entry))
     }
-    nextTick(() => {
-      if (logPanelEl.value) {
-        logPanelEl.value.scrollTop = logPanelEl.value.scrollHeight
-      }
-    })
+    scrollToBottom()
   }
 
   function mergeFromEvents(events: RawLogEvent[]) {
@@ -130,6 +133,7 @@ export const useLogStore = defineStore('log', () => {
       const entry = formatEvent(event)
       pushEntry(entry, rawEventSignature(event, entry))
     }
+    scrollToBottom()
   }
 
   function appendFromEvent(event: RawLogEvent) {
@@ -246,5 +250,5 @@ export const useLogStore = defineStore('log', () => {
     _wasConnected = false
   }
 
-  return { entries, logPanelEl, append, clear, connect, close, replaceFromEvents, mergeFromEvents, activeSessionId }
+  return { entries, logPanelEl, append, clear, connect, close, replaceFromEvents, mergeFromEvents, scrollToBottom, activeSessionId }
 })

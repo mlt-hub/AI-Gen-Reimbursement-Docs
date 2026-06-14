@@ -178,6 +178,80 @@ def test_pipeline_events_are_retained_as_log_snapshot():
     ]
 
 
+def test_log_snapshot_retains_terminal_generation_events():
+    manager = SessionManager()
+    manager.create("s1", mode="local")
+
+    events = [
+        {
+            "type": "step_started",
+            "step": "basedata",
+            "message": "生成基础数据",
+            "time": "22:10:48",
+        },
+        {
+            "type": "activity",
+            "step": "basedata",
+            "message": "正在读取功能清单",
+            "time": "22:10:48",
+        },
+        {
+            "type": "step_done",
+            "step": "basedata",
+            "message": "基础数据已准备完成",
+            "time": "22:10:49",
+        },
+        {
+            "type": "step_started",
+            "step": "fpa",
+            "message": "生成 FPA 工作量评估",
+            "time": "22:10:49",
+        },
+        {
+            "type": "artifact",
+            "step": "fpa",
+            "message": "FPA 模板 Markdown 已生成",
+            "payload": {
+                "label": "FPA 模板 Markdown",
+                "path": "md/1.1.gen-fpa-FPA-模板.md",
+                "is_temp": True,
+            },
+            "time": "22:10:50",
+        },
+        {
+            "type": "step_done",
+            "step": "fpa",
+            "message": "FPA 工作量评估已生成",
+            "time": "22:10:51",
+        },
+        {
+            "type": "done",
+            "files": [{"label": "FPA 工作量评估", "path": "out/fpa.xlsx"}],
+            "time": "22:10:51",
+        },
+    ]
+    for event in events:
+        if event["type"] == "done":
+            manager.record_log_event("s1", event)
+        else:
+            manager.record_pipeline_event("s1", event)
+
+    logs = manager.get_log_entries("s1")
+
+    assert [event["type"] for event in logs] == [
+        "step_started",
+        "activity",
+        "step_done",
+        "step_started",
+        "artifact",
+        "step_done",
+        "done",
+    ]
+    assert logs[-3]["step"] == "fpa"
+    assert logs[-2]["message"] == "FPA 工作量评估已生成"
+    assert logs[-1]["type"] == "done"
+
+
 def test_log_stream_subscribers_receive_independent_event_copies():
     manager = SessionManager()
     manager.create("s1", mode="local")

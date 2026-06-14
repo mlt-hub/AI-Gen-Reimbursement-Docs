@@ -139,7 +139,7 @@
         <div class="font-semibold">错误详情</div>
         <p class="mt-1 whitespace-pre-wrap break-words">{{ effectiveError }}</p>
       </div>
-      <div class="mt-4 h-96 overflow-y-auto rounded-lg bg-[var(--color-console)] p-4 font-mono text-xs leading-6 text-slate-300">
+      <div ref="logPanelEl" class="mt-4 h-96 overflow-y-auto rounded-lg bg-[var(--color-console)] p-4 font-mono text-xs leading-6 text-slate-300">
         <div v-if="logEntries.length === 0" class="flex h-full items-center justify-center text-center font-sans text-sm text-slate-400">
           {{ logEmptyText }}
         </div>
@@ -188,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import GenerationProgress from '@/components/GenerationProgress.vue'
 import { ApiError, apiFetch, normalizeApiError } from '@/lib/api.ts'
@@ -265,6 +265,7 @@ interface RawLogEvent {
   message?: string
   time?: string
   step?: string
+  payload?: Record<string, unknown>
   files?: DetailDoneFile[]
 }
 
@@ -288,8 +289,11 @@ const historyItem = ref<HistoryItem | null>(null)
 const sessionStatus = ref<SessionStatusResponse | null>(null)
 const sessionAvailable = ref(false)
 const logEntries = ref<DisplayLogEntry[]>([])
+const logPanelEl = ref<HTMLElement | null>(null)
 let eventSource: EventSource | null = null
 let pollTimer: number | null = null
+let logEntryKeys = new Set<string>()
+let terminalLogsLoadedFor = ''
 
 const focusTargets = [
   { value: 'mode', label: '操作模式' },
@@ -393,10 +397,14 @@ async function loadSessionStatus() {
   }
 }
 
-async function loadLogs() {
+async function loadLogs(options: { merge?: boolean } = {}) {
   try {
     const data = await apiFetch<{ entries?: RawLogEvent[] }>(`/api/sessions/${sessionId.value}/logs`)
-    logEntries.value = (data.entries || []).map(formatLogEvent)
+    if (options.merge) {
+      mergeLogEvents(data.entries || [])
+    } else {
+      replaceLogEvents(data.entries || [])
+    }
   } catch (err) {
     if (!(err instanceof ApiError && err.status === 404)) {
       error.value = normalizeApiError(err)
@@ -414,8 +422,9 @@ function connectIfRunning() {
       appendLog(data)
       if (['done', 'error', 'cancelled'].includes(String(data.type || ''))) {
         closeStream()
-        loadSessionStatus()
-        loadHistoryItem()
+        void loadSessionStatus()
+        void loadHistoryItem()
+        void loadLogs({ merge: true })
       }
     } catch {
       /* heartbeat */
@@ -434,7 +443,67 @@ function closeStream() {
 }
 
 function appendLog(event: RawLogEvent) {
-  logEntries.value = [...logEntries.value, formatLogEvent(event)]
+  const entry = formatLogEvent(event)
+  pushLogEntry(entry, rawLogSignature(event, entry))
+}
+
+function syncTerminalLogs() {
+  const state = String(effectiveRunState.value)
+  if (!['done', 'error', 'cancelled'].includes(state)) return
+  const key = `${sessionId.value}:${state}`
+  if (terminalLogsLoadedFor === key) return
+  terminalLogsLoadedFor = key
+  void loadLogs({ merge: true })
+}
+
+function replaceLogEvents(events: RawLogEvent[]) {
+  logEntries.value = []
+  logEntryKeys = new Set()
+  mergeLogEvents(events)
+}
+
+function mergeLogEvents(events: RawLogEvent[]) {
+  for (const event of events) {
+    const entry = formatLogEvent(event)
+    pushLogEntry(entry, rawLogSignature(event, entry))
+  }
+  scrollLogsToBottom()
+}
+
+function pushLogEntry(entry: DisplayLogEntry, key: string = logEntrySignature(entry)) {
+  if (logEntryKeys.has(key)) return
+  logEntryKeys.add(key)
+  logEntries.value = [...logEntries.value, entry]
+  scrollLogsToBottom()
+}
+
+function logEntrySignature(entry: DisplayLogEntry) {
+  return [entry.level, entry.time, entry.msg].join('\u001f')
+}
+
+function rawLogSignature(event: RawLogEvent, entry: DisplayLogEntry) {
+  const payload = event.payload || {}
+  return JSON.stringify([
+    event.type || '',
+    event.time || entry.time || '',
+    event.level || entry.level || '',
+    event.msg || '',
+    event.message || entry.msg || '',
+    event.step || '',
+    String(payload.label || ''),
+    String(payload.path || ''),
+  ])
+}
+
+function scrollLogsToBottom() {
+  nextTick(() => {
+    const element = logPanelEl.value
+    if (!element) return
+    element.scrollTop = element.scrollHeight
+    requestAnimationFrame(() => {
+      element.scrollTop = element.scrollHeight
+    })
+  })
 }
 
 function formatLogEvent(event: RawLogEvent): DisplayLogEntry {
@@ -585,6 +654,7 @@ function formatTime(value: string) {
 
 watch(sessionId, () => {
   closeStream()
+  terminalLogsLoadedFor = ''
   loadDetail()
 })
 
@@ -594,6 +664,7 @@ watch(effectiveRunState, (state) => {
     if (state === 'cancelled') {
       stopNotice.value = '任务已进入停止状态'
     }
+    syncTerminalLogs()
   }
 })
 
@@ -602,7 +673,11 @@ onMounted(() => {
   pollTimer = window.setInterval(() => {
     if (sessionStatus.value?.run_state === 'queued' || sessionStatus.value?.run_state === 'running') {
       loadSessionStatus().then(() => {
-        if (sessionStatus.value?.run_state === 'running') connectIfRunning()
+        if (sessionStatus.value?.run_state === 'running') {
+          connectIfRunning()
+        } else {
+          syncTerminalLogs()
+        }
       })
     }
   }, 5000)
