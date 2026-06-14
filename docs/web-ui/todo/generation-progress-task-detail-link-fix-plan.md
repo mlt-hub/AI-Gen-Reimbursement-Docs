@@ -2,7 +2,7 @@
 
 日期：2026-06-14
 
-状态：已实施（中间文件已补；页内日志回填待补）
+状态：已实施（FPA 中间文件已补；其他生成过程和页内日志回填待补）
 
 实施提交：`3e0e50c39f83654abe4a7f4364a9ffbac47bccff`（`Improve generation progress experience`）
 
@@ -20,6 +20,7 @@
 - 从任务列表点击 `继续` 回到生成页时，回填历史任务的输入路径或远程输入名、输出目录、任务模式和 FPA 运行参数快照。
 - 阶段卡片已拆成同级的 `输出模板`、`中间文件`、`阶段产物` 三段；中间文件和交付物分别展示，并在本机模式提供 `打开目录`、远程完成后提供 `下载 ZIP`。
 - `gen-fpa` 已补充阶段中间文件事件，当前会在 `生成 FPA` 卡片的 `中间文件` 区域列出 FPA 模板 Markdown、FPA 工作量汇总 Markdown、FPA 规划 Markdown、FPA 审计 Trace。
+- `gen-spec`、`gen-cosmic`、`gen-list` 的中间文件补充尚未统一完成：COSMIC 目前只有 JSON 草稿和校验报告作为中间文件，SPEC 和 LIST 仍主要只展示最终交付物。
 - 输出模板 manifest 预检事件按模板类型归属到对应阶段：FPA、需求说明书、COSMIC、需求清单分别展示在自身阶段卡片中。
 
 已验证：
@@ -41,7 +42,7 @@
 
 从任务列表点击 `继续` 回到生成页时，当前只恢复 session 运行状态和进度，不会回填主操作区的 `功能清单 .xlsx 路径（或项目目录）`。用户无法确认当前继续的是哪份输入，也不方便基于原参数再次启动或定位问题。
 
-生成进度中的阶段产物和模板契约也需要统一归属。中间文件曾经只打标签但缺少操作入口，部分阶段生成的中间文件没有出现在对应阶段卡片中；该问题已通过同级 `中间文件` 区块和 `gen-fpa` 中间文件事件补充修正。输出模板 manifest 信息也应归属到对应生成阶段，而不是只作为泛化进度信息展示。
+生成进度中的阶段产物和模板契约也需要统一归属。中间文件曾经只打标签但缺少操作入口，部分阶段生成的中间文件没有出现在对应阶段卡片中；该问题已通过同级 `中间文件` 区块和 `gen-fpa` 中间文件事件补充修正。后续还需要把 `gen-spec`、`gen-cosmic`、`gen-list` 的中间文件补齐到各自阶段卡片。输出模板 manifest 信息也应归属到对应生成阶段，而不是只作为泛化进度信息展示。
 
 ## 目标行为
 
@@ -104,7 +105,10 @@
 12. 本机目录输入在后端会被解析为具体 `.xlsx`。当前历史记录稳定保存的是解析后的 `input_path`，不一定保存用户最初输入的目录文本。
 13. `GenerationProgress.vue` 已按 `artifact.is_temp` 将材料拆成同级 `中间文件` 和 `阶段产物` 区块，不再把中间文件混在阶段产物中只靠标签区分。
 14. `gen-fpa` 已在后端补发中间文件 artifact：`1.1.gen-fpa-FPA-模板.md`、`1.2.gen-fpa-FPA工作量-总和.md`、`1.3.gen-fpa-AI填充-FPA.md`、`1.5.gen-fpa-audit-trace.json`；`rules_only` 场景会按路径去重，避免同一 MD 重复展示。
-15. 输出模板 manifest 目前作为步骤卡片中的“输出模板”摘要展示，并已按阶段归属：FPA manifest 属于 `生成 FPA`，spec manifest 属于 `生成需求说明书`，cosmic manifest 属于 `生成 COSMIC`，list manifest 属于 `生成需求清单`。
+15. `gen-cosmic` 目前已展示 `COSMIC JSON 草稿` 和 `COSMIC 校验报告`，但 `3.1.gen-cosmic-FPA核减后的工作量-总和.md`、`3.2.gen-cosmic-COSMIC-模板.md`、`3.3.gen-cosmic-AI填充-COSMIC.md` 尚未作为同级中间文件统一展示。
+16. `gen-spec` 目前只展示需求说明书 Word 交付物，尚未展示 `2.1.gen-spec-SPEC-功能需求章节-模板.md` 和 `2.2.gen-spec-AI填充-SPEC-功能需求章节.md`。
+17. `gen-list` 目前只展示项目需求清单交付物，缺少可审计的中间文件；拟新增送审参数快照 Markdown，记录本次 `cfp_total`、`fpa_reduced`、模板来源和任务模式。
+18. 输出模板 manifest 目前作为步骤卡片中的“输出模板”摘要展示，并已按阶段归属：FPA manifest 属于 `生成 FPA`，spec manifest 属于 `生成需求说明书`，cosmic manifest 属于 `生成 COSMIC`，list manifest 属于 `生成需求清单`。
 
 ## 诊断假设
 
@@ -167,7 +171,7 @@
 
 ### 3.3 阶段产物与模板归属统一规则
 
-实施进度：已完成阶段卡片同级拆分和 `gen-fpa` 中间文件补充；剩余工作只在后续新增中间文件时继续要求后端事件携带正确 step。
+实施进度：已完成阶段卡片同级拆分和 `gen-fpa` 中间文件补充；`gen-cosmic` 部分已有中间文件，`gen-spec`、`gen-list` 仍待补齐。
 
 - 每个阶段卡片都展示本阶段产生或使用的关键材料，不只展示最终交付物。
 - 阶段材料分三类展示：
@@ -191,6 +195,25 @@
   - `生成 COSMIC`：COSMIC manifest、COSMIC 中间报告、COSMIC 估算表。
   - `生成需求清单`：list manifest、清单中间数据、项目需求清单 xlsx。
 - 如果后端事件当前没有把某个中间文件挂到正确 step，应优先补事件归属，而不是在前端按文件名硬猜。
+
+### 3.4 补齐其他生成过程的中间文件
+
+- `gen-spec`：
+  - 将 `2.1.gen-spec-SPEC-功能需求章节-模板.md` 作为 `生成需求说明书` 阶段的中间文件。
+  - 将 `2.2.gen-spec-AI填充-SPEC-功能需求章节.md` 作为 `生成需求说明书` 阶段的中间文件。
+  - 需求说明书 Word 继续作为 `阶段产物`。
+- `gen-cosmic`：
+  - 将 `3.1.gen-cosmic-FPA核减后的工作量-总和.md` 作为 `生成 COSMIC` 阶段的中间文件。
+  - 将 `3.2.gen-cosmic-COSMIC-模板.md` 作为 `生成 COSMIC` 阶段的中间文件。
+  - 将 `3.3.gen-cosmic-AI填充-COSMIC.md` 作为 `生成 COSMIC` 阶段的中间文件。
+  - 保留已有 `COSMIC JSON 草稿` 和 `COSMIC 校验报告` 中间文件。
+  - 正式项目功能点拆分表继续作为 `阶段产物`，草稿 Excel 如果仍用于人工补齐，应继续标识清楚，避免和正式交付物混淆。
+- `gen-list`：
+  - 新增轻量中间文件 `4.1.gen-list-送审参数-快照.md`，记录本次 `cfp_total`、`fpa_reduced`、模板路径和任务模式。
+  - 将该快照作为 `生成需求清单` 阶段的中间文件。
+  - 项目需求清单 Excel 继续作为 `阶段产物`。
+- 所有新增中间文件 artifact 必须设置 `is_temp=True`，并通过后端 `_artifact` / `_artifacts` 事件挂到正确 step。
+- 如果某个中间文件在无 AI、跳过、失败或配置关闭场景中不存在，应跳过展示，不制造空占位。
 
 ### 4. 生成进度框顶部状态带当前步骤
 
@@ -240,6 +263,9 @@
    - `输出模板`、`中间文件`、`阶段产物` 在阶段卡片中作为同级区块展示。
    - `gen-fpa` 中间文件出现在 `生成 FPA` 阶段卡片中，不只显示在最终结果区或本机目录里。
    - `gen-fpa` 至少应列出 FPA 模板 Markdown、FPA 工作量汇总 Markdown、FPA 规划 Markdown、FPA 审计 Trace。
+   - `gen-spec` 应列出 SPEC 功能需求章节模板 Markdown 和 AI 填充 Markdown。
+   - `gen-cosmic` 应列出 FPA 核减汇总 Markdown、COSMIC 模板 Markdown、COSMIC AI 填充 Markdown、COSMIC JSON 草稿和 COSMIC 校验报告。
+   - `gen-list` 应列出送审参数快照 Markdown。
    - 中间文件保留 `中间文件` 标签，同时提供打开目录或下载操作。
    - FPA、spec、COSMIC、list 的 manifest 展示在对应生成阶段内。
    - 最终交付物和中间文件有清晰标签区分。
@@ -285,6 +311,7 @@
 - 本机目录输入第一期回填为解析后的 `.xlsx` 路径，行为清晰可验收。
 - 每个 gen 阶段都能展示自身相关的中间文件、交付物和输出模板契约。
 - `gen-fpa` 的 FPA 模板 Markdown、FPA 工作量汇总 Markdown、FPA 规划 Markdown、FPA 审计 Trace 能在 `中间文件` 区块展示。
+- `gen-spec`、`gen-cosmic`、`gen-list` 的阶段中间文件能在各自 `中间文件` 区块展示。
 - 中间文件可以打开目录或下载，并与最终交付物明确区分。
 - manifest 信息按阶段归属展示，不出现泛化重复展示。
 - 回归测试能捕捉到这条跳转链路。
