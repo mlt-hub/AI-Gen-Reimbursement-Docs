@@ -38,10 +38,41 @@ export const useLogStore = defineStore('log', () => {
   const logPanelEl = ref<HTMLElement | null>(null)
   const activeSessionId = ref<string | null>(null)
   let _wasConnected = false
+  let entryKeys = new Set<string>()
 
-  function append(entry: LogEntry) {
-    // 以"第N"开头的日志行为步骤行
+  function entrySignature(entry: LogEntry) {
+    return [entry.level, entry.time, entry.msg].join('\u001f')
+  }
+
+  function rawEventSignature(event: RawLogEvent, entry: LogEntry) {
+    const payload = event.payload || {}
+    const module = event.module || {}
+    return JSON.stringify([
+      event.type || '',
+      event.time || entry.time || '',
+      event.level || entry.level || '',
+      event.msg || '',
+      event.message || entry.msg || '',
+      event.step || '',
+      event.field || '',
+      event.default ?? '',
+      event.cfp_default ?? '',
+      event.fpa_default ?? '',
+      event.confirmation_mode || '',
+      String(payload.label || ''),
+      String(payload.path || ''),
+      String(payload.name || ''),
+      String(payload.toc_status || ''),
+      String(payload.toc_note || ''),
+      String(module.index || ''),
+      String(module.l3 || ''),
+    ])
+  }
+
+  function pushEntry(entry: LogEntry, key: string = entrySignature(entry)) {
+    if (entryKeys.has(key)) return
     entry.isStep = /^第\d/.test(entry.msg)
+    entryKeys.add(key)
     entries.value.push(entry)
     nextTick(() => {
       if (logPanelEl.value) {
@@ -50,8 +81,14 @@ export const useLogStore = defineStore('log', () => {
     })
   }
 
+  function append(entry: LogEntry) {
+    // 以"第N"开头的日志行为步骤行
+    pushEntry(entry)
+  }
+
   function clear() {
     entries.value = []
+    entryKeys = new Set()
   }
 
   function formatEvent(event: RawLogEvent): LogEntry {
@@ -59,9 +96,11 @@ export const useLogStore = defineStore('log', () => {
     if (type === 'done') return { level: 'DONE', msg: '── 任务完成 ──', time: event.time || '' }
     if (type === 'cancelled') return { level: 'WARNING', msg: '── 任务已被用户停止 ──', time: event.time || '' }
     if (type === 'error') return { level: 'ERROR', msg: `── 任务失败: ${event.msg || '未知错误'} ──`, time: event.time || '' }
-    if (type === 'prompt') return { level: 'INFO', msg: `等待输入：${event.msg || ''}`, time: event.time || '' }
-    if (type === 'prompt_list') return { level: 'INFO', msg: '等待确认送审工作量和送审功能点', time: event.time || '' }
-    if (type === 'fpa_confirmation_required') return { level: 'INFO', msg: '等待确认 FPA 计量口径', time: event.time || '' }
+    if (type === 'prompt') return { level: 'INFO', msg: `⏸ ${event.msg || '等待用户输入...'}`, time: event.time || '' }
+    if (type === 'prompt_list') return { level: 'INFO', msg: '⏸ 等待确认送审工作量和送审功能点...', time: event.time || '' }
+    if (type === 'fpa_confirmation_required') return { level: 'INFO', msg: '⏸ 等待确认 FPA 计量口径...', time: event.time || '' }
+    if (type === 'step_failed') return { level: 'ERROR', msg: `${event.step || '阶段'}：${event.message || type}`, time: event.time || '' }
+    if (type === 'step_cancelled') return { level: 'WARNING', msg: `${event.step || '阶段'}：${event.message || type}`, time: event.time || '' }
     if (type.startsWith('step') || ['activity', 'artifact', 'input_required'].includes(type)) {
       return { level: 'INFO', msg: `${event.step || '阶段'}：${event.message || type}`, time: event.time || '' }
     }
@@ -73,15 +112,29 @@ export const useLogStore = defineStore('log', () => {
   }
 
   function replaceFromEvents(events: RawLogEvent[]) {
-    entries.value = events.map(formatEvent).map((entry) => ({
-      ...entry,
-      isStep: /^第\d/.test(entry.msg),
-    }))
+    entries.value = []
+    entryKeys = new Set()
+    for (const event of events) {
+      const entry = formatEvent(event)
+      pushEntry(entry, rawEventSignature(event, entry))
+    }
     nextTick(() => {
       if (logPanelEl.value) {
         logPanelEl.value.scrollTop = logPanelEl.value.scrollHeight
       }
     })
+  }
+
+  function mergeFromEvents(events: RawLogEvent[]) {
+    for (const event of events) {
+      const entry = formatEvent(event)
+      pushEntry(entry, rawEventSignature(event, entry))
+    }
+  }
+
+  function appendFromEvent(event: RawLogEvent) {
+    const entry = formatEvent(event)
+    pushEntry(entry, rawEventSignature(event, entry))
   }
 
   function connect(sessionId?: string) {
@@ -102,24 +155,24 @@ export const useLogStore = defineStore('log', () => {
         switch (data.type) {
           case 'done':
             close()
-            append({ level: 'DONE', msg: '── 任务完成 ──', time: '' })
+            appendFromEvent(data)
             session.finish(data.files || [])
             useStepsStore().finishAll()
             return
           case 'error':
             close()
-            append({ level: 'ERROR', msg: `── 任务失败: ${data.msg || '未知错误'} ──`, time: '' })
+            appendFromEvent(data)
             session.setError()
             useStepsStore().failActive(data.msg || '任务失败')
             return
           case 'cancelled':
             close()
-            append({ level: 'WARNING', msg: '── 任务已被用户停止 ──', time: '' })
+            appendFromEvent(data)
             session.setCancelled()
             useStepsStore().cancelActive('任务已被用户停止')
             return
           case 'prompt':
-            append({ level: 'INFO', msg: `⏸ ${data.msg || '等待用户输入...'}`, time: data.time || '' })
+            appendFromEvent(data)
             session.showInputPrompt({
               sessionId: targetSessionId,
               field: data.field || '',
@@ -128,7 +181,7 @@ export const useLogStore = defineStore('log', () => {
             })
             return
           case 'prompt_list':
-            append({ level: 'INFO', msg: '⏸ 等待确认送审工作量和送审功能点...', time: data.time || '' })
+            appendFromEvent(data)
             session.showListPrompt({
               sessionId: targetSessionId,
               cfpDefault: data.cfp_default || 0,
@@ -136,7 +189,7 @@ export const useLogStore = defineStore('log', () => {
             })
             return
           case 'fpa_confirmation_required':
-            append({ level: 'INFO', msg: '⏸ 等待确认 FPA 计量口径...', time: data.time || '' })
+            appendFromEvent(data)
             session.showFpaConfirmationPrompt({
               sessionId: targetSessionId,
               confirmationMode: data.confirmation_mode || 'auto',
@@ -155,12 +208,13 @@ export const useLogStore = defineStore('log', () => {
           case 'step_failed':
           case 'step_cancelled':
             useStepsStore().handlePipelineEvent(data as PipelineEvent)
+            appendFromEvent(data)
             return
           case 'log':
-            append({ level: data.level || 'INFO', msg: data.msg || '', time: data.time || '' })
+            appendFromEvent(data)
             return
           default:
-            append({ level: data.level || 'INFO', msg: data.msg || '', time: data.time || '' })
+            appendFromEvent(data)
         }
       } catch {
         /* heartbeat */
@@ -192,5 +246,5 @@ export const useLogStore = defineStore('log', () => {
     _wasConnected = false
   }
 
-  return { entries, logPanelEl, append, clear, connect, close, replaceFromEvents, activeSessionId }
+  return { entries, logPanelEl, append, clear, connect, close, replaceFromEvents, mergeFromEvents, activeSessionId }
 })

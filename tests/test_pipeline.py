@@ -9,6 +9,7 @@ import pytest
 from ai_gen_reimbursement_docs.cosmic_ai import CosmicGenerationDiagnostics
 from ai_gen_reimbursement_docs.cosmic_models import CosmicItem, DataMovement
 from ai_gen_reimbursement_docs.pipeline import run_pipeline, PipelineResult
+from ai_gen_reimbursement_docs.pipeline_callbacks import PipelineCallbacks
 
 pytestmark = pytest.mark.slow
 
@@ -248,13 +249,15 @@ class TestGenCosmic:
     """gen-cosmic 模式"""
 
     def test_generates_cosmic_xlsx(self, output_dir, test_excel, mock_ai, monkeypatch):
+        events = []
         monkeypatch.setattr(
             "ai_gen_reimbursement_docs.pipeline._read_cfp_formula_from_meta_md",
             lambda meta_md: 'IF(L{row}="新增",1,0)',
         )
         result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
                              output_dir=output_dir, templates=TEMPLATES,
-                             api_key="sk-test")
+                             api_key="sk-test",
+                             callbacks=PipelineCallbacks(emit_event=events.append))
         assert result.cosmic_status == "passed"
         assert result.cosmic_formal_excel_written is True
         assert os.path.exists(result.cosmic_formal_xlsx)
@@ -264,6 +267,13 @@ class TestGenCosmic:
         assert result.cfp_total > 0
         payload = json.loads(Path(result.cosmic_validation_json).read_text(encoding="utf-8"))
         assert payload["cfp_basis"]["source"] == "template_formula"
+        artifact_labels = [event["payload"]["label"] for event in events if event.get("type") == "artifact" and event.get("step") == "cosmic"]
+        assert "FPA 核减工作量 Markdown" in artifact_labels
+        assert "COSMIC 模板 Markdown" in artifact_labels
+        assert "COSMIC AI 填充 Markdown" in artifact_labels
+        assert "COSMIC JSON 草稿" in artifact_labels
+        assert "COSMIC 校验报告" in artifact_labels
+        assert "项目功能点拆分表" in artifact_labels
 
     def test_no_api_key_sets_path_but_no_file(self, output_dir, test_excel):
         result = run_pipeline(mode="gen-cosmic", file_path=test_excel,
@@ -616,21 +626,32 @@ class TestGenSpec:
     """gen-spec 模式"""
 
     def test_generates_docx(self, output_dir, test_excel, mock_ai):
+        events = []
         result = run_pipeline(mode="gen-spec", file_path=test_excel,
                              output_dir=output_dir, templates=TEMPLATES,
-                             api_key="sk-test")
+                             api_key="sk-test",
+                             callbacks=PipelineCallbacks(emit_event=events.append))
         assert os.path.exists(result.spec_docx)
         assert os.path.getsize(result.spec_docx) > 0
+        artifact_labels = [event["payload"]["label"] for event in events if event.get("type") == "artifact" and event.get("step") == "spec"]
+        assert "需求说明书功能章节模板 Markdown" in artifact_labels
+        assert "需求说明书 AI 填充 Markdown" in artifact_labels
+        assert "项目需求说明书" in artifact_labels
 
 
 class TestGenList:
     """gen-list 模式"""
 
     def test_generates_xlsx(self, output_dir, test_excel):
+        events = []
         result = run_pipeline(mode="gen-list", file_path=test_excel,
-                             output_dir=output_dir, templates=TEMPLATES)
+                             output_dir=output_dir, templates=TEMPLATES,
+                             callbacks=PipelineCallbacks(emit_event=events.append))
         assert os.path.exists(result.require_xlsx)
         assert os.path.getsize(result.require_xlsx) > 0
+        artifact_labels = [event["payload"]["label"] for event in events if event.get("type") == "artifact" and event.get("step") == "list"]
+        assert "需求清单送审参数快照" in artifact_labels
+        assert "项目需求清单" in artifact_labels
 
     def test_override_values(self, output_dir, test_excel):
         result = run_pipeline(mode="gen-list", file_path=test_excel,

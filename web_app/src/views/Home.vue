@@ -62,7 +62,7 @@
           </p>
         </div>
       </div>
-      <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
+      <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]" @toggle="handleLogPanelToggle">
         <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
           运行日志 / 排错信息
         </summary>
@@ -611,7 +611,7 @@ async function restoreSessionById(sid: string, options: { explicit?: boolean } =
     })
     steps.applySnapshot(data.progress_steps)
     log.clear()
-    await restoreSessionLogs(sid)
+    await restoreSessionLogs(sid, { replace: true })
     await restoreHistoryContext(sid)
     localStorage.setItem(LAST_SESSION_KEY, data.session_id)
     if (data.run_state === 'queued') {
@@ -678,12 +678,25 @@ async function restoreHistoryContext(sid: string) {
   }
 }
 
-async function restoreSessionLogs(sid: string) {
+async function restoreSessionLogs(sid: string, options: { replace?: boolean } = {}) {
   try {
     const data = await apiFetch<SessionLogsResponse>('/api/sessions/' + sid + '/logs')
-    log.replaceFromEvents(data.entries || [])
+    if (options.replace) {
+      log.replaceFromEvents(data.entries || [])
+    } else {
+      log.mergeFromEvents(data.entries || [])
+    }
   } catch {
     log.append({ level: 'WARNING', msg: '未能加载历史日志，后续实时日志仍会继续追加', time: '' })
+  }
+}
+
+async function handleLogPanelToggle(event: Event) {
+  const target = event.currentTarget as HTMLDetailsElement | null
+  if (!target?.open || !session.sessionId) return
+  await restoreSessionLogs(session.sessionId)
+  if (session.runState === 'running' && log.activeSessionId !== session.sessionId) {
+    log.connect(session.sessionId)
   }
 }
 

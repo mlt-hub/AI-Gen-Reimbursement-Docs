@@ -61,15 +61,12 @@ import { useToastStore } from '@/stores/toast.ts'
 import { useConfigStore } from '@/stores/config.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 
-interface LogLevelResponse {
-  level?: string
-}
-
 const logStore = useLogStore()
 const toast = useToastStore()
 const config = useConfigStore()
 const logEl = ref<HTMLElement | null>(null)
-const filterLevel = ref('INFO')
+const LOG_FILTER_KEY = 'ard:logFilterLevel'
+const filterLevel = ref('DEBUG')
 const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 
 const levelOrder: Record<string, number> = { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, DONE: -1 }
@@ -87,14 +84,15 @@ watchEffect(() => {
   logStore.logPanelEl = logEl.value
 })
 
-onMounted(async () => {
-  try {
-    const data = await apiFetch<LogLevelResponse>('/api/log-level')
-    if (data.level && levels.includes(data.level)) filterLevel.value = data.level
-  } catch {}
+onMounted(() => {
+  const saved = localStorage.getItem(LOG_FILTER_KEY)
+  if (saved && levels.includes(saved)) {
+    filterLevel.value = saved
+  }
 })
 
 async function saveLevel() {
+  localStorage.setItem(LOG_FILTER_KEY, filterLevel.value)
   try {
     await apiFetch('/api/log-level', {
       method: 'POST',

@@ -2,7 +2,7 @@
 
 日期：2026-06-14
 
-状态：已实施（FPA 中间文件已补；其他生成过程和页内日志回填待补）
+状态：已实施
 
 实施提交：`3e0e50c39f83654abe4a7f4364a9ffbac47bccff`（`Improve generation progress experience`）
 
@@ -15,18 +15,19 @@
 - 生成页顶部入口改为 `查看任务详情`，通过显式导航进入 `/tasks/:sessionId`，导航失败时给出 toast 反馈。
 - 页内折叠区改为 `运行日志 / 排错信息`，与跳转入口职责分离。
 - 生成进度顶部状态改为“生命周期状态 + 当前步骤”，并在下方展示当前动作摘要。
-- 恢复 session 时已支持回填历史日志，但页内日志面板打开时仍需要补一次按需回填，避免只依赖实时 SSE。
-- 日志面板已明确提示 `DEBUG` 是否被隐藏，但默认级别与同步时机仍有待调整，避免用户误以为日志缺失。
+- 恢复 session 时已支持回填历史日志；页内日志面板打开时也会按需合并 session 历史日志快照，避免只依赖实时 SSE。
+- 日志面板已明确提示 `DEBUG` 是否被隐藏，并默认显示 `DEBUG` 及以上日志，避免排错信息被初始过滤隐藏。
 - 从任务列表点击 `继续` 回到生成页时，回填历史任务的输入路径或远程输入名、输出目录、任务模式和 FPA 运行参数快照。
 - 阶段卡片已拆成同级的 `输出模板`、`中间文件`、`阶段产物` 三段；中间文件和交付物分别展示，并在本机模式提供 `打开目录`、远程完成后提供 `下载 ZIP`。
 - `gen-fpa` 已补充阶段中间文件事件，当前会在 `生成 FPA` 卡片的 `中间文件` 区域列出 FPA 模板 Markdown、FPA 工作量汇总 Markdown、FPA 规划 Markdown、FPA 审计 Trace。
-- `gen-spec`、`gen-cosmic`、`gen-list` 的中间文件补充尚未统一完成：COSMIC 目前只有 JSON 草稿和校验报告作为中间文件，SPEC 和 LIST 仍主要只展示最终交付物。
+- `gen-spec`、`gen-cosmic`、`gen-list` 的中间文件已补齐到各自阶段卡片：SPEC 展示功能章节 Markdown，COSMIC 展示核减汇总、模板、AI 填充和校验材料，LIST 展示送审参数快照。
 - 输出模板 manifest 预检事件按模板类型归属到对应阶段：FPA、需求说明书、COSMIC、需求清单分别展示在自身阶段卡片中。
 
 已验证：
 
 - `.\.venv\Scripts\python.exe -m pytest tests/test_pipeline_callbacks.py tests/test_session_manager.py`
 - `.\.venv\Scripts\python.exe -m pytest tests/test_pipeline_callbacks.py`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_pipeline_callbacks.py tests/test_pipeline.py::TestGenCosmic::test_generates_cosmic_xlsx tests/test_pipeline.py::TestGenSpec::test_generates_docx tests/test_pipeline.py::TestGenList::test_generates_xlsx`
 - `npm run build`
 - `git diff --check`
 
@@ -38,11 +39,11 @@
 
 生成页框内和框外都在表达“运行详情 / 排错信息”时会产生重复，容易让用户误以为是同一个动作。需要把“跳转到任务详情”和“留在本页看日志”分开命名。
 
-页内 `运行日志 / 排错信息` 打开后，日志有时不全、也不够同步。当前面板主要依赖实时事件流，缺少 session 历史日志回填，默认级别过滤也会把一部分调试信息藏起来。
+页内 `运行日志 / 排错信息` 曾经打开后日志有时不全、也不够同步。原面板主要依赖实时事件流，缺少打开时的 session 历史日志回填，默认级别过滤也会把一部分调试信息藏起来；该问题已通过展开时合并历史快照、阶段事件同步追加到日志面板、默认显示 `DEBUG` 级别修正。
 
 从任务列表点击 `继续` 回到生成页时，当前只恢复 session 运行状态和进度，不会回填主操作区的 `功能清单 .xlsx 路径（或项目目录）`。用户无法确认当前继续的是哪份输入，也不方便基于原参数再次启动或定位问题。
 
-生成进度中的阶段产物和模板契约也需要统一归属。中间文件曾经只打标签但缺少操作入口，部分阶段生成的中间文件没有出现在对应阶段卡片中；该问题已通过同级 `中间文件` 区块和 `gen-fpa` 中间文件事件补充修正。后续还需要把 `gen-spec`、`gen-cosmic`、`gen-list` 的中间文件补齐到各自阶段卡片。输出模板 manifest 信息也应归属到对应生成阶段，而不是只作为泛化进度信息展示。
+生成进度中的阶段产物和模板契约也需要统一归属。中间文件曾经只打标签但缺少操作入口，部分阶段生成的中间文件没有出现在对应阶段卡片中；该问题已通过同级 `中间文件` 区块和各生成过程的中间文件事件补充修正。输出模板 manifest 信息也应归属到对应生成阶段，而不是只作为泛化进度信息展示。
 
 ## 目标行为
 
@@ -98,16 +99,16 @@
 5. 步骤 store 已经维护 `读取基础数据`、`生成 FPA`、`生成需求说明书`、`生成 COSMIC`、`生成需求清单` 等步骤，以及每个步骤的 `status` 和 `current_action`。
 6. 生成进度框顶部当前只展示生命周期状态，没有消费步骤 store 中的当前步骤信息。
 7. 当前页内折叠区与跳转入口使用了相近的“运行详情 / 排错信息”语义，存在命名重叠。
-8. 页内日志面板主要靠实时 `EventSource` 追加，缺少在打开时先拉一次历史日志的回填步骤。
-9. `LogViewer` 默认显示级别为 `INFO`，因此 `DEBUG` 日志会被过滤掉，容易被理解成“日志不全”。
+8. 页内日志面板打开时会调用 `/api/sessions/{sessionId}/logs` 合并历史快照；实时 `EventSource` 仍负责后续增量追加。
+9. `LogViewer` 默认显示级别为 `DEBUG`，用户手动调整的过滤级别会保存在浏览器本地。
 10. `Tasks.vue` 的 `继续` 操作只检查 `/api/sessions/{sessionId}` 后跳回 `/?session={sessionId}`。
 11. `Home.vue` 的 `restoreSessionById` 只读取 session 状态，不读取 `/api/history/{sessionId}`，因此拿不到历史记录中的 `input_path`、`output_dir` 和 `run_config`。
 12. 本机目录输入在后端会被解析为具体 `.xlsx`。当前历史记录稳定保存的是解析后的 `input_path`，不一定保存用户最初输入的目录文本。
 13. `GenerationProgress.vue` 已按 `artifact.is_temp` 将材料拆成同级 `中间文件` 和 `阶段产物` 区块，不再把中间文件混在阶段产物中只靠标签区分。
 14. `gen-fpa` 已在后端补发中间文件 artifact：`1.1.gen-fpa-FPA-模板.md`、`1.2.gen-fpa-FPA工作量-总和.md`、`1.3.gen-fpa-AI填充-FPA.md`、`1.5.gen-fpa-audit-trace.json`；`rules_only` 场景会按路径去重，避免同一 MD 重复展示。
-15. `gen-cosmic` 目前已展示 `COSMIC JSON 草稿` 和 `COSMIC 校验报告`，但 `3.1.gen-cosmic-FPA核减后的工作量-总和.md`、`3.2.gen-cosmic-COSMIC-模板.md`、`3.3.gen-cosmic-AI填充-COSMIC.md` 尚未作为同级中间文件统一展示。
-16. `gen-spec` 目前只展示需求说明书 Word 交付物，尚未展示 `2.1.gen-spec-SPEC-功能需求章节-模板.md` 和 `2.2.gen-spec-AI填充-SPEC-功能需求章节.md`。
-17. `gen-list` 目前只展示项目需求清单交付物，缺少可审计的中间文件；拟新增送审参数快照 Markdown，记录本次 `cfp_total`、`fpa_reduced`、模板来源和任务模式。
+15. `gen-cosmic` 已展示 `3.1.gen-cosmic-FPA核减后的工作量-总和.md`、`3.2.gen-cosmic-COSMIC-模板.md`、`3.3.gen-cosmic-AI填充-COSMIC.md`、`COSMIC JSON 草稿` 和 `COSMIC 校验报告`。
+16. `gen-spec` 已展示 `2.1.gen-spec-SPEC-功能需求章节-模板.md` 和 `2.2.gen-spec-AI填充-SPEC-功能需求章节.md`。
+17. `gen-list` 已新增送审参数快照 Markdown，记录本次 `cfp_total`、`fpa_reduced`、模板路径和任务模式，并作为中间文件展示。
 18. 输出模板 manifest 目前作为步骤卡片中的“输出模板”摘要展示，并已按阶段归属：FPA manifest 属于 `生成 FPA`，spec manifest 属于 `生成需求说明书`，cosmic manifest 属于 `生成 COSMIC`，list manifest 属于 `生成需求清单`。
 
 ## 诊断假设
@@ -171,7 +172,7 @@
 
 ### 3.3 阶段产物与模板归属统一规则
 
-实施进度：已完成阶段卡片同级拆分和 `gen-fpa` 中间文件补充；`gen-cosmic` 部分已有中间文件，`gen-spec`、`gen-list` 仍待补齐。
+实施进度：已完成阶段卡片同级拆分，并补齐 `gen-fpa`、`gen-spec`、`gen-cosmic`、`gen-list` 的阶段中间文件。
 
 - 每个阶段卡片都展示本阶段产生或使用的关键材料，不只展示最终交付物。
 - 阶段材料分三类展示：

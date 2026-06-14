@@ -466,6 +466,7 @@ def run_pipeline(
         result = _generate_list(
             md_dir, tree_md, meta_md, doc_dir, require_xlsx,
             templates_dict, result, fpa_reduced, cfp_total,
+            task_mode="gen-list",
         )
     elif mode == "gen-spec":
         meta_md = _current_meta
@@ -521,6 +522,27 @@ def _read_fpa_reduced_md(md_dir: str) -> float:
                 if m:
                     return float(m.group(1))
     return 0.0
+
+
+def _save_list_snapshot_md(
+    md_dir: str,
+    *,
+    cfp_total: float,
+    fpa_reduced: float,
+    template_path: str,
+    task_mode: str,
+) -> str:
+    """保存需求清单阶段送审参数快照，供 Web UI 中间文件区展示。"""
+    path = os.path.join(md_dir, '4.1.gen-list-送审参数-快照.md')
+    os.makedirs(md_dir, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write("# 需求清单送审参数快照\n\n")
+        f.write(f"任务模式: {task_mode}\n")
+        f.write(f"送审功能点（个）: {cfp_total}\n")
+        f.write(f"送审工作量（人/天）: {fpa_reduced}\n")
+        f.write(f"输出模板: {template_path}\n")
+    logger.info("需求清单送审参数快照已保存: %s", path)
+    return path
 
 
 def _configured_template_path(settings: dict[str, str], key: str, config_name: str) -> str:
@@ -861,7 +883,7 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     result.fpa_reduced = _prompt_fpa_reduced(result.fpa_reduced)
 
     # 保存 FPA 核减后的工作量
-    _save_fpa_reduced_md(md_dir, result.fpa_reduced)
+    reduced_md_path = _save_fpa_reduced_md(md_dir, result.fpa_reduced)
 
     init_md_path = os.path.join(md_dir, '3.2.gen-cosmic-COSMIC-模板.md')
     filled_md_path = os.path.join(md_dir, '3.3.gen-cosmic-AI填充-COSMIC.md')
@@ -1028,21 +1050,22 @@ def _generate_cosmic(file_path, md_dir, tree_md, meta_md, fpa_sum_md,
     result.cosmic_status = generation.status
     result.cfp_total = generation.cfp_total or 0
 
-    if generation.formal_excel_written and os.path.exists(generation.formal_excel_path):
-        _artifact("cosmic", generation.formal_excel_path, "项目功能点拆分表")
-    if generation.draft_excel_written and os.path.exists(generation.draft_excel_path):
-        _artifact("cosmic", generation.draft_excel_path, "项目功能点拆分表（草稿）")
-    if generation.validation_json_path and os.path.exists(generation.validation_json_path):
-        _artifact("cosmic", generation.validation_json_path, "COSMIC JSON 草稿", is_temp=True)
-    if generation.validation_report_path and os.path.exists(generation.validation_report_path):
-        _artifact("cosmic", generation.validation_report_path, "COSMIC 校验报告", is_temp=True)
+    _artifacts("cosmic", [
+        (reduced_md_path, "FPA 核减工作量 Markdown", True),
+        (init_md_path, "COSMIC 模板 Markdown", True),
+        (filled_md_path, "COSMIC AI 填充 Markdown", True),
+        (generation.validation_json_path, "COSMIC JSON 草稿", True),
+        (generation.validation_report_path, "COSMIC 校验报告", True),
+        (generation.draft_excel_path, "项目功能点拆分表（草稿）", True),
+        (generation.formal_excel_path, "项目功能点拆分表", False),
+    ])
     _step_done("cosmic", "COSMIC 项目功能点拆分表阶段已完成")
     return result
 
 
 def _generate_list(md_dir, tree_md, meta_md,
               doc_dir, require_xlsx, templates_dict, result,
-              fpa_reduced=None, cfp_total=None):
+              fpa_reduced=None, cfp_total=None, task_mode="gen-list"):
     """第3步：需求清单。fpa_reduced/cfp_total 为 None 时从 MD 文件读取默认值并弹窗确认。"""
     _check_cancelled()
     _step("list", "生成项目需求清单")
@@ -1060,11 +1083,22 @@ def _generate_list(md_dir, tree_md, meta_md,
     cfp_total, fpa_reduced = _prompt_list_values(
         md_dir, float(cfp_total or 0), float(fpa_reduced or 0))
 
+    list_snapshot_md = _save_list_snapshot_md(
+        md_dir,
+        cfp_total=float(cfp_total or 0),
+        fpa_reduced=float(fpa_reduced or 0),
+        template_path=require_src,
+        task_mode=task_mode,
+    )
+
     _activity("list", "正在写入需求清单 Excel 模板")
     require_xlsx = generate_list_xlsx_from_md(meta_md, tree_md, require_src, require_xlsx,
                                               cfp_total=cfp_total, fpa_reduced=fpa_reduced)
     result.require_xlsx = require_xlsx
-    _artifact("list", require_xlsx, "项目需求清单")
+    _artifacts("list", [
+        (list_snapshot_md, "需求清单送审参数快照", True),
+        (require_xlsx, "项目需求清单", False),
+    ])
     _step_done("list", "项目需求清单已生成")
     return result
 
@@ -1127,6 +1161,10 @@ def _generate_spec(file_path, md_dir, tree_md, meta_md, meta_md_tpl, meta_filled
     result.spec_toc_note = str(_toc_status["note"])
     result.spec_toc_present = bool(_toc_status["present"])
     result.spec_toc_updated = bool(_toc_status["updated"])
+    _artifacts("spec", [
+        (spec_md, "需求说明书功能章节模板 Markdown", True),
+        (spec_filled_md, "需求说明书 AI 填充 Markdown", True),
+    ])
     _artifact(
         "spec",
         spec_docx,
@@ -1183,7 +1221,8 @@ def _generate_all(file_path, output_dir, doc_dir, md_dir,
     result = _generate_list(md_dir, tree_md, meta_md, doc_dir, require_xlsx,
                             templates_dict, result,
                             cfp_total=cfp_total,
-                            fpa_reduced=result.fpa_reduced)
+                            fpa_reduced=result.fpa_reduced,
+                            task_mode="gen-all")
 
     logger.info("全流程完成")
     return result
