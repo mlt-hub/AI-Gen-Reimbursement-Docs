@@ -65,7 +65,7 @@
           </p>
         </div>
       </div>
-      <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]" @toggle="handleLogPanelToggle">
+      <details v-if="showInlineLogPanel" class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]" @toggle="handleLogPanelToggle">
         <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
           运行日志 / 排错信息
         </summary>
@@ -377,6 +377,7 @@ const runStateClass = computed(() => {
 const runDotClass = computed(() => {
   return TASK_STATUS_DOT_CLASSES[runStatusDisplay.value.tone]
 })
+const showInlineLogPanel = computed(() => config.pipelineMode !== 'from-excel-gen-fpa')
 
 // ── 送审工作量输入 ──
 const fpaInputValue = ref(0)
