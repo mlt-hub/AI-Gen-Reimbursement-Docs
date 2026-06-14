@@ -288,3 +288,7 @@ Rename multi_uis FPA profile to multi_ui
 - `multi_uis` 不再作为有效 profile kind、内置 profile、Web/API option 或测试期望值出现。
 - agent review / prompt payload / golden fixture contract 输出 `profile: multi_ui`、`profile_kind: multi_ui`、`contract: multi_ui_contract`。
 - 多界面口径的原行为保持不变：多界面拆分、界面开发行 EI、拆分理由进入 check/review 元数据、非界面业务动作沿用统一界面口径。
+
+## 归档说明
+
+本文已完成并归档，不再作为待办继续推进。
