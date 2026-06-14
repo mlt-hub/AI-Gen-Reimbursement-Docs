@@ -16,6 +16,7 @@
     <router-view />
   </AppShell>
   <router-view v-else />
+  <Toast />
 </template>
 
 <script setup lang="ts">
@@ -25,6 +26,7 @@ import { useConfigStore } from '@/stores/config.ts'
 import { useAuthStore } from '@/stores/auth.ts'
 import { apiFetch } from '@/lib/api.ts'
 import AppShell from '@/components/layout/AppShell.vue'
+import Toast from '@/components/Toast.vue'
 
 interface VersionResponse {
   version?: string

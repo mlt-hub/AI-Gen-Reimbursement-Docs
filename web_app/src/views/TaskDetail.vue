@@ -309,7 +309,10 @@ const title = computed(() => {
   if (name) return name
   return historyItem.value?.task_mode || `任务 ${sessionId.value}`
 })
-const effectiveError = computed(() => sessionStatus.value?.last_error || historyItem.value?.error || '')
+const effectiveError = computed(() => {
+  if (effectiveRunState.value === 'cancelled') return ''
+  return sessionStatus.value?.last_error || historyItem.value?.error || ''
+})
 const progressSteps = computed(() => normalizeSteps(sessionStatus.value?.progress_steps))
 const hasProgress = computed(() => progressSteps.value.some(step => step.status !== 'pending' || step.artifacts.length > 0))
 const runStatusDisplay = computed(() => getTaskStatusDisplay(effectiveRunState.value, progressSteps.value))
@@ -358,6 +361,7 @@ async function loadDetail() {
   if (!sessionId.value) return
   loading.value = true
   error.value = ''
+  stopNotice.value = ''
   logNotice.value = ''
   await Promise.all([loadHistoryItem(), loadSessionStatus(), loadLogs()])
   connectIfRunning()
@@ -477,8 +481,10 @@ function normalizeSteps(progressSteps: Record<string, StepProgress> | undefined)
 async function rerun() {
   if (!historyItem.value || !canRerun.value) return
   actionLoading.value = true
+  isStopping.value = false
   error.value = ''
   notice.value = ''
+  stopNotice.value = ''
   logNotice.value = ''
   try {
     const data = await apiFetch<{ session_id: string }>(`/api/tasks/${historyItem.value.run_id}/rerun`, { method: 'POST' })
@@ -518,6 +524,7 @@ async function restoreTask() {
   actionLoading.value = true
   error.value = ''
   notice.value = ''
+  stopNotice.value = ''
   logNotice.value = ''
   try {
     await apiFetch(`/api/tasks/${historyItem.value.run_id}/restore`, { method: 'POST' })

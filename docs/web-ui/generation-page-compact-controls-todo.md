@@ -347,13 +347,15 @@ npm run build
 - 2026-06-10 已实施：详情页支持 `重新运行`，重跑成功后跳转到新 session 的 `/tasks/:sessionId`。
 - 2026-06-10 已实施：详情页支持返回生成页并高亮对应控件，协议为 `/?focus=<field>&fromSession=<sessionId>`。
 - 2026-06-14 已实施：该入口文案从 `定位参数` 调整为 `返回生成设置`，并补充运行中/排队中任务的 `停止任务` 操作。
+- 2026-06-14 已实施：全局挂载 Toast；生成页和任务详情页点击停止后即时显示 `停止中...` / 正在停止提示，避免用户误以为按钮无响应。
+- 2026-06-14 已实施：详情页 `cancelled` 状态不再把后端 `last_error=cancelled` 渲染为红色错误详情；点击 `重新运行` 或切换详情 session 时会清理停止提示。
 - 2026-06-10 已实施：生成页和任务/历史列表增加运行详情入口。
 
 ### 目标行为
 
 - 新增 `/tasks/:sessionId` 运行详情页。
-- 详情页展示任务状态、来源、模式、输入、参数快照、`生成过程`、日志、错误详情和交付物。
-- 详情页支持 `复制日志`、`重新运行`、`返回生成设置`；重跑成功后自动跳转到新 session 的运行详情页。
+- 详情页展示任务状态、来源、模式、输入、参数快照、`生成过程`、日志、错误详情和交付物；已停止任务不展示红色错误详情。
+- 详情页支持 `复制日志`、`停止任务`、`重新运行`、`返回生成设置`；停止时显示停止中提示，重跑成功后自动跳转到新 session 的运行详情页。
 - 生成页出现 `运行详情 / 排错信息` 次级入口，运行中、完成、失败、已停止时均可进入。
 - 对于创建 session 前的启动失败，第二期运行详情页通常没有可跳转的 `session_id`；这类错误必须由生成页自身展示清楚。
 
@@ -363,6 +365,8 @@ npm run build
 - `web_app/src/views/Tasks.vue`
 - 新增 `web_app/src/views/TaskDetail.vue` 或等价详情页组件。
 - `web_app/src/views/Home.vue`
+- `web_app/src/App.vue`
+- `web_app/src/components/Toast.vue`
 - `web_app/src/components/GenerationProgress.vue`
 - `web_app/src/components/LogViewer.vue`
 - `web_app/src/lib/api.ts`
