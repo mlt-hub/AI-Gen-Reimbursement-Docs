@@ -53,6 +53,9 @@
         <p class="mt-1 whitespace-pre-wrap break-words leading-6">{{ startupError.detail }}</p>
         <p v-if="startupError.nextStep" class="mt-2 leading-6">{{ startupError.nextStep }}</p>
       </div>
+      <div v-if="stopNotice" class="border-b border-[var(--color-rule)] bg-[var(--color-warning-soft)] px-5 py-4 text-sm text-[var(--color-warning)]">
+        {{ stopNotice }}
+      </div>
       <GenerationProgress v-if="session.isRunning || session.isDone || session.runState === 'cancelled' || steps.hasProgress" />
       <div v-else class="flex min-h-[160px] flex-1 items-center justify-center bg-[var(--color-page)] p-5 text-center">
         <div>
@@ -70,7 +73,7 @@
           <LogViewer />
         </div>
       </details>
-      <ActionBar @ai="openAIModal" @reset="resetTask" />
+      <ActionBar @ai="openAIModal" @reset="resetTask" @stopping="showStopNotice" />
     </section>
 
     <!-- FPA核减后的工作量输入弹窗 -->
@@ -349,6 +352,7 @@ const LAST_SESSION_KEY = 'ard:lastSessionId'
 const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无法继续当前执行'
 const startupError = ref<StartupErrorMessage | null>(null)
 const isStopping = ref(false)
+const stopNotice = ref('')
 const FOCUS_HIGHLIGHT_CLASSES = [
   'outline',
   'outline-2',
@@ -420,6 +424,9 @@ watch(() => session.fpaConfirmationPrompt, (prompt) => {
 watch(() => session.runState, (state) => {
   if (!['queued', 'running'].includes(state)) {
     isStopping.value = false
+    if (state === 'cancelled') {
+      stopNotice.value = '任务已进入停止状态'
+    }
   }
 })
 
@@ -492,6 +499,7 @@ async function submitFpaConfirmation() {
 async function cancelTask() {
   if (!session.sessionId || isStopping.value) return
   isStopping.value = true
+  showStopNotice()
   toast.show('info', '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止', 6000)
   try {
     await apiFetch('/api/cancel/' + session.sessionId, { method: 'POST' })
@@ -499,6 +507,10 @@ async function cancelTask() {
     isStopping.value = false
     toast.show('error', normalizeApiError(e))
   }
+}
+
+function showStopNotice() {
+  stopNotice.value = '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止'
 }
 
 async function openTaskDetail() {
@@ -513,6 +525,7 @@ async function openTaskDetail() {
 // ── 任务启动 ──
 async function startTask() {
   startupError.value = null
+  stopNotice.value = ''
   const mode = config.pipelineMode
   const body = new FormData()
   body.append('mode', mode)
@@ -593,6 +606,7 @@ async function startTask() {
 
 async function restoreSessionById(sid: string, options: { explicit?: boolean } = {}) {
   startupError.value = null
+  stopNotice.value = ''
   const explicit = Boolean(options.explicit)
   if (session.sessionId) {
     if (!explicit || session.sessionId === sid) return
@@ -781,6 +795,7 @@ watch(aiTab, (t) => {
 
 function resetTask() {
   startupError.value = null
+  stopNotice.value = ''
   session.reset()
   log.clear()
   steps.reset()
