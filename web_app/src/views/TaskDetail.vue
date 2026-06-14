@@ -118,6 +118,9 @@
         </div>
         <button class="btn-secondary w-fit" :disabled="!logText" @click="copyLogs">复制日志</button>
       </div>
+      <div v-if="logNotice" class="mt-4 rounded-lg border border-[var(--color-success)] bg-[var(--color-success-soft)] px-4 py-3 text-sm text-[var(--color-success)]">
+        {{ logNotice }}
+      </div>
       <div v-if="effectiveError" class="mt-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-soft)] px-4 py-3 text-sm text-[var(--color-danger)]">
         <div class="font-semibold">错误详情</div>
         <p class="mt-1 whitespace-pre-wrap break-words">{{ effectiveError }}</p>
@@ -263,6 +266,7 @@ const loading = ref(false)
 const actionLoading = ref(false)
 const error = ref('')
 const notice = ref('')
+const logNotice = ref('')
 const historyItem = ref<HistoryItem | null>(null)
 const sessionStatus = ref<SessionStatusResponse | null>(null)
 const sessionAvailable = ref(false)
@@ -351,6 +355,7 @@ async function loadDetail() {
   if (!sessionId.value) return
   loading.value = true
   error.value = ''
+  logNotice.value = ''
   await Promise.all([loadHistoryItem(), loadSessionStatus(), loadLogs()])
   connectIfRunning()
   loading.value = false
@@ -471,6 +476,7 @@ async function rerun() {
   actionLoading.value = true
   error.value = ''
   notice.value = ''
+  logNotice.value = ''
   try {
     const data = await apiFetch<{ session_id: string }>(`/api/tasks/${historyItem.value.run_id}/rerun`, { method: 'POST' })
     await router.push(`/tasks/${data.session_id}`)
@@ -486,6 +492,7 @@ async function restoreTask() {
   actionLoading.value = true
   error.value = ''
   notice.value = ''
+  logNotice.value = ''
   try {
     await apiFetch(`/api/tasks/${historyItem.value.run_id}/restore`, { method: 'POST' })
     notice.value = '任务已恢复到任务列表'
@@ -501,7 +508,7 @@ async function copyLogs() {
   if (!logText.value) return
   try {
     await navigator.clipboard.writeText(logText.value)
-    notice.value = '日志已复制'
+    logNotice.value = '日志已复制'
   } catch {
     error.value = '复制失败，请手动选择日志内容复制'
   }
