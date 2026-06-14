@@ -211,6 +211,7 @@ def test_pipeline_template_preflight_event_includes_capabilities(monkeypatch, tm
         )
 
     preflight = next(event for event in events if event.get("message") == "输出模板预检通过")
+    assert preflight["step"] == "spec"
     assert preflight["payload"]["summary_type"] == "template_preflight"
     assert preflight["payload"]["templates"][0]["capabilities"]["anchor_mode"] == "split"
 

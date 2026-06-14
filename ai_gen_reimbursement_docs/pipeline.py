@@ -364,26 +364,26 @@ def run_pipeline(
         required_kinds=required_template_kinds_for_mode(mode),
     )
     if template_validation_results:
-        _emit_event(
-            "activity",
-            "basedata",
-            "输出模板预检通过",
-            {
-                "templates": [
-                    {
-                        "kind": item.kind,
-                        "template_path": item.template_path,
-                        "manifest_path": item.manifest_path,
-                        "template_id": item.template_id,
-                        "source": item.source,
-                        "capabilities": item.capabilities,
-                        "warnings": [issue.message for issue in item.warnings],
-                    }
-                    for item in template_validation_results
-                ],
-                "summary_type": "template_preflight",
-            },
-        )
+        for item in template_validation_results:
+            _emit_event(
+                "activity",
+                item.kind,
+                "输出模板预检通过",
+                {
+                    "templates": [
+                        {
+                            "kind": item.kind,
+                            "template_path": item.template_path,
+                            "manifest_path": item.manifest_path,
+                            "template_id": item.template_id,
+                            "source": item.source,
+                            "capabilities": item.capabilities,
+                            "warnings": [issue.message for issue in item.warnings],
+                        }
+                    ],
+                    "summary_type": "template_preflight",
+                },
+            )
 
     result = PipelineResult()
 

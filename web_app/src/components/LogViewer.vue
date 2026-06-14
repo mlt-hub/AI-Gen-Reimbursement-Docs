@@ -11,16 +11,19 @@
     >
       <span :class="['text-xs font-semibold', hasEntries ? 'text-slate-400' : 'text-[var(--color-ink-muted)]']">运行日志</span>
       <div class="flex items-center gap-2">
-      <span :class="['text-xs', hasEntries ? 'text-slate-500' : 'text-[var(--color-ink-soft)]']">显示级别</span>
-      <select v-model="filterLevel" @change="saveLevel"
-        :class="[
-          'rounded-md border px-2 py-1 text-xs focus:border-[var(--color-focus)] focus:outline-none',
-          hasEntries
-            ? 'border-slate-600 bg-slate-800 text-slate-200'
-            : 'border-[var(--color-rule-strong)] bg-[var(--color-surface)] text-[var(--color-ink-muted)]',
-        ]">
-        <option v-for="lv in levels" :key="lv" :value="lv">{{ lv }}</option>
-      </select>
+        <span :class="['text-xs', hasEntries ? 'text-slate-500' : 'text-[var(--color-ink-soft)]']">显示级别</span>
+        <select v-model="filterLevel" @change="saveLevel"
+          :class="[
+            'rounded-md border px-2 py-1 text-xs focus:border-[var(--color-focus)] focus:outline-none',
+            hasEntries
+              ? 'border-slate-600 bg-slate-800 text-slate-200'
+              : 'border-[var(--color-rule-strong)] bg-[var(--color-surface)] text-[var(--color-ink-muted)]',
+          ]">
+          <option v-for="lv in levels" :key="lv" :value="lv">{{ lv }}</option>
+        </select>
+        <span class="text-xs text-[var(--color-ink-soft)]">
+          {{ filterLevel === 'DEBUG' ? '显示全部日志' : 'DEBUG 已隐藏' }}
+        </span>
       </div>
     </div>
     <!-- 日志列表 -->

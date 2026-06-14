@@ -50,18 +50,27 @@
           <p class="text-xs font-semibold text-[var(--color-ink-soft)]">阶段产物</p>
           <div v-for="artifact in step.artifacts" :key="artifact.path || artifact.name" class="mt-2 flex items-center justify-between gap-3 text-xs">
             <span class="min-w-0">
-              <span class="block truncate text-[var(--color-ink-muted)]">{{ artifact.name || artifact.label }}</span>
+              <span class="block truncate text-[var(--color-ink-muted)]" :title="artifact.path || artifact.name || artifact.label">
+                {{ artifact.name || artifact.label }}
+              </span>
               <span v-if="artifact.toc_note" class="mt-0.5 block text-[var(--color-ink-soft)]">{{ artifact.toc_note }}</span>
             </span>
-            <span v-if="artifact.is_temp" class="shrink-0 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[var(--color-ink-soft)]">中间文件</span>
-            <button
-              v-else-if="canUseArtifactAction"
-              class="btn-secondary min-h-0 shrink-0 px-2 py-1 text-xs"
-              @click="useArtifactAction"
-            >
-              {{ artifactActionLabel }}
-            </button>
-            <span v-else class="shrink-0 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[var(--color-ink-soft)]">完成后可操作</span>
+            <span class="flex shrink-0 items-center gap-2">
+              <span
+                class="rounded px-1.5 py-0.5"
+                :class="artifact.is_temp ? 'bg-[var(--color-surface-muted)] text-[var(--color-ink-soft)]' : 'bg-[var(--color-success-soft)] text-[var(--color-success)]'"
+              >
+                {{ artifact.is_temp ? '中间文件' : '交付物' }}
+              </span>
+              <button
+                v-if="canUseArtifactAction"
+                class="btn-secondary min-h-0 shrink-0 px-2 py-1 text-xs"
+                @click="useArtifactAction"
+              >
+                {{ artifactActionLabel }}
+              </button>
+              <span v-else class="rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[var(--color-ink-soft)]">完成后可操作</span>
+            </span>
           </div>
         </div>
       </article>

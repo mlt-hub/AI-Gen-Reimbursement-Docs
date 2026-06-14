@@ -21,23 +21,29 @@
             <h2 class="mt-1 truncate text-lg font-bold text-[var(--color-ink)]">{{ runTitle }}</h2>
           </div>
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <RouterLink
+            <button
               v-if="session.sessionId"
-              :to="`/tasks/${session.sessionId}`"
+              type="button"
               class="btn-secondary w-fit"
+              @click="openTaskDetail"
             >
-              运行详情 / 排错信息
-            </RouterLink>
+              查看任务详情
+            </button>
             <span
               v-else
               class="inline-flex w-fit cursor-not-allowed rounded-md border border-[var(--color-rule)] bg-[var(--color-surface-muted)] px-3 py-1.5 text-sm font-semibold text-[var(--color-ink-soft)]"
               title="任务启动后可查看"
             >
-              运行详情 / 排错信息
+              查看任务详情
             </span>
-            <div :class="['inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
-              <span class="h-2 w-2 rounded-full" :class="runDotClass" />
-              {{ runStateText }}
+            <div class="flex flex-col gap-1">
+              <div :class="['inline-flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold', runStateClass]">
+                <span class="h-2 w-2 rounded-full" :class="runDotClass" />
+                {{ runStateText }}
+              </div>
+              <p v-if="runStateDetail" class="max-w-xs truncate text-xs text-[var(--color-ink-soft)]" :title="runStateDetail">
+                {{ runStateDetail }}
+              </p>
             </div>
           </div>
         </div>
@@ -58,7 +64,7 @@
       </div>
       <details class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]">
         <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
-          运行详情 / 排错信息
+          运行日志 / 排错信息
         </summary>
         <div class="h-80 border-t border-[var(--color-rule)]">
           <LogViewer />
@@ -244,11 +250,13 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session.ts'
 import type { DoneFile, FpaConfirmationQuestion, RunState } from '@/stores/session.ts'
 import { useConfigStore } from '@/stores/config.ts'
+import type { FpaConfirmationMode, PipelineMode } from '@/stores/config.ts'
 import { useLogStore } from '@/stores/log.ts'
+import type { RawLogEvent } from '@/stores/log.ts'
 import { useStepsStore } from '@/stores/steps.ts'
 import { useToastStore } from '@/stores/toast.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
@@ -274,6 +282,36 @@ interface SessionStatusResponse {
   done_files?: DoneFile[]
   progress_steps?: Record<string, StepProgress>
   queue_position?: number | null
+}
+
+interface RunConfigSnapshot {
+  model?: string
+  base_url?: string
+  max_tokens?: string
+  project_name?: string
+  fpa_profile?: string
+  fpa_strategy?: string
+  fpa_rule_set?: string
+  fpa_core_rules?: string
+  fpa_system_prompt?: string
+  fpa_user_prompt?: string
+  fpa_base_profile?: string
+  fpa_confirmation_mode?: string
+  clean?: boolean
+}
+
+interface HistoryItem {
+  session_id: string
+  mode: 'local' | 'remote'
+  task_mode: string
+  input_name?: string
+  input_path?: string
+  output_dir?: string
+  run_config?: RunConfigSnapshot
+}
+
+interface SessionLogsResponse {
+  entries?: RawLogEvent[]
 }
 
 interface AiInteraction {
@@ -305,6 +343,7 @@ const log = useLogStore()
 const toast = useToastStore()
 const steps = useStepsStore()
 const route = useRoute()
+const router = useRouter()
 const LAST_SESSION_KEY = 'ard:lastSessionId'
 const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无法继续当前执行'
 const startupError = ref<StartupErrorMessage | null>(null)
@@ -331,7 +370,17 @@ const runTitle = computed(() => {
   return `${taskLabel} ${session.sessionId}`
 })
 const runStateText = computed(() => {
-  return runStateLabels[session.runState]
+  const step = currentStepSummary.value
+  const label = runStateLabels[session.runState]
+  return step ? `${label} · ${step.label}` : label
+})
+const runStateDetail = computed(() => currentStepSummary.value?.current_action || '')
+const currentStepSummary = computed(() => {
+  const active = steps.steps.find(step => step.status === 'running' || step.status === 'waiting_input')
+  if (active) return active
+  return [...steps.steps]
+    .reverse()
+    .find(step => step.status !== 'pending' || step.artifacts.length > 0 || Boolean(step.current_action)) || null
 })
 const runStateClass = computed(() => {
   const map = {
@@ -473,6 +522,15 @@ async function cancelTask() {
   } catch { /* ignore */ }
 }
 
+async function openTaskDetail() {
+  if (!session.sessionId) return
+  try {
+    await router.push({ name: 'task-detail', params: { sessionId: session.sessionId } })
+  } catch (e) {
+    toast.show('error', normalizeApiError(e))
+  }
+}
+
 // ── 任务启动 ──
 async function startTask() {
   startupError.value = null
@@ -574,6 +632,8 @@ async function restoreSessionById(sid: string, options: { explicit?: boolean } =
     })
     steps.applySnapshot(data.progress_steps)
     log.clear()
+    await restoreSessionLogs(sid)
+    await restoreHistoryContext(sid)
     localStorage.setItem(LAST_SESSION_KEY, data.session_id)
     if (data.run_state === 'queued') {
       const position = data.queue_position ? `，当前位置 ${data.queue_position}` : ''
@@ -600,6 +660,51 @@ async function restoreSessionById(sid: string, options: { explicit?: boolean } =
     if (localStorage.getItem(LAST_SESSION_KEY) === sid) {
       localStorage.removeItem(LAST_SESSION_KEY)
     }
+  }
+}
+
+async function restoreHistoryContext(sid: string) {
+  try {
+    const history = await apiFetch<HistoryItem>('/api/history/' + sid)
+    if (history.mode === 'local') {
+      config.workMode = 'local'
+      config.xlsxPath = history.input_path || ''
+      config.outputDir = history.output_dir || ''
+      config.selectedFile = null
+      config.remoteInputName = ''
+    } else if (history.mode === 'remote') {
+      config.workMode = 'remote'
+      config.xlsxPath = ''
+      config.outputDir = ''
+      config.selectedFile = null
+      config.remoteInputName = history.input_name || ''
+    }
+    if (history.task_mode) config.pipelineMode = history.task_mode as PipelineMode
+    const runConfig = history.run_config || {}
+    config.model = runConfig.model || ''
+    config.baseUrl = runConfig.base_url || ''
+    config.maxTokens = runConfig.max_tokens || ''
+    config.projectName = runConfig.project_name || ''
+    config.fpaProfile = runConfig.fpa_profile || 'strict_fpa'
+    config.fpaStrategy = runConfig.fpa_strategy || 'rules_first'
+    config.fpaRuleSet = runConfig.fpa_rule_set || ''
+    config.fpaCoreRules = runConfig.fpa_core_rules || ''
+    config.fpaSystemPrompt = runConfig.fpa_system_prompt || ''
+    config.fpaUserPrompt = runConfig.fpa_user_prompt || ''
+    config.fpaBaseProfile = runConfig.fpa_base_profile || 'strict_fpa'
+    config.fpaConfirmationMode = (runConfig.fpa_confirmation_mode || 'auto') as FpaConfirmationMode
+    config.clean = Boolean(runConfig.clean)
+  } catch {
+    log.append({ level: 'WARNING', msg: '未能回填任务提交参数，可继续查看当前进度', time: '' })
+  }
+}
+
+async function restoreSessionLogs(sid: string) {
+  try {
+    const data = await apiFetch<SessionLogsResponse>('/api/sessions/' + sid + '/logs')
+    log.replaceFromEvents(data.entries || [])
+  } catch {
+    log.append({ level: 'WARNING', msg: '未能加载历史日志，后续实时日志仍会继续追加', time: '' })
   }
 }
 

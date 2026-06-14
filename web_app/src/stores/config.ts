@@ -102,6 +102,7 @@ export const useConfigStore = defineStore('config', () => {
   const fpaConfirmationMode = ref<FpaConfirmationMode>(normalizeFpaConfirmationMode(loadStr('fpaConfirmationMode', 'auto')))
   const clean = ref(loadBool('clean', false))
   const selectedFile = ref<File | null>(null)
+  const remoteInputName = ref('')
 
   // ── 自动持久化 ──
   watch(model, v => saveStr('model', v))
@@ -142,6 +143,7 @@ export const useConfigStore = defineStore('config', () => {
     fpaConfirmationMode.value = 'auto'
     clean.value = false
     selectedFile.value = null
+    remoteInputName.value = ''
   }
 
   /** 导出用户设置为 JSON 字符串。 */
@@ -194,7 +196,7 @@ export const useConfigStore = defineStore('config', () => {
 
   return { workMode, backendStatus, pipelineMode, xlsxPath, outputDir, apiKey, apiKeyForRequest, model, baseUrl,
            maxTokens, projectName, fpaProfile, fpaStrategy, fpaRuleSet, fpaCoreRules, fpaSystemPrompt, fpaUserPrompt,
-           fpaBaseProfile, fpaConfirmationMode, clean, selectedFile, isValid, reset,
+           fpaBaseProfile, fpaConfirmationMode, clean, selectedFile, remoteInputName, isValid, reset,
            exportSettings, importSettings }
 })
 
