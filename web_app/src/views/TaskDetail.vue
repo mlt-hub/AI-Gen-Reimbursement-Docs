@@ -13,8 +13,16 @@
             :to="{ path: '/', query: { focus: 'input', fromSession: sessionId } }"
             class="btn-secondary"
           >
-            定位参数
+            返回生成设置
           </RouterLink>
+          <button
+            v-if="canCancel"
+            class="btn-danger"
+            :disabled="actionLoading"
+            @click="cancelTask"
+          >
+            停止任务
+          </button>
           <button
             class="btn-secondary"
             :disabled="actionLoading || !canRerun"
@@ -302,6 +310,7 @@ const hasProgress = computed(() => progressSteps.value.some(step => step.status 
 const runStatusDisplay = computed(() => getTaskStatusDisplay(effectiveRunState.value, progressSteps.value))
 const doneFiles = computed(() => sessionStatus.value?.done_files?.length ? sessionStatus.value.done_files : (historyItem.value?.done_files || []))
 const canRerun = computed(() => historyItem.value?.source === 'web' && ['done', 'error', 'cancelled'].includes(String(historyItem.value.run_state)))
+const canCancel = computed(() => sessionAvailable.value && ['queued', 'running'].includes(String(effectiveRunState.value)))
 const canRestore = computed(() => historyItem.value?.source === 'web' && historyItem.value.run_state === 'closed')
 const canOpenFolder = computed(() => effectiveMode.value === 'local' && Boolean(historyItem.value?.open_folder_available || sessionStatus.value?.output_dir))
 const canDownload = computed(() => effectiveMode.value === 'remote' && Boolean(historyItem.value?.download_available || sessionStatus.value?.has_zip))
@@ -469,6 +478,23 @@ async function rerun() {
   try {
     const data = await apiFetch<{ session_id: string }>(`/api/tasks/${historyItem.value.run_id}/rerun`, { method: 'POST' })
     await router.push(`/tasks/${data.session_id}`)
+  } catch (err) {
+    error.value = normalizeApiError(err)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function cancelTask() {
+  if (!sessionId.value || !canCancel.value) return
+  actionLoading.value = true
+  error.value = ''
+  notice.value = ''
+  logNotice.value = ''
+  try {
+    await apiFetch(`/api/cancel/${sessionId.value}`, { method: 'POST' })
+    closeStream()
+    await Promise.all([loadSessionStatus(), loadHistoryItem(), loadLogs()])
   } catch (err) {
     error.value = normalizeApiError(err)
   } finally {
