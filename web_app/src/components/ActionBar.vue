@@ -34,9 +34,9 @@
       </div>
 
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <button v-if="session.isRunning" @click="cancelTask" class="btn-danger">
+        <button v-if="session.isRunning" @click="cancelTask" class="btn-danger" :disabled="isStopping">
           <XCircleIcon class="w-4 h-4" />
-          停止
+          {{ isStopping ? '停止中...' : '停止' }}
         </button>
 
         <template v-if="session.isDone">
@@ -75,8 +75,11 @@ const emit = defineEmits<{ ai: [], reset: [] }>()
 const session = useSessionStore()
 const config = useConfigStore()
 const toast = useToastStore()
+const isStopping = ref(false)
 const actionHint = computed(() => (
-  session.isRunning ? '任务运行中，可在需要时停止。' : '任务启动后，这里会显示交付物操作。'
+  isStopping.value
+    ? '正在停止任务，当前 AI 调用完成后会结束。'
+    : session.isRunning ? '任务运行中，可在需要时停止。' : '任务启动后，这里会显示交付物操作。'
 ))
 const canStartNewTask = computed(() => ['done', 'error', 'cancelled'].includes(session.runState))
 
@@ -96,12 +99,16 @@ function downloadZip() {
 
 function showAI() { emit('ai') }
 
-function cancelTask() {
-  if (!session.sessionId) return
-  apiFetch('/api/cancel/' + session.sessionId, { method: 'POST' }).catch((e) => {
-    toast.show('error', normalizeApiError(e))
-  })
+async function cancelTask() {
+  if (!session.sessionId || isStopping.value) return
+  isStopping.value = true
   toast.show('info', '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止', 6000)
+  try {
+    await apiFetch('/api/cancel/' + session.sessionId, { method: 'POST' })
+  } catch (e) {
+    isStopping.value = false
+    toast.show('error', normalizeApiError(e))
+  }
 }
 
 function resetTask() {
@@ -119,6 +126,12 @@ watch(() => session.isDone, (done) => {
     fetch('/api/play-notify', { method: 'POST' }).catch(() => {})
   } else {
     _audio.play().catch(() => {})
+  }
+})
+
+watch(() => session.runState, (state) => {
+  if (!['queued', 'running'].includes(state)) {
+    isStopping.value = false
   }
 })
 </script>

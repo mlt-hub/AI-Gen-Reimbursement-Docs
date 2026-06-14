@@ -18,10 +18,10 @@
           <button
             v-if="canCancel"
             class="btn-danger"
-            :disabled="actionLoading"
+            :disabled="actionLoading || isStopping"
             @click="cancelTask"
           >
-            停止任务
+            {{ isStopping ? '停止中...' : '停止任务' }}
           </button>
           <button
             class="btn-secondary"
@@ -46,6 +46,9 @@
       </div>
       <div v-if="notice" class="mt-4 rounded-lg border border-[var(--color-success)] bg-[var(--color-success-soft)] px-4 py-3 text-sm text-[var(--color-success)]">
         {{ notice }}
+      </div>
+      <div v-if="stopNotice" class="mt-4 rounded-lg border border-[var(--color-warning)] bg-[var(--color-warning-soft)] px-4 py-3 text-sm text-[var(--color-warning)]">
+        {{ stopNotice }}
       </div>
 
       <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -276,8 +279,10 @@ const router = useRouter()
 const sessionId = computed(() => String(route.params.sessionId || ''))
 const loading = ref(false)
 const actionLoading = ref(false)
+const isStopping = ref(false)
 const error = ref('')
 const notice = ref('')
+const stopNotice = ref('')
 const logNotice = ref('')
 const historyItem = ref<HistoryItem | null>(null)
 const sessionStatus = ref<SessionStatusResponse | null>(null)
@@ -486,10 +491,12 @@ async function rerun() {
 }
 
 async function cancelTask() {
-  if (!sessionId.value || !canCancel.value) return
+  if (!sessionId.value || !canCancel.value || isStopping.value) return
+  isStopping.value = true
   actionLoading.value = true
   error.value = ''
   notice.value = ''
+  stopNotice.value = '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止'
   logNotice.value = ''
   try {
     await apiFetch(`/api/cancel/${sessionId.value}`, { method: 'POST' })
@@ -497,8 +504,12 @@ async function cancelTask() {
     await Promise.all([loadSessionStatus(), loadHistoryItem(), loadLogs()])
   } catch (err) {
     error.value = normalizeApiError(err)
+    stopNotice.value = ''
   } finally {
     actionLoading.value = false
+    if (!canCancel.value) {
+      isStopping.value = false
+    }
   }
 }
 
@@ -568,6 +579,15 @@ function formatTime(value: string) {
 watch(sessionId, () => {
   closeStream()
   loadDetail()
+})
+
+watch(effectiveRunState, (state) => {
+  if (!['queued', 'running'].includes(String(state))) {
+    isStopping.value = false
+    if (state === 'cancelled') {
+      stopNotice.value = '任务已进入停止状态'
+    }
+  }
 })
 
 onMounted(() => {

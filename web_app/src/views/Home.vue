@@ -91,8 +91,8 @@
             />
           </div>
           <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-            <button @click="cancelTask" class="btn-quiet">取消任务</button>
-            <button @click="submitFpaInput" class="btn-primary">确认继续</button>
+            <button @click="cancelTask" class="btn-quiet" :disabled="isStopping">{{ isStopping ? '停止中...' : '取消任务' }}</button>
+            <button @click="submitFpaInput" class="btn-primary" :disabled="isStopping">确认继续</button>
           </div>
         </div>
       </div>
@@ -127,8 +127,8 @@
             />
           </div>
           <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-            <button @click="cancelTask" class="btn-quiet">取消任务</button>
-            <button @click="submitListInput" class="btn-primary">确认继续</button>
+            <button @click="cancelTask" class="btn-quiet" :disabled="isStopping">{{ isStopping ? '停止中...' : '取消任务' }}</button>
+            <button @click="submitListInput" class="btn-primary" :disabled="isStopping">确认继续</button>
           </div>
         </div>
       </div>
@@ -197,8 +197,8 @@
               </button>
             </div>
             <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-              <button @click="cancelTask" class="btn-quiet">取消任务</button>
-              <button @click="submitFpaConfirmation" class="btn-primary" :disabled="!canSubmitFpaConfirmation">确认继续</button>
+              <button @click="cancelTask" class="btn-quiet" :disabled="isStopping">{{ isStopping ? '停止中...' : '取消任务' }}</button>
+              <button @click="submitFpaConfirmation" class="btn-primary" :disabled="isStopping || !canSubmitFpaConfirmation">确认继续</button>
             </div>
           </div>
         </div>
@@ -348,6 +348,7 @@ const router = useRouter()
 const LAST_SESSION_KEY = 'ard:lastSessionId'
 const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无法继续当前执行'
 const startupError = ref<StartupErrorMessage | null>(null)
+const isStopping = ref(false)
 const FOCUS_HIGHLIGHT_CLASSES = [
   'outline',
   'outline-2',
@@ -413,6 +414,12 @@ watch(() => session.fpaConfirmationPrompt, (prompt) => {
   fpaConfirmationScope.value = 'current_run'
   for (const question of prompt?.questions ?? []) {
     fpaConfirmationSelections.value[question.id] = question.recommendation
+  }
+})
+
+watch(() => session.runState, (state) => {
+  if (!['queued', 'running'].includes(state)) {
+    isStopping.value = false
   }
 })
 
@@ -483,10 +490,15 @@ async function submitFpaConfirmation() {
 }
 
 async function cancelTask() {
-  if (!session.sessionId) return
+  if (!session.sessionId || isStopping.value) return
+  isStopping.value = true
+  toast.show('info', '正在停止任务，如当前有 AI 调用正在执行，需等待其完成后停止', 6000)
   try {
     await apiFetch('/api/cancel/' + session.sessionId, { method: 'POST' })
-  } catch { /* ignore */ }
+  } catch (e) {
+    isStopping.value = false
+    toast.show('error', normalizeApiError(e))
+  }
 }
 
 async function openTaskDetail() {
