@@ -65,14 +65,6 @@
           </p>
         </div>
       </div>
-      <details v-if="showInlineLogPanel" class="border-t border-[var(--color-rule)] bg-[var(--color-surface-raised)]" @toggle="handleLogPanelToggle">
-        <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-[var(--color-ink-muted)]">
-          运行日志 / 排错信息
-        </summary>
-        <div class="h-80 border-t border-[var(--color-rule)]">
-          <LogViewer />
-        </div>
-      </details>
       <ActionBar @ai="openAIModal" @reset="resetTask" @stopping="showStopNotice" />
     </section>
 
@@ -265,7 +257,6 @@ import { useToastStore } from '@/stores/toast.ts'
 import { apiFetch, normalizeApiError } from '@/lib/api.ts'
 import ConfigPanel from '@/components/ConfigPanel.vue'
 import GenerationProgress from '@/components/GenerationProgress.vue'
-import LogViewer from '@/components/LogViewer.vue'
 import ActionBar from '@/components/ActionBar.vue'
 import FpaRunSettingsSection from '@/components/run/FpaRunSettingsSection.vue'
 import type { StepProgress } from '@/stores/steps.ts'
@@ -353,7 +344,6 @@ const UNRECOVERABLE_SESSION_MESSAGE = '会话已结束或服务已重启，无�
 const startupError = ref<StartupErrorMessage | null>(null)
 const isStopping = ref(false)
 const stopNotice = ref('')
-const logPanelOpen = ref(false)
 const FOCUS_HIGHLIGHT_CLASSES = [
   'outline',
   'outline-2',
@@ -377,7 +367,6 @@ const runStateClass = computed(() => {
 const runDotClass = computed(() => {
   return TASK_STATUS_DOT_CLASSES[runStatusDisplay.value.tone]
 })
-const showInlineLogPanel = computed(() => config.pipelineMode !== 'from-excel-gen-fpa')
 
 // ── 送审工作量输入 ──
 const fpaInputValue = ref(0)
@@ -430,14 +419,6 @@ watch(() => session.runState, (state) => {
       stopNotice.value = '任务已进入停止状态'
     }
   }
-  if (logPanelOpen.value && session.sessionId && ['done', 'error', 'cancelled'].includes(state)) {
-    void restoreSessionLogs(session.sessionId)
-  }
-})
-
-watch(() => session.sessionId, (sid) => {
-  if (!logPanelOpen.value || !sid) return
-  void restoreSessionLogs(sid)
 })
 
 function optionLabel(question: FpaConfirmationQuestion, value: string) {
@@ -711,17 +692,6 @@ async function restoreSessionLogs(sid: string, options: { replace?: boolean } = 
     }
   } catch {
     log.append({ level: 'WARNING', msg: '未能加载历史日志，后续实时日志仍会继续追加', time: '' })
-  }
-}
-
-async function handleLogPanelToggle(event: Event) {
-  const target = event.currentTarget as HTMLDetailsElement | null
-  logPanelOpen.value = Boolean(target?.open)
-  if (!logPanelOpen.value || !session.sessionId) return
-  await restoreSessionLogs(session.sessionId)
-  log.scrollToBottom()
-  if (session.runState === 'running' && log.activeSessionId !== session.sessionId) {
-    log.connect(session.sessionId)
   }
 }
 
