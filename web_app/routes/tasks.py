@@ -62,6 +62,7 @@ from web_app.services.template_service import (
     save_custom_templates,
     save_custom_templates_into,
 )
+from web_app.services.upload_security import UploadSecurityError, validate_upload_file
 
 
 def _session_run_state(state) -> Literal["queued", "running", "done", "error", "cancelled"]:
@@ -1182,9 +1183,14 @@ def create_router(
             session_id=session_id,
         )
 
-        custom_t_dir = await save_custom_templates(
-            out, fpa_template, cosmic_template, list_template, spec_template
-        )
+        custom_t_dir_path = out / "custom_templates"
+        try:
+            custom_t_dir = await save_custom_templates(
+                out, fpa_template, cosmic_template, list_template, spec_template
+            )
+        except UploadSecurityError as exc:
+            shutil.rmtree(custom_t_dir_path, ignore_errors=True)
+            raise HTTPException(400, str(exc)) from exc
 
         profile_root = _profile_config_root(local_mode=True)
         profile_decisions = _load_profile_decision_payload(profile_root)
@@ -1327,6 +1333,10 @@ def create_router(
             user=user,
             mode=mode,
         )
+        try:
+            validated_input = await validate_upload_file(file, purpose="input_xlsx")
+        except UploadSecurityError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
         session_id = uuid.uuid4().hex[:8]
         work_dir = Path(tempfile.mkdtemp(prefix=f"ard_web_{session_id}_"))
@@ -1336,14 +1346,17 @@ def create_router(
         for d in [input_dir, output_dir, custom_t_dir]:
             d.mkdir(parents=True)
 
-        safe_name = Path(file.filename).name
+        safe_name = validated_input.safe_filename
         file_path = input_dir / safe_name
-        content = await file.read()
-        file_path.write_bytes(content)
+        file_path.write_bytes(validated_input.content)
 
-        await save_custom_templates_into(
-            custom_t_dir, fpa_template, cosmic_template, list_template, spec_template
-        )
+        try:
+            await save_custom_templates_into(
+                custom_t_dir, fpa_template, cosmic_template, list_template, spec_template
+            )
+        except UploadSecurityError as exc:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            raise HTTPException(400, str(exc)) from exc
         history_input = _snapshot_history_input(
             session_id=session_id,
             source=file_path,
@@ -1478,9 +1491,10 @@ def create_router(
                 temp_ctx = tempfile.TemporaryDirectory(prefix="ard_web_fpa_preview_")
                 input_dir = Path(temp_ctx.name) / "input"
                 input_dir.mkdir(parents=True, exist_ok=True)
-                safe_name = Path(file.filename).name
+                validated_input = await validate_upload_file(file, purpose="input_xlsx")
+                safe_name = validated_input.safe_filename
                 file_path = input_dir / safe_name
-                file_path.write_bytes(await file.read())
+                file_path.write_bytes(validated_input.content)
                 work_dir = str(Path(temp_ctx.name) / "work")
                 Path(work_dir).mkdir(parents=True, exist_ok=True)
             else:
@@ -1575,9 +1589,10 @@ def create_router(
                 temp_ctx = tempfile.TemporaryDirectory(prefix="ard_web_fpa_preview_modules_")
                 input_dir = Path(temp_ctx.name) / "input"
                 input_dir.mkdir(parents=True, exist_ok=True)
-                safe_name = Path(file.filename).name
+                validated_input = await validate_upload_file(file, purpose="input_xlsx")
+                safe_name = validated_input.safe_filename
                 file_path = input_dir / safe_name
-                file_path.write_bytes(await file.read())
+                file_path.write_bytes(validated_input.content)
                 work_dir = str(Path(temp_ctx.name) / "work")
                 Path(work_dir).mkdir(parents=True, exist_ok=True)
             else:

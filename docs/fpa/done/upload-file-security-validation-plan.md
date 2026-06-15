@@ -280,3 +280,13 @@ validate_upload_file(
 - 明确禁止 `.xlsm`
 - 业务预检与安全校验分层
 - 全部上传入口共用一套规则
+
+## 归档说明
+
+已实施并归档。实现落点包括：
+
+- `web_app/services/upload_security.py`：统一上传安全校验、OOXML ZIP 结构检查、`.xlsm` 拒绝、大小限制。
+- `web_app/routes/tasks.py`：`/api/run-upload`、`/api/fpa/preview-module`、`/api/fpa/preview-modules` 接入上传校验。
+- `web_app/services/template_service.py`：自定义输出模板保存与 Word 模板导入接入上传校验。
+- `web_app/src/components/TemplateUpload.vue`：自定义 Excel 输出模板选择提示移除 `.xlsm`。
+- `tests/test_upload_security.py`、`tests/test_web_tasks.py`、`tests/test_web_template_routes.py`：覆盖正常 OOXML、`.xlsm`、伪装文件、空文件、超大文件、ZIP 路径异常和缺少关键 entry 等路径。

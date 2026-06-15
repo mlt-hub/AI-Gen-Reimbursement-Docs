@@ -2,6 +2,7 @@ import json
 import threading
 import shutil
 import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,14 @@ from web_app import server
 from web_app.routes import tasks
 from web_app.services import run_history_service
 from web_app.services import session_access
+
+
+def _valid_xlsx_bytes() -> bytes:
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("xl/workbook.xml", "<workbook/>")
+    return buffer.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -92,7 +101,7 @@ def test_task_list_marks_running_session_availability(monkeypatch, tmp_path):
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     server.session_manager.create("recoverable1", mode="local", output_dir=tmp_path)
     server.session_manager.mark_task_started("recoverable1")
     tasks.start_web_run(
@@ -126,7 +135,7 @@ def test_mark_unrecoverable_running_task_cancels_history(monkeypatch, tmp_path):
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     tasks.start_web_run(
         base_dir=tmp_path,
         session_id="orphan_mark1",
@@ -150,7 +159,7 @@ def test_mark_unrecoverable_running_task_rejects_recoverable_session(monkeypatch
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     server.session_manager.create("recoverable_mark1", mode="local", output_dir=tmp_path)
     server.session_manager.mark_task_started("recoverable_mark1")
     tasks.start_web_run(
@@ -175,7 +184,7 @@ def test_mark_unrecoverable_task_can_be_rerun(monkeypatch, tmp_path):
     _configure_current_api_key(monkeypatch, tmp_path)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     tasks.start_web_run(
         base_dir=tmp_path,
         session_id="orphan_rerun1",
@@ -229,7 +238,7 @@ def test_close_done_task_keeps_it_in_history_as_closed(monkeypatch, tmp_path):
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     tasks.start_web_run(
         base_dir=tmp_path,
         session_id="done1",
@@ -261,7 +270,7 @@ def test_restore_closed_task_returns_to_task_list(monkeypatch, tmp_path):
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     tasks.start_web_run(
         base_dir=tmp_path,
         session_id="restore_done1",
@@ -351,7 +360,7 @@ def test_rerun_closed_task_returns_400(monkeypatch, tmp_path):
     monkeypatch.setattr("web_app.services.run_history_service.user_history_path", lambda: db)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     tasks.start_web_run(
         base_dir=tmp_path,
         session_id="closed_rerun",
@@ -382,7 +391,7 @@ def test_rerun_done_local_task_creates_new_history(monkeypatch, tmp_path):
     _configure_current_api_key(monkeypatch, tmp_path)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     tasks.start_web_run(
         base_dir=tmp_path,
         session_id="done_rerun",
@@ -429,7 +438,7 @@ def test_rerun_uses_original_run_config_snapshot(monkeypatch, tmp_path):
     _configure_current_api_key(monkeypatch, tmp_path)
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     tasks.start_web_run(
         base_dir=tmp_path,
         session_id="snapshot_rerun",
@@ -496,7 +505,7 @@ def test_rerun_ai_task_requires_current_api_key(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks, "read_config_from_dir", lambda path: {"_env": {}, "_system": {}})
     client = _client(monkeypatch, local_mode=True)
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
     tasks.start_web_run(
         base_dir=tmp_path,
         session_id="missing_key_rerun",
@@ -528,7 +537,7 @@ def test_finish_backfills_missing_project_name_into_history(monkeypatch, tmp_pat
         lambda path: "完成后项目名",
     )
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
 
     run_history_service.start_web_run(
         base_dir=tmp_path,
@@ -580,7 +589,7 @@ def test_finish_keeps_explicit_project_name(monkeypatch, tmp_path):
         lambda path: "完成后项目名",
     )
     input_path = tmp_path / "功能清单.xlsx"
-    input_path.write_bytes(b"placeholder")
+    input_path.write_bytes(_valid_xlsx_bytes())
 
     run_history_service.start_web_run(
         base_dir=tmp_path,
@@ -613,7 +622,7 @@ def test_run_local_smoke_creates_local_session(monkeypatch, tmp_path):
     client = _client(monkeypatch, local_mode=True)
     xlsx_path = tmp_path / "功能清单.xlsx"
     output_dir = tmp_path / "out"
-    xlsx_path.write_bytes(b"placeholder")
+    xlsx_path.write_bytes(_valid_xlsx_bytes())
     calls: list[dict] = []
 
     def fake_execute_in_session(*args, **kwargs):
@@ -699,7 +708,7 @@ def test_run_local_uses_session_isolated_output_dir(monkeypatch, tmp_path):
     client = _client(monkeypatch, local_mode=True)
     xlsx_path = tmp_path / "功能清单.xlsx"
     output_root = tmp_path / "out"
-    xlsx_path.write_bytes(b"placeholder")
+    xlsx_path.write_bytes(_valid_xlsx_bytes())
 
     monkeypatch.setattr(tasks, "execute_in_session", lambda *args, **kwargs: None)
 
@@ -739,7 +748,7 @@ def test_run_local_rejects_existing_session_output_dir(monkeypatch, tmp_path):
     client = _client(monkeypatch, local_mode=True)
     xlsx_path = tmp_path / "功能清单.xlsx"
     output_root = tmp_path / "out"
-    xlsx_path.write_bytes(b"placeholder")
+    xlsx_path.write_bytes(_valid_xlsx_bytes())
     existing = output_root / "功能清单_deadbeef"
     existing.mkdir(parents=True)
 
@@ -771,7 +780,7 @@ def test_run_local_queues_when_concurrency_limit_is_reached(monkeypatch, tmp_pat
     client = _client(monkeypatch, local_mode=True)
     xlsx_path = tmp_path / "功能清单.xlsx"
     output_root = tmp_path / "out"
-    xlsx_path.write_bytes(b"placeholder")
+    xlsx_path.write_bytes(_valid_xlsx_bytes())
     started: list[str] = []
 
     def fake_start_background_task(session_manager, session_id, target, *, on_done=None):
@@ -1117,7 +1126,7 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
             "fpa_system_prompt": "tampered_sp",
             "fpa_user_prompt": "tampered_up",
         },
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1143,10 +1152,26 @@ def test_run_upload_smoke_creates_remote_session(monkeypatch):
     server.session_manager.cleanup_download(data["session_id"])
 
 
+def test_run_upload_rejects_xlsm(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+    monkeypatch.setattr(tasks, "cleanup_expired_sessions", lambda *args, **kwargs: 0)
+
+    resp = client.post(
+        "/api/run-upload",
+        data={"mode": "from-excel-gen-fpa", "api_key": "sk-explicit"},
+        files={"file": ("功能清单.xlsm", _valid_xlsx_bytes(), "application/vnd.ms-excel.sheet.macroenabled.12")},
+    )
+
+    assert resp.status_code == 400
+    assert "不支持上传 .xlsm 文件" in resp.json()["detail"]
+
+
 def test_run_upload_persists_rerun_assets_in_history(monkeypatch, tmp_path):
     db = tmp_path / "service_history.sqlite3"
     monkeypatch.setattr("web_app.services.run_history_service.service_history_path", lambda base_dir: db)
     client = _client(monkeypatch, user="alice")
+    input_bytes = _valid_xlsx_bytes()
+    template_bytes = _valid_xlsx_bytes()
 
     def fake_execute_in_session(*args, **kwargs):
         return None
@@ -1161,8 +1186,8 @@ def test_run_upload_persists_rerun_assets_in_history(monkeypatch, tmp_path):
             "api_key": "sk-explicit",
         },
         files={
-            "file": ("功能清单.xlsx", b"input-content", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-            "fpa_template": ("FPA工作量评估-输出模板.xlsx", b"template-content", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            "file": ("功能清单.xlsx", input_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            "fpa_template": ("FPA工作量评估-输出模板.xlsx", template_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         },
     )
 
@@ -1178,9 +1203,9 @@ def test_run_upload_persists_rerun_assets_in_history(monkeypatch, tmp_path):
     history_input = Path(item["input_path"])
     history_template_dir = Path(item["run_config"]["custom_templates_dir"])
     assert "task_assets" in history_input.parts
-    assert history_input.read_bytes() == b"input-content"
+    assert history_input.read_bytes() == input_bytes
     assert "task_assets" in history_template_dir.parts
-    assert (history_template_dir / "FPA工作量评估-输出模板.xlsx").read_bytes() == b"template-content"
+    assert (history_template_dir / "FPA工作量评估-输出模板.xlsx").read_bytes() == template_bytes
     server.session_manager.cleanup_download(session_id)
 
 
@@ -1196,7 +1221,7 @@ def test_run_upload_blocks_ai_task_without_personal_or_shared_api_key(monkeypatc
     resp = client.post(
         "/api/run-upload",
         data={"mode": "from-excel-gen-fpa"},
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 400
@@ -1242,7 +1267,7 @@ def test_run_upload_uses_config_defaults_snapshot(monkeypatch, tmp_path):
     resp = client.post(
         "/api/run-upload",
         data={"mode": "from-excel-gen-fpa"},
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1285,7 +1310,7 @@ def test_run_upload_loads_project_profile_decisions(monkeypatch, tmp_path):
             "mode": "from-excel-gen-fpa",
             "api_key": "sk-explicit",
         },
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1345,7 +1370,7 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
             "fpa_confirmation_mode": "cautious",
             "confirmed_decisions": json.dumps({"merge_crud_demo": {"value": "yes", "scope": "current_run"}}),
         },
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1360,6 +1385,19 @@ def test_fpa_preview_upload_returns_preview(monkeypatch):
     assert calls[0]["rule_set"] == "unified_ui_rs"
     assert calls[0]["fpa_confirmation_mode"] == "auto"
     assert calls[0]["confirmed_decisions"] == {"merge_crud_demo": {"value": "yes", "scope": "current_run"}}
+
+
+def test_fpa_preview_upload_rejects_disguised_xlsx(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+
+    resp = client.post(
+        "/api/fpa/preview-module",
+        data={"module_name": "垂直行业管理", "api_key": "sk-test"},
+        files={"file": ("功能清单.xlsx", b"not a zip", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 400
+    assert "文件不是有效的 Office 文档" in resp.json()["detail"]
 
 
 def test_fpa_preview_merges_and_persists_project_profile_decisions(monkeypatch, tmp_path):
@@ -1394,7 +1432,7 @@ def test_fpa_preview_merges_and_persists_project_profile_decisions(monkeypatch, 
                 "current_only_demo": {"value": "no", "scope": "current_run"},
             }),
         },
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1449,7 +1487,7 @@ def test_fpa_preview_upload_uses_config_defaults(monkeypatch, tmp_path):
     resp = client.post(
         "/api/fpa/preview-module",
         data={"module_name": "垂直行业管理"},
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1474,7 +1512,7 @@ def test_fpa_preview_upload_blocks_without_available_ai_key(monkeypatch):
     resp = client.post(
         "/api/fpa/preview-module",
         data={"module_name": "垂直行业管理"},
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 400
@@ -1508,7 +1546,7 @@ def test_fpa_preview_rules_only_allows_missing_ai_key(monkeypatch):
             "fpa_user_prompt": "strict_fpa_up",
             "fpa_base_profile": "strict_fpa",
         },
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1550,7 +1588,7 @@ def test_fpa_preview_appends_debug_to_accessible_session(monkeypatch, tmp_path):
             "api_key": "sk-test",
             "session_id": session_id,
         },
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1590,7 +1628,7 @@ def test_fpa_preview_rejects_debug_session_without_access(monkeypatch, tmp_path)
             "api_key": "sk-test",
             "session_id": session_id,
         },
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 404
@@ -1624,7 +1662,7 @@ def test_fpa_preview_modules_upload_returns_selectable_modules(monkeypatch):
 
     resp = client.post(
         "/api/fpa/preview-modules",
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 200
@@ -1635,12 +1673,24 @@ def test_fpa_preview_modules_upload_returns_selectable_modules(monkeypatch):
     assert Path(calls[0]["file_path"]).name == "功能清单.xlsx"
 
 
+def test_fpa_preview_modules_upload_rejects_disguised_xlsx(monkeypatch):
+    client = _client(monkeypatch, user="alice")
+
+    resp = client.post(
+        "/api/fpa/preview-modules",
+        files={"file": ("功能清单.xlsx", b"not a zip", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert resp.status_code == 400
+    assert "文件不是有效的 Office 文档" in resp.json()["detail"]
+
+
 def test_fpa_preview_requires_module_target(monkeypatch):
     client = _client(monkeypatch, user="alice")
 
     resp = client.post(
         "/api/fpa/preview-module",
-        files={"file": ("功能清单.xlsx", b"placeholder", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("功能清单.xlsx", _valid_xlsx_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert resp.status_code == 400

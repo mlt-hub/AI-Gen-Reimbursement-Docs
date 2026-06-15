@@ -20,6 +20,7 @@ from ai_gen_reimbursement_docs.spec_template_importer import (
     import_spec_word_template,
 )
 from ai_gen_reimbursement_docs.template_manifest import load_template_manifest, validate_output_template
+from web_app.services.upload_security import validate_upload_file
 
 
 async def save_custom_templates_into(
@@ -30,15 +31,15 @@ async def save_custom_templates_into(
     spec_template: Any | None,
 ):
     """将自定义模板保存到指定目录。"""
-    for tpl_file, tpl_name in [
-        (fpa_template, "FPA工作量评估-输出模板.xlsx"),
-        (cosmic_template, "项目功能点拆分表-输出模板.xlsx"),
-        (list_template, "项目需求清单-输出模板.xlsx"),
-        (spec_template, "项目需求说明书-输出模板.docx"),
+    for tpl_file, tpl_name, purpose in [
+        (fpa_template, "FPA工作量评估-输出模板.xlsx", "output_template_xlsx"),
+        (cosmic_template, "项目功能点拆分表-输出模板.xlsx", "output_template_xlsx"),
+        (list_template, "项目需求清单-输出模板.xlsx", "output_template_xlsx"),
+        (spec_template, "项目需求说明书-输出模板.docx", "output_template_docx"),
     ]:
         if tpl_file is not None and tpl_file.filename:
-            tpl_content = await tpl_file.read()
-            (target_dir / tpl_name).write_bytes(tpl_content)
+            validated = await validate_upload_file(tpl_file, purpose=purpose)
+            (target_dir / tpl_name).write_bytes(validated.content)
 
 
 async def save_custom_templates(
@@ -78,15 +79,13 @@ async def import_spec_template_upload(
     target_root: Path,
 ) -> SpecTemplateImportResult:
     """导入客户 Word 文档，生成需求说明书输出模板草稿。"""
-    filename = str(getattr(upload_file, "filename", "") or "")
-    if not filename.lower().endswith(".docx"):
-        raise ValueError("仅支持上传 .docx 文件")
+    validated = await validate_upload_file(upload_file, purpose="spec_docx")
 
     import_id = uuid4().hex[:12]
     import_dir = target_root / "imported_templates" / "spec" / import_id
     import_dir.mkdir(parents=True, exist_ok=True)
     source_path = import_dir / "source.docx"
-    source_path.write_bytes(await upload_file.read())
+    source_path.write_bytes(validated.content)
 
     return import_spec_word_template(
         source_path,

@@ -564,6 +564,18 @@ def test_import_spec_template_route_rejects_non_docx(monkeypatch, tmp_path):
     assert ".docx" in resp.json()["detail"]
 
 
+def test_import_spec_template_route_rejects_disguised_docx(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+
+    resp = client.post(
+        "/api/templates/spec/import",
+        files={"file": ("customer.docx", b"not a zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    )
+
+    assert resp.status_code == 400
+    assert "文件不是有效的 Office 文档" in resp.json()["detail"]
+
+
 def test_import_spec_template_route_rejects_remote_mode(monkeypatch, tmp_path):
     client = _client(monkeypatch, tmp_path, local_mode=False)
 
