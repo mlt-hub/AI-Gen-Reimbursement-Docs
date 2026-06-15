@@ -16,6 +16,8 @@
 
 只有在用户明确发出“修改”“实施”“开始改”“按方案执行”等修改指令后，Agent 才能编辑文件、运行格式化或创建提交。用户仅提问、讨论、要求评估或要求方案时，不得自行改代码。
 
+文档类任务完成后，应把对应的 FPA 计划或实施文档整理到合适的 `docs/fpa/done/` 位置，并补上完成状态或归档说明，避免已完成内容继续停留在待办区。
+
 ## Result Review Terminology
 
 涉及 FPA、COSMIC 或其他生成结果的预览、审阅、修改页面时，必须先查阅并遵循 [`docs/fpa/result-review-terminology.md`](docs/fpa/result-review-terminology.md)。
@@ -64,7 +66,6 @@
 - Word 导入模板草稿已支持基础在线调整：可移动 `{{模块清单表}}` / `{{功能过程详情}}` 锚点，并可将指定段落文本替换为 `{{字段名}}` 占位符；调整后会重置确认/发布状态。
 - Word 导入模板草稿已支持基础版式渲染预览：后端提供页面尺寸、边距、页眉/正文/页脚、段落/表格、样式名和占位符的浏览器可渲染 layout model；Web 草稿列表可打开页面式预览。
 - 尚未完成的输出模板方向包括：Office 级 Word 像素还原预览、复杂 Word 结构识别，以及 COSMIC/FPA/list 更复杂 Excel 锚点、复杂样式复制、图片/文本框和跨 sheet 公式重写。
-- 已完成的 FPA 实施清单应从 `docs/fpa/todo/` 归档到 `docs/fpa/done/`，并补充归档说明，避免继续作为待办项。
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph
