@@ -53,10 +53,6 @@
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-## Output Template Status
-
-当前输出模板进度说明已移到 [`docs/dev/output-template-progress-notes.md`](docs/dev/output-template-progress-notes.md)。
-
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
